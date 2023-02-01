@@ -11,6 +11,8 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"runtime/debug"
+	"strings"
 
 	log "github.com/golang/glog"
 	"go.chromium.org/luci/common/system/signals"
@@ -63,6 +65,21 @@ func sisoMain(ctx context.Context, args []string) error {
 		}
 	}()
 
+	// Print build information to the log.
+	buildinfo, ok := debug.ReadBuildInfo()
+	log.Infof("buildinfo: path=%q ok=%t", buildinfo.Path, ok)
+	if ok {
+		log.Infof("main module: %s %s", moduleInfo(&buildinfo.Main), vcsInfo(buildinfo))
+		if log.V(1) {
+			for _, m := range buildinfo.Deps {
+				log.Infof("deps module: %s", moduleInfo(m))
+			}
+			for _, bs := range buildinfo.Settings {
+				log.Infof("build %s=%s", bs.Key, bs.Value)
+			}
+		}
+	}
+
 	var err error
 	// TODO(b/246687010) use subcommands library
 	switch args[0] {
@@ -70,4 +87,21 @@ func sisoMain(ctx context.Context, args []string) error {
 		err = fmt.Errorf("unknown subcommand %q: %w", args[0], flag.ErrHelp)
 	}
 	return err
+}
+
+func moduleInfo(m *debug.Module) string {
+	if m == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("path:%s version:%s sum:%s replace:%s", m.Path, m.Version, m.Sum, moduleInfo(m.Replace))
+}
+
+func vcsInfo(buildinfo *debug.BuildInfo) string {
+	m := make(map[string]string)
+	for _, bs := range buildinfo.Settings {
+		if strings.HasPrefix(bs.Key, "vcs.") {
+			m[bs.Key] = bs.Value
+		}
+	}
+	return fmt.Sprintf("vcs[revision=%s time=%s modified=%s]", m["vcs.revision"], m["vcs.time"], m["vcs.modified"])
 }
