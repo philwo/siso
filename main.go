@@ -9,11 +9,11 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"go.chromium.org/luci/common/system/signals"
 	"os"
 	"runtime"
 
 	log "github.com/golang/glog"
+	"go.chromium.org/luci/common/system/signals"
 )
 
 // Siso is an experimental build tool.
