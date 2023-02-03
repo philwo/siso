@@ -1,0 +1,66 @@
+// Copyright 2023 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+// Package clog_test is a test for clog package.
+package clog_test
+
+import (
+	"context"
+	"fmt"
+	"sync"
+	"testing"
+
+	"cloud.google.com/go/logging"
+
+	"infra/build/siso/o11y/clog"
+)
+
+func testFormater(e logging.Entry) string {
+	id := e.Labels["id"]
+
+	if id == "" {
+		return fmt.Sprintf("%v", e.Payload)
+	}
+	return fmt.Sprintf("%s %v", id, e.Payload)
+}
+
+func Test(t *testing.T) {
+	ctx := context.Background()
+
+	l := clog.New(ctx)
+	defer l.Close()
+	ctx = clog.NewContext(ctx, l)
+
+	clog.Infof(ctx, "Info")
+	clog.Warningf(ctx, "Warning")
+	clog.Errorf(ctx, "Error")
+
+	l.Formatter = testFormater
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		cctx := clog.NewSpan(ctx, "trace1", "span1", map[string]string{
+			"id": "id1"})
+
+		clog.Infof(cctx, "Child Info")
+		clog.Warningf(cctx, "Child Warning")
+		clog.Errorf(cctx, "Child Error")
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		cctx := clog.NewSpan(ctx, "trace2", "span2", map[string]string{
+			"id": "id2"})
+
+		clog.Infof(cctx, "Child Info")
+		clog.Warningf(cctx, "Child Warning")
+		clog.Errorf(cctx, "Child Error")
+	}()
+	wg.Wait()
+
+	// TODO(b/267409605): Add assertions to check for the generated log contents.
+}
