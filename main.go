@@ -15,7 +15,10 @@ import (
 	"strings"
 
 	log "github.com/golang/glog"
+	"go.chromium.org/luci/auth"
 	"go.chromium.org/luci/common/system/signals"
+	"go.chromium.org/luci/hardcoded/chromeinfra"
+	"google.golang.org/grpc/credentials"
 )
 
 // Siso is an experimental build tool.
@@ -36,7 +39,19 @@ func main() {
 	ctx := context.Background()
 	var err error
 
-	err = sisoMain(ctx, flag.Args())
+	// Use luci-auth to authenticate.
+	// TODO(b/267435657): Add auth subcommands to be able to authenticate without luci-auth.
+	// This is blocked on b/246687010 to use github.com/maruel/subcommand.
+	authOpts := chromeinfra.DefaultAuthOptions()
+	authOpts.Scopes = []string{auth.OAuthScopeEmail, "https://www.googleapis.com/auth/cloud-platform"}
+	a := auth.NewAuthenticator(ctx, auth.SilentLogin, authOpts)
+	cred, err := a.PerRPCCredentials()
+	if err != nil {
+		fmt.Printf("Failed to authenticate. Please login with `luci-auth login -scopes=\"%s\"`.\n", strings.Join(authOpts.Scopes, " "))
+		os.Exit(1)
+	}
+
+	err = sisoMain(ctx, flag.Args(), cred)
 
 	if errors.Is(err, flag.ErrHelp) {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -48,7 +63,7 @@ func main() {
 	}
 }
 
-func sisoMain(ctx context.Context, args []string) error {
+func sisoMain(ctx context.Context, args []string, cred credentials.PerRPCCredentials) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer signals.HandleInterrupt(cancel)()
 
