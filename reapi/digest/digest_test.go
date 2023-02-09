@@ -58,6 +58,9 @@ func TestData(t *testing.T) {
 	name := "123"
 	b := []byte{1, 2, 3}
 	d := FromBytes(name, b)
+	if d.IsZero() {
+		t.Errorf("FromBytes(..., []byte{1, 2, 3}).IsZero() = true, want false")
+	}
 	bFromData, err := DataToBytes(ctx, d)
 	if err != nil {
 		t.Fatalf("FromBytes(..., []byte{1, 2, 3}).Bytes(ctx) = _, %v, want nil error", err)
@@ -69,6 +72,11 @@ func TestData(t *testing.T) {
 	wantStr := fmt.Sprintf("%s 123", testDigestStr123)
 	if gotStr != wantStr {
 		t.Errorf("FromBytes(%q, []byte{1, 2, 3}).Bytes(ctx) = %v, _, want %v", name, gotStr, wantStr)
+	}
+
+	zd := NewData(nil, Digest{})
+	if !zd.IsZero() {
+		t.Errorf("NewData(nil, Digest{}).IsZero() = false, want true")
 	}
 
 	// TODO(b/267409605): Add test for FromProtoMessage.

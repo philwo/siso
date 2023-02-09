@@ -111,6 +111,11 @@ func NewData(src Source, d Digest) Data {
 	}
 }
 
+// IsZero returns true when the Data is zero value struct.
+func (d Data) IsZero() bool {
+	return d.digest.IsZero()
+}
+
 // Digest returns the Digest of the data.
 func (d Data) Digest() Digest {
 	return d.digest
