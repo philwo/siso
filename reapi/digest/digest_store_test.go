@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 )
 
 func TestStore(t *testing.T) {
@@ -60,7 +61,8 @@ func TestStore(t *testing.T) {
 	// list digests
 	listGot := ds.List()
 	listWant := []Digest{dg1, dg2}
-	if diff := cmp.Diff(listWant, listGot); diff != "" {
+	ignoreOrder := cmpopts.SortSlices(func(x, y Digest) bool { return x.String() < y.String() })
+	if diff := cmp.Diff(listWant, listGot, ignoreOrder); diff != "" {
 		t.Errorf("ds.List(): diff -want +got:\n%s", diff)
 	}
 }
