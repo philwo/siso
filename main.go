@@ -6,66 +6,59 @@ package main
 
 import (
 	"context"
-	"errors"
 	"flag"
-	"fmt"
 	"os"
 	"runtime"
-	"runtime/debug"
-	"strings"
 
 	log "github.com/golang/glog"
+	"github.com/maruel/subcommands"
 	"go.chromium.org/luci/auth"
+	"go.chromium.org/luci/auth/client/authcli"
+	"go.chromium.org/luci/client/versioncli"
+	"go.chromium.org/luci/common/cli"
 	"go.chromium.org/luci/common/system/signals"
 	"go.chromium.org/luci/hardcoded/chromeinfra"
-	"google.golang.org/grpc/credentials"
+
+	"infra/build/siso/subcmd/ninja"
 )
 
 // Siso is an experimental build tool.
 
-func main() {
-	flag.Usage = func() {
-		out := flag.CommandLine.Output()
-		fmt.Fprintf(out, "Usage of %s:\n", os.Args[0])
-		fmt.Fprintf(out, "global flags:\n")
-		flag.PrintDefaults()
-	}
+const version = "0.1"
 
-	flag.Parse()
-	if flag.NArg() == 0 {
-		flag.Usage()
-		os.Exit(2)
-	}
-	ctx := context.Background()
-	var err error
-
-	// Use luci-auth to authenticate.
-	// TODO(b/267435657): Add auth subcommands to be able to authenticate without luci-auth.
-	// This is blocked on b/246687010 to use github.com/maruel/subcommand.
+func getApplication() *cli.Application {
+	// Use go.chromium.org/luci/auth to authenticate.
 	authOpts := chromeinfra.DefaultAuthOptions()
 	authOpts.Scopes = []string{auth.OAuthScopeEmail, "https://www.googleapis.com/auth/cloud-platform"}
-	a := auth.NewAuthenticator(ctx, auth.SilentLogin, authOpts)
-	cred, err := a.PerRPCCredentials()
-	if err != nil {
-		fmt.Printf("Failed to authenticate. Please login with `luci-auth login -scopes=\"%s\"`.\n", strings.Join(authOpts.Scopes, " "))
-		os.Exit(1)
-	}
 
-	err = sisoMain(ctx, flag.Args(), cred)
+	return &cli.Application{
+		Name:  "siso",
+		Title: "Build system with Remote Build Execution",
+		Context: func(ctx context.Context) context.Context {
+			ctx, cancel := context.WithCancel(ctx)
+			signals.HandleInterrupt(cancel)()
+			return ctx
+		},
+		Commands: []*subcommands.Command{
+			subcommands.CmdHelp,
 
-	if errors.Is(err, flag.ErrHelp) {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		flag.Usage()
-		os.Exit(2)
-	}
-	if err != nil {
-		log.Exitf("Error: %v", err)
+			ninja.Cmd(authOpts),
+
+			authcli.SubcommandInfo(authOpts, "whoami", false),
+			authcli.SubcommandLogin(authOpts, "login", false),
+			authcli.SubcommandLogout(authOpts, "logout", false),
+			versioncli.CmdVersion(version),
+		},
 	}
 }
 
-func sisoMain(ctx context.Context, args []string, cred credentials.PerRPCCredentials) error {
-	ctx, cancel := context.WithCancel(ctx)
-	defer signals.HandleInterrupt(cancel)()
+func main() {
+	flag.Parse()
+	// Wraps sisoMain() because os.Exit() doesn't wait defers.
+	os.Exit(sisoMain())
+}
+
+func sisoMain() int {
 
 	// Flush the log on exit to not lose any messages.
 	defer log.Flush()
@@ -80,43 +73,5 @@ func sisoMain(ctx context.Context, args []string, cred credentials.PerRPCCredent
 		}
 	}()
 
-	// Print build information to the log.
-	buildinfo, ok := debug.ReadBuildInfo()
-	log.Infof("buildinfo: path=%q ok=%t", buildinfo.Path, ok)
-	if ok {
-		log.Infof("main module: %s %s", moduleInfo(&buildinfo.Main), vcsInfo(buildinfo))
-		if log.V(1) {
-			for _, m := range buildinfo.Deps {
-				log.Infof("deps module: %s", moduleInfo(m))
-			}
-			for _, bs := range buildinfo.Settings {
-				log.Infof("build %s=%s", bs.Key, bs.Value)
-			}
-		}
-	}
-
-	var err error
-	// TODO(b/246687010) use subcommands library
-	switch args[0] {
-	default:
-		err = fmt.Errorf("unknown subcommand %q: %w", args[0], flag.ErrHelp)
-	}
-	return err
-}
-
-func moduleInfo(m *debug.Module) string {
-	if m == nil {
-		return "<nil>"
-	}
-	return fmt.Sprintf("path:%s version:%s sum:%s replace:%s", m.Path, m.Version, m.Sum, moduleInfo(m.Replace))
-}
-
-func vcsInfo(buildinfo *debug.BuildInfo) string {
-	m := make(map[string]string)
-	for _, bs := range buildinfo.Settings {
-		if strings.HasPrefix(bs.Key, "vcs.") {
-			m[bs.Key] = bs.Value
-		}
-	}
-	return fmt.Sprintf("vcs[revision=%s time=%s modified=%s]", m["vcs.revision"], m["vcs.time"], m["vcs.modified"])
+	return subcommands.Run(getApplication(), nil)
 }
