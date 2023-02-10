@@ -47,11 +47,11 @@ func NewSpan(ctx context.Context, trace, spanID string, labels map[string]string
 	return NewContext(ctx, logger.Span(trace, spanID, labels))
 }
 
-// FromContext returns a logger in the context, or nil if it's not set.
+// FromContext returns a logger in the context, or returns a new logger.
 func FromContext(ctx context.Context) *Logger {
 	logger, ok := ctx.Value(contextKey).(*Logger)
 	if !ok {
-		return nil
+		return New(ctx)
 	}
 	return logger
 }
