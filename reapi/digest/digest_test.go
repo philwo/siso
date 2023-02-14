@@ -116,7 +116,7 @@ func TestLocalFileSource(t *testing.T) {
 		t.Fatalf("failed to write file %q. %v", fname, err)
 	}
 
-	d, err := FromLocalFile(ctx, LocalFileSource{fname})
+	d, err := FromLocalFile(ctx, LocalFileSource{fname, nil})
 	if err != nil {
 		t.Fatalf("FromLocalFile(...) = _, %v, want nil error", err)
 	}

@@ -19,6 +19,8 @@ import (
 
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
 	"google.golang.org/protobuf/proto"
+
+	"infra/build/siso/o11y/iometrics"
 )
 
 // Empty is a digest of empty content.
@@ -192,15 +194,13 @@ func FromLocalFile(ctx context.Context, src LocalFileSource) (Data, error) {
 
 // LocalFileSource is a source for local file.
 type LocalFileSource struct {
-	Fname string
-	// TODO(b/266518906): add IOMetrics.
-	// IOMetrics *iometrics.IOMetrics
+	Fname     string
+	IOMetrics *iometrics.IOMetrics
 }
 
 type localFile struct {
 	*os.File
-	// TODO(b/266518906): add IOMetrics.
-	// m *iometrics.IOMetrics
+	m *iometrics.IOMetrics
 	n int
 }
 
@@ -213,13 +213,17 @@ func (f *localFile) Read(buf []byte) (int, error) {
 
 // Close closes the local file.
 func (f *localFile) Close() error {
-	return f.File.Close()
+	err := f.File.Close()
+	if f.m != nil {
+		f.m.ReadDone(f.n, err)
+	}
+	return err
 }
 
 // Open opens local file.
 func (s LocalFileSource) Open(ctx context.Context) (io.ReadCloser, error) {
 	r, err := os.Open(s.Fname)
-	return &localFile{File: r}, err
+	return &localFile{File: r, m: s.IOMetrics}, err
 }
 
 // String returns the source name with "file://" prefix.
