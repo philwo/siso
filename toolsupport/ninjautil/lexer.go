@@ -119,19 +119,27 @@ func (m *charmap) contains(ch byte) bool {
 // [a-zA-Z0-9_.-]
 var varnameChar charmap
 
+// [a-zA-Z0-9_-]
+var simpleVarnameChar charmap
+
 func init() {
 	for ch := byte('a'); ch <= 'z'; ch++ {
 		varnameChar.set(ch)
+		simpleVarnameChar.set(ch)
 	}
 	for ch := byte('A'); ch <= 'Z'; ch++ {
 		varnameChar.set(ch)
+		simpleVarnameChar.set(ch)
 	}
 	for ch := byte('0'); ch <= '9'; ch++ {
 		varnameChar.set(ch)
+		simpleVarnameChar.set(ch)
 	}
 	varnameChar.set('_')
 	varnameChar.set('.')
 	varnameChar.set('-')
+	simpleVarnameChar.set('_')
+	simpleVarnameChar.set('-')
 }
 
 func matchKeyword(buf, kw []byte) int {
@@ -271,4 +279,148 @@ loop:
 		l.eatWhitespace()
 	}
 	return t, nil
+}
+
+func (l *lexer) VarValue() (EvalString, error) {
+	return l.evalString()
+}
+
+var nonLiteralChar charmap
+
+func init() {
+	for _, ch := range []byte("$ :\r\n|\000") {
+		nonLiteralChar.set(ch)
+	}
+}
+
+func matchLiteral(buf []byte) int {
+	for i, ch := range buf {
+		if nonLiteralChar.contains(ch) {
+			return i
+		}
+	}
+	return len(buf)
+}
+
+func matchVarref(buf []byte) (n int, simple, ok bool) {
+	if len(buf) == 0 {
+		return 0, false, false
+	}
+	if buf[0] != '$' {
+		return 0, false, false
+	}
+	if len(buf) == 1 {
+		return 0, false, false
+	}
+	if buf[1] == ':' {
+		return 2, false, false
+	}
+	i := 1
+	simple = buf[1] != '{'
+	if !simple {
+		i++
+	}
+	for ; i < len(buf); i++ {
+		c := buf[i]
+		if simpleVarnameChar.contains(c) {
+			continue
+		}
+		if !simple {
+			if c == '.' {
+				continue
+			}
+			if c == '}' {
+				return i + 1, false, true
+			}
+			return 0, false, false
+		}
+		return i, true, true
+	}
+	return len(buf), simple, false
+
+}
+
+var esbuf = EvalString{
+	s: make([]tokenStr, 0, 32),
+}
+
+func (l *lexer) evalString() (EvalString, error) {
+	esbuf.s = esbuf.s[:0]
+	var s int
+loop:
+	for {
+		s = l.pos
+		cur := l.buf[l.pos:]
+		if len(cur) == 0 {
+			return EvalString{}, l.errorf("unexpected EOF")
+		}
+		if i := matchLiteral(cur); i > 0 {
+			esbuf.addLiteral(cur[:i])
+			l.pos += i
+			continue
+		}
+		if bytes.HasPrefix(cur, []byte("\r\n")) {
+			l.pos += len("\r\n")
+			break loop
+		}
+		if cur[0] == '\n' {
+			l.pos++
+			break loop
+		}
+		// TODO(b/267409605): Ensure all cases have test coverage.
+		switch cur[0] {
+		case ' ', ':', '|':
+			esbuf.addLiteral(cur[:1])
+			l.pos++
+			continue
+		}
+		if bytes.HasPrefix(cur, []byte("$$")) {
+			esbuf.addLiteral(cur[1:2])
+			l.pos += 2
+			continue
+		}
+		if bytes.HasPrefix(cur, []byte("$ ")) {
+			esbuf.addLiteral(cur[1:2])
+			l.pos += 2
+			continue
+		}
+		if bytes.HasPrefix(cur, []byte("$\r\n")) {
+			l.pos += 3
+			for l.pos < len(l.buf) && l.buf[l.pos] == ' ' {
+				l.pos++
+			}
+			continue
+		}
+		if bytes.HasPrefix(cur, []byte("$\n")) {
+			l.pos += 2
+			for l.pos < len(l.buf) && l.buf[l.pos] == ' ' {
+				l.pos++
+			}
+			continue
+		}
+		if bytes.HasPrefix(cur, []byte("$:")) {
+			esbuf.addLiteral(cur[1:2])
+			l.pos += 2
+			continue
+		}
+		if i, simple, ok := matchVarref(cur); ok {
+			if simple {
+				esbuf.addVar(cur[1:i])
+			} else {
+				esbuf.addVar(cur[2 : i-1])
+			}
+			l.pos += i
+			continue
+		}
+		if cur[0] == '$' {
+			return EvalString{}, l.errorf("bad $-escape")
+		}
+		return EvalString{}, l.errorf("lexing error")
+	}
+	l.last = s
+	e := EvalString{
+		s: make([]tokenStr, len(esbuf.s)),
+	}
+	copy(e.s, esbuf.s)
+	return e, nil
 }
