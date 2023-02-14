@@ -35,6 +35,35 @@ func TestLexerVarValue_Escapes(t *testing.T) {
 	}
 }
 
+func TestLexerIdent(t *testing.T) {
+	l := lexer{buf: []byte("foo BaR baz_123 foo-bar")}
+	for _, want := range []string{
+		"foo",
+		"BaR",
+		"baz_123",
+		"foo-bar",
+	} {
+		tok, err := l.Ident()
+		if err != nil || tok.String() != want {
+			t.Errorf("Ident %q,%v; want %q", tok, err, want)
+		}
+	}
+}
+
+func TestLexerIdent_Curlies(t *testing.T) {
+	l := lexer{buf: []byte("foo.dots $bar.dots ${bar.dots}\n")}
+	tok, err := l.Ident()
+	want := "foo.dots"
+	if err != nil || tok.String() != want {
+		t.Errorf("Ident=%q,%v; want %q", tok, err, want)
+	}
+	str, err := l.VarValue()
+	want = "[$bar][.dots ][$bar.dots]"
+	if err != nil || str.String() != want {
+		t.Errorf("VarValue=%q, %v; want %q", str, err, want)
+	}
+}
+
 func TestLexer_Error(t *testing.T) {
 	l := lexer{buf: []byte("foo$\nbad $")}
 	str, err := l.VarValue()

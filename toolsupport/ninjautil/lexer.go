@@ -281,8 +281,29 @@ loop:
 	return t, nil
 }
 
+func (l *lexer) Ident() (tokenIdent, error) {
+	var t tokenIdent
+	s := l.pos
+	cur := l.buf[l.pos:]
+	if len(cur) == 0 {
+		return t, l.errorf("EOF")
+	}
+	if i := matchVarname(cur); i > 0 {
+		t = tokenIdent{tokenString(cur[:i])}
+		l.pos += i
+		l.last = s
+		l.eatWhitespace()
+		return t, nil
+	}
+	return t, l.errorf("not ident name")
+}
+
+func (l *lexer) Path() (EvalString, error) {
+	return l.evalString(true)
+}
+
 func (l *lexer) VarValue() (EvalString, error) {
-	return l.evalString()
+	return l.evalString(false)
 }
 
 var nonLiteralChar charmap
@@ -344,10 +365,11 @@ var esbuf = EvalString{
 	s: make([]tokenStr, 0, 32),
 }
 
-func (l *lexer) evalString() (EvalString, error) {
+func (l *lexer) evalString(path bool) (EvalString, error) {
 	esbuf.s = esbuf.s[:0]
 	var s int
 loop:
+	// TODO(b/267409605): Add test coverage for path=true.
 	for {
 		s = l.pos
 		cur := l.buf[l.pos:]
@@ -360,17 +382,23 @@ loop:
 			continue
 		}
 		if bytes.HasPrefix(cur, []byte("\r\n")) {
-			l.pos += len("\r\n")
+			if !path {
+				l.pos += len("\r\n")
+			}
 			break loop
 		}
 		if cur[0] == '\n' {
-			l.pos++
+			if !path {
+				l.pos++
+			}
 			break loop
 		}
 		// TODO(b/267409605): Ensure all cases have test coverage.
 		switch cur[0] {
 		case ' ', ':', '|':
-			esbuf.addLiteral(cur[:1])
+			if !path {
+				esbuf.addLiteral(cur[:1])
+			}
 			l.pos++
 			continue
 		}
@@ -418,6 +446,9 @@ loop:
 		return EvalString{}, l.errorf("lexing error")
 	}
 	l.last = s
+	if path {
+		l.eatWhitespace()
+	}
 	e := EvalString{
 		s: make([]tokenStr, len(esbuf.s)),
 	}
