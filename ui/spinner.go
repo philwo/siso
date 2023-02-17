@@ -13,7 +13,6 @@ import (
 type Spinner struct {
 	quit, done chan struct{}
 	started    time.Time
-	chars      []byte
 	n          int
 }
 
@@ -23,9 +22,6 @@ func (s *Spinner) Start(format string, args ...interface{}) {
 	fmt.Printf(format, args...)
 	if !IsTerminal {
 		return
-	}
-	if len(s.chars) == 0 {
-		s.chars = []byte(`/-\|`)
 	}
 	s.quit = make(chan struct{})
 	s.done = make(chan struct{})
@@ -37,9 +33,10 @@ func (s *Spinner) Start(format string, args ...interface{}) {
 			case <-s.quit:
 				return
 			case <-time.After(1 * time.Second):
-				fmt.Printf("\b%c", s.chars[s.n])
+				const chars = `/-\|`
+				fmt.Printf("\b%c", chars[s.n])
 				s.n++
-				if s.n >= len(s.chars) {
+				if s.n >= len(chars) {
 					s.n = 0
 				}
 			}
