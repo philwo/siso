@@ -32,15 +32,7 @@ func init() {
 // Otherwise, it will replaces the last N lines, where N is len(msgs).
 func PrintLines(msgs ...string) {
 	if !IsTerminal {
-		var buf bytes.Buffer
-		for i, msg := range msgs {
-			if i > 0 {
-				fmt.Fprint(&buf, "\t")
-			}
-			fmt.Fprint(&buf, msg)
-		}
-		fmt.Fprintln(&buf)
-		os.Stdout.Write(buf.Bytes())
+		os.Stdout.Write([]byte(strings.Join(msgs, "\t") + "\n"))
 		return
 	}
 	var buf bytes.Buffer
