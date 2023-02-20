@@ -51,7 +51,7 @@ type lexerError struct {
 	msg   string
 }
 
-func (l *lexer) errorf(format string, args ...interface{}) error {
+func (l *lexer) errorf(format string, args ...any) error {
 	return lexerError{
 		lexer: l,
 		pos:   l.pos,

@@ -17,7 +17,7 @@ type Spinner struct {
 }
 
 // Start starts the spinner.
-func (s *Spinner) Start(format string, args ...interface{}) {
+func (s *Spinner) Start(format string, args ...any) {
 	s.started = time.Now()
 	fmt.Printf(format, args...)
 	if !IsTerminal {

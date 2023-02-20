@@ -104,118 +104,118 @@ func (l *Logger) glogEntry(e logging.Entry) {
 }
 
 // Info logs at info log level in the manner of fmt.Print.
-func (l *Logger) Info(args ...interface{}) {
+func (l *Logger) Info(args ...any) {
 	l.log(l.Entry(logging.Info, fmt.Sprint(args...)))
 }
 
 // Infoln logs at info log level in the manner of fmt.Println.
-func (l *Logger) Infoln(args ...interface{}) {
+func (l *Logger) Infoln(args ...any) {
 	l.log(l.Entry(logging.Info, fmt.Sprintln(args...)))
 }
 
 // Infof logs at info log level in the manner of fmt.Printf.
-func (l *Logger) Infof(format string, args ...interface{}) {
+func (l *Logger) Infof(format string, args ...any) {
 	l.log(l.Entry(logging.Info, fmt.Sprintf(format, args...)))
 }
 
 // Infof logs at info log level in the manner of fmt.Printf.
-func Infof(ctx context.Context, format string, args ...interface{}) {
+func Infof(ctx context.Context, format string, args ...any) {
 	logger := FromContext(ctx)
 	logger.log(logger.Entry(logging.Info, fmt.Sprintf(format, args...)))
 }
 
 // Warning logs at warning log level in the manner of fmt.Print.
-func (l *Logger) Warning(args ...interface{}) {
+func (l *Logger) Warning(args ...any) {
 	l.log(l.Entry(logging.Warning, fmt.Sprint(args...)))
 }
 
 // Warningln logs at warning log level in the manner of fmt.Println.
-func (l *Logger) Warningln(args ...interface{}) {
+func (l *Logger) Warningln(args ...any) {
 	l.log(l.Entry(logging.Warning, fmt.Sprintln(args...)))
 }
 
 // Warningf logs at warning log level in the manner of fmt.Printf.
-func (l *Logger) Warningf(format string, args ...interface{}) {
+func (l *Logger) Warningf(format string, args ...any) {
 	l.log(l.Entry(logging.Warning, fmt.Sprintf(format, args...)))
 }
 
 // Warningf logs at warning log level in the manner of fmt.Printf.
-func Warningf(ctx context.Context, format string, args ...interface{}) {
+func Warningf(ctx context.Context, format string, args ...any) {
 	logger := FromContext(ctx)
 	logger.log(logger.Entry(logging.Warning, fmt.Sprintf(format, args...)))
 }
 
 // Error logs at error log level in the manner of fmt.Print.
-func (l *Logger) Error(args ...interface{}) {
+func (l *Logger) Error(args ...any) {
 	l.log(l.Entry(logging.Error, fmt.Sprint(args...)))
 }
 
 // Errorln logs at error log level in the manner of fmt.Println.
-func (l *Logger) Errorln(args ...interface{}) {
+func (l *Logger) Errorln(args ...any) {
 	l.log(l.Entry(logging.Error, fmt.Sprintln(args...)))
 }
 
 // Errorf logs at error log level in the manner of fmt.Printf.
-func (l *Logger) Errorf(format string, args ...interface{}) {
+func (l *Logger) Errorf(format string, args ...any) {
 	l.log(l.Entry(logging.Error, fmt.Sprintf(format, args...)))
 }
 
 // Errorf logs at error log level in the manner of fmt.Printf.
-func Errorf(ctx context.Context, format string, args ...interface{}) {
+func Errorf(ctx context.Context, format string, args ...any) {
 	logger := FromContext(ctx)
 	logger.log(logger.Entry(logging.Warning, fmt.Sprintf(format, args...)))
 }
 
 // Fatal logs at fatal log level in the manner of fmt.Print with stacktrace, and exit.
-func (l *Logger) Fatal(args ...interface{}) {
+func (l *Logger) Fatal(args ...any) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 	l.fatalf(ctx, "%s", fmt.Sprint(args...))
 }
 
 // Fatalln logs at fatal log level in the manner of fmt.Println with stacktrace, and exit.
-func (l *Logger) Fatalln(args ...interface{}) {
+func (l *Logger) Fatalln(args ...any) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 	l.fatalf(ctx, "%s", fmt.Sprintln(args...))
 }
 
 // Fatalf logs at fatal log level in the manner of fmt.Printf with stacktrace, and exit.
-func (l *Logger) Fatalf(format string, args ...interface{}) {
+func (l *Logger) Fatalf(format string, args ...any) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 	l.fatalf(ctx, format, args...)
 }
 
-func (l *Logger) fatalf(ctx context.Context, format string, args ...interface{}) {
+func (l *Logger) fatalf(ctx context.Context, format string, args ...any) {
 	l.log(l.Entry(logging.Critical, fmt.Sprintf(format, args...)))
 }
 
 // Fatalf logs at fatal log level in the manner of fmt.Printf with stacktrace, and exit.
-func Fatalf(ctx context.Context, format string, args ...interface{}) {
+func Fatalf(ctx context.Context, format string, args ...any) {
 	logger := FromContext(ctx)
 	logger.log(logger.Entry(logging.Critical, fmt.Sprintf(format, args...)))
 }
 
 // Exitf logs at fatal log level in the manner of fmt.Printf, and exit.
-func (l *Logger) Exitf(format string, args ...interface{}) {
+func (l *Logger) Exitf(format string, args ...any) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 	l.exitf(ctx, format, args...)
 }
 
-func (l *Logger) exitf(ctx context.Context, format string, args ...interface{}) {
+func (l *Logger) exitf(ctx context.Context, format string, args ...any) {
 	l.log(l.Entry(logging.Emergency, fmt.Sprintf(format, args...)))
 }
 
 // Exitf logs at fatal log level in the manner of fmt.Printf, and exit.
-func Exitf(ctx context.Context, format string, args ...interface{}) {
+func Exitf(ctx context.Context, format string, args ...any) {
 	logger := FromContext(ctx)
 	logger.exitf(ctx, format, args...)
 }
 
 // Entry creates a new log entry for the given severity.
-func (l *Logger) Entry(severity logging.Severity, payload interface{}) logging.Entry {
+func (l *Logger) Entry(severity logging.Severity, payload any) logging.Entry {
 	return logging.Entry{
 		Timestamp: time.Now(),
 		Severity:  severity,
