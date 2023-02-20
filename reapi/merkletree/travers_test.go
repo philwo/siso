@@ -12,7 +12,7 @@ import (
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
 	"github.com/golang/glog"
 	"github.com/google/go-cmp/cmp"
-	"github.com/google/go-cmp/cmp/cmpopts"
+	"google.golang.org/protobuf/testing/protocmp"
 
 	"infra/build/siso/reapi/digest"
 	"infra/build/siso/reapi/merkletree"
@@ -85,8 +85,8 @@ func TestTraverse(t *testing.T) {
 		},
 	}
 	ignoreOpts := []cmp.Option{
-		cmpopts.IgnoreUnexported(rpb.OutputFile{}),
-		cmpopts.IgnoreFields(rpb.OutputFile{}, "Digest"),
+		protocmp.Transform(),
+		protocmp.IgnoreFields(new(rpb.OutputFile), "digest"),
 	}
 	if diff := cmp.Diff(wantFiles, files, ignoreOpts...); diff != "" {
 		t.Errorf("merkletree.Traverse(...) = files, _, _: -want +got\n%s", diff)
@@ -103,7 +103,7 @@ func TestTraverse(t *testing.T) {
 		},
 	}
 	ignoreOpts = []cmp.Option{
-		cmpopts.IgnoreUnexported(rpb.OutputSymlink{}),
+		protocmp.Transform(),
 	}
 	if diff := cmp.Diff(wantLinks, links, ignoreOpts...); diff != "" {
 		t.Errorf("merkletree.Traverse(...) = _, _, _: -want +got\n%s", diff)
@@ -121,8 +121,8 @@ func TestTraverse(t *testing.T) {
 		},
 	}
 	ignoreOpts = []cmp.Option{
-		cmpopts.IgnoreUnexported(rpb.OutputDirectory{}),
-		cmpopts.IgnoreFields(rpb.OutputDirectory{}, "TreeDigest"),
+		protocmp.Transform(),
+		protocmp.IgnoreFields(new(rpb.OutputDirectory), "tree_digest"),
 	}
 	if diff := cmp.Diff(wantDirs, dirs, ignoreOpts...); diff != "" {
 		t.Errorf("merkletree.Traverse(...) = _, _, dirs: -want +got\n%s", diff)
