@@ -26,7 +26,7 @@ type DepsLog interface {
 // DepsLogs combines local deps log and shared deps log.
 type DepsLogs struct {
 	Local  DepsLog
-	Shared DepsLog
+	Shared *SharedDepsLog
 }
 
 // Get returns a local deps log if available. Otherwise, gets a shared deps log.
@@ -53,7 +53,7 @@ func (d DepsLogs) Record(ctx context.Context, output string, cmdhash []byte, t t
 	})
 	if d.Shared != nil {
 		g.Go(func() (err error) {
-			su, err = d.Shared.Record(ctx, output, cmdhash, t, deps)
+			su, err = d.Shared.Record(ctx, output, cmdhash, deps)
 			return err
 		})
 	}
