@@ -6,54 +6,102 @@ package build
 
 import (
 	"context"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
+	"path"
+	"path/filepath"
 	"time"
 
+	"cloud.google.com/go/storage"
 	"golang.org/x/sync/errgroup"
 )
 
-// TODO(b/266518906): move ninjautil.DepsLog to build package and remove this interface.
-// DepsLog is an interface to access deps log.
-type DepsLog interface {
-	// Get gets a deps log by an output with cmdhash.
-	// An error is returned when the deps log is not found.
-	Get(ctx context.Context, output string, cmdhash []byte) (deps []string, mtime time.Time, err error)
+// TODO(b/267576561): support Cloud Trace integration.
 
-	// Records records a deps log for an output with cmdhash.
-	Record(ctx context.Context, output string, cmdhash []byte, mtime time.Time, deps []string) (updaetd bool, err error)
+// SharedDepsLog is a shared deps log on cloud storage bucket.
+type SharedDepsLog struct {
+	Bucket *storage.BucketHandle
 }
 
-// DepsLogs combines local deps log and shared deps log.
-type DepsLogs struct {
-	Local  DepsLog
-	Shared *SharedDepsLog
+type depsLogEntry struct {
+	Deps []string `json:"deps"`
 }
 
-// Get returns a local deps log if available. Otherwise, gets a shared deps log.
-func (d DepsLogs) Get(ctx context.Context, output string, cmdhash []byte) ([]string, time.Time, error) {
-	deps, t, err := d.Local.Get(ctx, output, cmdhash)
-	if err == nil {
-		return deps, t, nil
-	}
-	if d.Shared == nil {
+// Get gets a deps log from Google Cloud Storage.
+func (d SharedDepsLog) Get(ctx context.Context, output string, cmdhash []byte) ([]string, time.Time, error) {
+	if d.Bucket == nil {
 		return nil, time.Time{}, errors.New("not found")
 	}
-	return d.Shared.Get(ctx, output, cmdhash)
+	obj := d.Bucket.Object(path.Join(filepath.ToSlash(output), hex.EncodeToString(cmdhash)))
+	rd, err := obj.NewReader(ctx)
+	if err != nil {
+		return nil, time.Time{}, err
+	}
+	defer rd.Close()
+	buf, err := io.ReadAll(rd)
+	if err != nil {
+		return nil, time.Time{}, fmt.Errorf("read err %s: %w", obj.ObjectName(), err)
+	}
+	var ent depsLogEntry
+	err = json.Unmarshal(buf, &ent)
+	if err != nil {
+		return nil, time.Time{}, fmt.Errorf("unmarshal err %s: %w", obj.ObjectName(), err)
+	}
+	return ent.Deps, rd.Attrs.LastModified, nil
 }
 
-// Record records the deps log to both local and shared locations.
-func (d DepsLogs) Record(ctx context.Context, output string, cmdhash []byte, t time.Time, deps []string) (bool, error) {
+// Record records a deps log deps on Google Cloud Storage.
+func (d SharedDepsLog) Record(ctx context.Context, output string, cmdhash []byte, deps []string) (bool, error) {
+	if d.Bucket == nil {
+		return false, nil
+	}
+	ent := depsLogEntry{
+		Deps: deps,
+	}
+	obj := d.Bucket.Object(path.Join(filepath.ToSlash(output), hex.EncodeToString(cmdhash)))
+	buf, err := json.Marshal(ent)
+	if err != nil {
+		return false, fmt.Errorf("marshal %s: %w", obj.ObjectName(), err)
+	}
+	// Upload without checking the content of the object because it may take longer to download.
+	wr := obj.NewWriter(ctx)
+	var ok bool
+	defer func() {
+		if e := wr.Close(); e != nil {
+			ok = false
+			// TODO(b/269974751): use errors.Join(err, e) to not dismiss err from wr.Write().
+			// https://pkg.go.dev/errors@go1.20#Join
+			err = e
+		}
+	}()
+	for len(buf) > 0 {
+		n, err := wr.Write(buf)
+		if err != nil {
+			ok = false
+			return ok, fmt.Errorf("write %s: %w", obj.ObjectName(), err)
+		}
+		buf = buf[n:]
+	}
+	ok = true
+	return ok, nil
+}
+
+// recordDepsLog records deps for output with cmdhash to local and shared.
+func (b *Builder) recordDepsLog(ctx context.Context, output string, cmdhash []byte, t time.Time, deps []string) (bool, error) {
 	g, ctx := errgroup.WithContext(ctx)
 
 	// updated flags
 	var lu, su bool
 	g.Go(func() (err error) {
-		lu, err = d.Local.Record(ctx, output, cmdhash, t, deps)
+		lu, err = b.stepDefs.RecordDepsLog(ctx, output, t, deps)
 		return err
 	})
-	if d.Shared != nil {
+	if b.sharedDepsLog.Bucket != nil {
 		g.Go(func() (err error) {
-			su, err = d.Shared.Record(ctx, output, cmdhash, deps)
+			su, err = b.sharedDepsLog.Record(ctx, output, cmdhash, deps)
 			return err
 		})
 	}
