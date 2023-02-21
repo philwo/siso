@@ -26,7 +26,7 @@ func TestDo(t *testing.T) {
 	t.Run("no retry", func(t *testing.T) {
 		called := 0
 		err := retry.Do(ctx, func() error {
-			called += 1
+			called++
 			return nil
 		})
 		if err != nil {
@@ -41,7 +41,7 @@ func TestDo(t *testing.T) {
 		called := 0
 		testErr := fmt.Errorf("error")
 		err := retry.Do(ctx, func() error {
-			called += 1
+			called++
 			return testErr
 		})
 		if err != testErr {
@@ -60,7 +60,7 @@ func TestDo(t *testing.T) {
 
 		called := 0
 		err := retry.Do(ctx, func() error {
-			called += 1
+			called++
 			if called == 1 {
 				return status.Error(codes.Internal, "retriable error")
 			}

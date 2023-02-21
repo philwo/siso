@@ -43,7 +43,7 @@ func retriableError(err error, called int) bool {
 func Do(ctx context.Context, f func() error) error {
 	called := 0
 	return retry.Retry(ctx, transient.Only(retry.Default), func() error {
-		called += 1
+		called++
 		err := f()
 		if retriableError(err, called) {
 			return errors.Annotate(err, "retriable error").Tag(transient.Tag).Err()
