@@ -21,8 +21,6 @@ import (
 	"infra/build/siso/o11y/clog"
 )
 
-// TODO(b/267409605): Add tests.
-
 // DepsLog is an in-memory representation of ninja's depslog.
 // It supports creating new depslog files and reading existing depslog files,
 // as well as adding new records to open depslog files.
