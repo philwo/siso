@@ -59,6 +59,7 @@ func (h recordHeader) RecordSize() int {
 }
 
 type depsRecord struct {
+	// TODO(b/270278015): use 64bit timestamp to avoid year 2038 problem.
 	mtime  int32
 	inputs []string
 }
