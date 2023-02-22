@@ -9,6 +9,7 @@ package semaphore
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"sync/atomic"
 )
@@ -27,12 +28,15 @@ type Semaphore struct {
 	reqs  atomic.Int64
 }
 
-// Lookup returns a semaphore for the name, or nil if not registered.
-// TODO(jwata): return error for missing semaphore.
-func Lookup(name string) *Semaphore {
+// Lookup returns a semaphore for the name, or error if not registered.
+func Lookup(name string) (*Semaphore, error) {
 	mu.Lock()
 	defer mu.Unlock()
-	return semaphores[name]
+	s, ok := semaphores[name]
+	if !ok {
+		return nil, fmt.Errorf("semaphore %q does not exist", name)
+	}
+	return s, nil
 }
 
 // New creates a new semaphore with name and capacity.
@@ -75,9 +79,6 @@ func (s *Semaphore) Name() string {
 
 // Capacity returns capacity of the semaphore.
 func (s *Semaphore) Capacity() int {
-	if s == nil {
-		return 0
-	}
 	return cap(s.ch)
 }
 
