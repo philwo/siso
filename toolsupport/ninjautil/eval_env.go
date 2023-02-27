@@ -10,9 +10,11 @@ import (
 	"strings"
 )
 
-// Env is an interface for an environment for evaluation.
+// Env implementations provide a scope for looking up bindings.
+// Bindings are more commonly known as variables for Ninja users.
+// Further reading: https://ninja-build.org/manual.html#_variables
 type Env interface {
-	// Look up the variable in the environment.
+	// Look up the binding in the environment.
 	Lookup(string) string
 }
 
@@ -28,7 +30,8 @@ type tokenStr struct {
 	s []byte
 }
 
-// EvalString is an eval string.
+// EvalString represents a sequence of Ninja literals or variables which can be
+// evaluated in an Env.
 // TODO(b/267409605): Add tests for EvalString methods.
 type EvalString struct {
 	s []tokenStr
@@ -106,6 +109,7 @@ func (e EvalString) String() string {
 }
 
 // Rule represents a build rule.
+// Further reading: https://ninja-build.org/manual.html#_rules
 // TODO(b/267409605): Add tests for Rule methods.
 type Rule struct {
 	name     string
@@ -138,7 +142,9 @@ func (r *Rule) hasBinding(key string) bool {
 	return ok
 }
 
-// BindingEnv is a binding env.
+// BindingEnv is an implementation of the Env interface which holds mappings of
+// binding names to values, mappings of rule names to rules (which also hold
+// bindings), and a pointer to a parent BindingEnv.
 // TODO(b/267409605): Add tests for BindingEnv methods.
 type BindingEnv struct {
 	rules    map[string]*Rule
