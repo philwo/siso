@@ -54,7 +54,7 @@ func (d SharedDepsLog) Get(ctx context.Context, output string, cmdhash []byte) (
 }
 
 // Record records a deps log deps on Google Cloud Storage.
-func (d SharedDepsLog) Record(ctx context.Context, output string, cmdhash []byte, deps []string) (bool, error) {
+func (d SharedDepsLog) Record(ctx context.Context, output string, cmdhash []byte, deps []string) (updated bool, err error) {
 	if d.Bucket == nil {
 		return false, nil
 	}
@@ -68,25 +68,25 @@ func (d SharedDepsLog) Record(ctx context.Context, output string, cmdhash []byte
 	}
 	// Upload without checking the content of the object because it may take longer to download.
 	wr := obj.NewWriter(ctx)
-	var ok bool
 	defer func() {
 		if e := wr.Close(); e != nil {
-			ok = false
-			// TODO(b/269974751): use errors.Join(err, e) to not dismiss err from wr.Write().
-			// https://pkg.go.dev/errors@go1.20#Join
-			err = e
+			updated = false
+			// Do not overwrite an error from Write() below.
+			if err == nil {
+				err = e
+			}
 		}
 	}()
 	for len(buf) > 0 {
 		n, err := wr.Write(buf)
 		if err != nil {
-			ok = false
-			return ok, fmt.Errorf("write %s: %w", obj.ObjectName(), err)
+			updated = false
+			return updated, fmt.Errorf("write %s: %w", obj.ObjectName(), err)
 		}
 		buf = buf[n:]
 	}
-	ok = true
-	return ok, nil
+	updated = true
+	return updated, nil
 }
 
 // recordDepsLog records deps for output with cmdhash to local and shared.
