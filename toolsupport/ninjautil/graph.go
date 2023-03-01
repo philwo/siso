@@ -36,7 +36,9 @@ func (n *Node) InEdge() (*Edge, bool) {
 // Edge represents an edge (action) in build graph.
 // TODO(b/267409605): Add tests for Edge methods.
 type Edge struct {
-	rule    *Rule
+	rule *Rule
+
+	// For now, setting pool doesn't affect Siso builds as all because Siso utilizes remote computation resources.
 	pool    *Pool
 	env     *BindingEnv
 	inputs  []*Node
