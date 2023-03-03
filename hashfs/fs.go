@@ -15,14 +15,15 @@ import (
 	"infra/build/siso/reapi/merkletree"
 )
 
-type entry struct {
-	mtime time.Time
+// TODO(b/266518906): make this struct and its fields private.
+type Entry struct {
+	Mtime time.Time
 
-	d            digest.Digest
-	isExecutable bool
-	target       string // symlink
+	D            digest.Digest
+	IsExecutable bool
+	Target       string // symlink
 
-	data digest.Data // from local
+	Data digest.Data // from local
 }
 
 type HashFS struct {
@@ -30,32 +31,33 @@ type HashFS struct {
 
 // FileInfo implements https://pkg.go.dev/io/fs#FileInfo.
 type FileInfo struct {
-	fname string
-	e     *entry
+	// TODO(b/266518906): make these fields private.
+	Fname string
+	E     *Entry
 }
 
 // Name is a base name of the file.
 func (fi *FileInfo) Name() string {
-	return filepath.Base(fi.fname)
+	return filepath.Base(fi.Fname)
 }
 
 // Size is a size of the file.
 func (fi *FileInfo) Size() int64 {
-	if fi.e.d.IsZero() {
+	if fi.E.D.IsZero() {
 		return 0
 	}
-	return fi.e.d.SizeBytes
+	return fi.E.D.SizeBytes
 }
 
 // Mode is a file mode of the file.
 func (fi *FileInfo) Mode() fs.FileMode {
 	mode := fs.FileMode(0644)
-	if fi.e.d.IsZero() && fi.e.target == "" {
+	if fi.E.D.IsZero() && fi.E.Target == "" {
 		mode |= fs.ModeDir
-	} else if fi.e.d.IsZero() && fi.e.target != "" {
+	} else if fi.E.D.IsZero() && fi.E.Target != "" {
 		mode |= fs.ModeSymlink
 	}
-	if fi.e.isExecutable {
+	if fi.E.IsExecutable {
 		mode |= 0111
 	}
 	return mode
@@ -63,48 +65,49 @@ func (fi *FileInfo) Mode() fs.FileMode {
 
 // ModTime is a modification time of the file.
 func (fi *FileInfo) ModTime() time.Time {
-	return fi.e.mtime
+	return fi.E.Mtime
 }
 
 // IsDir returns true if it is the directory.
 func (fi *FileInfo) IsDir() bool {
 	// TODO: e.directory != nil?
-	return fi.e.d.IsZero() && fi.e.target == ""
+	return fi.E.D.IsZero() && fi.E.Target == ""
 }
 
 // Sys returns merkletree Entry of the file.
 func (fi *FileInfo) Sys() any {
 	return merkletree.Entry{
-		Name:         fi.fname,
-		Data:         fi.e.data,
-		IsExecutable: fi.e.isExecutable,
-		Target:       fi.e.target,
+		Name:         fi.Fname,
+		Data:         fi.E.Data,
+		IsExecutable: fi.E.IsExecutable,
+		Target:       fi.E.Target,
 	}
 }
 
 // DirEntry implements https://pkg.go.dev/io/fs#DirEntry.
 type DirEntry struct {
-	fi *FileInfo
+	// TODO(b/266518906): make this private.
+	Fi *FileInfo
 }
 
 // Name is a base name in the directory.
 func (de DirEntry) Name() string {
-	return de.fi.Name()
+	return de.Fi.Name()
 }
 
 // IsDir returns true if it is a directory.
 func (de DirEntry) IsDir() bool {
-	return de.fi.IsDir()
+	return de.Fi.IsDir()
 }
 
 // Type returns a file type.
 func (de DirEntry) Type() fs.FileMode {
-	return de.fi.Mode().Type()
+	return de.Fi.Mode().Type()
 }
 
 // Info returns a FileInfo.
 func (de DirEntry) Info() (fs.FileInfo, error) {
-	return de.fi, nil
+	return de.Fi, nil
 }
 
 // Entries gets merkletree entries for inputs at root.
