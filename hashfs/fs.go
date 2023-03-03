@@ -111,3 +111,7 @@ func (de DirEntry) Info() (fs.FileInfo, error) {
 func (hfs *HashFS) Entries(ctx context.Context, root string, inputs []string) ([]merkletree.Entry, error) {
 	return nil, nil
 }
+
+// Forget forgets cached entry for inputs under root.
+func (hfs *HashFS) Forget(ctx context.Context, root string, inputs []string) {
+}
