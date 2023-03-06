@@ -67,7 +67,10 @@ type Cmd struct {
 	Inputs []string
 
 	// ToolInputs are tool input files of the cmd, relative to ExecRoot.
-	// They are specified by the command, not overridden by deps. (or inputs would be deps + tool inputs)
+	// They are specified by the siso config, not overridden by deps.
+	// (or inputs would be deps + tool inputs).
+	// These are expected to be toolchain input files, not by specified
+	// by build deps, nor in deps log.
 	ToolInputs []string
 
 	// Outputs are output files of the cmd, relative to ExecRoot.
