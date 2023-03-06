@@ -58,6 +58,7 @@ type Entry struct {
 // TODO: use generics as DirMap<K,V>?
 // TODO(b/266518906): make this struct and its fields private.
 type Directory struct {
+	// M is a map of file's basename to *entry.
 	M sync.Map
 }
 
