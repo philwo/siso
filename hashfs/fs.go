@@ -9,6 +9,8 @@ import (
 	"context"
 	"io/fs"
 	"path/filepath"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"infra/build/siso/reapi/digest"
@@ -17,13 +19,46 @@ import (
 
 // TODO(b/266518906): make this struct and its fields private.
 type Entry struct {
+	// Lready represents whether it is ready to use local file.
+	// true - need to download contents.
+	// block - download is in progress.
+	// closed/false - file is already downloaded.
+	Lready chan bool
+
 	Mtime time.Time
 
+	// cmdhash is hash of command lines that generated this file.
+	// e.g. hash('touch output.stamp')
+	Cmdhash []byte
+
+	// digest of action that generated this file.
+	Action digest.Digest
+
+	// Readyq represents whether it is ready to use file metadatas below.
+	// block - calculate in progress.
+	// closed - already available. readyq has been closed.
+	Readyq chan struct{}
+	// atomic flag for readiness of metadata.
+	// true - ready. readyq was closed.
+	// false - not ready. need to wait on readyq.
+	Ready        atomic.Bool
 	D            digest.Digest
 	IsExecutable bool
-	Target       string // symlink
+	Target       string // symlink.
 
-	Data digest.Data // from local
+	Data digest.Data // from local.
+	Buf  []byte      // from WriteFile.
+
+	Mu        sync.RWMutex
+	Directory *Directory
+	Err       error
+}
+
+// directory is per-directory entry map to reduce mutex contention.
+// TODO: use generics as DirMap<K,V>?
+// TODO(b/266518906): make this struct and its fields private.
+type Directory struct {
+	M sync.Map
 }
 
 type HashFS struct {
