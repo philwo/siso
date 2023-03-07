@@ -398,9 +398,10 @@ loop:
 		case ' ', ':', '|':
 			if !path {
 				esbuf.addLiteral(cur[:1])
+				l.pos++
+				continue
 			}
-			l.pos++
-			continue
+			break loop
 		}
 		if bytes.HasPrefix(cur, []byte("$$")) {
 			esbuf.addLiteral(cur[1:2])
