@@ -8,6 +8,7 @@ package execute
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"path/filepath"
 
@@ -92,8 +93,10 @@ type Cmd struct {
 	Restat bool
 
 	// TODO(jwata): implement digest calculation.
-
 	// TODO(jwata): support file trace with strace.
+
+	// HashFS is a hash fs that the cmd runs on.
+	HashFS *hashfs.HashFS
 
 	stdoutWriter, stderrWriter io.Writer
 	stdoutBuffer, stderrBuffer bytes.Buffer
@@ -226,4 +229,13 @@ func (c *Cmd) EntriesFromResult(ctx context.Context, ds hashfs.DataSource, resul
 		})
 	}
 	return entries
+}
+
+// ExitError is an error of cmd exit.
+type ExitError struct {
+	ExitCode int
+}
+
+func (e ExitError) Error() string {
+	return fmt.Sprintf("exit=%d", e.ExitCode)
 }
