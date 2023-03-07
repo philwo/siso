@@ -7,6 +7,7 @@ package hashfs
 
 import (
 	"context"
+	"fmt"
 	"io/fs"
 	"path/filepath"
 	"sync"
@@ -54,12 +55,43 @@ type Entry struct {
 	Err       error
 }
 
+func (e *Entry) String() string {
+	if e.Ready.Load() {
+		switch {
+		case GetDir(e) != nil:
+			return "<directory>"
+		case e.Target != "":
+			return "<symlink>"
+		default:
+			return "<file>"
+		}
+	}
+	return "<not ready>"
+}
+
+// GetDir returns directory of entry.
+// TODO(b/266518906): make this Entry's private method.
+func GetDir(e *Entry) *Directory {
+	if e == nil {
+		return nil
+	}
+	return e.Directory
+}
+
 // directory is per-directory entry map to reduce mutex contention.
 // TODO: use generics as DirMap<K,V>?
 // TODO(b/266518906): make this struct and its fields private.
 type Directory struct {
 	// M is a map of file's basename to *entry.
 	M sync.Map
+}
+
+func (d *Directory) String() string {
+	if d == nil {
+		return "<nil>"
+	}
+	// better to dump all entries?
+	return fmt.Sprintf("&directory{m:%p}", &d.M)
 }
 
 type HashFS struct {
@@ -118,6 +150,16 @@ func (fi *FileInfo) Sys() any {
 		IsExecutable: fi.E.IsExecutable,
 		Target:       fi.E.Target,
 	}
+}
+
+// CmdHash returns a cmdhash that created the file.
+func (fi *FileInfo) CmdHash() []byte {
+	return fi.E.Cmdhash
+}
+
+// Action returns a digest of action that created the file.
+func (fi *FileInfo) Action() digest.Digest {
+	return fi.E.Action
 }
 
 // DirEntry implements https://pkg.go.dev/io/fs#DirEntry.
