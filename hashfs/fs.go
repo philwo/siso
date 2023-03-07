@@ -99,6 +99,7 @@ type HashFS struct {
 
 // FileInfo implements https://pkg.go.dev/io/fs#FileInfo.
 type FileInfo struct {
+	// Fname is full path of file.
 	// TODO(b/266518906): make these fields private.
 	Fname string
 	E     *Entry
