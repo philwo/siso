@@ -97,6 +97,25 @@ func (d *Directory) String() string {
 type HashFS struct {
 }
 
+// DataSource returns DataSource of the HashFS.
+func (hfs *HashFS) DataSource() DataSource {
+	return nil
+}
+
+// Entries gets merkletree entries for inputs at root.
+func (hfs *HashFS) Entries(ctx context.Context, root string, inputs []string) ([]merkletree.Entry, error) {
+	return nil, nil
+}
+
+// Forget forgets cached entry for inputs under root.
+func (hfs *HashFS) Forget(ctx context.Context, root string, inputs []string) {
+}
+
+// Update updates cache information for entries under execRoot with mtime and cmdhash.
+func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []merkletree.Entry, mtime time.Time, cmdhash []byte, action digest.Digest) error {
+	return nil
+}
+
 // FileInfo implements https://pkg.go.dev/io/fs#FileInfo.
 type FileInfo struct {
 	// Fname is full path of file.
@@ -187,13 +206,4 @@ func (de DirEntry) Type() fs.FileMode {
 // Info returns a FileInfo.
 func (de DirEntry) Info() (fs.FileInfo, error) {
 	return de.Fi, nil
-}
-
-// Entries gets merkletree entries for inputs at root.
-func (hfs *HashFS) Entries(ctx context.Context, root string, inputs []string) ([]merkletree.Entry, error) {
-	return nil, nil
-}
-
-// Forget forgets cached entry for inputs under root.
-func (hfs *HashFS) Forget(ctx context.Context, root string, inputs []string) {
 }
