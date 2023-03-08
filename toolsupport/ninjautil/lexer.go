@@ -7,6 +7,7 @@ package ninjautil
 import (
 	"bytes"
 	"fmt"
+	"reflect"
 )
 
 // Reference:
@@ -279,6 +280,24 @@ loop:
 		l.eatWhitespace()
 	}
 	return t, nil
+}
+
+func (l *lexer) Back() {
+	l.pos = l.last
+}
+
+// Peek returns true if the next token matches the given token,
+// without advancing the current position.
+func (l *lexer) Peek(t token) bool {
+	next, err := l.Next()
+	if err != nil {
+		return false
+	}
+	if reflect.TypeOf(next) == reflect.TypeOf(t) {
+		return true
+	}
+	l.Back()
+	return false
 }
 
 func (l *lexer) Ident() (tokenIdent, error) {
