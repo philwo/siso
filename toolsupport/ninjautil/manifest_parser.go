@@ -21,8 +21,11 @@ import (
 
 // ManifestParser parses Ninja manifests. (i.e. .ninja files)
 type ManifestParser struct {
+	// Stores all information found while parsing the .ninja file.
 	state *State
-	env   *BindingEnv
+	// Shortcut for state.bindings.
+	env *BindingEnv
+	// Lexer instance used to parse the .ninja file.
 	lexer *lexer
 }
 
@@ -104,6 +107,15 @@ func (p *ManifestParser) parse(ctx context.Context, l *lexer) error {
 }
 
 func (p *ManifestParser) parsePool() error {
+	// After the `pool` keyword, a pool is defined by the pool name, a newline,
+	// and a `depth` variable set to the limit of concurrent actions.
+	//
+	// For example, a pool named "my_pool" limited to 4 concurrent actions would look like the below snippet:
+	//
+	// ```
+	// pool my_pool
+	//   depth = 4
+	// ```
 	name, err := p.lexer.Ident()
 	if err != nil {
 		return err
@@ -141,6 +153,27 @@ func (p *ManifestParser) parsePool() error {
 }
 
 func (p *ManifestParser) parseEdge() error {
+	// After the `build` keyword, an edge (action) is defined by a space-separated list of output files,
+	// a colon `:`, and a space-separated list of inputs. That is, the format:
+	// `build outputs: rulename inputs`
+	//
+	// - For example, an edge that builds `foo.o` using the `cc` rule with the input `foo.c` would look like:
+	//   `build foo.o: cc foo.c`
+	// - Implicit dependencies (i.e. deps that will not be expanded to $in for the action) may be added to the end
+	//   with the format `| dep1 dep2 .. depn`.
+	// - Order-only dependencies (see https://crbug.com/327214#c7 for an explanation) may be added to the end
+	//   with the format `|| dep1 dep2 .. depn`.
+	//
+	// For further reading, see the Ninja manual: https://ninja-build.org/manual.html#_build_statements
+	//
+	// This `build` line may be followed by an indented set of `variable = value` lines.
+	// For example, given the previous `foo.o` action:
+	//
+	// ```
+	// build foo.o: cc foo.c
+	//   foo = bar
+	//   baz - qux
+	// ```
 	var outs []EvalString
 	out, err := p.lexer.Path()
 	if err != nil {
@@ -170,10 +203,14 @@ func (p *ManifestParser) parseEdge() error {
 	if len(outs) == 0 {
 		return p.lexer.errorf("expected path")
 	}
+
+	// Output list should be followed by a colon.
 	err = p.expectToken(tokenColon{})
 	if err != nil {
 		return err
 	}
+
+	// Colon should be followed by a rule name that is known.
 	ruleName, err := p.lexer.Ident()
 	if err != nil {
 		return p.lexer.errorf("expected build command name: %v", err)
@@ -182,6 +219,8 @@ func (p *ManifestParser) parseEdge() error {
 	if !ok {
 		return p.lexer.errorf("unknown build rule %s", ruleName)
 	}
+
+	// Rule name should be followed by a list of inputs.
 	var ins []EvalString
 	for {
 		in, err := p.lexer.Path()
@@ -194,6 +233,7 @@ func (p *ManifestParser) parseEdge() error {
 		ins = append(ins, in)
 	}
 
+	// Implicit dependencies come after the single pipe `|`.
 	implicit := 0
 	if p.lexer.Peek(tokenPipe{}) {
 		for {
@@ -208,6 +248,8 @@ func (p *ManifestParser) parseEdge() error {
 			implicit++
 		}
 	}
+
+	// Order-only dependencies come after the double pipe `||`.
 	orderOnly := 0
 	if p.lexer.Peek(tokenPipe2{}) {
 		for {
@@ -227,6 +269,8 @@ func (p *ManifestParser) parseEdge() error {
 	if err != nil {
 		return err
 	}
+
+	// If there is an indented block directly after the `build` line, start reading variables.
 	hasIndent := p.lexer.Peek(tokenIndent{})
 	var env *BindingEnv = p.env
 	if hasIndent {
@@ -241,9 +285,12 @@ func (p *ManifestParser) parseEdge() error {
 		hasIndent = p.lexer.Peek(tokenIndent{})
 	}
 
+	// Finished parsing.
+	// Add a new Edge to current state and begin populating it.
 	edge := p.state.addEdge(rule)
 	edge.env = env
 
+	// Populate this Edge with the properties we collected above.
 	poolName := edge.Binding("pool")
 	if poolName != "" {
 		pool, ok := p.state.LookupPool(poolName)
@@ -271,6 +318,15 @@ func (p *ManifestParser) parseEdge() error {
 }
 
 func (p *ManifestParser) parseRule() error {
+	// After the `rule` keyword, a rule is defined with the name of the rule, and an indented set of
+	// `variable = value` lines specific to rules. For example, `command` is always expected to be set.
+	//
+	// For example, a rule named "cc" which runs gcc may look like the below snippet:
+	//
+	// ```
+	// rule cc
+	//   command = gcc -Wall -c $in -o $out
+	// ```
 	name, err := p.lexer.Ident()
 	if err != nil {
 		return p.lexer.errorf("expected rule name")
@@ -303,6 +359,8 @@ func (p *ManifestParser) parseRule() error {
 }
 
 func (p *ManifestParser) parseDefault() error {
+	// After the `default` keyword, one or more default targets are defined by a space-separated list of target names.
+	// For example, `default foo bar` specifies that `foo` and `bar` will be built by default.
 	v, err := p.lexer.Path()
 	if err != nil {
 		return err
@@ -329,6 +387,7 @@ func (p *ManifestParser) parseDefault() error {
 }
 
 func (p *ManifestParser) parseLet() (string, EvalString, error) {
+	// A variable is set using the `variable = value` syntax.
 	name, err := p.lexer.Ident()
 	if err != nil {
 		return "", EvalString{}, p.lexer.errorf("expected vairable name: %v", err)
@@ -345,6 +404,10 @@ func (p *ManifestParser) parseLet() (string, EvalString, error) {
 }
 
 func (p *ManifestParser) parseFileInclude(ctx context.Context, newScope bool) error {
+	// .ninja files may be included, either as part of a new scope, or in the current scope.
+	// Using the `include` keyword includes in the current scope, similar to a C #include statement.
+	// Using the `subninja` keyword includes in a new scope, that is, variables and rules may be used
+	// from the current .ninja files, however its scope won't affect the parent .ninja file.
 	s, err := p.lexer.Path()
 	if err != nil {
 		return err
