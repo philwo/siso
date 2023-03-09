@@ -11,10 +11,13 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
+	"sort"
 
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
+	log "github.com/golang/glog"
 
 	"infra/build/siso/hashfs"
+	"infra/build/siso/o11y/clog"
 	"infra/build/siso/reapi/digest"
 	"infra/build/siso/reapi/merkletree"
 	"infra/build/siso/toolsupport/shutil"
@@ -92,11 +95,23 @@ type Cmd struct {
 	// - no need to update mtime if content is not changed.
 	Restat bool
 
-	// TODO(jwata): implement digest calculation.
-	// TODO(jwata): support file trace with strace.
+	// Pure indicates whether the cmd is pure.
+	// This is analogue to pure function.
+	// For example, a cmd is pure when the inputs/outputs of the cmd are fully specified,
+	// and it doesn't access other files during execution.
+	// A pure cmd can execute remotely and the outputs can be safely cacheable.
+	Pure bool
 
 	// HashFS is a hash fs that the cmd runs on.
 	HashFS *hashfs.HashFS
+
+	// RemoteInputs are the substitute files for remote execution.
+	// The key is the filename used in remote execution.
+	// The value is the filename on local disk.
+	// The file names are relative to ExecRoot.
+	RemoteInputs map[string]string
+
+	// TODO(jwata): support file trace with strace.
 
 	stdoutWriter, stderrWriter io.Writer
 	stdoutBuffer, stderrBuffer bytes.Buffer
@@ -182,9 +197,115 @@ func (c *Cmd) Stderr() []byte {
 
 // Digest computes action digest of the cmd.
 // If ds is nil, then it will reuse the previous calculated digest if any.
+// TODO(b/267576561): Integrate with Cloud Trace.
 func (c *Cmd) Digest(ctx context.Context, ds *digest.Store) (digest.Digest, error) {
-	// TODO(jwata): implement this method.
+	if !c.Pure {
+		return digest.Digest{}, fmt.Errorf("unable to create digest for impure cmd %s", c.ID)
+	}
+	if c.HashFS == nil {
+		return digest.Digest{}, fmt.Errorf("unable to get the input root for %s: missing HashFS", c)
+
+	}
+	ents, err := c.inputTree(ctx)
+	if err != nil {
+		return digest.Digest{}, fmt.Errorf("failed to get input tree for %s: %w", c, err)
+	}
+
+	// TODO(jwata): canonicalize entries.
+
+	_, err = treeDigest(ctx, ents, ds)
+	if err != nil {
+		return digest.Digest{}, fmt.Errorf("failed to get input root for %s: %w", c, err)
+	}
+
+	// TODO(jwata): calculate action digest.
+
 	return digest.Digest{}, nil
+}
+
+// inputTree returns Merkle tree entries for the cmd.
+func (c *Cmd) inputTree(ctx context.Context) ([]merkletree.Entry, error) {
+	inputs := c.AllInputs()
+
+	if log.V(1) {
+		clog.Infof(ctx, "tree @%s %s", c.ExecRoot, inputs)
+	}
+	ents, err := c.HashFS.Entries(ctx, c.ExecRoot, inputs)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(c.RemoteInputs) == 0 {
+		return ents, nil
+	}
+	if log.V(1) {
+		clog.Infof(ctx, "remote tree @%s %s", c.ExecRoot, c.RemoteInputs)
+	}
+
+	// Construct a reverse map from local path to remote paths.
+	// Note that multiple remote inputs may use the same local input.
+	// Also, make a list of local filepaths to retrieve entries from the HashFS.
+	revm := map[string][]string{}
+	reins := make([]string, 0, len(c.RemoteInputs))
+	for r, l := range c.RemoteInputs {
+		reins = append(reins, l)
+		revm[l] = append(revm[l], r)
+	}
+
+	// Retrieve Merkle tree entries from HashFS.
+	sort.Strings(reins)
+	reents, err := c.HashFS.Entries(ctx, c.ExecRoot, reins)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert local paths to remote paths.
+	remap := map[string]merkletree.Entry{}
+	for _, e := range reents {
+		for _, rname := range revm[e.Name] {
+			e.Name = rname
+			remap[rname] = e
+		}
+	}
+
+	// Replace local entries with the remote entries.
+	for i, e := range ents {
+		re, ok := remap[e.Name]
+		if ok {
+			ents[i] = re
+			delete(remap, e.Name)
+		}
+	}
+
+	// Append the remaining remote entries.
+	for _, re := range remap {
+		ents = append(ents, re)
+	}
+
+	sort.Slice(ents, func(i, j int) bool {
+		return ents[i].Name < ents[j].Name
+	})
+	return ents, nil
+}
+
+// treeDigest returns a digest for the Merkle tree entries.
+func treeDigest(ctx context.Context, entries []merkletree.Entry, ds *digest.Store) (digest.Digest, error) {
+	t := merkletree.New(ds)
+	for _, ent := range entries {
+		if log.V(2) {
+			clog.Infof(ctx, "input entry: %#v", ent)
+		}
+		err := t.Set(ent)
+		if err != nil {
+			return digest.Digest{}, err
+		}
+	}
+
+	d, err := t.Build(ctx)
+	if err != nil {
+		return digest.Digest{}, err
+	}
+	return d, nil
 }
 
 // SetActionResults sets action result to the cmd.
