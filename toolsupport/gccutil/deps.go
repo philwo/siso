@@ -49,7 +49,7 @@ func DepsArgs(args []string) []string {
 }
 
 // Deps runs command specified by args, env, cwd and returns deps.
-func Deps(ctx context.Context, args []string, env []string, cwd string) ([]string, error) {
+func Deps(ctx context.Context, args, env []string, cwd string) ([]string, error) {
 	s := time.Now()
 	cmd := &execute.Cmd{
 		Args:     args,
