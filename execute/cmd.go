@@ -12,6 +12,7 @@ import (
 	"io"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
 	log "github.com/golang/glog"
@@ -110,6 +111,10 @@ type Cmd struct {
 	// The value is the filename on local disk.
 	// The file names are relative to ExecRoot.
 	RemoteInputs map[string]string
+
+	// CanonicalizeDir specifies whether remote execution will canonicalize
+	// working directory or not.
+	CanonicalizeDir bool
 
 	// TODO(jwata): support file trace with strace.
 
@@ -211,7 +216,9 @@ func (c *Cmd) Digest(ctx context.Context, ds *digest.Store) (digest.Digest, erro
 		return digest.Digest{}, fmt.Errorf("failed to get input tree for %s: %w", c, err)
 	}
 
-	// TODO(jwata): canonicalize entries.
+	if c.CanonicalizeDir {
+		ents = c.canonicalizeEntries(ctx, ents)
+	}
 
 	_, err = treeDigest(ctx, ents, ds)
 	if err != nil {
@@ -306,6 +313,50 @@ func treeDigest(ctx context.Context, entries []merkletree.Entry, ds *digest.Stor
 		return digest.Digest{}, err
 	}
 	return d, nil
+}
+
+// canonicalizeEntries canonicalizes working dirs in the entries.
+func (c *Cmd) canonicalizeEntries(ctx context.Context, entries []merkletree.Entry) []merkletree.Entry {
+	cdir := c.canonicalDir()
+	if cdir == "" {
+		return entries
+	}
+	if log.V(1) {
+		clog.Infof(ctx, "canonicalize dir: %s -> %s", c.Dir, cdir)
+	}
+	for i := range entries {
+		e := &entries[i]
+		e.Name = canonicalizeDir(e.Name, c.Dir, cdir)
+	}
+	return entries
+}
+
+// canonicalDir computes a canonical dir of the working directory.
+func (c *Cmd) canonicalDir() string {
+	if c.Dir == "" || c.Dir == "." {
+		return ""
+	}
+	n := len(strings.Split(filepath.ToSlash(c.Dir), "/"))
+	elems := []string{"out"}
+	for i := 1; i < n; i++ {
+		elems = append(elems, "x")
+	}
+	return filepath.Join(elems...)
+}
+
+func canonicalizeDir(fname, dir, cdir string) string {
+	if dir == cdir {
+		return fname
+	}
+	if fname == dir {
+		return cdir
+	}
+	for _, prefix := range []string{dir + "/", dir + `\`} {
+		if f, ok := strings.CutPrefix(fname, prefix); ok {
+			return filepath.Join(cdir, f)
+		}
+	}
+	return fname
 }
 
 // SetActionResults sets action result to the cmd.
