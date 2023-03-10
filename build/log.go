@@ -11,7 +11,7 @@ import (
 )
 
 func logFormat(e logging.Entry) string {
-	stepID := e.Labels["id"]
+	stepID := e.Labels[logLabelKeyID]
 	if e.HTTPRequest != nil {
 		return fmt.Sprintf("%s %v %s", stepID, e.Payload, e.HTTPRequest.Latency)
 	}
