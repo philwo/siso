@@ -222,6 +222,11 @@ func (c *Cmd) Stderr() []byte {
 	return c.stderrBuffer.Bytes()
 }
 
+// ActionDigest returns action digest of the cmd.
+func (c *Cmd) ActionDigest() digest.Digest {
+	return c.actionDigest
+}
+
 // Digest computes action digest of the cmd.
 // If ds is nil, then it will reuse the previous calculated digest if any.
 // TODO(b/267576561): Integrate with Cloud Trace.
