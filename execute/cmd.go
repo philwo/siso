@@ -8,14 +8,18 @@ package execute
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
+	"time"
 
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
 	log "github.com/golang/glog"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	"infra/build/siso/hashfs"
 	"infra/build/siso/o11y/clog"
@@ -106,6 +110,14 @@ type Cmd struct {
 	// HashFS is a hash fs that the cmd runs on.
 	HashFS *hashfs.HashFS
 
+	// Platform is a platform properties for remote execution.
+	// e.g. OSFamily: {Linux, Windows}
+	Platform map[string]string
+
+	// RemoteWrapper is a wrapper command when the cmd runs on remote execution backend.
+	// It can be used to specify a wrapper command/script that exist on the worker.
+	RemoteWrapper string
+
 	// RemoteInputs are the substitute files for remote execution.
 	// The key is the filename used in remote execution.
 	// The value is the filename on local disk.
@@ -116,11 +128,21 @@ type Cmd struct {
 	// working directory or not.
 	CanonicalizeDir bool
 
+	// DoNotCache specifies whether it won't update cache in remote execution.
+	DoNotCache bool
+
+	// Timeout specifies timeout of the cmd.
+	Timeout time.Duration
+
+	// ActionSalt is arbitrary bytes used for cache salt.
+	ActionSalt []byte
+
 	// TODO(jwata): support file trace with strace.
 
 	stdoutWriter, stderrWriter io.Writer
 	stdoutBuffer, stderrBuffer bytes.Buffer
 
+	actionDigest digest.Digest
 	actionResult *rpb.ActionResult
 }
 
@@ -220,14 +242,39 @@ func (c *Cmd) Digest(ctx context.Context, ds *digest.Store) (digest.Digest, erro
 		ents = c.canonicalizeEntries(ctx, ents)
 	}
 
-	_, err = treeDigest(ctx, ents, ds)
+	inputRootDigest, err := treeDigest(ctx, ents, ds)
 	if err != nil {
 		return digest.Digest{}, fmt.Errorf("failed to get input root for %s: %w", c, err)
 	}
+	clog.Infof(ctx, "inputRoot: %s digests=%d", inputRootDigest, ds.Size())
+	commandDigest, err := c.commandDigest(ctx, ds)
+	if err != nil {
+		return digest.Digest{}, fmt.Errorf("failed to build command for %s: %w", c, err)
+	}
+	clog.Infof(ctx, "command: %s", commandDigest)
 
-	// TODO(jwata): calculate action digest.
+	var timeout *durationpb.Duration
+	if c.Timeout > 0 {
+		timeout = durationpb.New(c.Timeout)
+	}
 
-	return digest.Digest{}, nil
+	action, err := digest.FromProtoMessage(&rpb.Action{
+		CommandDigest:   commandDigest.Proto(),
+		InputRootDigest: inputRootDigest.Proto(),
+		Timeout:         timeout,
+		DoNotCache:      c.DoNotCache,
+		Salt:            c.ActionSalt,
+		Platform:        c.remoteExecutionPlatform(),
+	})
+	if err != nil {
+		return digest.Digest{}, fmt.Errorf("failed to build action for %s: %w", c, err)
+	}
+	if ds != nil {
+		ds.Set(action)
+	}
+	c.actionDigest = action.Digest()
+	clog.Infof(ctx, "action: %s", c.actionDigest)
+	return c.actionDigest, nil
 }
 
 // inputTree returns Merkle tree entries for the cmd.
@@ -357,6 +404,82 @@ func canonicalizeDir(fname, dir, cdir string) string {
 		}
 	}
 	return fname
+}
+
+// remoteExecutionPlatform constructs a Remote Execution Platform properties from the platform properties.
+func (c *Cmd) remoteExecutionPlatform() *rpb.Platform {
+	platform := &rpb.Platform{}
+	for k, v := range c.Platform {
+		platform.Properties = append(platform.Properties, &rpb.Platform_Property{
+			Name:  k,
+			Value: v,
+		})
+	}
+	sort.Slice(platform.Properties, func(i, j int) bool {
+		return platform.Properties[i].Name < platform.Properties[j].Name
+	})
+	return platform
+}
+
+// commandDigest constructs the digest of the command line.
+func (c *Cmd) commandDigest(ctx context.Context, ds *digest.Store) (digest.Digest, error) {
+	outputs := c.AllOutputs()
+	outs := make([]string, 0, len(outputs))
+	for _, out := range outputs {
+		rout, err := filepath.Rel(c.Dir, out)
+		if err != nil {
+			clog.Warningf(ctx, "failed to get rel %s,%s: %v", c.Dir, out, err)
+			rout = out
+		}
+		outs = append(outs, filepath.ToSlash(rout))
+	}
+	if len(c.Args) == 0 {
+		return digest.Digest{}, errors.New("0 args")
+	}
+	args := c.Args
+
+	// Cross-compile Windows builds on Linux workers.
+	if runtime.GOOS == "windows" && c.Platform["OSFamily"] != "Windows" {
+		args[0] = filepath.ToSlash(args[0])
+	}
+	if c.RemoteWrapper != "" {
+		args = append([]string{c.RemoteWrapper}, args...)
+	}
+	dir := c.Dir
+	if c.CanonicalizeDir {
+		dir = c.canonicalDir()
+	}
+	command := &rpb.Command{
+		Arguments:        args,
+		WorkingDirectory: dir,
+		// TODO(b/273151098): `OutputFiles` is deprecated. should use `OutputPaths` instead.
+		// https://github.com/bazelbuild/remote-apis/blob/main/build/bazel/remote/execution/v2/remote_execution.proto#L592
+		OutputFiles: outs,
+		// TODO(b/273152496): `Platform` in `Command` is deprecated. should specify it in `Action`.
+		// https://github.com/bazelbuild/remote-apis/blob/55153ba61dcf6277849562a30bca9fa3906ad9a0/build/bazel/remote/execution/v2/remote_execution.proto#L661-L664
+		Platform: c.remoteExecutionPlatform(), // deprecated?
+	}
+	for _, env := range c.Env {
+		k, v, ok := strings.Cut(env, "=")
+		if !ok {
+			continue
+		}
+		command.EnvironmentVariables = append(command.EnvironmentVariables, &rpb.Command_EnvironmentVariable{
+			Name:  k,
+			Value: v,
+		})
+	}
+	sort.Slice(command.EnvironmentVariables, func(i, j int) bool {
+		return command.EnvironmentVariables[i].Name < command.EnvironmentVariables[j].Name
+	})
+	data, err := digest.FromProtoMessage(command)
+	if err != nil {
+		return digest.Digest{}, err
+	}
+	if ds != nil {
+		ds.Set(data)
+	}
+	return data.Digest(), nil
 }
 
 // SetActionResults sets action result to the cmd.
