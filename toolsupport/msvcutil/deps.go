@@ -20,7 +20,7 @@ import (
 	"infra/build/siso/sync/semaphore"
 )
 
-// msvc may localized text, but we assume developers don't use that.
+// msvc may localize text, but we assume developers don't use that.
 const depsPrefix = "Note: including file: "
 
 // ParseShowIncludes parses /showIncludes outputs, and returns a list of inputs and other outputs.
