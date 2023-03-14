@@ -20,6 +20,7 @@ import (
 
 	"infra/build/siso/execute"
 	"infra/build/siso/o11y/clog"
+	"infra/build/siso/toolsupport/straceutil"
 )
 
 // WorkerName is a name used for worker of the cmd in action result.
@@ -71,9 +72,24 @@ func run(ctx context.Context, cmd *execute.Cmd) (*rpb.ActionResult, error) {
 	c.Stderr = &stderr
 	s := time.Now()
 
-	// TODO(jwata): support starce.
-	err := c.Run()
-	log.V(1).Infof("%s %v", cmd.ID, err)
+	var err error
+	if cmd.FileTrace != nil {
+		if !straceutil.Available(ctx) {
+			return nil, fmt.Errorf("strace is not available")
+		}
+		st := straceutil.New(ctx, cmd.ID, c)
+		c = st.Cmd(ctx)
+		err = c.Run()
+		if err == nil {
+			cmd.FileTrace.Inputs, cmd.FileTrace.Outputs, err = st.PostProcess(ctx)
+			err = fmt.Errorf("failed to postprocess: %w", err)
+		}
+		st.Close(ctx)
+		log.V(1).Infof("%s filetrace=false n_traced_inputs=%d n_traced_outputs=%d err=%v", cmd.ID, len(cmd.Inputs), len(cmd.Outputs), err)
+	} else {
+		err = c.Run()
+		log.V(1).Infof("%s filetrace=false %v", cmd.ID, err)
+	}
 	e := time.Now()
 
 	result := &rpb.ActionResult{

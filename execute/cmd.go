@@ -33,6 +33,13 @@ type Executor interface {
 	Run(ctx context.Context, cmd *Cmd) error
 }
 
+// FileTrace is the results of file trace of the cmd.
+// The paths are relative to ExecRoot of the cmd.
+type FileTrace struct {
+	Inputs  []string
+	Outputs []string
+}
+
 // Cmd includes all the information required to run a build command.
 type Cmd struct {
 	// ID is used as a unique identifier for this action in logs and tracing.
@@ -137,7 +144,8 @@ type Cmd struct {
 	// ActionSalt is arbitrary bytes used for cache salt.
 	ActionSalt []byte
 
-	// TODO(jwata): support file trace with strace.
+	// FileTrace is a FileTrace info if enabled.
+	FileTrace *FileTrace
 
 	stdoutWriter, stderrWriter io.Writer
 	stdoutBuffer, stderrBuffer bytes.Buffer
