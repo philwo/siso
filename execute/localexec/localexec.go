@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// Package localexec implements local command execution.
 package localexec
 
 import (
@@ -22,6 +23,8 @@ import (
 	"infra/build/siso/o11y/clog"
 	"infra/build/siso/toolsupport/straceutil"
 )
+
+// TODO(b/270886586): Compare local execution with/without local execution server.
 
 // WorkerName is a name used for worker of the cmd in action result.
 const WorkerName = "local"
