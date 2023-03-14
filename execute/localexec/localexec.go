@@ -106,7 +106,7 @@ func run(ctx context.Context, cmd *execute.Cmd) (*rpb.ActionResult, error) {
 		result.StderrRaw = append(result.StderrRaw, []byte(fmt.Sprintf("\ncmd: %q env: %q dir: %q error: %v", cmd.Args, cmd.Env, cmd.Dir, err))...)
 	}
 
-	// TODO(jwata): track resource usage.
+	// TODO(b/273423470): track resource usage.
 
 	return result, nil
 }
