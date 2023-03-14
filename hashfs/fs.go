@@ -31,10 +31,6 @@ func localDigest(ctx context.Context, fname string, m *iometrics.IOMetrics) (dig
 	return digest.FromLocalFile(ctx, src)
 }
 
-func isSymlink(m fs.FileMode) bool {
-	return m.Type() == fs.ModeSymlink
-}
-
 func isExecutable(fi fs.FileInfo, fname string) bool {
 	if fi.Mode()&0111 != 0 {
 		return true
@@ -136,7 +132,7 @@ func (e *Entry) Init(ctx context.Context, fname string, m *iometrics.IOMetrics) 
 		e.InitDir()
 		// don't update mtime, so updateDir scans local dir.
 		return
-	case isSymlink(fi.Mode()):
+	case fi.Mode().Type() == fs.ModeSymlink:
 		e.Target, err = os.Readlink(fname)
 		m.OpsDone(err)
 		if err != nil {
