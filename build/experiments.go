@@ -85,7 +85,7 @@ func (e *Experiments) String() string {
 
 // Enabled returns true if experimental feature k is enabled, and
 // log error once with its hint if so.
-func (e *Experiments) Enabled(k, format string, args ...interface{}) bool {
+func (e *Experiments) Enabled(k, format string, args ...any) bool {
 	ex, ok := e.m[k]
 	if !ok {
 		return false
