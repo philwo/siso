@@ -5,7 +5,15 @@
 package build
 
 import (
+	"context"
+	"errors"
+	"time"
+
+	log "github.com/golang/glog"
+
 	"infra/build/siso/hashfs"
+	"infra/build/siso/o11y/clog"
+	"infra/build/siso/o11y/trace"
 )
 
 // logging labels's key.
@@ -15,6 +23,8 @@ const (
 )
 
 var experiments Experiments
+
+var errNotRelocatable = errors.New("request is not relocatable")
 
 // Builder is a builder.
 type Builder struct {
@@ -34,6 +44,20 @@ type Builder struct {
 	actionSalt []byte
 
 	sharedDepsLog SharedDepsLog
+}
+
+func (b *Builder) prepareLocalInputs(ctx context.Context, step *Step) error {
+	ctx, span := trace.NewSpan(ctx, "prepare-local-inputs")
+	defer span.Close(nil)
+	inputs := step.cmd.AllInputs()
+	span.SetAttr("inputs", len(inputs))
+	start := time.Now()
+	if log.V(1) {
+		clog.Infof(ctx, "prepare-local-inputs %d", len(inputs))
+	}
+	err := b.hashFS.Flush(ctx, step.cmd.ExecRoot, inputs)
+	clog.Infof(ctx, "prepare-local-inputs %d %s: %v", len(inputs), time.Since(start), err)
+	return err
 }
 
 // Metadata is a metadata of the build process.

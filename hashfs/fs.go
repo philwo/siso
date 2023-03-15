@@ -1,4 +1,4 @@
-// Copyright 2023 The Chromium Authors. All rights reserved.
+// Copyright 2023 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -391,14 +391,35 @@ func (d *Directory) String() string {
 type HashFS struct {
 }
 
+// FileSystem returns FileSystem interface at dir.
+func (hfs *HashFS) FileSystem(ctx context.Context, dir string) FileSystem {
+	// TODO(b/266518906): migrate from infra_internal
+	return FileSystem{}
+}
+
 // DataSource returns DataSource of the HashFS.
 func (hfs *HashFS) DataSource() DataSource {
 	return nil
 }
 
+// Stat returns a FileInfo at root/fname.
+func (hfs *HashFS) Stat(ctx context.Context, root, fname string) (*FileInfo, error) {
+	return nil, errors.New("hashfs.Stat: not implemented")
+}
+
+// ReadFile reads a contents of root/fname.
+func (hfs *HashFS) ReadFile(ctx context.Context, root, fname string) ([]byte, error) {
+	return nil, errors.New("hashfs.ReadFile: not implemented")
+}
+
 // Entries gets merkletree entries for inputs at root.
 func (hfs *HashFS) Entries(ctx context.Context, root string, inputs []string) ([]merkletree.Entry, error) {
-	return nil, nil
+	return nil, errors.New("hashfs.Entries: not implemented")
+}
+
+// Remove removes a file at root/fname.
+func (hfs *HashFS) Remove(ctx context.Context, root, fname string) error {
+	return errors.New("hashfs.Remove: not implemented")
 }
 
 // Forget forgets cached entry for inputs under root.
@@ -407,7 +428,12 @@ func (hfs *HashFS) Forget(ctx context.Context, root string, inputs []string) {
 
 // Update updates cache information for entries under execRoot with mtime and cmdhash.
 func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []merkletree.Entry, mtime time.Time, cmdhash []byte, action digest.Digest) error {
-	return nil
+	return errors.New("hashfs.Update: not umplemented")
+}
+
+// Flush flushes cached information for files under execRoot to local disk.
+func (hfs *HashFS) Flush(ctx context.Context, execRoot string, files []string) error {
+	return errors.New("hashfs.Flush: not implemented")
 }
 
 // FileInfo implements https://pkg.go.dev/io/fs#FileInfo.
