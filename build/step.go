@@ -34,6 +34,9 @@ type StepDef interface {
 	// Args returns command line arguments of the step.
 	Args(context.Context) []string
 
+	// TODO(b/266518906): add Env for environment variables for the step
+	// i.e. envfile support when `ninja -t msvc -e envfile` is used.
+
 	// IsPhony returns true if the step is phony.
 	IsPhony() bool
 
@@ -313,7 +316,6 @@ func newCmd(ctx context.Context, b *Builder, stepDef StepDef) *execute.Cmd {
 		Timeout:    stepTimeout(ctx, stepDef.Binding("timeout")),
 		ActionSalt: b.actionSalt,
 	}
-	// TODO(b/266518906): enable envfile support when `ninja -t msvc -e envfile` is used.
 	if experiments.Enabled("gvisor", "Force gVisor") {
 		if len(cmd.Platform) == 0 {
 			cmd.Platform = map[string]string{}

@@ -44,6 +44,3 @@ type Metadata struct {
 	GOOS   string
 	GOARCH string
 }
-
-// TODO(b/266518906): enable envfile support when `ninja -t msvc -e envfile` is used.
-// func (b *Builder) envfile(ctx context.Context, fname string) []string
