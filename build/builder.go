@@ -4,15 +4,35 @@
 
 package build
 
+import (
+	"infra/build/siso/hashfs"
+)
+
 // logging labels's key.
 const (
 	logLabelKeyID        = "id"
 	logLabelKeyBacktrace = "backtrace"
 )
 
+var experiments Experiments
+
 // Builder is a builder.
 type Builder struct {
-	stepDefs      StepDefs
+	// path system used in the build.
+	path   *Path
+	hashFS *hashfs.HashFS
+
+	// arg table to intern command line args of steps.
+	argTab symtab
+
+	stepDefs StepDefs
+
+	reCacheEnableRead bool
+	// TODO(b/266518906): enable reCacheEnableWrite option for read-only client.
+	// reCacheEnableWrite bool
+
+	actionSalt []byte
+
 	sharedDepsLog SharedDepsLog
 }
 
@@ -24,3 +44,6 @@ type Metadata struct {
 	GOOS   string
 	GOARCH string
 }
+
+// TODO(b/266518906): enable envfile support when `ninja -t msvc -e envfile` is used.
+// func (b *Builder) envfile(ctx context.Context, fname string) []string
