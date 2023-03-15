@@ -23,6 +23,7 @@ import (
 
 	"infra/build/siso/o11y/clog"
 	"infra/build/siso/o11y/iometrics"
+	"infra/build/siso/reapi/digest"
 )
 
 // Option contains options of remote exec API.
@@ -165,4 +166,20 @@ func New(ctx context.Context, opt Option, cred credentials.PerRPCCredentials) (*
 // Close closes the client.
 func (c *Client) Close() error {
 	return c.conn.Close()
+}
+
+// IOMetrics returns an IOMetrics of the client.
+func (c *Client) IOMetrics() *iometrics.IOMetrics {
+	return c.m
+}
+
+// GetActionResult gets the action result by the digest.
+func (c *Client) GetActionResult(ctx context.Context, d digest.Digest) (*rpb.ActionResult, error) {
+	client := rpb.NewActionCacheClient(c.conn)
+	result, err := client.GetActionResult(ctx, &rpb.GetActionResultRequest{
+		InstanceName: c.opt.Instance,
+		ActionDigest: d.Proto(),
+	})
+	c.m.OpsDone(err)
+	return result, err
 }
