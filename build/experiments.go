@@ -31,7 +31,7 @@ type experimentFeature struct {
 }
 
 // Experiments manages experimental features.
-// Experiments are enabled by SISOEXPERIMENTS environment variable.
+// Experiments are enabled by SISO_EXPERIMENTS environment variable.
 // We don't guarantee experiment id in future versions.
 // Unknown experiment id will be ignored.
 type Experiments struct {
@@ -39,7 +39,7 @@ type Experiments struct {
 	m    map[string]*experimentFeature
 }
 
-const experimentEnv = "SISOEXPERIMENTS"
+const experimentEnv = "SISO_EXPERIMENTS"
 
 func (e *Experiments) init() {
 	if e.m != nil {
