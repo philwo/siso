@@ -34,13 +34,13 @@ func (u *usageRecord) sample(ctx context.Context, t time.Time) []traceEventObjec
 	o.Name = "cpu"
 	utime := float64(rusage.Utime.Nano()-u.rusage.Utime.Nano()) / float64(time.Second)
 	stime := float64(rusage.Stime.Nano()-u.rusage.Stime.Nano()) / float64(time.Second)
-	o.Args = map[string]interface{}{
+	o.Args = map[string]any{
 		"user": utime,
 		"sys":  stime,
 	}
 	ret = append(ret, o)
 	o.Name = "mem"
-	o.Args = map[string]interface{}{
+	o.Args = map[string]any{
 		"maxrss": rusage.Maxrss,
 	}
 	ret = append(ret, o)

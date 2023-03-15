@@ -106,7 +106,7 @@ func (te *traceEvents) loop(ctx context.Context) {
 		Ph:   "M",
 		Pid:  sisoPid,
 		Tid:  sisoTid,
-		Args: map[string]interface{}{
+		Args: map[string]any{
 			"name": "siso",
 		},
 	})
@@ -115,7 +115,7 @@ func (te *traceEvents) loop(ctx context.Context) {
 		Ph:   "M",
 		Pid:  sisoSemaPid,
 		Tid:  sisoTid,
-		Args: map[string]interface{}{
+		Args: map[string]any{
 			"name": "siso-sema",
 		},
 	})
@@ -124,7 +124,7 @@ func (te *traceEvents) loop(ctx context.Context) {
 		Ph:   "M",
 		Pid:  sisoPreprocPid,
 		Tid:  sisoTid,
-		Args: map[string]interface{}{
+		Args: map[string]any{
 			"name": "preproc",
 		},
 	})
@@ -133,7 +133,7 @@ func (te *traceEvents) loop(ctx context.Context) {
 		Ph:   "M",
 		Pid:  sisoLocalPid,
 		Tid:  sisoTid,
-		Args: map[string]interface{}{
+		Args: map[string]any{
 			"name": "local-exec",
 		},
 	})
@@ -142,7 +142,7 @@ func (te *traceEvents) loop(ctx context.Context) {
 		Ph:   "M",
 		Pid:  sisoRemotePid,
 		Tid:  sisoTid,
-		Args: map[string]interface{}{
+		Args: map[string]any{
 			"name": "remote-exec",
 		},
 	})
@@ -151,7 +151,7 @@ func (te *traceEvents) loop(ctx context.Context) {
 		Ph:   "M",
 		Pid:  sisoRBEPid,
 		Tid:  sisoTid,
-		Args: map[string]interface{}{
+		Args: map[string]any{
 			"name": "rbe",
 		},
 	})
@@ -161,7 +161,7 @@ func (te *traceEvents) loop(ctx context.Context) {
 			Ph:   "M",
 			Pid:  int64(sisoIOPid + i),
 			Tid:  sisoTid,
-			Args: map[string]interface{}{
+			Args: map[string]any{
 				"name": "siso-io-" + sema.Name(),
 			},
 		})
