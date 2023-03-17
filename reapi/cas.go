@@ -36,10 +36,10 @@ const (
 	// bytestreamReadThreshold is the threshold that decides whether to use BatchReadBlobs or ByteStream API.
 	bytestreamReadThreshold = 2 * 1024 * 1024
 
-	// defaultBatchUploadByteLimit is bytes limit for cas BatchUploadBlobs.
-	defaultBatchUploadByteLimit = 4 * 1024 * 1024
+	// defaultBatchUpdateByteLimit is bytes limit for cas BatchUpdateBlobs.
+	defaultBatchUpdateByteLimit = 4 * 1024 * 1024
 
-	// batchBlobUploadLimit is max number of blobs in BatchUploadBlobs.
+	// batchBlobUploadLimit is max number of blobs in BatchUpdateBlobs.
 	batchBlobUploadLimit = 1000
 )
 
@@ -195,7 +195,7 @@ func (c *Client) Upload(ctx context.Context, ds *digest.Store, blobs []digest.Di
 	ctx, span := trace.NewSpan(ctx, "upload")
 	defer span.Close(nil)
 
-	byteLimit := int64(defaultBatchUploadByteLimit)
+	byteLimit := int64(defaultBatchUpdateByteLimit)
 	if max := c.capabilities.GetCacheCapabilities().GetMaxBatchTotalSizeBytes(); max > 0 {
 		byteLimit = max
 	}
@@ -206,8 +206,8 @@ func (c *Client) Upload(ctx context.Context, ds *digest.Store, blobs []digest.Di
 	span.SetAttr("small", len(smalls))
 	span.SetAttr("large", len(larges))
 
-	// Upload small blobs with BatchUploadBlobs rpc.
-	missingBlobs, err := c.uploadWithBatchUploadBlobs(ctx, smalls, ds, byteLimit)
+	// Upload small blobs with BatchUpdateBlobs rpc.
+	missingBlobs, err := c.uploadWithBatchUpdateBlobs(ctx, smalls, ds, byteLimit)
 	if err != nil {
 		return 0, err
 	}
@@ -260,9 +260,9 @@ func separateBlobs(instance string, blobs []digest.Digest, byteLimit int64) (sma
 	return blobs, nil
 }
 
-// uploadWithBatchUploadBlobs uploads blobs using BatchUploadBlobs RPC.
+// uploadWithBatchUpdateBlobs uploads blobs using BatchUpdateBlobs RPC.
 // The blobs will be bundled into multiple batches that fit in the size limit.
-func (c *Client) uploadWithBatchUploadBlobs(ctx context.Context, digests []digest.Digest, ds *digest.Store, byteLimit int64) ([]missingBlob, error) {
+func (c *Client) uploadWithBatchUpdateBlobs(ctx context.Context, digests []digest.Digest, ds *digest.Store, byteLimit int64) ([]missingBlob, error) {
 	blobReqs, missingBlobs := lookupBlobsInStore(ctx, digests, ds)
 
 	// Bundle the blobs to multiple batch requests.
@@ -427,7 +427,7 @@ func (c *Client) uploadWithByteStream(ctx context.Context, digests []digest.Dige
 			continue
 		}
 		key := fmt.Sprintf("%s/%d", d.Hash, d.SizeBytes)
-		_, err, shared := c.bytestreamSingleflight.Do(key, func() (interface{}, error) {
+		_, err, shared := c.bytestreamSingleflight.Do(key, func() (any, error) {
 			err := retry.Do(ctx, func() error {
 				rd, err := data.Open(ctx)
 				if err != nil {
