@@ -169,6 +169,43 @@ func (c *Client) getWithByteStream(ctx context.Context, d digest.Digest) ([]byte
 	return buf, err
 }
 
+// Missing returns digests of missing blobs.
+func (c *Client) Missing(ctx context.Context, blobs []digest.Digest) ([]digest.Digest, error) {
+	blobspb := make([]*rpb.Digest, 0, len(blobs))
+	for _, b := range blobs {
+		blobspb = append(blobspb, b.Proto())
+	}
+	cas := rpb.NewContentAddressableStorageClient(c.conn)
+	resp, err := cas.FindMissingBlobs(ctx, &rpb.FindMissingBlobsRequest{
+		InstanceName: c.opt.Instance,
+		BlobDigests:  blobspb,
+	})
+	c.m.OpsDone(err)
+	if err != nil {
+		return nil, err
+	}
+	ret := make([]digest.Digest, 0, len(resp.GetMissingBlobDigests()))
+	for _, b := range resp.GetMissingBlobDigests() {
+		ret = append(ret, digest.FromProto(b))
+	}
+	return ret, nil
+}
+
+// UploadAll uploads all blobs specified in ds that are still missing in the CAS.
+func (c *Client) UploadAll(ctx context.Context, ds *digest.Store) (int, error) {
+	ctx, span := trace.NewSpan(ctx, "upload-all")
+	defer span.Close(nil)
+	blobs := ds.List()
+	span.SetAttr("blobs", len(blobs))
+	missings, err := c.Missing(ctx, blobs)
+	if err != nil {
+		return 0, err
+	}
+	clog.Infof(ctx, "upload %d -> missing %d", len(blobs), len(missings))
+	span.SetAttr("missings", len(missings))
+	return c.Upload(ctx, ds, missings)
+}
+
 var (
 	errBlobNotInReq = errors.New("blob not in request")
 )
