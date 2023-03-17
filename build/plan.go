@@ -195,7 +195,8 @@ func newScheduler(ctx context.Context, opt schedulerOption) *scheduler {
 		path:   opt.Path,
 		hashFS: opt.HashFS,
 		plan: &plan{
-			m:     make(map[string]bool),
+			m: make(map[string]bool),
+			// preallocate capacity for performance optimization.
 			q:     make(chan *Step, 10000),
 			waits: make(map[string][]*Step),
 		},
@@ -289,6 +290,7 @@ func (p *plan) pushReady() {
 	select {
 	case p.q <- p.ready[0]:
 		p.ready[0].queueDuration = time.Since(p.ready[0].queueTime)
+		// Deallocate p.ready[0] explcitily.
 		copy(p.ready, p.ready[1:])
 		p.ready[len(p.ready)-1] = nil
 		p.ready = p.ready[:len(p.ready)-1]
@@ -299,6 +301,9 @@ func (p *plan) pushReady() {
 func (p *plan) done(ctx context.Context, step *Step, outs []string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+
+	// Before processing the completed step,
+	// send ready steps from p.ready to p.q and resize p.ready.
 	i := 0
 	for _, s := range p.ready {
 		select {
@@ -313,6 +318,8 @@ func (p *plan) done(ctx context.Context, step *Step, outs []string) {
 		p.ready[j] = nil
 	}
 	p.ready = p.ready[:i]
+
+	// Unblock waiting steps and send them to the queue if they are ready.
 	npendings := p.npendings
 	nready := 0
 	ready := make([]*Step, 0, len(outs))
