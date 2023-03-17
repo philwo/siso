@@ -157,7 +157,7 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target s
 	//   so no need to wait for it. doesn't change build graph.
 	// - if depfile's dependency is generated file
 	//   - and if it is included in step's inputs, or indirect inputs,
-	//     then, it just add redundant edge to build graph. Without
+	//     then, it just adds redundant edge to build graph. Without
 	//     the edge, step's order won't be changed, so no need to add
 	//     such edge.
 	//   - otherwise, it will change the build graph.
@@ -219,7 +219,7 @@ func (s *scheduler) marked(target string) bool {
 	return s.plan.m[target]
 }
 
-func (s *scheduler) progressReport(format string, args ...interface{}) {
+func (s *scheduler) progressReport(format string, args ...any) {
 	msg := fmt.Sprintf(format, args...)
 	ui.PrintLines(msg)
 }
@@ -233,7 +233,7 @@ func (s *scheduler) finish(ctx context.Context, d time.Duration) {
 	s.progressReport("schedule pending:%d+ready:%d (node:%d edge:%d) %s\n", npendings, nready, len(s.plan.m), s.visited, d)
 }
 
-// Add adds new stepDef to run.
+// add adds new stepDef to run.
 func (s *scheduler) add(ctx context.Context, stepDef StepDef, waits []string) {
 	s.plan.mu.Lock()
 	defer s.plan.mu.Unlock()
@@ -372,7 +372,7 @@ func (p *plan) dump(ctx context.Context) {
 	var steps []*Step
 	seen := make(map[*Step]bool)
 	waits := make(map[string]bool)
-	var ready []string
+	ready := make([]string, 0, len(p.ready))
 	for _, s := range p.ready {
 		ready = append(ready, s.String())
 		seen[s] = true
@@ -398,7 +398,7 @@ func (p *plan) dump(ctx context.Context) {
 			delete(waits, o)
 		}
 	}
-	var outs []string
+	outs := make([]string, 0, len(waits))
 	for k := range waits {
 		outs = append(outs, k)
 	}
