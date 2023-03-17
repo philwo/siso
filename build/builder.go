@@ -14,6 +14,7 @@ import (
 	"infra/build/siso/hashfs"
 	"infra/build/siso/o11y/clog"
 	"infra/build/siso/o11y/trace"
+	"infra/build/siso/sync/semaphore"
 )
 
 // logging labels's key.
@@ -35,8 +36,16 @@ type Builder struct {
 	// arg table to intern command line args of steps.
 	argTab symtab
 
+	start time.Time
 	graph Graph
+	plan  *plan
+	stats *stats
 
+	stepSema *semaphore.Semaphore
+
+	localSema *semaphore.Semaphore
+
+	remoteSema        *semaphore.Semaphore
 	reCacheEnableRead bool
 	// TODO(b/266518906): enable reCacheEnableWrite option for read-only client.
 	// reCacheEnableWrite bool
