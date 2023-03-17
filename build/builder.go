@@ -35,7 +35,7 @@ type Builder struct {
 	// arg table to intern command line args of steps.
 	argTab symtab
 
-	stepDefs StepDefs
+	graph Graph
 
 	reCacheEnableRead bool
 	// TODO(b/266518906): enable reCacheEnableWrite option for read-only client.

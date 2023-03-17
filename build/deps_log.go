@@ -90,13 +90,13 @@ func (d SharedDepsLog) Record(ctx context.Context, output string, cmdhash []byte
 }
 
 // recordDepsLog records deps for output with cmdhash to local and shared.
-func (b *Builder) recordDepsLog(ctx context.Context, output string, cmdhash []byte, t time.Time, deps []string) (bool, error) {
+func (b *Builder) recordDepsLog(ctx context.Context, stepDef StepDef, output string, cmdhash []byte, t time.Time, deps []string) (bool, error) {
 	g, ctx := errgroup.WithContext(ctx)
 
 	// updated flags
 	var lu, su bool
 	g.Go(func() (err error) {
-		lu, err = b.stepDefs.RecordDepsLog(ctx, output, t, deps)
+		lu, err = stepDef.RecordDeps(ctx, output, t, deps)
 		return err
 	})
 	if b.sharedDepsLog.Bucket != nil {
