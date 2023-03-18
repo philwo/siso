@@ -6,6 +6,7 @@
 package hashfs
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -13,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -80,6 +82,9 @@ type Entry struct {
 	Directory *Directory
 	Err       error
 }
+
+// TODO(b/266518906): remove this.
+type entry = Entry
 
 // TODO(b/266518906): make this private.
 func NewLocalEntry() *Entry {
@@ -380,12 +385,173 @@ type Directory struct {
 	M sync.Map
 }
 
-func (d *Directory) String() string {
+// TODO(b/266518906): remove this.
+type directory = Directory
+
+func (d *directory) String() string {
 	if d == nil {
 		return "<nil>"
 	}
 	// better to dump all entries?
 	return fmt.Sprintf("&directory{m:%p}", &d.M)
+}
+
+// TODO(b/266518906): make this private.
+func (d *directory) Lookup(ctx context.Context, fname string) (*entry, *directory, bool) {
+	origFname := fname
+	for fname != "" {
+		fname = strings.TrimPrefix(fname, "/")
+		elem, rest, ok := strings.Cut(fname, "/")
+		if !ok {
+			e, ok := d.M.Load(fname)
+			if !ok {
+				return nil, d, ok
+			}
+			return e.(*entry), d, ok
+		}
+		fname = rest
+		v, ok := d.M.Load(elem)
+		var subdir *directory
+		if ok {
+			e := v.(*entry)
+			subdir = e.GetDir()
+			if subdir == nil {
+				err := e.WaitReady(ctx)
+				if err != nil {
+					clog.Warningf(ctx, "lookup %s wait failed %v", origFname, err)
+				} else {
+					subdir = e.GetDir()
+				}
+			}
+		}
+		if subdir == nil {
+			log.V(1).Infof("lookup %s subdir %s %s -> %s", origFname, elem, fname, subdir)
+			return nil, nil, false
+		}
+		d = subdir
+	}
+	log.V(1).Infof("lookup %s fname empty", origFname)
+	return nil, nil, false
+}
+
+// TODO(b/266518906): make this private.
+func (d *directory) Store(ctx context.Context, fname string, e *entry) error {
+	origFname := fname
+	if log.V(8) {
+		clog.Infof(ctx, "store %s %v", origFname, e)
+	}
+	for fname != "" {
+		fname = strings.TrimPrefix(fname, "/")
+		elem, rest, ok := strings.Cut(fname, "/")
+		if !ok {
+			v, ok := d.M.Load(fname)
+			var ee *entry
+			if ok {
+				ee = v.(*entry)
+			}
+			if ok && e.Directory != nil {
+				ee.InitDir()
+			} else {
+				if ok && ee != nil {
+					cmdchanged := !bytes.Equal(ee.Cmdhash, e.Cmdhash)
+					if e.Target != "" && ee.Target != e.Target {
+						clog.Infof(ctx, "store %s: cmdchagne:%t s:%q to %q", origFname, cmdchanged, ee.Target, e.Target)
+					} else if !e.D.IsZero() && ee.D != e.D && ee.D.SizeBytes != 0 && e.D.SizeBytes != 0 {
+						// don't log nil to digest of empty file (size=0)
+						clog.Infof(ctx, "store %s: cmdchange:%t d:%v to %v", origFname, cmdchanged, ee.D, e.D)
+					}
+				}
+				d.M.Store(fname, e)
+			}
+			if log.V(8) {
+				clog.Infof(ctx, "store %s -> %s %s", origFname, d, fname)
+			}
+			return nil
+		}
+		fname = rest
+		v, ok := d.M.Load(elem)
+		if ok {
+			dent := v.(*entry)
+			err := dent.WaitReady(ctx)
+			if err != nil {
+				return fmt.Errorf("store interrupted %s: %w", origFname, err)
+			}
+			if dent.GetError() == nil {
+				d = dent.GetDir()
+				if log.V(9) {
+					clog.Infof(ctx, "store %s subdir0 %s %s -> %s (%v)", origFname, elem, fname, d, dent)
+				}
+				if d == nil {
+					return fmt.Errorf("failed to set entry: %s not dir %#v", elem, dent)
+				}
+				continue
+			}
+		}
+		// create intermediate dir of elem.
+		lready := make(chan bool, 1)
+		lready <- true
+		readyq := make(chan struct{})
+		close(readyq)
+		newDent := &entry{
+			Lready: lready,
+			// don't set mtime for intermediate dir.
+			// mtime will be updated by updateDir
+			// when all dirents have been loaded.
+			Readyq:    readyq,
+			Directory: &directory{},
+		}
+		newDent.Ready.Store(true)
+		dent := newDent
+		v, ok = d.M.LoadOrStore(elem, dent)
+		if ok {
+			dent = v.(*entry)
+		}
+		subdir := dent.GetDir()
+		err := dent.WaitReady(ctx)
+		if err != nil {
+			return fmt.Errorf("store interrupted %s: %w", origFname, err)
+		}
+		err = dent.GetError()
+		if err != nil {
+			// local was known to not exist. replace it with new dent.
+			if log.V(9) {
+				clog.Infof(ctx, "store %s subdir-update %s %s -> %s (%v)", origFname, elem, fname, subdir, dent)
+			}
+			dent.InitDir()
+			subdir = dent.GetDir()
+		}
+		if log.V(9) {
+			clog.Infof(ctx, "store %s subdir1 %s %s -> %s (%v)", origFname, elem, fname, subdir, dent)
+		}
+		d = subdir
+		if d == nil {
+			return fmt.Errorf("failed to set entry: %s not dir %#v", elem, dent)
+		}
+
+	}
+	return fmt.Errorf("bad fname? %q", origFname)
+}
+
+// TODO(b/266518906): make this private.
+func (d *directory) Delete(ctx context.Context, fname string) {
+	for fname != "" {
+		fname = strings.TrimPrefix(fname, "/")
+		elem, rest, ok := strings.Cut(fname, "/")
+		if !ok {
+			d.M.Delete(fname)
+			return
+		}
+		fname = rest
+		v, ok := d.M.Load(elem)
+		if !ok {
+			return
+		}
+		e := v.(*entry)
+		d = e.GetDir()
+		if d == nil {
+			return
+		}
+	}
 }
 
 type HashFS struct {
