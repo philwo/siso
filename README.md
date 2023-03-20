@@ -30,6 +30,13 @@ instructions and examples how to use it effectively.
 Alternatively, you can use `-cpuprofile=cpu.prof` or `-memprofile=memory.prof`
 to collect a CPU or memory profile while Siso runs and save it to disk.
 
+### Tracing
+
+Passing the flag `--trace_file=<filename>` to Siso will cause it capture an
+execution trace with a wide range of events that can be interpreted by the
+`go tool trace` tool. The documentation of [go tool trace](https://pkg.go.dev/runtime/trace)
+is a good place to check for ideas how to use this data.
+
 ## References
 
 * [Previous location of Siso's source](https://chrome-internal.googlesource.com/infra/infra_internal/+/refs/heads/main/go/src/infra_internal/experimental/siso)

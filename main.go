@@ -15,6 +15,7 @@ import (
 	"os/signal"
 	"runtime"
 	"runtime/pprof"
+	"runtime/trace"
 
 	log "github.com/golang/glog"
 	"github.com/maruel/subcommands"
@@ -32,6 +33,7 @@ var (
 	pprofAddr  string
 	cpuprofile string
 	memprofile string
+	traceFile  string
 )
 
 const version = "0.1"
@@ -72,6 +74,7 @@ func sisoMain() int {
 	flag.StringVar(&pprofAddr, "pprof_addr", "", `listen address for "go tool pprof". e.g. "localhost:6060"`)
 	flag.StringVar(&cpuprofile, "cpuprofile", "", "write cpu profile to this file")
 	flag.StringVar(&memprofile, "memprofile", "", "write memory profile to this file")
+	flag.StringVar(&traceFile, "trace_file", "", "go trace output for `go tool trace`")
 	flag.Parse()
 
 	// Flush the log on exit to not lose any messages.
@@ -128,6 +131,26 @@ func sisoMain() int {
 				log.Errorf("failed to write heap profile: %v", err)
 			}
 		}()
+	}
+
+	// Save a go trace to disk during execution.
+	if traceFile != "" {
+		fmt.Fprintf(os.Stderr, "enable go trace in %q\n", traceFile)
+		f, err := os.Create(traceFile)
+		if err != nil {
+			log.Fatalf("Failed to create go trace output file: %v", err)
+		}
+		defer func() {
+			fmt.Fprintf(os.Stderr, "go trace: go tool trace %s\n", traceFile)
+			cerr := f.Close()
+			if cerr != nil {
+				log.Fatalf("Failed to close go trace output file: %v", cerr)
+			}
+		}()
+		if err := trace.Start(f); err != nil {
+			log.Fatalf("Failed to start go trace: %v", err)
+		}
+		defer trace.Stop()
 	}
 
 	return subcommands.Run(getApplication(), nil)
