@@ -583,6 +583,11 @@ func (hfs *HashFS) Entries(ctx context.Context, root string, inputs []string) ([
 	return nil, errors.New("hashfs.Entries: not implemented")
 }
 
+// Mkdir makes a directory at root/dirname.
+func (hfs *HashFS) Mkdir(ctx context.Context, root, dirname string) error {
+	return errors.New("hashfs.Mkdir: not implemented")
+}
+
 // Remove removes a file at root/fname.
 func (hfs *HashFS) Remove(ctx context.Context, root, fname string) error {
 	return errors.New("hashfs.Remove: not implemented")
