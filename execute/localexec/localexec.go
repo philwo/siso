@@ -127,3 +127,9 @@ func exitCode(err error) int32 {
 	}
 	return 1
 }
+
+// TraceEnabled returns whether file trace is enabled or not.
+func TraceEnabled(ctx context.Context) bool {
+	// TODO(b/266518906): migrate from infra_internal/experimental
+	return false
+}
