@@ -118,7 +118,7 @@ func (c *LocalCache) SetContent(ctx context.Context, d digest.Digest, fname stri
 	if err != nil {
 		return err
 	}
-	_, err, shared := c.singleflight.Do(cname, func() (interface{}, error) {
+	_, err, shared := c.singleflight.Do(cname, func() (any, error) {
 		w, err := os.Create(cname)
 		if err != nil {
 			c.m.WriteDone(0, err)

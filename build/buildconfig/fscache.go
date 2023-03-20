@@ -34,7 +34,7 @@ func (c *fscache) Get(ctx context.Context, fsys fs.FS, fname string) ([]byte, er
 		}
 		return buf, nil
 	}
-	v, err, _ := c.s.Do(fname, func() (interface{}, error) {
+	v, err, _ := c.s.Do(fname, func() (any, error) {
 		buf, err := fs.ReadFile(fsys, fname)
 		if err != nil {
 			return buf, err

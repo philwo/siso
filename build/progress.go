@@ -33,10 +33,10 @@ type activeSteps []*stepInfo
 func (as activeSteps) Len() int           { return len(as) }
 func (as activeSteps) Less(i, j int) bool { return as[i].step.startTime.Before(as[j].step.startTime) }
 func (as activeSteps) Swap(i, j int)      { as[i], as[j] = as[j], as[i] }
-func (as *activeSteps) Push(x interface{}) {
+func (as *activeSteps) Push(x any) {
 	(*as) = append(*as, x.(*stepInfo))
 }
-func (as *activeSteps) Pop() interface{} {
+func (as *activeSteps) Pop() any {
 	old := *as
 	n := len(old)
 	s := old[n-1]
@@ -100,7 +100,7 @@ func (p *progress) stop(ctx context.Context) {
 	close(p.done)
 }
 
-func (p *progress) report(format string, args ...interface{}) {
+func (p *progress) report(format string, args ...any) {
 	p.mu.Lock()
 	t := p.ts
 	p.mu.Unlock()
