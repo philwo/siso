@@ -19,13 +19,12 @@ import (
 
 	log "github.com/golang/glog"
 	"github.com/maruel/subcommands"
-	"go.chromium.org/luci/auth"
 	"go.chromium.org/luci/auth/client/authcli"
 	"go.chromium.org/luci/client/versioncli"
 	"go.chromium.org/luci/common/cli"
 	"go.chromium.org/luci/common/system/signals"
-	"go.chromium.org/luci/hardcoded/chromeinfra"
 
+	"infra/build/siso/auth/cred"
 	"infra/build/siso/subcmd/ninja"
 )
 
@@ -39,9 +38,7 @@ var (
 const version = "0.1"
 
 func getApplication() *cli.Application {
-	// Use go.chromium.org/luci/auth to authenticate.
-	authOpts := chromeinfra.DefaultAuthOptions()
-	authOpts.Scopes = []string{auth.OAuthScopeEmail, "https://www.googleapis.com/auth/cloud-platform"}
+	authOpts := cred.AuthOpts()
 
 	return &cli.Application{
 		Name:  "siso",
