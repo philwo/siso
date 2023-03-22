@@ -71,7 +71,7 @@ func sisoMain() int {
 	flag.StringVar(&pprofAddr, "pprof_addr", "", `listen address for "go tool pprof". e.g. "localhost:6060"`)
 	flag.StringVar(&cpuprofile, "cpuprofile", "", "write cpu profile to this file")
 	flag.StringVar(&memprofile, "memprofile", "", "write memory profile to this file")
-	flag.StringVar(&traceFile, "trace_file", "", "go trace output for `go tool trace`")
+	flag.StringVar(&traceFile, "trace", "", "go trace output for `go tool trace`")
 	flag.Parse()
 
 	// Flush the log on exit to not lose any messages.
