@@ -1,0 +1,213 @@
+// Copyright 2023 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+package reapi
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"strings"
+	"time"
+
+	"cloud.google.com/go/longrunning/autogen/longrunningpb"
+	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
+	"go.chromium.org/luci/common/retry"
+	spb "google.golang.org/genproto/googleapis/rpc/status"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
+
+	"infra/build/siso/o11y/clog"
+)
+
+var ErrBadPlatformContainerImage = errors.New("reapi: bad platform container image")
+
+// ExecuteAndWait executes a cmd and waits for the result.
+func (c *Client) ExecuteAndWait(ctx context.Context, req *rpb.ExecuteRequest, opts ...grpc.CallOption) (string, *rpb.ExecuteResponse, error) {
+	clog.Infof(ctx, "execute action")
+
+	if req.InstanceName == "" {
+		req.InstanceName = c.opt.Instance
+	}
+
+	var opName string
+	var waitReq *rpb.WaitExecutionRequest
+	resp := &rpb.ExecuteResponse{}
+	type responseStream interface {
+		Recv() (*longrunningpb.Operation, error)
+	}
+	execClient := rpb.NewExecutionClient(c.conn)
+	var err error
+	pctx := ctx
+	backoff := retry.Default()
+retryLoop:
+	for i := 0; ; i++ {
+		err = func() error {
+			var stream responseStream
+			var err error
+			ctx, cancel := context.WithTimeout(pctx, 1*time.Minute)
+			defer cancel()
+			if waitReq != nil {
+				stream, err = execClient.WaitExecution(ctx, waitReq, opts...)
+			} else {
+				stream, err = execClient.Execute(ctx, req, opts...)
+			}
+			if err != nil {
+				return status.Errorf(status.Code(err), "execute: %v", err)
+			}
+			for {
+				op, err := stream.Recv()
+				if err != nil {
+					if status.Code(err) == codes.NotFound {
+						waitReq = nil
+						return status.Errorf(codes.Unavailable, "operation stream lost: %v", err)
+					}
+					return err
+				}
+				if opName == "" {
+					opName = op.GetName()
+					clog.Infof(ctx, "operation starts: %s", opName)
+				}
+				if !op.GetDone() {
+					waitReq = &rpb.WaitExecutionRequest{
+						Name: opName,
+					}
+					continue
+				}
+				clog.Infof(ctx, "operation done: %s", opName)
+				waitReq = nil
+				err = op.GetResponse().UnmarshalTo(resp)
+				if err != nil {
+					err = status.Errorf(codes.Internal, "op %s response bad type %T: %v", op.GetName(), op.GetResponse(), err)
+					clog.Warningf(ctx, "action digest: %s failed %v", req.ActionDigest, err)
+					return err
+				}
+				return erespErr(ctx, resp)
+			}
+		}()
+		c.m.OpsDone(err)
+		unknownErr := true
+		switch status.Code(err) {
+		case codes.OK:
+			break retryLoop
+		case codes.Canceled,
+			codes.InvalidArgument,
+			codes.FailedPrecondition,
+			codes.Unimplemented:
+			break retryLoop
+		case codes.Aborted:
+			// "the bot running the task appears to be lost" ?
+		case codes.Unavailable, codes.ResourceExhausted:
+			unknownErr = false
+		case codes.DeadlineExceeded:
+			// ctx deadline exceeded, but pctx may not?
+			unknownErr = false
+		default:
+			break retryLoop
+		}
+		select {
+		case <-pctx.Done():
+			clog.Warningf(pctx, "pctx done: %v", pctx.Err())
+			break retryLoop
+		default:
+			if unknownErr {
+				clog.Infof(pctx, "pctx is not done: ctx=%v: %v", ctx.Err(), err)
+			}
+		}
+		if status.Code(err) == codes.DeadlineExceeded {
+			s, ok := status.FromError(err)
+			if ok && s.Message() == "execution timeout exceeded" {
+				// action timed out. no retry.
+				clog.Warningf(pctx, "action timed out: %v", err)
+				return opName, resp, err
+			}
+			// no need to backoff for deadline exceeded
+			clog.Infof(pctx, "retry exec call again: %v", err)
+			continue retryLoop
+		}
+		delay := backoff.Next(ctx, err)
+		if delay == retry.Stop {
+			break
+		}
+		clog.Infof(pctx, "backoff %s for %v", delay, err)
+		select {
+		case <-pctx.Done():
+			return opName, resp, pctx.Err()
+		case <-time.After(delay):
+		}
+	}
+	if err == nil {
+		err = status.FromProto(resp.GetStatus()).Err()
+		switch status.Code(err) {
+		case codes.PermissionDenied, codes.NotFound:
+			// RBE returns permission denied or not found when
+			// platform container image are not available
+			// on RBE worker.
+			err = fmt.Errorf("%w: %v", ErrBadPlatformContainerImage, err)
+		}
+	}
+	return opName, resp, err
+}
+
+func erespErr(ctx context.Context, eresp *rpb.ExecuteResponse) error {
+	st := eresp.GetStatus()
+	if codes.Code(st.GetCode()) != codes.OK && len(st.GetDetails()) > 0 {
+		clog.Warningf(ctx, "error details for %v: %v", codes.Code(st.GetCode()), st.GetDetails())
+	}
+	switch codes.Code(st.GetCode()) {
+	case codes.OK:
+	case codes.ResourceExhausted, codes.FailedPrecondition:
+		clog.Warningf(ctx, "execute response: status=%s", st)
+		return status.FromProto(st).Err()
+
+	case codes.Internal:
+		clog.Warningf(ctx, "execute response: status=%s", st)
+		if strings.Contains(st.GetMessage(), "CreateProcess: failure in a Windows system call") {
+			return status.FromProto(st).Err()
+		}
+		// message:"docker: Error response from daemon: OCI runtime create failed: container_linux.go:380: starting container process caused: exec: \"./bin/clang++\": permission denied: unknown."
+		if strings.Contains(st.GetMessage(), "runtime create failed") && strings.Contains(st.GetMessage(), "starting container process") {
+			return status.FromProto(st).Err()
+		}
+		fallthrough
+	case codes.Unavailable:
+		st = proto.Clone(st).(*spb.Status)
+		// codes.Unavailable, so that rpc.Retry will retry.
+		st.Code = int32(codes.Unavailable)
+		return status.FromProto(st).Err()
+
+	case codes.Unauthenticated:
+		clog.Warningf(ctx, "execute response: status=%s", st)
+		if strings.Contains(st.GetMessage(), "Request had invalid authentication credentials.") {
+			// may expire access token?
+			st = proto.Clone(st).(*spb.Status)
+			st.Code = int32(codes.Unavailable)
+			return status.FromProto(st).Err()
+		}
+		return status.FromProto(st).Err()
+
+	case codes.Aborted:
+		if ctx.Err() == nil {
+			// ctx is not cancelled, but returned
+			// code = Aborted, context canceled
+			// in this case, it would be retriable.
+			clog.Warningf(ctx, "execute reponse: aborted %s, but ctx is still active", st)
+			if st.GetMessage() == "context canceled" {
+				st = proto.Clone(st).(*spb.Status)
+				// codes.Unavailable, so that rpc.Retry will retry.
+				st.Code = int32(codes.Unavailable)
+				return status.FromProto(st).Err()
+			}
+			// otherwise, "the bot running the task appears to be lost"
+			return status.FromProto(st).Err()
+		}
+		fallthrough
+	default:
+		clog.Errorf(ctx, "execute response: error %s", st)
+		return status.FromProto(st).Err()
+	}
+	return nil
+}
