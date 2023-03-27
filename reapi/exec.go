@@ -146,7 +146,7 @@ retryLoop:
 			// RBE returns permission denied or not found when
 			// platform container image are not available
 			// on RBE worker.
-			err = fmt.Errorf("%w: %v", ErrBadPlatformContainerImage, err)
+			err = fmt.Errorf("%w: %w", ErrBadPlatformContainerImage, err)
 		}
 	}
 	return opName, resp, err
@@ -191,7 +191,7 @@ func erespErr(ctx context.Context, eresp *rpb.ExecuteResponse) error {
 
 	case codes.Aborted:
 		if ctx.Err() == nil {
-			// ctx is not cancelled, but returned
+			// ctx is not canceled, but returned
 			// code = Aborted, context canceled
 			// in this case, it would be retriable.
 			clog.Warningf(ctx, "execute reponse: aborted %s, but ctx is still active", st)
@@ -206,7 +206,7 @@ func erespErr(ctx context.Context, eresp *rpb.ExecuteResponse) error {
 		}
 		fallthrough
 	default:
-		clog.Errorf(ctx, "execute response: error %s", st)
+		clog.Errorf(ctx, "execute response: status %s", st)
 		return status.FromProto(st).Err()
 	}
 	return nil
