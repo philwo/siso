@@ -578,6 +578,11 @@ func (hfs *HashFS) ReadFile(ctx context.Context, root, fname string) ([]byte, er
 	return nil, errors.New("hashfs.ReadFile: not implemented")
 }
 
+// WriteFile writes a contents in root/fname with mtime and cmdhash.
+func (hfs *HashFS) WriteFile(ctx context.Context, root, fname string, b []byte, isExecutable bool, mtime time.Time, cmdhash []byte) error {
+	return errors.New("hashfs.WriteFile: not implemented")
+}
+
 // Entries gets merkletree entries for inputs at root.
 func (hfs *HashFS) Entries(ctx context.Context, root string, inputs []string) ([]merkletree.Entry, error) {
 	return nil, errors.New("hashfs.Entries: not implemented")
