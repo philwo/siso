@@ -6,7 +6,6 @@
 package main
 
 import (
-	"context"
 	"flag"
 	"fmt"
 	"net/http"
@@ -43,11 +42,6 @@ func getApplication() *cli.Application {
 	return &cli.Application{
 		Name:  "siso",
 		Title: "Ninja-compatible build system optimized for remote execution",
-		Context: func(ctx context.Context) context.Context {
-			ctx, cancel := context.WithCancel(ctx)
-			signals.HandleInterrupt(cancel)()
-			return ctx
-		},
 		Commands: []*subcommands.Command{
 			subcommands.CmdHelp,
 

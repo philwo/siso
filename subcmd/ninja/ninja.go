@@ -6,14 +6,16 @@
 package ninja
 
 import (
+	"context"
 	"fmt"
 	"os"
-
-	"infra/build/siso/auth/cred"
 
 	"github.com/maruel/subcommands"
 	"go.chromium.org/luci/auth"
 	"go.chromium.org/luci/common/cli"
+	"go.chromium.org/luci/common/system/signals"
+
+	"infra/build/siso/auth/cred"
 )
 
 // Cmd returns the Command for the `ninja` subcommand provided by this package.
@@ -37,6 +39,8 @@ type ninjaCmdRun struct {
 // Run runs the `ninja` subcommand.
 func (c *ninjaCmdRun) Run(a subcommands.Application, args []string, env subcommands.Env) int {
 	ctx := cli.GetContext(a, c, env)
+	ctx, cancel := context.WithCancel(ctx)
+	defer signals.HandleInterrupt(cancel)()
 
 	_, err := cred.New(ctx, c.authOpts)
 	if err != nil {
