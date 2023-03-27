@@ -20,6 +20,11 @@ import (
 	"infra/build/siso/o11y/clog"
 )
 
+const (
+	configRepo          = "config"
+	configOverridesRepo = "config_overrides"
+)
+
 type emptyFS struct{}
 
 func (emptyFS) Open(name string) (fs.File, error) {
@@ -79,8 +84,8 @@ func (r *repoLoader) Load(thread *starlark.Thread, module string) (starlark.Stri
 		buf, err = os.ReadFile(fname)
 	}
 	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) && moduleName == "config_overrides" {
-			clog.Warningf(r.ctx, "no @config_overrides//%s: %v", fname, err)
+		if errors.Is(err, fs.ErrNotExist) && moduleName == configOverridesRepo {
+			clog.Warningf(r.ctx, "no @%s//%s: %v", configOverridesRepo, fname, err)
 			name := strings.TrimSuffix(fname, filepath.Ext(fname))
 			return starlark.StringDict(map[string]starlark.Value{
 				name: starlark.None,
