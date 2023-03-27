@@ -381,7 +381,7 @@ func (e *Entry) Flush(ctx context.Context, fname string, m *iometrics.IOMetrics)
 // TODO: use generics as DirMap<K,V>?
 // TODO(b/266518906): make this struct and its fields private.
 type Directory struct {
-	// M is a map of file's basename to *entry.
+	// M is a map of file in a directoy's basename to *entry.
 	M sync.Map
 }
 
