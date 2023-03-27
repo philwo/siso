@@ -114,6 +114,9 @@ type Cmd struct {
 	// A pure cmd can execute remotely and the outputs can be safely cacheable.
 	Pure bool
 
+	// SkipCacheLookup specifies it won't lookup cache in remote execution.
+	SkipCacheLookup bool
+
 	// HashFS is a hash fs that the cmd runs on.
 	HashFS *hashfs.HashFS
 
