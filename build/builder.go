@@ -39,6 +39,8 @@ type Metadata struct {
 
 // Builder is a builder.
 type Builder struct {
+	progress progress
+
 	// path system used in the build.
 	path   *Path
 	hashFS *hashfs.HashFS
@@ -66,6 +68,12 @@ type Builder struct {
 	sharedDepsLog SharedDepsLog
 
 	localexecLogWriter io.Writer
+
+	clobber bool
+}
+
+func (b *Builder) skipped(ctx context.Context, step *Step) {
+	b.progress.step(ctx, b, step, "- "+step.cmd.Desc)
 }
 
 var errNotRelocatable = errors.New("request is not relocatable")
