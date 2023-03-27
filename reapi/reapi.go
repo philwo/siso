@@ -1,7 +1,6 @@
 // Copyright 2023 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
-
 // Package reapi provides remote execution API.
 package reapi
 
@@ -17,9 +16,12 @@ import (
 	"github.com/bazelbuild/remote-apis-sdks/go/pkg/balancer"
 	configpb "github.com/bazelbuild/remote-apis-sdks/go/pkg/balancer/proto"
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
+	"go.chromium.org/luci/cipd/version"
 	"golang.org/x/sync/singleflight"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/protobuf/proto"
 
 	"infra/build/siso/o11y/clog"
 	"infra/build/siso/o11y/iometrics"
@@ -182,4 +184,26 @@ func (c *Client) GetActionResult(ctx context.Context, d digest.Digest) (*rpb.Act
 	})
 	c.m.OpsDone(err)
 	return result, err
+}
+
+// NewContext returns new context with request metadata.
+func NewContext(ctx context.Context, rmd *rpb.RequestMetadata) context.Context {
+	ver, err := version.GetStartupVersion()
+	if err == nil {
+		rmd.ToolDetails = &rpb.ToolDetails{
+			ToolName:    ver.PackageName,
+			ToolVersion: ver.InstanceID,
+		}
+	}
+	// Append metadata to the context.
+	// See the document for the specification.
+	// https://github.com/bazelbuild/remote-apis/blob/8f539af4b407a4f649707f9632fc2b715c9aa065/build/bazel/remote/execution/v2/remote_execution.proto#L2034-L2045
+	b, err := proto.Marshal(rmd)
+	if err != nil {
+		clog.Warningf(ctx, "marshal %v: %v", rmd, err)
+		return ctx
+	}
+	return metadata.AppendToOutgoingContext(ctx,
+		"build.bazel.remote.execution.v2.requestmetadata-bin",
+		string(b))
 }
