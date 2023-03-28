@@ -25,7 +25,10 @@ import (
 	"infra/build/siso/o11y/iometrics"
 	"infra/build/siso/reapi/digest"
 	"infra/build/siso/reapi/merkletree"
+	"infra/build/siso/sync/semaphore"
 )
+
+var FlushSemaphore = semaphore.New("fs-flush", runtime.NumCPU()*2)
 
 func localDigest(ctx context.Context, fname string, m *iometrics.IOMetrics) (digest.Data, error) {
 	// TODO(b/271059955): add xattr support.
@@ -555,6 +558,19 @@ func (d *directory) Delete(ctx context.Context, fname string) {
 }
 
 type HashFS struct {
+	// IOMetrics stores the metrics of I/O operations on the HashFS.
+	IOMetrics *iometrics.IOMetrics
+}
+
+// New creates a HashFS.
+func New(ctx context.Context, opt Option) (*HashFS, error) {
+	return nil, errors.New("hashfs.New: not implemented")
+}
+
+// Close closes the HashFS.
+// Persists current state in opt.StateFile.
+func (hfs *HashFS) Close(ctx context.Context) error {
+	return errors.New("hashfs.Close: not implemented")
 }
 
 // FileSystem returns FileSystem interface at dir.
@@ -618,6 +634,12 @@ func (hfs *HashFS) Remove(ctx context.Context, root, fname string) error {
 func (hfs *HashFS) Forget(ctx context.Context, root string, inputs []string) {
 }
 
+// LocalEntries gets merkletree entries for inputs at root from local disk,
+// ignoring cached entries.
+func (hfs *HashFS) LocalEntries(ctx context.Context, root string, inputs []string) ([]merkletree.Entry, error) {
+	return nil, errors.New("hashfs.LocalEntries: not implemented")
+}
+
 // Update updates cache information for entries under execRoot with mtime and cmdhash.
 func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []merkletree.Entry, mtime time.Time, cmdhash []byte, action digest.Digest) error {
 	return errors.New("hashfs.Update: not umplemented")
@@ -626,6 +648,11 @@ func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []merkle
 // Flush flushes cached information for files under execRoot to local disk.
 func (hfs *HashFS) Flush(ctx context.Context, execRoot string, files []string) error {
 	return errors.New("hashfs.Flush: not implemented")
+}
+
+// Refresh refreshes cached file entries under execRoot.
+func (hfs *HashFS) Refresh(ctx context.Context, execRoot string) error {
+	return errors.New("hashfs.Refresh: not implemented")
 }
 
 // FileInfo implements https://pkg.go.dev/io/fs#FileInfo.
