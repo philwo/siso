@@ -573,6 +573,11 @@ func (hfs *HashFS) Stat(ctx context.Context, root, fname string) (*FileInfo, err
 	return nil, errors.New("hashfs.Stat: not implemented")
 }
 
+// ReadDir returns directory entries of root/name.
+func (hfs *HashFS) ReadDir(ctx context.Context, root, name string) (dents []DirEntry, err error) {
+	return nil, errors.New("hashfs.ReadDir: not implemented")
+}
+
 // ReadFile reads a contents of root/fname.
 func (hfs *HashFS) ReadFile(ctx context.Context, root, fname string) ([]byte, error) {
 	return nil, errors.New("hashfs.ReadFile: not implemented")
@@ -581,6 +586,17 @@ func (hfs *HashFS) ReadFile(ctx context.Context, root, fname string) ([]byte, er
 // WriteFile writes a contents in root/fname with mtime and cmdhash.
 func (hfs *HashFS) WriteFile(ctx context.Context, root, fname string, b []byte, isExecutable bool, mtime time.Time, cmdhash []byte) error {
 	return errors.New("hashfs.WriteFile: not implemented")
+}
+
+// Symlink creates a symlink to target at root/linkpath with mtime and cmdhash.
+func (hfs *HashFS) Symlink(ctx context.Context, root, target, linkpath string, mtime time.Time, cmdhash []byte) error {
+	return errors.New("hashfs.Symlink: not implemented")
+}
+
+// Copy copies a file from root/src to root/dst with mtime and cmdhash.
+// if src is dir, returns error.
+func (hfs *HashFS) Copy(ctx context.Context, root, src, dst string, mtime time.Time, cmdhash []byte) error {
+	return errors.New("hashfs.Copy: not implemented")
 }
 
 // Entries gets merkletree entries for inputs at root.
