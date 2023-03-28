@@ -542,6 +542,31 @@ func (c *Cmd) EntriesFromResult(ctx context.Context, ds hashfs.DataSource, resul
 	return entries
 }
 
+// ResultFromEntries updates result from entries.
+func ResultFromEntries(result *rpb.ActionResult, entries []merkletree.Entry) {
+	for _, ent := range entries {
+		switch {
+		case ent.IsSymlink():
+			result.OutputSymlinks = append(result.OutputSymlinks, &rpb.OutputSymlink{
+				Path:   ent.Name,
+				Target: ent.Target,
+			})
+		case ent.IsDir():
+			result.OutputDirectories = append(result.OutputDirectories, &rpb.OutputDirectory{
+				Path: ent.Name,
+				// TODO(b/275448031): calculate tree digest from the entry.
+				TreeDigest: digest.Empty.Proto(),
+			})
+		default:
+			result.OutputFiles = append(result.OutputFiles, &rpb.OutputFile{
+				Path:         ent.Name,
+				Digest:       ent.Data.Digest().Proto(),
+				IsExecutable: ent.IsExecutable,
+			})
+		}
+	}
+}
+
 // ExitError is an error of cmd exit.
 type ExitError struct {
 	ExitCode int
