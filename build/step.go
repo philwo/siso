@@ -302,10 +302,9 @@ func newCmd(ctx context.Context, b *Builder, stepDef StepDef) *execute.Cmd {
 
 		HashFS: b.hashFS,
 
-		Platform:      stepDef.Platform(),
-		RemoteWrapper: stepDef.Binding("remote_wrapper"),
-		// TODO(b/266518906): enable RemoteCommand
-		// RemoteCommand:   stepDef.Binding("remote_command"),
+		Platform:        stepDef.Platform(),
+		RemoteWrapper:   stepDef.Binding("remote_wrapper"),
+		RemoteCommand:   stepDef.Binding("remote_command"),
 		RemoteInputs:    stepDef.RemoteInputs(),
 		CanonicalizeDir: stepDef.Binding("canonicalize_dir") != "",
 

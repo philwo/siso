@@ -128,6 +128,10 @@ type Cmd struct {
 	// It can be used to specify a wrapper command/script that exist on the worker.
 	RemoteWrapper string
 
+	// RemoteCommand is an argv[0] when the cmd runs on remote execution backend, if not empty.
+	// e.g. "python3" for python actions sent from Windows host to Linux worker.
+	RemoteCommand string
+
 	// RemoteInputs are the substitute files for remote execution.
 	// The key is the filename used in remote execution.
 	// The value is the filename on local disk.
@@ -460,6 +464,10 @@ func (c *Cmd) commandDigest(ctx context.Context, ds *digest.Store) (digest.Diges
 	}
 	if c.RemoteWrapper != "" {
 		args = append([]string{c.RemoteWrapper}, args...)
+	}
+	if c.RemoteCommand != "" {
+		// Replace the first args. But don't modify the Cmd.Args for fallback.
+		args = append([]string{c.RemoteCommand}, args[1:]...)
 	}
 	dir := c.Dir
 	if c.CanonicalizeDir {
