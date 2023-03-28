@@ -10,8 +10,12 @@ import (
 	"errors"
 	"io"
 	"path/filepath"
+	"strings"
 	"time"
 
+	log "github.com/golang/glog"
+
+	"infra/build/siso/execute"
 	"infra/build/siso/execute/localexec"
 	"infra/build/siso/hashfs"
 	"infra/build/siso/o11y/clog"
@@ -70,6 +74,33 @@ type Builder struct {
 	localexecLogWriter io.Writer
 
 	clobber bool
+}
+
+// dedupInputs deduplicates inputs.
+// For windows worker, which uses case insensitive file system, it also
+// deduplicates filenames with different cases, e.g. "Windows.h" vs "windows.h".
+// TODO(b/275452106): support Mac worker
+func dedupInputs(ctx context.Context, cmd *execute.Cmd) {
+	// need to dedup input with different case in intermediate dir on win and mac?
+	caseInsensitive := cmd.Platform["OSFamily"] == "Windows"
+	m := make(map[string]string)
+	inputs := make([]string, 0, len(cmd.Inputs))
+	for _, input := range cmd.Inputs {
+		key := input
+		if caseInsensitive {
+			key = strings.ToLower(input)
+		}
+		if s, found := m[key]; found {
+			if log.V(1) {
+				clog.Infof(ctx, "dedup input %s (%s)", input, s)
+			}
+			continue
+		}
+		m[key] = input
+		inputs = append(inputs, input)
+	}
+	cmd.Inputs = make([]string, len(inputs))
+	copy(cmd.Inputs, inputs)
 }
 
 func (b *Builder) skipped(ctx context.Context, step *Step) {
