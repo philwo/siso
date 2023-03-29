@@ -11,14 +11,18 @@ import (
 	"fmt"
 	"io/fs"
 	"runtime"
+	"time"
 
+	log "github.com/golang/glog"
 	"go.starlark.net/resolve"
 	"go.starlark.net/starlark"
 	"go.starlark.net/starlarkstruct"
 
 	"infra/build/siso/build"
+	"infra/build/siso/execute"
 	"infra/build/siso/hashfs"
 	"infra/build/siso/o11y/clog"
+	"infra/build/siso/o11y/trace"
 )
 
 const configEntryPoint = "init"
@@ -166,4 +170,68 @@ func (cfg *Config) Init(ctx context.Context, hashFS *hashfs.HashFS, buildPath *b
 		return "", fmt.Errorf("%s returned %s, want string", configEntryPoint, ret.Type())
 	}
 	return s, nil
+}
+
+// Func returns a function for the handler name.
+func (cfg *Config) Func(ctx context.Context, handler string) (starlark.Value, bool) {
+	if cfg.handlers == nil {
+		clog.Warningf(ctx, "no handlers")
+		return starlark.None, false
+	}
+	fun, ok, err := cfg.handlers.Get(starlark.String(handler))
+	if !ok || err != nil {
+		clog.Warningf(ctx, "no handler:%q ok:%t err:%v dict:%v keys:%v", handler, ok, err, cfg.handlers, cfg.handlers.Keys())
+	}
+	return fun, ok && err == nil
+}
+
+// Handle runs handler for the cmd.
+func (cfg *Config) Handle(ctx context.Context, handler string, bpath *build.Path, cmd *execute.Cmd) error {
+	fun, ok := cfg.Func(ctx, handler)
+	if !ok {
+		return fmt.Errorf("no handler:%q for %s", handler, cmd)
+	}
+	ctx, span := trace.NewSpan(ctx, "handle")
+	defer span.Close(nil)
+	span.SetAttr("handler", handler)
+	started := time.Now()
+	defer func() {
+		clog.Infof(ctx, "handle:%s %s", handler, time.Since(started))
+	}()
+	thread := &starlark.Thread{
+		Name: "handler:" + handler,
+		Print: func(thread *starlark.Thread, msg string) {
+			clog.Infof(ctx, "thread:%s %s", thread.Name, msg)
+		},
+		Load: func(*starlark.Thread, string) (starlark.StringDict, error) {
+			return nil, fmt.Errorf("load is not allowed in handler")
+		},
+	}
+
+	hctx := starlarkstruct.FromStringDict(starlark.String("ctx"), map[string]starlark.Value{
+		"actions": starCmdActions(ctx, cmd),
+		"fs":      starFS(ctx, cmd.HashFS.FileSystem(ctx, cmd.ExecRoot), bpath, cfg.fscache),
+	})
+	if log.V(1) {
+		clog.Infof(ctx, "hctx: %v", hctx)
+	}
+
+	hcmd, err := packCmd(ctx, cmd)
+	if err != nil {
+		return fmt.Errorf("failed to pack cmd: %w", err)
+	}
+	if log.V(1) {
+		clog.Infof(ctx, "hcmd: %v", hcmd)
+	}
+	// hctx and hcmd will be frozen, so fun may not mutate hcmd.
+	_, err = starlark.Call(thread, fun, starlark.Tuple([]starlark.Value{hctx, hcmd}), nil)
+	if err != nil {
+		clog.Warningf(ctx, "thread:%s failed to run %s: %v", thread.Name, handler, err)
+		var eerr *starlark.EvalError
+		if errors.As(err, &eerr) {
+			clog.Warningf(ctx, "stacktrace:\n%s", eerr.Backtrace())
+		}
+		return fmt.Errorf("failed to run %s: %w", handler, err)
+	}
+	return nil
 }
