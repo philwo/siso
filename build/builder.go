@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io"
 	"path/filepath"
 	"strings"
@@ -22,6 +23,9 @@ import (
 	"infra/build/siso/o11y/trace"
 	"infra/build/siso/sync/semaphore"
 )
+
+// OutputLocalFunc is a function to determine the file should be downloaded or not.
+type OutputLocalFunc func(context.Context, string) bool
 
 // logging labels's key.
 const (
@@ -71,6 +75,8 @@ type Builder struct {
 
 	sharedDepsLog SharedDepsLog
 
+	outputLocal OutputLocalFunc
+
 	localexecLogWriter io.Writer
 
 	clobber bool
@@ -101,6 +107,74 @@ func dedupInputs(ctx context.Context, cmd *execute.Cmd) {
 	}
 	cmd.Inputs = make([]string, len(inputs))
 	copy(cmd.Inputs, inputs)
+}
+
+// outputs processes step's outputs.
+// it will flush outputs to local disk if
+// - it is specified in local outputs of StepDef.
+// - it has an extension that requires scan deps of future steps.
+// - it is specified by OutptutLocalFunc.
+func (b *Builder) outputs(ctx context.Context, step *Step) error {
+	ctx, span := trace.NewSpan(ctx, "outputs")
+	defer span.Close(nil)
+	span.SetAttr("outputs", len(step.cmd.Outputs))
+	localOutputs := step.def.LocalOutputs()
+	span.SetAttr("outputs-local", len(localOutputs))
+	seen := make(map[string]bool)
+	for _, o := range localOutputs {
+		if seen[o] {
+			continue
+		}
+		seen[o] = true
+	}
+
+	clog.Infof(ctx, "outputs %d->%d", len(step.cmd.Outputs), len(localOutputs))
+	allowMissing := step.def.Binding("allow_missing_outputs") != ""
+	// need to check against step.cmd.Outputs, not step.def.Outputs, since
+	// handler may add to step.cmd.Outputs.
+	for _, out := range step.cmd.Outputs {
+		// force to output local for inputs
+		// .h,/.hxx/.hpp/.inc/.c/.cc/.cxx/.cpp/.m/.mm for gcc deps or msvc showIncludes
+		// .json/.js/.ts for tsconfig.json, .js for grit etc.
+		switch filepath.Ext(out) {
+		case ".h", ".hxx", ".hpp", ".inc", ".c", ".cc", "cxx", ".cpp", ".m", ".mm", ".json", ".js", ".ts":
+			if seen[out] {
+				continue
+			}
+			localOutputs = append(localOutputs, out)
+			seen[out] = true
+		}
+		if b.outputLocal != nil && b.outputLocal(ctx, out) {
+			if seen[out] {
+				continue
+			}
+			localOutputs = append(localOutputs, out)
+			seen[out] = true
+		}
+		_, err := b.hashFS.Stat(ctx, step.cmd.ExecRoot, out)
+		if err != nil {
+			if allowMissing {
+				clog.Warningf(ctx, "missing outputs %s: %v", out, err)
+				outs := make([]string, 0, len(localOutputs))
+				for _, f := range localOutputs {
+					if f == out {
+						continue
+					}
+					outs = append(outs, f)
+				}
+				localOutputs = outs
+				continue
+			}
+			return fmt.Errorf("missing outputs %s: %w", out, err)
+		}
+	}
+	if len(localOutputs) > 0 {
+		err := b.hashFS.Flush(ctx, step.cmd.ExecRoot, localOutputs)
+		if err != nil {
+			return fmt.Errorf("failed to flush outputs to local: %w", err)
+		}
+	}
+	return nil
 }
 
 func (b *Builder) skipped(ctx context.Context, step *Step) {
