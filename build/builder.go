@@ -18,6 +18,7 @@ import (
 
 	"infra/build/siso/execute"
 	"infra/build/siso/execute/localexec"
+	"infra/build/siso/execute/remoteexec"
 	"infra/build/siso/hashfs"
 	"infra/build/siso/o11y/clog"
 	"infra/build/siso/o11y/trace"
@@ -47,6 +48,9 @@ type Metadata struct {
 
 // Builder is a builder.
 type Builder struct {
+	// build session id, tool invocation id.
+	id string
+
 	progress progress
 
 	// path system used in the build.
@@ -67,6 +71,7 @@ type Builder struct {
 	localExec localexec.LocalExec
 
 	remoteSema        *semaphore.Semaphore
+	remoteExec        *remoteexec.RemoteExec
 	reCacheEnableRead bool
 	// TODO(b/266518906): enable reCacheEnableWrite option for read-only client.
 	// reCacheEnableWrite bool
