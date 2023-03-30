@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -23,6 +24,7 @@ import (
 	"infra/build/siso/o11y/clog"
 	"infra/build/siso/o11y/trace"
 	"infra/build/siso/sync/semaphore"
+	"infra/build/siso/ui"
 )
 
 // OutputLocalFunc is a function to determine the file should be downloaded or not.
@@ -85,6 +87,7 @@ type Builder struct {
 	localexecLogWriter io.Writer
 
 	clobber bool
+	dryRun  bool
 }
 
 // dedupInputs deduplicates inputs.
@@ -233,4 +236,66 @@ func (b *Builder) updateDeps(ctx context.Context, step *Step) error {
 	}
 	depsFixCmd(ctx, b, step, deps)
 	return nil
+}
+
+func (b *Builder) phonyDone(ctx context.Context, step *Step) error {
+	b.plan.done(ctx, step, step.def.Outputs())
+	return nil
+}
+
+func (b *Builder) done(ctx context.Context, step *Step) error {
+	ctx, span := trace.NewSpan(ctx, "done")
+	defer span.Close(nil)
+	var outputs []string
+	allowMissing := step.def.Binding("allow_missing_outputs") != ""
+	for _, out := range step.cmd.Outputs {
+		out := out
+		var mtime time.Time
+		if log.V(1) {
+			clog.Infof(ctx, "output -> %s", out)
+		}
+		fi, err := b.hashFS.Stat(ctx, step.cmd.ExecRoot, out)
+		if err != nil {
+			if allowMissing {
+				clog.Warningf(ctx, "missing output %s: %v", out, err)
+				continue
+			}
+			if !b.dryRun {
+				return fmt.Errorf("output %s for %s: %w", out, step, err)
+			}
+		}
+		if fi != nil {
+			mtime = fi.ModTime()
+		}
+		if log.V(1) {
+			clog.Infof(ctx, "become ready: %s %s", out, mtime)
+		}
+		outputs = append(outputs, out)
+	}
+	b.stats.done(step.cmd.Pure)
+	b.plan.done(ctx, step, outputs)
+	return nil
+}
+
+func (b *Builder) failedToRun(ctx context.Context, cmd *execute.Cmd, err error) {
+	clog.Warningf(ctx, "Failed to exec: %v", err)
+	if errors.Is(err, context.Canceled) || ctx.Err() != nil {
+		return
+	}
+	var output string
+	if len(cmd.Outputs) > 0 {
+		output = cmd.Outputs[0]
+		if strings.HasPrefix(output, cmd.Dir+"/") {
+			output = "./" + strings.TrimPrefix(output, cmd.Dir+"/")
+		}
+	}
+	var msgs []string
+	msgs = append(msgs, "\n", fmt.Sprintf("\nFAILED: %s %s\n%q %q\n%q\n", cmd, cmd.Desc, cmd.ActionName, output, cmd.Command()))
+	rsp := cmd.RSPFile
+	if rsp != "" {
+		msgs = append(msgs, fmt.Sprintf(" %s=%q\n", rsp, cmd.RSPFileContent))
+	}
+	ui.PrintLines(msgs...)
+	os.Stdout.Write(cmd.Stdout())
+	os.Stderr.Write(append(cmd.Stderr(), '\n'))
 }
