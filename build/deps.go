@@ -184,19 +184,6 @@ func depsAfterRun(ctx context.Context, b *Builder, step *Step) ([]string, error)
 	return deps, nil
 }
 
-func depsImpureCheck(ctx context.Context, step *Step, args []string) error {
-	// deps="gcc","msvc" doesn't use file access. new *.d will have correct deps.
-	switch step.cmd.Deps {
-	case "gcc", "msvc", "ts_library":
-		return nil
-	default:
-		if experiments.Enabled("keep-going-impure", "impure cmd %s %s %q marked as pure", step, step.cmd.ActionName, args) {
-			return nil
-		}
-	}
-	return fmt.Errorf("impure cmd %s %s %q marked as pure", step, step.cmd.ActionName, args)
-}
-
 // returns canonical paths
 func fastDepsLogInputs(ctx context.Context, b *Builder, cmd *execute.Cmd) ([]string, error) {
 	if len(cmd.Outputs) == 0 {

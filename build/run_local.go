@@ -205,8 +205,3 @@ args: %q %d
 		clog.Warningf(ctx, "failed to log localexec: %v", err)
 	}
 }
-
-func (b *Builder) checkTrace(ctx context.Context, step *Step, dur time.Duration) error {
-	// TODO(b/266518906): migrate from infra_internal/experimental
-	return nil
-}
