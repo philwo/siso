@@ -84,6 +84,9 @@ type Builder struct {
 
 	outputLocal OutputLocalFunc
 
+	cacheSema *semaphore.Semaphore
+	cache     *Cache
+
 	localexecLogWriter io.Writer
 
 	clobber bool
@@ -185,7 +188,13 @@ func (b *Builder) outputs(ctx context.Context, step *Step) error {
 	return nil
 }
 
-func (b *Builder) skipped(ctx context.Context, step *Step) {
+// progressStepCacheHit shows progress of the cache hit step.
+func (b *Builder) progressStepCacheHit(ctx context.Context, step *Step) {
+	b.progress.step(ctx, b, step, "c "+step.cmd.Desc)
+}
+
+// progressStepCacheHit shows progress of the skipped step.
+func (b *Builder) progressStepSkipped(ctx context.Context, step *Step) {
 	b.progress.step(ctx, b, step, "- "+step.cmd.Desc)
 }
 

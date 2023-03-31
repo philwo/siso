@@ -52,7 +52,7 @@ func (b *Builder) checkUpToDate(ctx context.Context, step *Step) bool {
 	clog.Infof(ctx, "skip: in:%s < out:%s %s", lastIn, out0, outmtime.Sub(inmtime))
 	span.SetAttr("skip", true)
 	if b.stats.skipped(ctx)%100 == 0 {
-		b.skipped(ctx, step)
+		b.progressStepSkipped(ctx, step)
 	}
 	return true
 }
