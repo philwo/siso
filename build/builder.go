@@ -69,6 +69,8 @@ type Builder struct {
 
 	stepSema *semaphore.Semaphore
 
+	preprocSema *semaphore.Semaphore
+
 	localSema *semaphore.Semaphore
 	localExec localexec.LocalExec
 
@@ -198,6 +200,19 @@ func (b *Builder) progressStepSkipped(ctx context.Context, step *Step) {
 	b.progress.step(ctx, b, step, "- "+step.cmd.Desc)
 }
 
+// progressStepCacheHit shows progress of the started step.
+func (b *Builder) progressStepStarted(ctx context.Context, step *Step) {
+	step.SetPhase(stepStart)
+	step.startTime = time.Now()
+	b.progress.step(ctx, b, step, "S "+step.cmd.Desc)
+}
+
+// progressStepCacheHit shows progress of the finished step.
+func (b *Builder) progressStepFinished(ctx context.Context, step *Step) {
+	step.SetPhase(stepDone)
+	b.progress.step(ctx, b, step, "F "+step.cmd.Desc)
+}
+
 var errNotRelocatable = errors.New("request is not relocatable")
 
 func (b *Builder) updateDeps(ctx context.Context, step *Step) error {
@@ -248,6 +263,9 @@ func (b *Builder) updateDeps(ctx context.Context, step *Step) error {
 }
 
 func (b *Builder) phonyDone(ctx context.Context, step *Step) error {
+	if log.V(1) {
+		clog.Infof(ctx, "step phony %s", step)
+	}
 	b.plan.done(ctx, step, step.def.Outputs())
 	return nil
 }
