@@ -6,7 +6,6 @@ package reapi
 
 import (
 	"context"
-	"crypto/tls"
 	"errors"
 	"flag"
 	"fmt"
@@ -19,10 +18,10 @@ import (
 	"go.chromium.org/luci/cipd/version"
 	"golang.org/x/sync/singleflight"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/proto"
 
+	"infra/build/siso/auth/cred"
 	"infra/build/siso/o11y/clog"
 	"infra/build/siso/o11y/iometrics"
 	"infra/build/siso/reapi/digest"
@@ -72,7 +71,7 @@ type Client struct {
 }
 
 // New creates new remote exec API client.
-func New(ctx context.Context, opt Option, cred credentials.PerRPCCredentials) (*Client, error) {
+func New(ctx context.Context, cred cred.Cred, opt Option) (*Client, error) {
 	if opt.Address == "" {
 		return nil, errors.New("no reapi address")
 	}
@@ -108,9 +107,7 @@ func New(ctx context.Context, opt Option, cred credentials.PerRPCCredentials) (*
 	// https://github.com/grpc/grpc/blob/c16338581dba2b054bf52484266b79e6934bbc1c/doc/service_config.md
 	// https://github.com/grpc/proposal/blob/9f993b522267ed297fe54c9ee32cfc13699166c7/A6-client-retries.md
 	// timeout=300s may cause deadline exceeded to fetch large *.so file?
-	dopts := []grpc.DialOption{
-		grpc.WithPerRPCCredentials(cred),
-		grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{})),
+	dopts := append(cred.GRPCDialOptions(),
 		grpc.WithUnaryInterceptor(grpcInt.GCPUnaryClientInterceptor),
 		grpc.WithStreamInterceptor(grpcInt.GCPStreamClientInterceptor),
 		grpc.WithDisableServiceConfig(),
@@ -133,7 +130,7 @@ func New(ctx context.Context, opt Option, cred credentials.PerRPCCredentials) (*
 		}
 	  }
 	]
-}`, balancer.Name))}
+}`, balancer.Name)))
 
 	conn, err := grpc.DialContext(ctx, opt.Address, dopts...)
 	if err != nil {
@@ -173,6 +170,15 @@ func (c *Client) Close() error {
 // IOMetrics returns an IOMetrics of the client.
 func (c *Client) IOMetrics() *iometrics.IOMetrics {
 	return c.m
+}
+
+// Proto fetches contents of digest into proto message.
+func (c *Client) Proto(ctx context.Context, d digest.Digest, p proto.Message) error {
+	b, err := c.Get(ctx, d, fmt.Sprintf("%s -> %T", d, p))
+	if err != nil {
+		return err
+	}
+	return proto.Unmarshal(b, p)
 }
 
 // GetActionResult gets the action result by the digest.
