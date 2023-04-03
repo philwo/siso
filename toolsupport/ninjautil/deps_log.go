@@ -64,6 +64,106 @@ type depsRecord struct {
 	inputs []string
 }
 
+func verifySignature(ctx context.Context, f io.Reader) error {
+	buf := make([]byte, len(fileSignature))
+	n, err := f.Read(buf)
+	if log.V(3) {
+		clog.Infof(ctx, "signature=%q: %d %v", buf, n, err)
+	}
+	if err != nil || n != len(buf) {
+		return fmt.Errorf("failed to read file signature=%d: %v", n, err)
+	}
+	if !bytes.Equal(buf, []byte(fileSignature)) {
+		return fmt.Errorf("wrong signature %q", buf)
+	}
+	return nil
+}
+
+func verifyVersion(ctx context.Context, f io.Reader) error {
+	var ver int32
+	err := binary.Read(f, binary.LittleEndian, &ver)
+	if log.V(3) {
+		clog.Infof(ctx, "version=%d: %v", ver, err)
+	}
+	if err != nil || ver != currentVersion {
+		return fmt.Errorf("wrong version %d: %v", ver, err)
+	}
+	return nil
+}
+
+func readRecordHeader(ctx context.Context, f io.Reader) (recordHeader, error) {
+	var header recordHeader
+	err := binary.Read(f, binary.LittleEndian, &header)
+	if log.V(3) {
+		clog.Infof(ctx, "header=0x%0x: %v", header, err)
+	}
+	if err != nil {
+		return -1, err
+	}
+	return header, nil
+}
+
+func readDepsRecord(ctx context.Context, buf []byte, size int, depsLogPaths []string) (int32, *depsRecord, error) {
+	// dependency record
+	// array of 4-byte integers
+	//   output path id
+	//   output path mtime
+	//   input path id, ...
+	rec := make([]int32, size/4)
+	err := binary.Read(bytes.NewReader(buf[:size]), binary.LittleEndian, rec)
+	if log.V(3) {
+		clog.Infof(ctx, "deps record=%v: %v", rec, err)
+	}
+	if err != nil {
+		return -1, nil, err
+	}
+	outID := rec[0]
+	mtime := rec[1]
+	rec = rec[2:]
+	deps := &depsRecord{mtime: mtime, inputs: make([]string, 0, len(rec))}
+	for _, id := range rec {
+		if int(id) < 0 || int(id) >= len(depsLogPaths) {
+			clog.Warningf(ctx, "bad path id=%d (depsLog.paths=%d)", id, len(depsLogPaths))
+			return -1, nil, nil
+		}
+		deps.inputs = append(deps.inputs, depsLogPaths[id])
+	}
+
+	return outID, deps, nil
+}
+
+func readPathRecord(ctx context.Context, buf []byte, size int, numDepsLogPaths int) (string, error) {
+	// path record
+	//  string name of the path
+	//  up to 3 padding bytes to align on 4 byte boundaries
+	//  one's complement of the expected index of the record
+	//  checksum (4 bytes)
+	pathSize := size - 4
+	for i := 0; i < 3; i++ {
+		if buf[pathSize-1] == 0 {
+			pathSize--
+		}
+	}
+	pathname := string(buf[:pathSize])
+	if log.V(3) {
+		clog.Infof(ctx, "path record %q %d", pathname, numDepsLogPaths)
+	}
+
+	var checksum int32
+	err := binary.Read(bytes.NewReader(buf[size-4:size]), binary.LittleEndian, &checksum)
+	if log.V(3) {
+		clog.Infof(ctx, "checksum %x: %v", checksum, err)
+	}
+	if err != nil {
+		return "", err
+	}
+	expectedID := ^checksum
+	if numDepsLogPaths != int(expectedID) {
+		clog.Errorf(ctx, "failed to match checksum %x -> %d != %d", checksum, expectedID, numDepsLogPaths)
+	}
+	return pathname, nil
+}
+
 // NewDepsLog reads or creates a new deps log.
 // If there are read errors, returns a truncated deps log.
 // TODO(ukai): recompact the deps log.
@@ -82,28 +182,15 @@ func NewDepsLog(ctx context.Context, fname string) (*DepsLog, error) {
 		return nil, err
 	}
 	f := bytes.NewReader(fbuf)
-	buf := make([]byte, len(fileSignature))
-	n, err := f.Read(buf)
-	if log.V(3) {
-		clog.Infof(ctx, "signature=%q: %d %v", buf, n, err)
+	if err = verifySignature(ctx, f); err != nil {
+		return nil, err
 	}
-	if err != nil || n != len(buf) {
-		return nil, fmt.Errorf("failed to read file signature=%d: %v", n, err)
-	}
-	if !bytes.Equal(buf, []byte(fileSignature)) {
-		return nil, fmt.Errorf("wrong signature %q", buf)
-	}
-	var ver int32
-	err = binary.Read(f, binary.LittleEndian, &ver)
-	if log.V(3) {
-		clog.Infof(ctx, "version=%d: %v", ver, err)
-	}
-	if err != nil || ver != currentVersion {
-		return nil, fmt.Errorf("wrong version %d", ver)
+	if err = verifyVersion(ctx, f); err != nil {
+		return nil, err
 	}
 	var offset int64
 	// TODO(ukai): this reflects original ninja impl, may not be optimal
-	buf = make([]byte, maxRecordSize+1)
+	buf := make([]byte, maxRecordSize+1)
 	// Perform read loop. Truncates with current state of deps log if error
 	// encountered while parsing (i.e. broken input should never cause error)
 	// TODO(ukai): recompact the deps log.
@@ -117,16 +204,11 @@ readLoop:
 			clog.Errorf(ctx, "failed to get offset: %v", err)
 			break readLoop
 		}
-		var header recordHeader
-		err = binary.Read(f, binary.LittleEndian, &header)
-		if log.V(3) {
-			clog.Infof(ctx, "header=0x%0x: %v", header, err)
-		}
+		header, err := readRecordHeader(ctx, f)
 		if err != nil {
-			if err == io.EOF {
-				break readLoop
+			if err != io.EOF {
+				clog.Errorf(ctx, "failed to read header at %d: %v", offset, err)
 			}
-			clog.Errorf(ctx, "failed to read header at %d: %v", offset, err)
 			break readLoop
 		}
 		size := header.RecordSize()
@@ -140,65 +222,24 @@ readLoop:
 			break readLoop
 		}
 		if header.IsDepsRecord() {
-			// dependency record
-			// array of 4-byte integers
-			//   output path id
-			//   output path mtime
-			//   input path id, ...
-			rec := make([]int32, size/4)
-			err = binary.Read(bytes.NewReader(buf[:size]), binary.LittleEndian, rec)
-			if log.V(3) {
-				clog.Infof(ctx, "deps record=%v: %v", rec, err)
-			}
+			outID, deps, err := readDepsRecord(ctx, buf, size, depsLog.paths)
 			if err != nil {
 				clog.Errorf(ctx, "failed to parse deps record at %d: %v", offset, err)
 				break readLoop
 			}
-			outID := rec[0]
-			mtime := rec[1]
-			rec = rec[2:]
-			deps := &depsRecord{mtime: mtime, inputs: make([]string, 0, len(rec))}
-			for _, id := range rec {
-				if int(id) < 0 || int(id) >= len(depsLog.paths) {
-					clog.Warningf(ctx, "bad path id=%d (depsLog.paths=%d)", id, len(depsLog.paths))
-					continue
-				}
-				deps.inputs = append(deps.inputs, depsLog.paths[id])
+			// don't update if deps record is invalid, but allow continuation
+			if outID != -1 {
+				depsLog.update(ctx, outID, deps)
 			}
-			depsLog.update(ctx, outID, deps)
-			continue
-		}
-		// path record
-		//  string name of the path
-		//  up to 3 padding bytes to align on 4 byte boundaries
-		//  one's complement of the expected index of the record
-		//  checksum (4 bytes)
-		pathSize := size - 4
-		for i := 0; i < 3; i++ {
-			if buf[pathSize-1] == 0 {
-				pathSize--
+		} else {
+			pathname, err := readPathRecord(ctx, buf, size, len(depsLog.paths))
+			if err != nil {
+				clog.Errorf(ctx, "failed to parse path record at %d: %v", offset, err)
+				break readLoop
 			}
+			depsLog.pathIdx[pathname] = len(depsLog.paths)
+			depsLog.paths = append(depsLog.paths, pathname)
 		}
-		pathname := string(buf[:pathSize])
-		if log.V(3) {
-			clog.Infof(ctx, "path record %q %d", pathname, len(depsLog.paths))
-		}
-
-		var checksum int32
-		err = binary.Read(bytes.NewReader(buf[size-4:size]), binary.LittleEndian, &checksum)
-		if log.V(3) {
-			clog.Infof(ctx, "checksum %x: %v", checksum, err)
-		}
-		if err != nil {
-			clog.Errorf(ctx, "failed to read checksum of record at %d: %v", offset, err)
-			break readLoop
-		}
-		expectedID := ^checksum
-		if len(depsLog.paths) != int(expectedID) {
-			clog.Errorf(ctx, "failed to match checksum %x -> %d != %d", checksum, expectedID, len(depsLog.paths))
-		}
-		depsLog.pathIdx[pathname] = len(depsLog.paths)
-		depsLog.paths = append(depsLog.paths, pathname)
 	}
 	clog.Infof(ctx, "ninja deps %s => paths=%d, deps=%d", depsLog.fname, len(depsLog.paths), len(depsLog.deps))
 	return depsLog, nil
