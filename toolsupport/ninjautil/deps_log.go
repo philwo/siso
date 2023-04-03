@@ -71,7 +71,7 @@ func verifySignature(ctx context.Context, f io.Reader) error {
 		clog.Infof(ctx, "signature=%q: %d %v", buf, n, err)
 	}
 	if err != nil || n != len(buf) {
-		return fmt.Errorf("failed to read file signature=%d: %v", n, err)
+		return fmt.Errorf("failed to read file signature=%d: %w", n, err)
 	}
 	if !bytes.Equal(buf, []byte(fileSignature)) {
 		return fmt.Errorf("wrong signature %q", buf)
@@ -86,7 +86,7 @@ func verifyVersion(ctx context.Context, f io.Reader) error {
 		clog.Infof(ctx, "version=%d: %v", ver, err)
 	}
 	if err != nil || ver != currentVersion {
-		return fmt.Errorf("wrong version %d: %v", ver, err)
+		return fmt.Errorf("wrong version %d: %w", ver, err)
 	}
 	return nil
 }
@@ -332,7 +332,7 @@ func (d *DepsLog) Record(ctx context.Context, output string, mtime time.Time, de
 		willUpdateDeps = true
 		err := d.recordPath(ctx, i, output)
 		if err != nil {
-			return false, fmt.Errorf("failed to record for output %s: %v", output, err)
+			return false, fmt.Errorf("failed to record for output %s: %w", output, err)
 		}
 	}
 	var depIDs []int
@@ -343,7 +343,7 @@ func (d *DepsLog) Record(ctx context.Context, output string, mtime time.Time, de
 			willUpdateDeps = true
 			err := d.recordPath(ctx, di, dep)
 			if err != nil {
-				return false, fmt.Errorf("failed to record for dep %s: %v", dep, err)
+				return false, fmt.Errorf("failed to record for dep %s: %w", dep, err)
 			}
 		}
 		depIDs = append(depIDs, di)
