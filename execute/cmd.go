@@ -89,6 +89,11 @@ type Cmd struct {
 	// by build deps, nor in deps log.
 	ToolInputs []string
 
+	// If UseSystemInputs is true, inputs may include system includes,
+	// but it won't be included in remote exec request and expect such
+	// files exist in platform container image.
+	UseSystemInput bool
+
 	// Outputs are output files of the cmd, relative to ExecRoot.
 	Outputs []string
 
@@ -300,6 +305,18 @@ func (c *Cmd) Digest(ctx context.Context, ds *digest.Store) (digest.Digest, erro
 // inputTree returns Merkle tree entries for the cmd.
 func (c *Cmd) inputTree(ctx context.Context) ([]merkletree.Entry, error) {
 	inputs := c.AllInputs()
+
+	if c.UseSystemInput {
+		var newInputs []string
+		for _, input := range inputs {
+			if strings.HasPrefix(input, "../") {
+				continue
+			}
+			newInputs = append(newInputs, input)
+		}
+		clog.Infof(ctx, "drop %d system inputs -> %d", len(inputs)-len(newInputs), len(newInputs))
+		inputs = newInputs
+	}
 
 	if log.V(1) {
 		clog.Infof(ctx, "tree @%s %s", c.ExecRoot, inputs)
