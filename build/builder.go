@@ -7,23 +7,34 @@ package build
 import (
 	"context"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
+	"sync"
 	"time"
 
+	"cloud.google.com/go/logging"
 	log "github.com/golang/glog"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"infra/build/siso/execute"
 	"infra/build/siso/execute/localexec"
 	"infra/build/siso/execute/remoteexec"
 	"infra/build/siso/hashfs"
 	"infra/build/siso/o11y/clog"
+	"infra/build/siso/o11y/iometrics"
+	"infra/build/siso/o11y/pprof"
 	"infra/build/siso/o11y/trace"
+	"infra/build/siso/reapi"
 	"infra/build/siso/sync/semaphore"
+	"infra/build/siso/toolsupport/gccutil"
+	"infra/build/siso/toolsupport/msvcutil"
 	"infra/build/siso/ui"
 )
 
@@ -63,8 +74,11 @@ func (md Metadata) Get() map[string]string {
 // Builder is a builder.
 type Builder struct {
 	// build session id, tool invocation id.
-	id string
+	id        string
+	projectID string
+	metadata  Metadata
 
+	w        io.Writer
 	progress progress
 
 	// path system used in the build.
@@ -91,6 +105,7 @@ type Builder struct {
 	reCacheEnableRead bool
 	// TODO(b/266518906): enable reCacheEnableWrite option for read-only client.
 	// reCacheEnableWrite bool
+	reapiclient *reapi.Client
 
 	actionSalt []byte
 
@@ -102,9 +117,324 @@ type Builder struct {
 	cache     *Cache
 
 	localexecLogWriter io.Writer
+	metricsJSONWriter  io.Writer
+	traceEvents        *traceEvents
+	traceStats         *traceStats
+	tracePprof         *tracePprof
+	pprofUploader      *pprof.Uploader
 
-	clobber bool
-	dryRun  bool
+	clobber         bool
+	dryRun          bool
+	rebuildManifest string
+}
+
+// Stats returns stats of the builder.
+func (b *Builder) Stats() Stats {
+	return b.stats.stats()
+}
+
+// ErrManifestModified is an error to indicate that manifest is modified.
+var ErrManifestModified = errors.New("manifest modified")
+
+type numBytes int64
+
+var bytesUnit = map[int64]string{
+	1 << 10: "KiB",
+	1 << 20: "MiB",
+	1 << 30: "GiB",
+	1 << 40: "TiB",
+}
+
+func (b numBytes) String() string {
+	var n []int64
+	for k := range bytesUnit {
+		n = append(n, k)
+	}
+	sort.Slice(n, func(i, j int) bool {
+		return n[i] > n[j]
+	})
+	i := int64(b)
+	for _, k := range n {
+		if i >= k {
+			return fmt.Sprintf("%.02f%s", float64(i)/float64(k), bytesUnit[k])
+		}
+	}
+	return fmt.Sprintf("%dB", i)
+}
+
+// Build builds args with the name.
+func (b *Builder) Build(ctx context.Context, name string, args ...string) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			clog.Errorf(ctx, "panic in build: %v", r)
+			if err == nil {
+				err = fmt.Errorf("panic in build: %v", r)
+			}
+		}
+		clog.Infof(ctx, "build %v", err)
+	}()
+	started := time.Now()
+	// scheduling
+	// TODO: run asynchronously?
+	schedOpts := schedulerOption{
+		Writer: b.w,
+		Path:   b.path,
+		HashFS: b.hashFS,
+		// TODO(b/267576561): enable trace export
+	}
+	sched := newScheduler(ctx, schedOpts)
+	err = schedule(ctx, sched, b.graph, args...)
+	if err != nil {
+		return err
+	}
+	b.plan = sched.plan
+	b.stats = sched.stats
+
+	stat := b.Stats()
+	if stat.Total == 0 {
+		return fmt.Errorf("nothing to build for %q", args)
+	}
+	ui.PrintLines("\n", fmt.Sprintf("%s %d\n", name, stat.Total), "")
+	var mftime time.Time
+	if b.rebuildManifest != "" {
+		fi, err := b.hashFS.Stat(ctx, b.path.ExecRoot, filepath.Join(b.path.Dir, b.rebuildManifest))
+		if err == nil {
+			mftime = fi.ModTime()
+			clog.Infof(ctx, "manifest %s: %s", b.rebuildManifest, mftime)
+		}
+	}
+	defer func() {
+		stat = b.Stats()
+		if b.rebuildManifest != "" {
+			fi, mferr := b.hashFS.Stat(ctx, b.path.ExecRoot, filepath.Join(b.path.Dir, b.rebuildManifest))
+			if mferr != nil {
+				clog.Warningf(ctx, "failed to stat %s: %v", b.rebuildManifest, err)
+				return
+			}
+			clog.Infof(ctx, "rebuild manifest %#v %s: %s->%s: %s", stat, b.rebuildManifest, mftime, fi.ModTime(), time.Since(started))
+			if fi.ModTime().After(mftime) || stat.Done != stat.Skipped {
+				ui.PrintLines(fmt.Sprintf("updated %s\n", time.Since(started)))
+				err = ErrManifestModified
+				return
+			}
+			return
+		}
+		clog.Infof(ctx, "build %s: %v", time.Since(started), err)
+		restat := b.reapiclient.IOMetrics().Stats()
+		ui.PrintLines(
+			fmt.Sprintf("run:%d+%d pure:%d fastDeps:%d+%d cache:%d fallback:%d skip:%d\n",
+				stat.Local, stat.Remote, stat.Pure, stat.FastDepsSuccess, stat.FastDepsFailed, stat.CacheHit, stat.LocalFallback, stat.Skipped) +
+				fmt.Sprintf("reapi: ops: %d(err:%d) / r:%d(err:%d) %s / w:%d(err:%d) %s\n",
+					restat.Ops, restat.OpsErrs,
+					restat.ROps, restat.RErrs, numBytes(restat.RBytes),
+					restat.WOps, restat.WErrs, numBytes(restat.WBytes)) +
+				fmt.Sprintf("total:%d in %s: %v\n",
+					stat.Total, time.Since(started), err))
+	}()
+	semas := []*semaphore.Semaphore{
+		b.stepSema,
+		b.localSema,
+		b.remoteSema,
+		b.cacheSema,
+		b.cache.Sema,
+		gccutil.Semaphore,
+		hashfs.FlushSemaphore,
+		msvcutil.Semaphore,
+		remoteexec.Semaphore,
+	}
+	b.traceEvents.Start(ctx, semas, []*iometrics.IOMetrics{
+		b.hashFS.IOMetrics,
+		b.reapiclient.IOMetrics(),
+		// XXX: cache iometrics?
+	})
+	defer b.traceEvents.Close(ctx)
+	b.tracePprof.SetMetadata(b.metadata)
+	b.pprofUploader.SetMetadata(ctx, b.metadata.Get())
+	defer func(ctx context.Context) {
+		perr := b.tracePprof.Close(ctx)
+		if perr != nil {
+			clog.Warningf(ctx, "pprof close: %v", perr)
+		}
+		if b.pprofUploader != nil {
+			perr := b.pprofUploader.Upload(ctx, b.tracePprof.p)
+			if perr != nil {
+				clog.Warningf(ctx, "upload pprof: %v", perr)
+			} else {
+				clog.Infof(ctx, "uploaded pprof")
+			}
+		} else {
+			clog.Infof(ctx, "no pprof uploader")
+		}
+
+	}(ctx)
+	b.start = time.Now()
+	pstat := b.plan.stats()
+	b.progress.report("[%d+%d] build start", pstat.npendings, pstat.nready)
+	clog.Infof(ctx, "build pendings=%d ready=%d", pstat.npendings, pstat.nready)
+	b.progress.start(ctx, b)
+	defer b.progress.stop(ctx)
+	var wg sync.WaitGroup
+	errch := make(chan error, 1000)
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+loop:
+	for {
+		t := time.Now()
+		ctx, done, err := b.stepSema.WaitAcquire(ctx)
+		if err != nil {
+			clog.Warningf(ctx, "wait acquire: %v", err)
+			cancel()
+			return err
+		}
+		dur := time.Since(t)
+		if dur > 1*time.Millisecond {
+			clog.Infof(ctx, "step sema wait %s", dur)
+		}
+
+		var step *Step
+		var ok bool
+		select {
+		case step, ok = <-b.plan.q:
+			if !ok {
+				clog.Infof(ctx, "q is closed")
+				done()
+				break loop
+			}
+		case err := <-errch:
+			clog.Infof(ctx, "err from errch: %v", err)
+			done()
+			cancel()
+			return err
+		case <-ctx.Done():
+			clog.Infof(ctx, "context done")
+			done()
+			cancel()
+			b.plan.dump(ctx)
+			return ctx.Err()
+		}
+		b.plan.pushReady()
+		wg.Add(1)
+		go func(step *Step) {
+			defer wg.Done()
+			defer done()
+			stepStart := time.Now()
+			tc := trace.New(ctx, step.Def.String())
+			ctx := trace.NewContext(ctx, tc)
+			spanName := stepSpanName(step.Def)
+			ctx, span := trace.NewSpan(ctx, "step:"+spanName)
+			traceID, spanID := span.ID(b.projectID)
+			sctx := clog.NewSpan(ctx, traceID, spanID, map[string]string{
+				"id": step.Def.String(),
+			})
+			logger := clog.FromContext(sctx)
+			if logger.Formatter == nil {
+				logger.Formatter = logFormat
+			}
+			logEntry := logger.Entry(logging.Info, step.Def.Binding("description"))
+			logEntry.Labels = map[string]string{
+				"id":          step.Def.String(),
+				"command":     step.Def.Binding("command"),
+				"description": step.Def.Binding("description"),
+				"action":      step.Def.ActionName(),
+				"span_name":   spanName,
+				"output0":     step.Def.Outputs()[0],
+			}
+			logger.Log(logEntry)
+			step.Metrics.BuildID = b.id
+			step.Metrics.StepID = step.Def.String()
+			step.Metrics.Action = step.Def.ActionName()
+			step.Metrics.Output = step.Def.Outputs()[0]
+			step.Metrics.PrevStepID = step.PrevStepID
+			step.Metrics.PrevStepOut = step.PrevStepOut
+			step.Metrics.Ready = IntervalMetric(step.ReadyTime.Sub(started))
+			step.Metrics.Start = IntervalMetric(stepStart.Sub(step.ReadyTime))
+
+			span.SetAttr("ready_time", time.Since(step.ReadyTime).Milliseconds())
+			span.SetAttr("prev", step.PrevStepID)
+			span.SetAttr("prev_out", step.PrevStepOut)
+			span.SetAttr("queue_time", time.Since(step.QueueTime).Milliseconds())
+			span.SetAttr("queue_size", step.QueueSize)
+			span.SetAttr("build_id", b.id)
+			span.SetAttr("id", step.Def.String())
+			span.SetAttr("command", step.Def.Binding("command"))
+			span.SetAttr("description", step.Def.Binding("description"))
+			span.SetAttr("action", step.Def.ActionName())
+			span.SetAttr("span_name", spanName)
+			span.SetAttr("output0", step.Def.Outputs()[0])
+			if next := step.Def.Next(); next != nil {
+				span.SetAttr("next_id", step.Def.Next().String())
+			}
+			span.SetAttr("backtraces", stepBacktraces(step))
+			err := b.runStep(sctx, step)
+			span.Close(nil)
+			duration := time.Since(stepStart)
+			stepLogEntry(sctx, logger, step, duration, err)
+
+			if !step.Def.IsPhony() && !step.Metrics.Skip {
+				// $ cat siso_metrcis.json |
+				//     jq --slurp 'sort_by(.duration)|reverse'
+				//
+				//     jq --slurp 'sort_by(.duration) | reverse | .[] | select(.cached==false)'
+				step.Metrics.Duration = IntervalMetric(duration)
+				step.Metrics.Err = err != nil
+				mb, err := json.Marshal(step.Metrics)
+				if err != nil {
+					clog.Warningf(ctx, "metrics marshal err: %v", err)
+				} else {
+					fmt.Fprintf(b.metricsJSONWriter, "%s\n", mb)
+				}
+			}
+
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+			b.traceEvents.Add(ctx, tc)
+			b.traceStats.update(ctx, tc)
+			// TODO(b/267576561): export trace
+			b.tracePprof.Add(ctx, tc)
+			tc = nil
+			step.Cmd = nil
+			if err != nil {
+				select {
+				case <-ctx.Done():
+				case errch <- err:
+				default:
+					clog.Warningf(ctx, "failed to send err channel: %v", err)
+				}
+			}
+		}(step)
+	}
+	clog.Infof(ctx, "all pendings becomes ready")
+	wg.Wait()
+	close(errch)
+	err = <-errch
+	b.progress.step(ctx, b, nil, fmt.Sprintf("build finished: %v\n", err))
+	return err
+}
+
+// stepLogEntry logs step in parent access log of the step.
+func stepLogEntry(ctx context.Context, logger *clog.Logger, step *Step, duration time.Duration, err error) {
+	// TODO(b/267575656): implement this for cloud logging.
+}
+
+func isCanceled(ctx context.Context, err error) bool {
+	if errors.Is(err, context.Canceled) {
+		return true
+	}
+	st, ok := status.FromError(err)
+	if ok {
+		if st.Code() == codes.Canceled {
+			return true
+		}
+	}
+	select {
+	case <-ctx.Done():
+		return true
+	default:
+	}
+	return false
 }
 
 // dedupInputs deduplicates inputs.

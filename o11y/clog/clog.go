@@ -81,6 +81,11 @@ func (l *Logger) Span(trace, spanID string, labels map[string]string) *Logger {
 	}
 }
 
+// Log logs an entry.
+func (l *Logger) Log(e logging.Entry) {
+	l.glogEntry(e)
+}
+
 func (l *Logger) log(e logging.Entry) {
 	l.glogEntry(e)
 }
