@@ -54,7 +54,7 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 
 	skip := b.checkUpToDate(ctx, step)
 	if skip {
-		step.metrics.skip = true
+		step.metrics.Skip = true
 		return b.done(ctx, step)
 	}
 

@@ -95,10 +95,10 @@ type StepMetric struct {
 	Inputs  int `json:"inputs"`  // how many input files.
 	Outputs int `json:"outputs"` // how many output files.
 
-	skip bool // whether the step was skipped during the build.
+	Skip bool // whether the step was skipped during the build.
 }
 
-func (m *StepMetric) done(ctx context.Context, step *Step) {
+func (m *StepMetric) Done(ctx context.Context, step *Step) {
 	m.WeightedDuration = IntervalMetric(step.getWeightedDuration())
 	m.Inputs = len(step.cmd.Inputs)
 	m.Outputs = len(step.cmd.Outputs)

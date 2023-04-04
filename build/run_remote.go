@@ -36,7 +36,7 @@ func (b *Builder) runRemote(ctx context.Context, step *Step) error {
 			step.metrics.IsRemote = true
 		}
 		step.metrics.RunTime = IntervalMetric(time.Since(started))
-		step.metrics.done(ctx, step)
+		step.metrics.Done(ctx, step)
 		return err
 	})
 	if err != nil {

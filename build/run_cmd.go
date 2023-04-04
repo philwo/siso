@@ -36,7 +36,7 @@ func (b *Builder) runCmdWithCache(ctx context.Context, step *Step, allowLocalFal
 			b.progressStepCacheHit(ctx, step)
 			step.metrics.Cached = true
 			step.metrics.RunTime = IntervalMetric(time.Since(start))
-			step.metrics.done(ctx, step)
+			step.metrics.Done(ctx, step)
 			// need to update deps for cache hit for deps=gcc, msvc.
 			// even if cache hit, deps should be updated with gcc depsfile,
 			// or with msvc showIncludes outputs.
