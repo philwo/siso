@@ -44,7 +44,8 @@ type Config struct {
 	// handlers registered by the config.
 	handlers *starlark.Dict
 
-	// TODO(b/266518906): add filegroups
+	// filegroups registered by the config.
+	filegroups map[string]filegroupUpdater
 
 	// filesystem cache used for handlers.
 	fscache *fscache
@@ -151,7 +152,7 @@ func (cfg *Config) Init(ctx context.Context, hashFS *hashfs.HashFS, buildPath *b
 	}
 	h, err := m.Attr("handlers")
 	if err != nil {
-		return "", fmt.Errorf("no handlers in %v", ret)
+		return "", fmt.Errorf("no handlers in %v: %w", ret, err)
 	}
 	handlers, ok := h.(*starlark.Dict)
 	if !ok {
@@ -159,11 +160,18 @@ func (cfg *Config) Init(ctx context.Context, hashFS *hashfs.HashFS, buildPath *b
 	}
 	cfg.handlers = handlers
 
-	// TODO(b/266518906): add filegroups
+	fg, err := m.Attr("filegroups")
+	if err != nil {
+		return "", fmt.Errorf("no filegroups in %v: %w", ret, err)
+	}
+	cfg.filegroups, err = parseFilegroups(ctx, fg)
+	if err != nil {
+		return "", fmt.Errorf("bad filegroups: %w", err)
+	}
 
 	stepConfig, err := m.Attr("step_config")
 	if err != nil {
-		return "", fmt.Errorf("no step_config in %v", ret)
+		return "", fmt.Errorf("no step_config in %v: %w", ret, err)
 	}
 	s, ok := starlark.AsString(stepConfig)
 	if !ok {
