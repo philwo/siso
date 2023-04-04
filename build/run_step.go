@@ -44,7 +44,7 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 		clog.Infof(ctx, "run step %s", step)
 	}
 	// defer some initialization after mtimeCheck?
-	if step.def.IsPhony() {
+	if step.Def.IsPhony() {
 		return b.phonyDone(ctx, step)
 	}
 
@@ -134,7 +134,7 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 func (b *Builder) handleStep(ctx context.Context, step *Step) error {
 	ctx, span := trace.NewSpan(ctx, "handle-step")
 	defer span.Close(nil)
-	return step.def.Handle(ctx, step.cmd)
+	return step.Def.Handle(ctx, step.cmd)
 }
 
 func (b *Builder) tryFastStep(ctx context.Context, step, fastStep *Step) (bool, error) {

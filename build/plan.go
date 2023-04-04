@@ -397,7 +397,7 @@ func (p *plan) dump(ctx context.Context) {
 		}
 	}
 	for _, s := range steps {
-		for _, o := range s.def.Outputs() {
+		for _, o := range s.Def.Outputs() {
 			if !waits[o] {
 				clog.Infof(ctx, "step %s output:%s no trigger", s, o)
 				continue

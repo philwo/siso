@@ -47,7 +47,7 @@ func (b *Builder) runLocal(ctx context.Context, step *Step) error {
 		// for the step too, but we want to disable
 		// file-access-trace only for the step with impure=true.
 		// http://b/261655377 errorprone_plugin_tests: too slow under strace?
-		impure := step.def.Binding("impure") == "true"
+		impure := step.Def.Binding("impure") == "true"
 		x := experiments.Enabled("no-file-access-trace", "disabled file-access-trace")
 		if !impure && !x {
 			step.cmd.FileTrace = &execute.FileTrace{}

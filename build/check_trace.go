@@ -58,8 +58,8 @@ func (b *Builder) checkTrace(ctx context.Context, step *Step, dur time.Duration)
 		inouts = allOutputs
 		allOutputs = nil
 	}
-	inadds, indels, inplatforms, inerrs := filesDiff(ctx, b, allInputs, inouts, step.cmd.FileTrace.Inputs, step.def.Binding("ignore_extra_input_pattern"))
-	outadds, outdels, outplatforms, outerrs := filesDiff(ctx, b, allOutputs, inouts, step.cmd.FileTrace.Outputs, step.def.Binding("ignore_extra_output_pattern"))
+	inadds, indels, inplatforms, inerrs := filesDiff(ctx, b, allInputs, inouts, step.cmd.FileTrace.Inputs, step.Def.Binding("ignore_extra_input_pattern"))
+	outadds, outdels, outplatforms, outerrs := filesDiff(ctx, b, allOutputs, inouts, step.cmd.FileTrace.Outputs, step.Def.Binding("ignore_extra_output_pattern"))
 	clog.Infof(ctx, "check-trace inputs=%d+%d+%d=>%d+%d+%d outputs=%d+%d+%d=>%d+%d+%d",
 		len(allInputs), len(inouts), len(step.cmd.FileTrace.Inputs),
 		len(inadds), len(indels), len(inplatforms),
@@ -129,7 +129,7 @@ outputs:
 		strings.Join(outerrs, "\n?"))
 	log.V(1).Infof("%s trace-diff-platform\ninputs\n %s\noutputs\n %s", step, strings.Join(inplatforms, "\n "), strings.Join(outplatforms, "\n "))
 
-	ruleBuf := step.def.RuleFix(ctx, inadds, outadds)
+	ruleBuf := step.Def.RuleFix(ctx, inadds, outadds)
 
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, `cmd: %s pure:%t/false restat:%t %s

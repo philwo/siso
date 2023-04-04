@@ -143,7 +143,7 @@ func (b *Builder) outputs(ctx context.Context, step *Step) error {
 	ctx, span := trace.NewSpan(ctx, "outputs")
 	defer span.Close(nil)
 	span.SetAttr("outputs", len(step.cmd.Outputs))
-	localOutputs := step.def.LocalOutputs()
+	localOutputs := step.Def.LocalOutputs()
 	span.SetAttr("outputs-local", len(localOutputs))
 	seen := make(map[string]bool)
 	for _, o := range localOutputs {
@@ -154,7 +154,7 @@ func (b *Builder) outputs(ctx context.Context, step *Step) error {
 	}
 
 	clog.Infof(ctx, "outputs %d->%d", len(step.cmd.Outputs), len(localOutputs))
-	allowMissing := step.def.Binding("allow_missing_outputs") != ""
+	allowMissing := step.Def.Binding("allow_missing_outputs") != ""
 	// need to check against step.cmd.Outputs, not step.def.Outputs, since
 	// handler may add to step.cmd.Outputs.
 	for _, out := range step.cmd.Outputs {
@@ -256,10 +256,10 @@ func (b *Builder) updateDeps(ctx context.Context, step *Step) error {
 	if step.fastDeps {
 		// if fastDeps case, we already know the correct deps for this cmd.
 		// just update for local deps log for incremental build.
-		updated, err = step.def.RecordDeps(ctx, output, fi.ModTime(), deps)
+		updated, err = step.Def.RecordDeps(ctx, output, fi.ModTime(), deps)
 	} else {
 		// otherwise, update both local and shared.
-		updated, err = b.recordDepsLog(ctx, step.def, output, step.cmd.CmdHash, fi.ModTime(), deps)
+		updated, err = b.recordDepsLog(ctx, step.Def, output, step.cmd.CmdHash, fi.ModTime(), deps)
 	}
 	if err != nil {
 		clog.Warningf(ctx, "update deps: failed to record deps %s, %s, %s, %s: %v", output, hex.EncodeToString(step.cmd.CmdHash), fi.ModTime(), deps, err)
@@ -278,7 +278,7 @@ func (b *Builder) phonyDone(ctx context.Context, step *Step) error {
 	if log.V(1) {
 		clog.Infof(ctx, "step phony %s", step)
 	}
-	b.plan.done(ctx, step, step.def.Outputs())
+	b.plan.done(ctx, step, step.Def.Outputs())
 	return nil
 }
 
@@ -286,7 +286,7 @@ func (b *Builder) done(ctx context.Context, step *Step) error {
 	ctx, span := trace.NewSpan(ctx, "done")
 	defer span.Close(nil)
 	var outputs []string
-	allowMissing := step.def.Binding("allow_missing_outputs") != ""
+	allowMissing := step.Def.Binding("allow_missing_outputs") != ""
 	for _, out := range step.cmd.Outputs {
 		out := out
 		var mtime time.Time

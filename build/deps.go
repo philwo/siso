@@ -41,7 +41,7 @@ func depsFastStep(ctx context.Context, b *Builder, step *Step) (*Step, error) {
 	if !found {
 		return nil, fmt.Errorf("no fast-deps (deps=%q depfile=%q)", step.cmd.Deps, step.cmd.Depfile)
 	}
-	depsIns, err := step.def.DepInputs(ctx)
+	depsIns, err := step.Def.DepInputs(ctx)
 	if err != nil {
 		depsIns, err = fastDepsLogInputs(ctx, b, step.cmd)
 		if err != nil {
@@ -58,7 +58,7 @@ func depsFastStep(ctx context.Context, b *Builder, step *Step) (*Step, error) {
 	// just needs ToolInputs.
 	stepInputs := step.cmd.ToolInputs
 	if step.cmd.Platform["OSFamily"] != "Windows" {
-		depsIns = step.def.ExpandCaseSensitives(ctx, depsIns)
+		depsIns = step.Def.ExpandCaseSensitives(ctx, depsIns)
 	}
 	inputs, err := fixInputsByDeps(ctx, b, stepInputs, depsIns)
 	if err != nil {
@@ -83,12 +83,12 @@ func depsExpandInputs(ctx context.Context, b *Builder, step *Step) {
 	switch step.cmd.Deps {
 	case "gcc", "msvc":
 	default:
-		if step.def.Binding("siso_handler") != "" {
+		if step.Def.Binding("siso_handler") != "" {
 			// already expanded before handle.
 			return
 		}
 		oldlen := len(step.cmd.Inputs)
-		expanded := step.def.ExpandedInputs(ctx)
+		expanded := step.Def.ExpandedInputs(ctx)
 		inputs := make([]string, 0, oldlen+len(expanded))
 		seen := make(map[string]bool)
 		for _, in := range step.cmd.Inputs {
@@ -116,9 +116,9 @@ func depsExpandInputs(ctx context.Context, b *Builder, step *Step) {
 }
 
 func depsFixCmd(ctx context.Context, b *Builder, step *Step, deps []string) {
-	stepInputs := step.def.Inputs(ctx) // use ToolInputs?
+	stepInputs := step.Def.Inputs(ctx) // use ToolInputs?
 	if step.cmd.Platform["OSFamily"] != "Windows" {
-		deps = step.def.ExpandCaseSensitives(ctx, deps)
+		deps = step.Def.ExpandCaseSensitives(ctx, deps)
 	}
 	inputs, err := fixInputsByDeps(ctx, b, stepInputs, deps)
 	if err != nil {
@@ -142,11 +142,11 @@ func depsCmd(ctx context.Context, b *Builder, step *Step) error {
 			// just needs ToolInputs for deps=gcc, msvc.
 			stepInputs = step.cmd.ToolInputs
 		default:
-			stepInputs = step.def.Inputs(ctx) // use ToolInputs?
+			stepInputs = step.Def.Inputs(ctx) // use ToolInputs?
 		}
 		depsIns, err := ds.DepsCmd(ctx, b, step)
 		if step.cmd.Platform["OSFamily"] != "Windows" {
-			depsIns = step.def.ExpandCaseSensitives(ctx, depsIns)
+			depsIns = step.Def.ExpandCaseSensitives(ctx, depsIns)
 		}
 		inputs := uniqueFiles(stepInputs, depsIns)
 		clog.Infof(ctx, "%s-deps %d %s: %v", step.cmd.Deps, len(inputs), time.Since(start), err)

@@ -95,7 +95,7 @@ type StepDef interface {
 
 // Step is a build step.
 type Step struct {
-	def      StepDef
+	Def      StepDef
 	nwaits   int
 	cmd      *execute.Cmd
 	fastDeps bool
@@ -133,7 +133,7 @@ func (s *stepState) Phase() stepPhase {
 
 func newStep(stepDef StepDef, waits []string) *Step {
 	return &Step{
-		def:    stepDef,
+		Def:    stepDef,
 		nwaits: len(waits),
 		state:  &stepState{},
 	}
@@ -164,7 +164,7 @@ func (s *Step) String() string {
 	if s.cmd != nil {
 		return s.cmd.ID
 	}
-	return s.def.String()
+	return s.Def.String()
 }
 
 type stepPhase int
@@ -250,7 +250,7 @@ func stepSpanName(stepDef StepDef) string {
 func stepBacktraces(step *Step) []string {
 	var locs []string
 	var prev string
-	for s := step.def; s != nil; s = s.Next() {
+	for s := step.Def; s != nil; s = s.Next() {
 		outs := s.Outputs()
 		loc := stepSpanName(s)
 		if len(outs) > 0 {
@@ -271,7 +271,7 @@ func stepBacktraces(step *Step) []string {
 func (s *Step) init(ctx context.Context, b *Builder) {
 	ctx, span := trace.NewSpan(ctx, "step-init")
 	defer span.Close(nil)
-	s.cmd = newCmd(ctx, b, s.def)
+	s.cmd = newCmd(ctx, b, s.Def)
 	clog.Infof(ctx, "cmdhash:%s", hex.EncodeToString(s.cmd.CmdHash))
 }
 

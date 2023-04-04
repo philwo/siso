@@ -24,7 +24,7 @@ func (b *Builder) runRemote(ctx context.Context, step *Step) error {
 		ctx = reapi.NewContext(ctx, &rpb.RequestMetadata{
 			ActionId:         step.cmd.ID,
 			ToolInvocationId: b.id,
-			ActionMnemonic:   step.def.ActionName(),
+			ActionMnemonic:   step.Def.ActionName(),
 			TargetId:         step.cmd.Outputs[0],
 		})
 		clog.Infof(ctx, "step state: remote exec")
