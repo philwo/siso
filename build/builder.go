@@ -48,6 +48,18 @@ type Metadata struct {
 	// want to include hostname?
 }
 
+// Get returns a map of the metadata.
+func (md Metadata) Get() map[string]string {
+	m := make(map[string]string)
+	for k, v := range md.KV {
+		m[k] = v
+	}
+	m["numcpu"] = fmt.Sprintf("%d", md.NumCPU)
+	m["goos"] = md.GOOS
+	m["goarch"] = md.GOARCH
+	return m
+}
+
 // Builder is a builder.
 type Builder struct {
 	// build session id, tool invocation id.
