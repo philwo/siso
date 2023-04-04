@@ -16,7 +16,7 @@ func fastDepsCmd(ctx context.Context, b *Builder, step *Step) (*Step, bool) {
 	defer span.Close(nil)
 	fastStep, err := depsFastStep(ctx, b, step)
 	if err != nil {
-		clog.Infof(ctx, "no fast-deps %s: %v", step.cmd.Deps, err)
+		clog.Infof(ctx, "no fast-deps %s: %v", step.Cmd.Deps, err)
 		return nil, false
 	}
 	return fastStep, true
@@ -27,7 +27,7 @@ func preprocCmd(ctx context.Context, b *Builder, step *Step) {
 	defer span.Close(nil)
 	err := depsCmd(ctx, b, step)
 	if err != nil {
-		clog.Warningf(ctx, "failed to get %s deps: %v", step.cmd.Deps, err)
+		clog.Warningf(ctx, "failed to get %s deps: %v", step.Cmd.Deps, err)
 	}
 }
 

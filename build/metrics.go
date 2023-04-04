@@ -100,13 +100,13 @@ type StepMetric struct {
 
 func (m *StepMetric) Done(ctx context.Context, step *Step) {
 	m.WeightedDuration = IntervalMetric(step.getWeightedDuration())
-	m.Inputs = len(step.cmd.Inputs)
-	m.Outputs = len(step.cmd.Outputs)
+	m.Inputs = len(step.Cmd.Inputs)
+	m.Outputs = len(step.Cmd.Outputs)
 
-	m.CmdHash = hex.EncodeToString(step.cmd.CmdHash)
-	m.Digest = step.cmd.ActionDigest().String()
+	m.CmdHash = hex.EncodeToString(step.Cmd.CmdHash)
+	m.Digest = step.Cmd.ActionDigest().String()
 
-	md := step.cmd.ActionResult().GetExecutionMetadata()
+	md := step.Cmd.ActionResult().GetExecutionMetadata()
 	if !m.Cached {
 		m.QueueTime = IntervalMetric(md.GetWorkerStartTimestamp().AsTime().Sub(md.GetQueuedTimestamp().AsTime()))
 	}

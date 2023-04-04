@@ -37,22 +37,22 @@ func (depsMSVC) fixArgsForDeps(cmd *execute.Cmd) {
 func (depsMSVC) DepsAfterRun(ctx context.Context, b *Builder, step *Step) ([]string, error) {
 	ctx, span := trace.NewSpan(ctx, "deps-for-msvc")
 	defer span.Close(nil)
-	if step.cmd.Deps != "msvc" {
-		return nil, fmt.Errorf("deps-for-msvc: unexpected deps=%q %s", step.cmd.Deps, step)
+	if step.Cmd.Deps != "msvc" {
+		return nil, fmt.Errorf("deps-for-msvc: unexpected deps=%q %s", step.Cmd.Deps, step)
 	}
 	// RBE doesn't use stderr?
 	// http://b/149501385 stdout and stderr get merged in ActionResult
-	output := step.cmd.Stderr()
-	output = append(output, step.cmd.Stdout()...)
+	output := step.Cmd.Stderr()
+	output = append(output, step.Cmd.Stdout()...)
 	_, dspan := trace.NewSpan(ctx, "parse-deps")
 	deps, filteredOutput := msvcutil.ParseShowIncludes(output)
 	dspan.SetAttr("deps", len(deps))
 	dspan.Close(nil)
-	clog.Infof(ctx, "deps-for-msvc stdout=%d stderr=%d -> deps=%d extra=%q", len(step.cmd.Stdout()), len(step.cmd.Stderr()), len(deps), filteredOutput)
-	step.cmd.StdoutWriter().Write(filteredOutput)
-	step.cmd.StderrWriter().Write(nil)
+	clog.Infof(ctx, "deps-for-msvc stdout=%d stderr=%d -> deps=%d extra=%q", len(step.Cmd.Stdout()), len(step.Cmd.Stderr()), len(deps), filteredOutput)
+	step.Cmd.StdoutWriter().Write(filteredOutput)
+	step.Cmd.StderrWriter().Write(nil)
 	// /showIncludes doesn't include source file.
-	for _, arg := range step.cmd.Args {
+	for _, arg := range step.Cmd.Args {
 		switch ext := filepath.Ext(arg); ext {
 		case ".cpp", ".cxx", ".cc", ".c", ".S", ".s":
 			deps = append(deps, arg)
@@ -63,7 +63,7 @@ func (depsMSVC) DepsAfterRun(ctx context.Context, b *Builder, step *Step) ([]str
 
 func (msvc depsMSVC) DepsCmd(ctx context.Context, b *Builder, step *Step) ([]string, error) {
 	depsIns, err := msvc.depsInputs(ctx, b, step)
-	msvc.fixArgsForDeps(step.cmd)
+	msvc.fixArgsForDeps(step.Cmd)
 	return depsIns, err
 }
 
@@ -73,9 +73,9 @@ func (depsMSVC) depsInputs(ctx context.Context, b *Builder, step *Step) ([]strin
 	if err != nil {
 		return nil, fmt.Errorf("prepare for msvc deps: %w", err)
 	}
-	dargs := step.cmd.DepsArgs
+	dargs := step.Cmd.DepsArgs
 	if len(dargs) == 0 {
-		dargs = msvcutil.DepsArgs(step.cmd.Args)
+		dargs = msvcutil.DepsArgs(step.Cmd.Args)
 	}
 	ins, err := msvcutil.Deps(ctx, dargs, nil, cwd)
 	if err != nil {

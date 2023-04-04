@@ -19,6 +19,8 @@ import (
 	"infra/build/siso/o11y/trace"
 )
 
+// TODO(b/266518906): some fields have been changed to pubilc for migration.
+
 // StepDef is a build step definition.
 // unless specified, path is execroot relative.
 type StepDef interface {
@@ -96,36 +98,36 @@ type StepDef interface {
 // Step is a build step.
 type Step struct {
 	Def      StepDef
-	nwaits   int
-	cmd      *execute.Cmd
-	fastDeps bool
+	Nwaits   int
+	Cmd      *execute.Cmd
+	FastDeps bool
 
-	readyTime     time.Time
-	prevStepID    string
-	prevStepOut   string
-	queueTime     time.Time
-	queueSize     int
-	queueDuration time.Duration
-	startTime     time.Time
+	ReadyTime     time.Time
+	PrevStepID    string
+	PrevStepOut   string
+	QueueTime     time.Time
+	QueueSize     int
+	QueueDuration time.Duration
+	StartTime     time.Time
 
-	metrics StepMetric
+	Metrics StepMetric
 
-	state *stepState
+	State *StepState
 }
 
-type stepState struct {
+type StepState struct {
 	mu               sync.Mutex
-	phase            stepPhase
+	phase            StepPhase
 	weightedDuration time.Duration
 }
 
-func (s *stepState) SetPhase(phase stepPhase) {
+func (s *StepState) SetPhase(phase StepPhase) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.phase = phase
 }
 
-func (s *stepState) Phase() stepPhase {
+func (s *StepState) Phase() StepPhase {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.phase
@@ -134,43 +136,43 @@ func (s *stepState) Phase() stepPhase {
 func newStep(stepDef StepDef, waits []string) *Step {
 	return &Step{
 		Def:    stepDef,
-		nwaits: len(waits),
-		state:  &stepState{},
+		Nwaits: len(waits),
+		State:  &StepState{},
 	}
 }
 
 // NumWaits returns number of waits for the step.
 func (s *Step) NumWaits() int {
-	return s.nwaits
+	return s.Nwaits
 }
 
 // ReadyToRun checks whether the step is ready to run
 // when prev step's out becomes ready.
 func (s *Step) ReadyToRun(prev, out string) bool {
 	if out != "" {
-		s.nwaits--
+		s.Nwaits--
 	}
-	ready := s.nwaits == 0
+	ready := s.Nwaits == 0
 	if ready {
-		s.readyTime = time.Now()
-		s.prevStepID = prev
-		s.prevStepOut = out
+		s.ReadyTime = time.Now()
+		s.PrevStepID = prev
+		s.PrevStepOut = out
 	}
 	return ready
 }
 
 // String returns id of the step.
 func (s *Step) String() string {
-	if s.cmd != nil {
-		return s.cmd.ID
+	if s.Cmd != nil {
+		return s.Cmd.ID
 	}
 	return s.Def.String()
 }
 
-type stepPhase int
+type StepPhase int
 
 const (
-	stepPhaseNone stepPhase = iota
+	stepPhaseNone StepPhase = iota
 	stepStart
 	stepPreproc
 	stepInput
@@ -180,7 +182,7 @@ const (
 	stepDone
 )
 
-func (s stepPhase) String() string {
+func (s StepPhase) String() string {
 	switch s {
 	case stepPhaseNone:
 		return "none"
@@ -204,33 +206,33 @@ func (s stepPhase) String() string {
 }
 
 // SetPhase sets a phase of the step.
-func (s *Step) SetPhase(phase stepPhase) {
-	s.state.SetPhase(phase)
+func (s *Step) SetPhase(phase StepPhase) {
+	s.State.SetPhase(phase)
 }
 
 // Phase returns the phase of the step.
-func (s *Step) Phase() stepPhase {
-	return s.state.Phase()
+func (s *Step) Phase() StepPhase {
+	return s.State.Phase()
 }
 
 // Done checks the step is done.
 func (s *Step) Done() bool {
-	return s.state.Phase() == stepDone
+	return s.State.Phase() == stepDone
 }
 
 func (s *Step) addWeightedDuration(d time.Duration) {
-	s.state.mu.Lock()
-	defer s.state.mu.Unlock()
-	if s.state.phase == stepDone {
+	s.State.mu.Lock()
+	defer s.State.mu.Unlock()
+	if s.State.phase == stepDone {
 		return
 	}
-	s.state.weightedDuration += d
+	s.State.weightedDuration += d
 }
 
 func (s *Step) getWeightedDuration() time.Duration {
-	s.state.mu.Lock()
-	defer s.state.mu.Unlock()
-	return s.state.weightedDuration
+	s.State.mu.Lock()
+	defer s.State.mu.Unlock()
+	return s.State.weightedDuration
 }
 
 func stepSpanName(stepDef StepDef) string {
@@ -268,11 +270,11 @@ func stepBacktraces(step *Step) []string {
 	return locs
 }
 
-func (s *Step) init(ctx context.Context, b *Builder) {
+func (s *Step) Init(ctx context.Context, b *Builder) {
 	ctx, span := trace.NewSpan(ctx, "step-init")
 	defer span.Close(nil)
-	s.cmd = newCmd(ctx, b, s.Def)
-	clog.Infof(ctx, "cmdhash:%s", hex.EncodeToString(s.cmd.CmdHash))
+	s.Cmd = newCmd(ctx, b, s.Def)
+	clog.Infof(ctx, "cmdhash:%s", hex.EncodeToString(s.Cmd.CmdHash))
 }
 
 func newCmd(ctx context.Context, b *Builder, stepDef StepDef) *execute.Cmd {

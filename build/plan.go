@@ -254,8 +254,8 @@ func (s *scheduler) add(ctx context.Context, stepDef StepDef, waits []string) {
 		select {
 		case s.plan.q <- step:
 		default:
-			step.queueTime = time.Now()
-			step.queueSize = len(s.plan.ready)
+			step.QueueTime = time.Now()
+			step.QueueSize = len(s.plan.ready)
 			s.plan.ready = append(s.plan.ready, step)
 		}
 		return
@@ -289,7 +289,7 @@ func (p *plan) pushReady() {
 	}
 	select {
 	case p.q <- p.ready[0]:
-		p.ready[0].queueDuration = time.Since(p.ready[0].queueTime)
+		p.ready[0].QueueDuration = time.Since(p.ready[0].QueueTime)
 		// Deallocate p.ready[0] explcitily.
 		copy(p.ready, p.ready[1:])
 		p.ready[len(p.ready)-1] = nil
@@ -308,7 +308,7 @@ func (p *plan) done(ctx context.Context, step *Step, outs []string) {
 	for _, s := range p.ready {
 		select {
 		case p.q <- s:
-			s.queueDuration = time.Since(s.queueTime)
+			s.QueueDuration = time.Since(s.QueueTime)
 		default:
 			p.ready[i] = s
 			i++
@@ -338,8 +338,8 @@ func (p *plan) done(ctx context.Context, step *Step, outs []string) {
 				select {
 				case p.q <- s:
 				default:
-					s.queueTime = time.Now()
-					s.queueSize = len(ready)
+					s.QueueTime = time.Now()
+					s.QueueSize = len(ready)
 					ready = append(ready, s)
 				}
 				continue

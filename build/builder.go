@@ -142,7 +142,7 @@ func dedupInputs(ctx context.Context, cmd *execute.Cmd) {
 func (b *Builder) outputs(ctx context.Context, step *Step) error {
 	ctx, span := trace.NewSpan(ctx, "outputs")
 	defer span.Close(nil)
-	span.SetAttr("outputs", len(step.cmd.Outputs))
+	span.SetAttr("outputs", len(step.Cmd.Outputs))
 	localOutputs := step.Def.LocalOutputs()
 	span.SetAttr("outputs-local", len(localOutputs))
 	seen := make(map[string]bool)
@@ -153,11 +153,11 @@ func (b *Builder) outputs(ctx context.Context, step *Step) error {
 		seen[o] = true
 	}
 
-	clog.Infof(ctx, "outputs %d->%d", len(step.cmd.Outputs), len(localOutputs))
+	clog.Infof(ctx, "outputs %d->%d", len(step.Cmd.Outputs), len(localOutputs))
 	allowMissing := step.Def.Binding("allow_missing_outputs") != ""
 	// need to check against step.cmd.Outputs, not step.def.Outputs, since
 	// handler may add to step.cmd.Outputs.
-	for _, out := range step.cmd.Outputs {
+	for _, out := range step.Cmd.Outputs {
 		// force to output local for inputs
 		// .h,/.hxx/.hpp/.inc/.c/.cc/.cxx/.cpp/.m/.mm for gcc deps or msvc showIncludes
 		// .json/.js/.ts for tsconfig.json, .js for grit etc.
@@ -176,7 +176,7 @@ func (b *Builder) outputs(ctx context.Context, step *Step) error {
 			localOutputs = append(localOutputs, out)
 			seen[out] = true
 		}
-		_, err := b.hashFS.Stat(ctx, step.cmd.ExecRoot, out)
+		_, err := b.hashFS.Stat(ctx, step.Cmd.ExecRoot, out)
 		if err != nil {
 			if allowMissing {
 				clog.Warningf(ctx, "missing outputs %s: %v", out, err)
@@ -194,7 +194,7 @@ func (b *Builder) outputs(ctx context.Context, step *Step) error {
 		}
 	}
 	if len(localOutputs) > 0 {
-		err := b.hashFS.Flush(ctx, step.cmd.ExecRoot, localOutputs)
+		err := b.hashFS.Flush(ctx, step.Cmd.ExecRoot, localOutputs)
 		if err != nil {
 			return fmt.Errorf("failed to flush outputs to local: %w", err)
 		}
@@ -204,25 +204,25 @@ func (b *Builder) outputs(ctx context.Context, step *Step) error {
 
 // progressStepCacheHit shows progress of the cache hit step.
 func (b *Builder) progressStepCacheHit(ctx context.Context, step *Step) {
-	b.progress.step(ctx, b, step, "c "+step.cmd.Desc)
+	b.progress.step(ctx, b, step, "c "+step.Cmd.Desc)
 }
 
 // progressStepCacheHit shows progress of the skipped step.
 func (b *Builder) progressStepSkipped(ctx context.Context, step *Step) {
-	b.progress.step(ctx, b, step, "- "+step.cmd.Desc)
+	b.progress.step(ctx, b, step, "- "+step.Cmd.Desc)
 }
 
 // progressStepCacheHit shows progress of the started step.
 func (b *Builder) progressStepStarted(ctx context.Context, step *Step) {
 	step.SetPhase(stepStart)
-	step.startTime = time.Now()
-	b.progress.step(ctx, b, step, "S "+step.cmd.Desc)
+	step.StartTime = time.Now()
+	b.progress.step(ctx, b, step, "S "+step.Cmd.Desc)
 }
 
 // progressStepCacheHit shows progress of the finished step.
 func (b *Builder) progressStepFinished(ctx context.Context, step *Step) {
 	step.SetPhase(stepDone)
-	b.progress.step(ctx, b, step, "F "+step.cmd.Desc)
+	b.progress.step(ctx, b, step, "F "+step.Cmd.Desc)
 }
 
 var errNotRelocatable = errors.New("request is not relocatable")
@@ -230,18 +230,18 @@ var errNotRelocatable = errors.New("request is not relocatable")
 func (b *Builder) updateDeps(ctx context.Context, step *Step) error {
 	ctx, span := trace.NewSpan(ctx, "update-deps")
 	defer span.Close(nil)
-	if len(step.cmd.Outputs) == 0 {
+	if len(step.Cmd.Outputs) == 0 {
 		clog.Warningf(ctx, "update deps: no outputs")
 		return nil
 	}
-	output, err := filepath.Rel(step.cmd.Dir, step.cmd.Outputs[0])
+	output, err := filepath.Rel(step.Cmd.Dir, step.Cmd.Outputs[0])
 	if err != nil {
-		clog.Warningf(ctx, "update deps: failed to get rel %s,%s: %v", step.cmd.Dir, step.cmd.Outputs[0], err)
+		clog.Warningf(ctx, "update deps: failed to get rel %s,%s: %v", step.Cmd.Dir, step.Cmd.Outputs[0], err)
 		return nil
 	}
-	fi, err := b.hashFS.Stat(ctx, step.cmd.ExecRoot, step.cmd.Outputs[0])
+	fi, err := b.hashFS.Stat(ctx, step.Cmd.ExecRoot, step.Cmd.Outputs[0])
 	if err != nil {
-		clog.Warningf(ctx, "update deps: missing outputs %s: %v", step.cmd.Outputs[0], err)
+		clog.Warningf(ctx, "update deps: missing outputs %s: %v", step.Cmd.Outputs[0], err)
 		return nil
 	}
 	deps, err := depsAfterRun(ctx, b, step)
@@ -253,18 +253,18 @@ func (b *Builder) updateDeps(ctx context.Context, step *Step) error {
 		return nil
 	}
 	var updated bool
-	if step.fastDeps {
+	if step.FastDeps {
 		// if fastDeps case, we already know the correct deps for this cmd.
 		// just update for local deps log for incremental build.
 		updated, err = step.Def.RecordDeps(ctx, output, fi.ModTime(), deps)
 	} else {
 		// otherwise, update both local and shared.
-		updated, err = b.recordDepsLog(ctx, step.Def, output, step.cmd.CmdHash, fi.ModTime(), deps)
+		updated, err = b.recordDepsLog(ctx, step.Def, output, step.Cmd.CmdHash, fi.ModTime(), deps)
 	}
 	if err != nil {
-		clog.Warningf(ctx, "update deps: failed to record deps %s, %s, %s, %s: %v", output, hex.EncodeToString(step.cmd.CmdHash), fi.ModTime(), deps, err)
+		clog.Warningf(ctx, "update deps: failed to record deps %s, %s, %s, %s: %v", output, hex.EncodeToString(step.Cmd.CmdHash), fi.ModTime(), deps, err)
 	}
-	clog.Infof(ctx, "update deps=%s: %s %s %d updated:%t pure:%t/%t->true", step.cmd.Deps, output, hex.EncodeToString(step.cmd.CmdHash), len(deps), updated, step.cmd.Pure, step.cmd.Pure)
+	clog.Infof(ctx, "update deps=%s: %s %s %d updated:%t pure:%t/%t->true", step.Cmd.Deps, output, hex.EncodeToString(step.Cmd.CmdHash), len(deps), updated, step.Cmd.Pure, step.Cmd.Pure)
 	span.SetAttr("deps", len(deps))
 	span.SetAttr("updated", updated)
 	for i := range deps {
@@ -287,13 +287,13 @@ func (b *Builder) done(ctx context.Context, step *Step) error {
 	defer span.Close(nil)
 	var outputs []string
 	allowMissing := step.Def.Binding("allow_missing_outputs") != ""
-	for _, out := range step.cmd.Outputs {
+	for _, out := range step.Cmd.Outputs {
 		out := out
 		var mtime time.Time
 		if log.V(1) {
 			clog.Infof(ctx, "output -> %s", out)
 		}
-		fi, err := b.hashFS.Stat(ctx, step.cmd.ExecRoot, out)
+		fi, err := b.hashFS.Stat(ctx, step.Cmd.ExecRoot, out)
 		if err != nil {
 			if allowMissing {
 				clog.Warningf(ctx, "missing output %s: %v", out, err)
@@ -311,7 +311,7 @@ func (b *Builder) done(ctx context.Context, step *Step) error {
 		}
 		outputs = append(outputs, out)
 	}
-	b.stats.done(step.cmd.Pure)
+	b.stats.done(step.Cmd.Pure)
 	b.plan.done(ctx, step, outputs)
 	return nil
 }

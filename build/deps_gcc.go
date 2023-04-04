@@ -89,18 +89,18 @@ func (depsGCC) fixForSplitDwarf(ctx context.Context, cmd *execute.Cmd) {
 func (depsGCC) DepsAfterRun(ctx context.Context, b *Builder, step *Step) ([]string, error) {
 	ctx, span := trace.NewSpan(ctx, "gcc-deps")
 	defer span.Close(nil)
-	if step.cmd.Deps != "gcc" {
-		return nil, fmt.Errorf("gcc-deps; unexpected deps=%q %s", step.cmd.Deps, step)
+	if step.Cmd.Deps != "gcc" {
+		return nil, fmt.Errorf("gcc-deps; unexpected deps=%q %s", step.Cmd.Deps, step)
 	}
 	defer func() {
-		b.hashFS.Remove(ctx, step.cmd.ExecRoot, step.cmd.Depfile)
-		b.hashFS.Flush(ctx, step.cmd.ExecRoot, []string{step.cmd.Depfile})
+		b.hashFS.Remove(ctx, step.Cmd.ExecRoot, step.Cmd.Depfile)
+		b.hashFS.Flush(ctx, step.Cmd.ExecRoot, []string{step.Cmd.Depfile})
 	}()
-	buf, err := b.hashFS.ReadFile(ctx, step.cmd.ExecRoot, step.cmd.Depfile)
+	buf, err := b.hashFS.ReadFile(ctx, step.Cmd.ExecRoot, step.Cmd.Depfile)
 	if err != nil {
-		return nil, fmt.Errorf("gcc-deps: failed to get depfile %s of %s: %v", step.cmd.Depfile, step, err)
+		return nil, fmt.Errorf("gcc-deps: failed to get depfile %s of %s: %v", step.Cmd.Depfile, step, err)
 	}
-	span.SetAttr("depfile", step.cmd.Depfile)
+	span.SetAttr("depfile", step.Cmd.Depfile)
 	span.SetAttr("deps-file-size", len(buf))
 
 	_, dspan := trace.NewSpan(ctx, "parse-deps")
@@ -112,9 +112,9 @@ func (depsGCC) DepsAfterRun(ctx context.Context, b *Builder, step *Step) ([]stri
 
 func (gcc depsGCC) DepsCmd(ctx context.Context, b *Builder, step *Step) ([]string, error) {
 	depsIns, err := gcc.depsInputs(ctx, b, step)
-	depsIns = append(depsIns, gcc.sysroot(ctx, b, step.cmd)...)
-	gcc.fixArgsForDeps(ctx, step.cmd)
-	gcc.fixForSplitDwarf(ctx, step.cmd)
+	depsIns = append(depsIns, gcc.sysroot(ctx, b, step.Cmd)...)
+	gcc.fixArgsForDeps(ctx, step.Cmd)
+	gcc.fixForSplitDwarf(ctx, step.Cmd)
 	return depsIns, err
 }
 
@@ -124,9 +124,9 @@ func (depsGCC) depsInputs(ctx context.Context, b *Builder, step *Step) ([]string
 	if err != nil {
 		return nil, fmt.Errorf("prepare for gcc deps: %w", err)
 	}
-	dargs := step.cmd.DepsArgs
+	dargs := step.Cmd.DepsArgs
 	if len(dargs) == 0 {
-		dargs = gccutil.DepsArgs(step.cmd.Args)
+		dargs = gccutil.DepsArgs(step.Cmd.Args)
 	}
 	ins, err := gccutil.Deps(ctx, dargs, nil, cwd)
 	if err != nil {

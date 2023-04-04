@@ -31,7 +31,7 @@ type stepInfo struct {
 type activeSteps []*stepInfo
 
 func (as activeSteps) Len() int           { return len(as) }
-func (as activeSteps) Less(i, j int) bool { return as[i].step.startTime.Before(as[j].step.startTime) }
+func (as activeSteps) Less(i, j int) bool { return as[i].step.StartTime.Before(as[j].step.StartTime) }
 func (as activeSteps) Swap(i, j int)      { as[i], as[j] = as[j], as[i] }
 func (as *activeSteps) Push(x any) {
 	(*as) = append(*as, x.(*stepInfo))
@@ -90,7 +90,7 @@ func (p *progress) update(ctx context.Context, b *Builder) {
 				continue
 			}
 			lastStepUpdate = time.Now()
-			dur := time.Since(si.step.startTime).Round(1 * time.Second)
+			dur := time.Since(si.step.StartTime).Round(1 * time.Second)
 			p.step(ctx, b, si.step, fmt.Sprintf("%s[%s]: %s", dur.String(), si.step.Phase(), si.desc))
 		}
 	}
@@ -126,7 +126,7 @@ func (p *progress) step(ctx context.Context, b *Builder, step *Step, s string) {
 		if strings.HasPrefix(s, progressPrefixStart) {
 			heap.Push(&p.actives, &stepInfo{
 				step: step,
-				desc: step.cmd.Desc,
+				desc: step.Cmd.Desc,
 			})
 		}
 	}

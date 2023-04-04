@@ -18,25 +18,25 @@ import (
 func (b *Builder) runRemote(ctx context.Context, step *Step) error {
 	ctx, span := trace.NewSpan(ctx, "run-remote")
 	defer span.Close(nil)
-	clog.Infof(ctx, "run remote %s", step.cmd.Desc)
+	clog.Infof(ctx, "run remote %s", step.Cmd.Desc)
 	err := b.remoteSema.Do(ctx, func(ctx context.Context) error {
 		started := time.Now()
 		ctx = reapi.NewContext(ctx, &rpb.RequestMetadata{
-			ActionId:         step.cmd.ID,
+			ActionId:         step.Cmd.ID,
 			ToolInvocationId: b.id,
 			ActionMnemonic:   step.Def.ActionName(),
-			TargetId:         step.cmd.Outputs[0],
+			TargetId:         step.Cmd.Outputs[0],
 		})
 		clog.Infof(ctx, "step state: remote exec")
 		step.SetPhase(stepRemoteRun)
-		err := b.remoteExec.Run(ctx, step.cmd)
+		err := b.remoteExec.Run(ctx, step.Cmd)
 		step.SetPhase(stepOutput)
 		b.stats.remoteDone(ctx, err)
 		if err == nil {
-			step.metrics.IsRemote = true
+			step.Metrics.IsRemote = true
 		}
-		step.metrics.RunTime = IntervalMetric(time.Since(started))
-		step.metrics.Done(ctx, step)
+		step.Metrics.RunTime = IntervalMetric(time.Since(started))
+		step.Metrics.Done(ctx, step)
 		return err
 	})
 	if err != nil {
