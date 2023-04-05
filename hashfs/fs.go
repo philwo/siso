@@ -10,6 +10,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -20,9 +21,11 @@ import (
 	"time"
 
 	log "github.com/golang/glog"
+	"golang.org/x/sync/errgroup"
 
 	"infra/build/siso/o11y/clog"
 	"infra/build/siso/o11y/iometrics"
+	"infra/build/siso/o11y/trace"
 	"infra/build/siso/reapi/digest"
 	"infra/build/siso/reapi/merkletree"
 	"infra/build/siso/sync/semaphore"
@@ -47,6 +50,696 @@ func isExecutable(fi fs.FileInfo, fname string) bool {
 	// marker file, so check it.
 	_, err := os.Stat(fname + ".is_executable")
 	return err == nil
+}
+
+// HashFS is a filesystem for digest hash.
+type HashFS struct {
+	opt       Option
+	directory *directory
+
+	// IOMetrics stores the metrics of I/O operations on the HashFS.
+	IOMetrics *iometrics.IOMetrics
+}
+
+// New creates a HashFS.
+func New(ctx context.Context, opt Option) (*HashFS, error) {
+	if opt.DataSource == nil {
+		opt.DataSource = noDataSource{}
+	}
+	fsys := &HashFS{
+		opt:       opt,
+		directory: &directory{},
+		IOMetrics: iometrics.New("fs"),
+	}
+	if opt.StateFile != "" {
+		fstate, err := Load(ctx, opt.StateFile)
+		if err != nil {
+			clog.Warningf(ctx, "Failed to load fs state from %s: %v", opt.StateFile, err)
+		} else {
+			clog.Infof(ctx, "Load fs state from %s", opt.StateFile)
+			if err := fsys.SetState(ctx, fstate); err != nil {
+				return nil, err
+			}
+		}
+	}
+	return fsys, nil
+}
+
+// Close closes the HashFS.
+// Persists current state in opt.StateFile.
+func (hfs *HashFS) Close(ctx context.Context) error {
+	clog.Infof(ctx, "fs close")
+	if hfs.opt.StateFile == "" {
+		return nil
+	}
+	err := Save(ctx, hfs.opt.StateFile, hfs.State(ctx))
+	if err != nil {
+		clog.Errorf(ctx, "Failed to save fs state in %s: %v", hfs.opt.StateFile, err)
+		return err
+	}
+	clog.Infof(ctx, "Saved fs state in %s", hfs.opt.StateFile)
+	return nil
+}
+
+// FileSystem returns FileSystem interface at dir.
+func (hfs *HashFS) FileSystem(ctx context.Context, dir string) FileSystem {
+	return FileSystem{
+		hashFS: hfs,
+		ctx:    ctx,
+		dir:    dir,
+	}
+}
+
+// DataSource returns DataSource of the HashFS.
+func (hfs *HashFS) DataSource() DataSource {
+	return hfs.opt.DataSource
+}
+
+// Stat returns a FileInfo at root/fname.
+func (hfs *HashFS) Stat(ctx context.Context, root, fname string) (*FileInfo, error) {
+	if log.V(1) {
+		clog.Infof(ctx, "stat @%s %s", root, fname)
+	}
+	fname = filepath.Join(root, fname)
+	fname = filepath.ToSlash(fname)
+	e, dir, ok := hfs.directory.Lookup(ctx, fname)
+	if ok {
+		err := e.WaitReady(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("stat interrupted %s %s: %w", root, fname, err)
+		}
+		err = e.GetError()
+		if err != nil {
+			return nil, err
+		}
+		return &FileInfo{Fname: fname, E: e}, nil
+	}
+	e = newLocalEntry()
+	if log.V(9) {
+		clog.Infof(ctx, "store %s %s in %s", fname, e, dir)
+	}
+	var err error
+	if dir != nil {
+		err = dir.Store(ctx, filepath.Base(fname), e)
+	} else {
+		err = hfs.directory.Store(ctx, fname, e)
+	}
+	if err != nil {
+		clog.Warningf(ctx, "failed to store %s %s in %s: %v", fname, e, dir, err)
+		return nil, err
+	}
+	e.Init(ctx, fname, hfs.IOMetrics)
+	clog.Infof(ctx, "stat new entry %s %s", fname, e)
+	if err := e.GetError(); err != nil {
+		return nil, err
+	}
+	return &FileInfo{Fname: fname, E: e}, nil
+}
+
+// ReadDir returns directory entries of root/name.
+func (hfs *HashFS) ReadDir(ctx context.Context, root, name string) (dents []DirEntry, err error) {
+	ctx, span := trace.NewSpan(ctx, "read-dir")
+	defer span.Close(nil)
+	if log.V(1) {
+		clog.Infof(ctx, "readdir @%s %s", root, name)
+		defer func() {
+			clog.Infof(ctx, "readdir @%s %s -> %d %v", root, name, len(dents), err)
+		}()
+	}
+	dirname := filepath.Join(root, name)
+	dname := filepath.ToSlash(dirname)
+	e, _, ok := hfs.directory.Lookup(ctx, dname)
+	if !ok {
+		e = newLocalEntry()
+		err := hfs.directory.Store(ctx, dname, e)
+		if err != nil {
+			clog.Warningf(ctx, "failed to store %s %s: %v", dname, e, err)
+			return nil, err
+		}
+		e.Init(ctx, dname, hfs.IOMetrics)
+		clog.Infof(ctx, "stat new dir entry %s %s", dname, e)
+	}
+	err = e.GetError()
+	if err != nil {
+		return nil, fmt.Errorf("read dir %s: %w", dname, err)
+	}
+	names := e.UpdateDir(ctx, dirname)
+	if e.Directory == nil {
+		return nil, fmt.Errorf("read dir %s: not dir: %w", dname, os.ErrPermission)
+	}
+	if log.V(1) {
+		clog.Infof(ctx, "update-dir %s -> %d", dirname, len(names))
+	}
+	if len(names) > 0 {
+		// update from local dir entries.
+		_, err = hfs.Entries(ctx, dirname, names)
+		if err != nil {
+			clog.Warningf(ctx, "readdir entries %s: %v", dirname, err)
+		}
+	}
+	var ents []DirEntry
+	e.Directory.M.Range(func(k, v any) bool {
+		name := k.(string)
+		ee := v.(*entry)
+		ents = append(ents, DirEntry{
+			Fi: &FileInfo{
+				Fname: filepath.Join(root, dirname, name),
+				E:     ee,
+			},
+		})
+		return true
+	})
+	return ents, nil
+}
+
+// ReadFile reads a contents of root/fname.
+func (hfs *HashFS) ReadFile(ctx context.Context, root, fname string) ([]byte, error) {
+	ctx, span := trace.NewSpan(ctx, "read-file")
+	defer span.Close(nil)
+	if log.V(1) {
+		clog.Infof(ctx, "readfile @%s %s", root, fname)
+	}
+	fname = filepath.Join(root, fname)
+	fname = filepath.ToSlash(fname)
+	span.SetAttr("fname", fname)
+	e, _, ok := hfs.directory.Lookup(ctx, fname)
+	if !ok {
+		e = newLocalEntry()
+		err := hfs.directory.Store(ctx, fname, e)
+		if err != nil {
+			clog.Warningf(ctx, "failed to store %s %s: %v", fname, e, err)
+			return nil, err
+		}
+		e.Init(ctx, fname, hfs.IOMetrics)
+		clog.Infof(ctx, "stat new entry %s %s", fname, e)
+	}
+	err := e.GetError()
+	if err != nil {
+		return nil, fmt.Errorf("read file %s: %w", fname, err)
+	}
+	if len(e.Buf) > 0 {
+		return e.Buf, nil
+	}
+	err = e.WaitReady(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if e.Data.IsZero() {
+		return nil, fmt.Errorf("read file %s: no data", fname)
+	}
+	buf, err := digest.DataToBytes(ctx, e.Data)
+	if log.V(1) {
+		clog.Infof(ctx, "readfile %s: %v", fname, err)
+	}
+	return buf, err
+}
+
+// WriteFile writes a contents in root/fname with mtime and cmdhash.
+func (hfs *HashFS) WriteFile(ctx context.Context, root, fname string, b []byte, isExecutable bool, mtime time.Time, cmdhash []byte) error {
+	ctx, span := trace.NewSpan(ctx, "write-file")
+	defer span.Close(nil)
+	if log.V(1) {
+		clog.Infof(ctx, "writefile @%s %s x:%t mtime:%s", root, fname, isExecutable, mtime)
+	}
+	data := digest.FromBytes(fname, b)
+	fname = filepath.Join(root, fname)
+	fname = filepath.ToSlash(fname)
+	span.SetAttr("fname", fname)
+	lready := make(chan bool, 1)
+	lready <- true
+	readyq := make(chan struct{})
+	close(readyq)
+
+	e := &entry{
+		Lready:       lready,
+		Mtime:        mtime,
+		Readyq:       readyq,
+		D:            data.Digest(),
+		IsExecutable: isExecutable,
+		Data:         data,
+		Buf:          b,
+		Cmdhash:      cmdhash,
+	}
+	e.Ready.Store(true)
+	err := hfs.directory.Store(ctx, fname, e)
+	clog.Infof(ctx, "writefile %s x:%t mtime:%s: %v", fname, isExecutable, mtime, err)
+	return err
+}
+
+// Symlink creates a symlink to target at root/linkpath with mtime and cmdhash.
+func (hfs *HashFS) Symlink(ctx context.Context, root, target, linkpath string, mtime time.Time, cmdhash []byte) error {
+	if log.V(1) {
+		clog.Infof(ctx, "symlink @%s %s -> %s", root, linkpath, target)
+	}
+	linkfname := filepath.Join(root, linkpath)
+	linkfname = filepath.ToSlash(linkfname)
+	lready := make(chan bool, 1)
+	lready <- true
+	readyq := make(chan struct{})
+	close(readyq)
+	e := &entry{
+		Lready:  lready,
+		Mtime:   mtime,
+		Cmdhash: cmdhash,
+		Readyq:  readyq,
+		Target:  target,
+	}
+	e.Ready.Store(true)
+	err := hfs.directory.Store(ctx, linkfname, e)
+	clog.Infof(ctx, "symlink @%s %s -> %s: %v", root, linkpath, target, err)
+	return err
+}
+
+// Copy copies a file from root/src to root/dst with mtime and cmdhash.
+// if src is dir, returns error.
+func (hfs *HashFS) Copy(ctx context.Context, root, src, dst string, mtime time.Time, cmdhash []byte) error {
+	if log.V(1) {
+		clog.Infof(ctx, "copy @%s %s to %s", root, src, dst)
+	}
+	srcname := filepath.Join(root, src)
+	srcfname := filepath.ToSlash(srcname)
+	dstfname := filepath.Join(root, dst)
+	dstfname = filepath.ToSlash(dstfname)
+	e, _, ok := hfs.directory.Lookup(ctx, srcfname)
+	if !ok {
+		e = newLocalEntry()
+		if log.V(9) {
+			clog.Infof(ctx, "new entry for copy src %s", srcfname)
+		}
+		err := hfs.directory.Store(ctx, srcfname, e)
+		if err != nil {
+			clog.Warningf(ctx, "failed to store copy src %s: %v", srcfname, err)
+			return err
+		}
+		e.Init(ctx, srcfname, hfs.IOMetrics)
+		clog.Infof(ctx, "copy src new entry %s %s", srcfname, e)
+		if err := e.GetError(); err != nil {
+			return err
+		}
+	}
+	err := e.WaitReady(ctx)
+	if err != nil {
+		return err
+	}
+	subdir := e.GetDir()
+	if subdir != nil {
+		return fmt.Errorf("is a directory: %s", srcfname)
+	}
+	lready := make(chan bool, 1)
+	lready <- true
+	readyq := make(chan struct{})
+	close(readyq)
+	newEnt := &entry{
+		Lready:       lready,
+		Mtime:        mtime,
+		Cmdhash:      cmdhash,
+		Readyq:       readyq,
+		D:            e.D,
+		IsExecutable: e.IsExecutable,
+		Target:       e.Target,
+		// use the same data source as src if any.
+		Data: e.Data,
+		Buf:  e.Buf,
+	}
+	newEnt.Ready.Store(true)
+	err = hfs.directory.Store(ctx, dstfname, newEnt)
+	if err != nil {
+		return err
+	}
+	clog.Infof(ctx, "copy %s to %s", srcfname, dstfname)
+	return nil
+}
+
+// Mkdir makes a directory at root/dirname.
+func (hfs *HashFS) Mkdir(ctx context.Context, root, dirname string) error {
+	if log.V(1) {
+		clog.Infof(ctx, "mkdir @%s %s", root, dirname)
+	}
+	dirname = filepath.Join(root, dirname)
+	dirname = filepath.ToSlash(dirname)
+	err := os.MkdirAll(dirname, 0755)
+	hfs.IOMetrics.OpsDone(err)
+	if err != nil {
+		return err
+	}
+	lready := make(chan bool, 1)
+	lready <- true
+	readyq := make(chan struct{})
+	close(readyq)
+
+	e := &entry{
+		Lready:    lready,
+		Mtime:     time.Now(),
+		Readyq:    readyq,
+		Directory: &directory{},
+	}
+	e.Ready.Store(true)
+	err = hfs.directory.Store(ctx, dirname, e)
+	clog.Infof(ctx, "mkdir %s: %v", dirname, err)
+	return err
+}
+
+// Remove removes a file at root/fname.
+func (hfs *HashFS) Remove(ctx context.Context, root, fname string) error {
+	if log.V(1) {
+		clog.Infof(ctx, "remove @%s %s", root, fname)
+	}
+	fname = filepath.Join(root, fname)
+	fname = filepath.ToSlash(fname)
+	e, _, ok := hfs.directory.Lookup(ctx, fname)
+	if !ok {
+		e = newLocalEntry()
+		e.SetError(os.ErrNotExist)
+		err := hfs.directory.Store(ctx, fname, e)
+		clog.Infof(ctx, "remove %s: %v", fname, err)
+	}
+	e.SetError(os.ErrNotExist)
+	clog.Infof(ctx, "remove %s: %v", fname, nil)
+	return nil
+}
+
+// Forget forgets cached entry for inputs under root.
+func (hfs *HashFS) Forget(ctx context.Context, root string, inputs []string) {
+	for _, fname := range inputs {
+		fullname := filepath.Join(root, fname)
+		fullname = filepath.ToSlash(fullname)
+		hfs.directory.Delete(ctx, fullname)
+	}
+}
+
+// LocalEntries gets merkletree entries for inputs at root from local disk,
+// ignoring cached entries.
+func (hfs *HashFS) LocalEntries(ctx context.Context, root string, inputs []string) ([]merkletree.Entry, error) {
+	ctx, span := trace.NewSpan(ctx, "fs-local-entries")
+	defer span.Close(nil)
+	var entries []merkletree.Entry
+	for _, fname := range inputs {
+		fullname := filepath.Join(root, fname)
+		fullname = filepath.ToSlash(fullname)
+		fi, err := os.Lstat(fullname)
+		hfs.IOMetrics.OpsDone(err)
+		if err != nil {
+			clog.Warningf(ctx, "failed to stat local-entry %s: %v", fullname, err)
+			continue
+		}
+		switch {
+		case fi.IsDir():
+			entries = append(entries, merkletree.Entry{
+				Name: fname,
+			})
+			continue
+		case fi.Mode().Type() == fs.ModeSymlink:
+			target, err := os.Readlink(fullname)
+			hfs.IOMetrics.OpsDone(err)
+			if err != nil {
+				clog.Warningf(ctx, "failed to readlink %s: %v", fullname, err)
+				continue
+			}
+			entries = append(entries, merkletree.Entry{
+				Name:   fname,
+				Target: target,
+			})
+			continue
+		case fi.Mode().IsRegular():
+			data, err := localDigest(ctx, fullname, hfs.IOMetrics)
+			if err != nil {
+				clog.Warningf(ctx, "failed to get diget %s: %v", fullname, err)
+				continue
+			}
+			entries = append(entries, merkletree.Entry{
+				Name:         fname,
+				Data:         data,
+				IsExecutable: isExecutable(fi, fullname),
+			})
+		default:
+			clog.Warningf(ctx, "unexpected filetype %s: %s", fullname, fi.Mode())
+			continue
+		}
+	}
+	return entries, nil
+}
+
+// Entries gets merkletree entries for inputs at root.
+func (hfs *HashFS) Entries(ctx context.Context, root string, inputs []string) ([]merkletree.Entry, error) {
+	ctx, span := trace.NewSpan(ctx, "fs-entries")
+	defer span.Close(nil)
+	var nwait int
+	var wg sync.WaitGroup
+	ents := make([]*entry, 0, len(inputs))
+	for _, fname := range inputs {
+		fname := filepath.Join(root, fname)
+		fname = filepath.ToSlash(fname)
+		e, _, ok := hfs.directory.Lookup(ctx, fname)
+		if ok {
+			if log.V(2) {
+				clog.Infof(ctx, "tree cache hit %s", fname)
+			}
+			ents = append(ents, e)
+			if !e.Ready.Load() {
+				wg.Add(1)
+				nwait++
+				go func() {
+					defer wg.Done()
+					select {
+					case <-e.Readyq:
+					case <-ctx.Done():
+					}
+				}()
+			}
+			continue
+		}
+		e = newLocalEntry()
+		clog.Infof(ctx, "tree new entry %s", fname)
+		if err := hfs.directory.Store(ctx, fname, e); err != nil {
+			return nil, err
+		}
+		ents = append(ents, e)
+		wg.Add(1)
+		nwait++
+		go func() {
+			defer wg.Done()
+			e.Init(ctx, fname, hfs.IOMetrics)
+		}()
+	}
+	_, wspan := trace.NewSpan(ctx, "fs-entries-wait")
+	wg.Wait()
+	wspan.SetAttr("waits", nwait)
+	wspan.Close(nil)
+	var entries []merkletree.Entry
+	for i, fname := range inputs {
+		e := ents[i]
+		if err := e.GetError(); err != nil || (e.Data.IsZero() && e.Target == "" && e.Directory == nil) {
+			// TODO: hard fail instead?
+			clog.Warningf(ctx, "missing %s data:%v target:%q: %v", fname, e.Data, e.Target, err)
+			continue
+		}
+		data := e.Data
+		isExecutable := e.IsExecutable
+		target := e.Target
+		if target != "" {
+			// Linux imposes a limit of at most 40 symlinks in any one path lookup.
+			// see: https://lwn.net/Articles/650786/
+			const maxSymlinks = 40
+			var tname string
+			name := filepath.Join(root, fname)
+			elink := e
+			for j := 0; j < maxSymlinks; j++ {
+				tname = filepath.Join(filepath.Dir(name), elink.Target)
+				if log.V(1) {
+					clog.Infof(ctx, "symlink %s -> %s", name, tname)
+				}
+				tname = filepath.ToSlash(tname)
+				if strings.HasPrefix(tname, root+"/") {
+					break
+				}
+				// symlink to out of exec root (e.g. ../.cipd/pkgs/..)
+				name = tname
+				tname = ""
+				var ok bool
+				elink, _, ok = hfs.directory.Lookup(ctx, name)
+				if ok {
+					if log.V(2) {
+						clog.Infof(ctx, "tree cache hit %s", name)
+					}
+				} else {
+					elink = newLocalEntry()
+					clog.Infof(ctx, "tree new entry %s", name)
+					if err := hfs.directory.Store(ctx, name, elink); err != nil {
+						return nil, err
+					}
+					elink.Init(ctx, name, hfs.IOMetrics)
+				}
+				select {
+				case <-elink.Readyq:
+				case <-ctx.Done():
+					return nil, ctx.Err()
+				}
+				if elink.Target == "" {
+					break
+				}
+			}
+			if e != elink {
+				clog.Infof(ctx, "resolve symlink %s to %s", fname, name)
+				target = elink.Target
+				data = elink.Data
+				isExecutable = elink.IsExecutable
+			}
+		}
+		entries = append(entries, merkletree.Entry{
+			Name:         fname,
+			Data:         data,
+			IsExecutable: isExecutable,
+			Target:       target,
+		})
+	}
+	return entries, nil
+}
+
+// Update updates cache information for entries under execRoot with mtime and cmdhash.
+func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []merkletree.Entry, mtime time.Time, cmdhash []byte, action digest.Digest) error {
+	ctx, span := trace.NewSpan(ctx, "fs-update")
+	defer span.Close(nil)
+	for _, ent := range entries {
+		fname := filepath.Join(execRoot, ent.Name)
+		fname = filepath.ToSlash(fname)
+		switch {
+		case !ent.Data.IsZero():
+			lready := make(chan bool, 1)
+			lready <- true
+			readyq := make(chan struct{})
+			close(readyq)
+			e := &entry{
+				Lready:       lready,
+				Mtime:        mtime,
+				Cmdhash:      cmdhash,
+				Action:       action,
+				Readyq:       readyq,
+				D:            ent.Data.Digest(),
+				IsExecutable: ent.IsExecutable,
+				Data:         ent.Data,
+			}
+			e.Ready.Store(true)
+			if err := hfs.directory.Store(ctx, fname, e); err != nil {
+				return err
+			}
+		case ent.Target != "":
+			lready := make(chan bool, 1)
+			lready <- true
+			readyq := make(chan struct{})
+			close(readyq)
+			e := &entry{
+				Lready:  lready,
+				Mtime:   mtime,
+				Cmdhash: cmdhash,
+				Action:  action,
+				Readyq:  readyq,
+				Target:  ent.Target,
+			}
+			e.Ready.Store(true)
+			if err := hfs.directory.Store(ctx, fname, e); err != nil {
+				return err
+			}
+		default: // directory
+			lready := make(chan bool, 1)
+			lready <- true
+			readyq := make(chan struct{})
+			close(readyq)
+			e := &entry{
+				Lready:    lready,
+				Mtime:     mtime,
+				Readyq:    readyq,
+				Directory: &directory{},
+			}
+			e.Ready.Store(true)
+			if err := hfs.directory.Store(ctx, fname, e); err != nil {
+				return err
+			}
+			err := os.Chtimes(fname, time.Now(), mtime)
+			hfs.IOMetrics.OpsDone(err)
+			if err != nil {
+				clog.Warningf(ctx, "failed to update dir mtime %s: %v", fname, err)
+			}
+		}
+	}
+	return nil
+}
+
+type noSource struct {
+	filename string
+}
+
+func (ns noSource) Open(ctx context.Context) (io.ReadCloser, error) {
+	return nil, fmt.Errorf("no source for %s", ns.filename)
+}
+
+func (ns noSource) String() string {
+	return fmt.Sprintf("noSource:%s", ns.filename)
+}
+
+type noDataSource struct{}
+
+func (noDataSource) DigestData(d digest.Digest, fname string) digest.Data {
+	return digest.NewData(noSource{fname}, d)
+}
+
+// Flush flushes cached information for files under execRoot to local disk.
+func (hfs *HashFS) Flush(ctx context.Context, execRoot string, files []string) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	ctx, span := trace.NewSpan(ctx, "flush")
+	defer span.Close(nil)
+	eg, ctx := errgroup.WithContext(ctx)
+	for _, file := range files {
+		fname := filepath.Join(execRoot, file)
+		fname = filepath.ToSlash(fname)
+		e, _, ok := hfs.directory.Lookup(ctx, fname)
+		if !ok {
+			// If it doesn't exist in memory, just use local disk as is.
+			continue
+		}
+		select {
+		case need := <-e.Lready:
+			if !need {
+				if log.V(1) {
+					clog.Infof(ctx, "flush %s local ready", fname)
+				}
+				err := e.GetError()
+				if errors.Is(err, fs.ErrNotExist) {
+					clog.Warningf(ctx, "flush %s local-ready: %v", fname, err)
+					continue
+				}
+				if err != nil {
+					return fmt.Errorf("flush %s local-ready: %w", fname, err)
+				}
+				continue
+			}
+		case <-ctx.Done():
+			return fmt.Errorf("flush %s: %w", fname, ctx.Err())
+		}
+
+		if !e.Ready.Load() {
+			// digest etc is not yet ready,
+			// which means it is calculating digest from local disk
+			// so we can assume local disk is ready.
+			continue
+		}
+		ctx, done, err := FlushSemaphore.WaitAcquire(ctx)
+		if err != nil {
+			return fmt.Errorf("flush %s: %w", fname, err)
+		}
+		eg.Go(func() error {
+			defer done()
+			return e.Flush(ctx, fname, hfs.IOMetrics)
+		})
+	}
+	return eg.Wait()
+}
+
+// Refresh refreshes cached file entries under execRoot.
+func (hfs *HashFS) Refresh(ctx context.Context, execRoot string) error {
+	// XXX: optimize?
+	state := hfs.State(ctx)
+	return hfs.SetState(ctx, state)
 }
 
 // TODO(b/266518906): make this struct and its fields private.
@@ -89,8 +782,7 @@ type Entry struct {
 // TODO(b/266518906): remove this.
 type entry = Entry
 
-// TODO(b/266518906): make this private.
-func NewLocalEntry() *Entry {
+func newLocalEntry() *Entry {
 	lready := make(chan bool)
 	close(lready)
 	readyq := make(chan struct{})
@@ -555,104 +1247,6 @@ func (d *directory) Delete(ctx context.Context, fname string) {
 			return
 		}
 	}
-}
-
-type HashFS struct {
-	// IOMetrics stores the metrics of I/O operations on the HashFS.
-	IOMetrics *iometrics.IOMetrics
-}
-
-// New creates a HashFS.
-func New(ctx context.Context, opt Option) (*HashFS, error) {
-	return nil, errors.New("hashfs.New: not implemented")
-}
-
-// Close closes the HashFS.
-// Persists current state in opt.StateFile.
-func (hfs *HashFS) Close(ctx context.Context) error {
-	return errors.New("hashfs.Close: not implemented")
-}
-
-// FileSystem returns FileSystem interface at dir.
-func (hfs *HashFS) FileSystem(ctx context.Context, dir string) FileSystem {
-	// TODO(b/266518906): migrate from infra_internal
-	return FileSystem{}
-}
-
-// DataSource returns DataSource of the HashFS.
-func (hfs *HashFS) DataSource() DataSource {
-	return nil
-}
-
-// Stat returns a FileInfo at root/fname.
-func (hfs *HashFS) Stat(ctx context.Context, root, fname string) (*FileInfo, error) {
-	return nil, errors.New("hashfs.Stat: not implemented")
-}
-
-// ReadDir returns directory entries of root/name.
-func (hfs *HashFS) ReadDir(ctx context.Context, root, name string) (dents []DirEntry, err error) {
-	return nil, errors.New("hashfs.ReadDir: not implemented")
-}
-
-// ReadFile reads a contents of root/fname.
-func (hfs *HashFS) ReadFile(ctx context.Context, root, fname string) ([]byte, error) {
-	return nil, errors.New("hashfs.ReadFile: not implemented")
-}
-
-// WriteFile writes a contents in root/fname with mtime and cmdhash.
-func (hfs *HashFS) WriteFile(ctx context.Context, root, fname string, b []byte, isExecutable bool, mtime time.Time, cmdhash []byte) error {
-	return errors.New("hashfs.WriteFile: not implemented")
-}
-
-// Symlink creates a symlink to target at root/linkpath with mtime and cmdhash.
-func (hfs *HashFS) Symlink(ctx context.Context, root, target, linkpath string, mtime time.Time, cmdhash []byte) error {
-	return errors.New("hashfs.Symlink: not implemented")
-}
-
-// Copy copies a file from root/src to root/dst with mtime and cmdhash.
-// if src is dir, returns error.
-func (hfs *HashFS) Copy(ctx context.Context, root, src, dst string, mtime time.Time, cmdhash []byte) error {
-	return errors.New("hashfs.Copy: not implemented")
-}
-
-// Entries gets merkletree entries for inputs at root.
-func (hfs *HashFS) Entries(ctx context.Context, root string, inputs []string) ([]merkletree.Entry, error) {
-	return nil, errors.New("hashfs.Entries: not implemented")
-}
-
-// Mkdir makes a directory at root/dirname.
-func (hfs *HashFS) Mkdir(ctx context.Context, root, dirname string) error {
-	return errors.New("hashfs.Mkdir: not implemented")
-}
-
-// Remove removes a file at root/fname.
-func (hfs *HashFS) Remove(ctx context.Context, root, fname string) error {
-	return errors.New("hashfs.Remove: not implemented")
-}
-
-// Forget forgets cached entry for inputs under root.
-func (hfs *HashFS) Forget(ctx context.Context, root string, inputs []string) {
-}
-
-// LocalEntries gets merkletree entries for inputs at root from local disk,
-// ignoring cached entries.
-func (hfs *HashFS) LocalEntries(ctx context.Context, root string, inputs []string) ([]merkletree.Entry, error) {
-	return nil, errors.New("hashfs.LocalEntries: not implemented")
-}
-
-// Update updates cache information for entries under execRoot with mtime and cmdhash.
-func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []merkletree.Entry, mtime time.Time, cmdhash []byte, action digest.Digest) error {
-	return errors.New("hashfs.Update: not umplemented")
-}
-
-// Flush flushes cached information for files under execRoot to local disk.
-func (hfs *HashFS) Flush(ctx context.Context, execRoot string, files []string) error {
-	return errors.New("hashfs.Flush: not implemented")
-}
-
-// Refresh refreshes cached file entries under execRoot.
-func (hfs *HashFS) Refresh(ctx context.Context, execRoot string) error {
-	return errors.New("hashfs.Refresh: not implemented")
 }
 
 // FileInfo implements https://pkg.go.dev/io/fs#FileInfo.

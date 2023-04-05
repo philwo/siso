@@ -55,21 +55,26 @@ type EntryState struct {
 	Action  digest.Digest `json:"action,omitempty"`
 }
 
-func (s *State) Map() map[string]EntryState {
-	panic("hashfs.Map: not implemented")
-}
-
-// Save persists state in fname.
-func Save(ctx context.Context, fname string, state *State) error {
-	return errors.New("hashfs.Save: not implemented")
-}
-
 // Load loads a HashFS's state.
 func Load(ctx context.Context, fname string) (*State, error) {
 	return nil, errors.New("hashfs.Load: not implemented")
 }
 
+// SetState sets states to the HashFS.
+func (hfs *HashFS) SetState(ctx context.Context, state *State) error {
+	panic("hashfs.SetState: not implemented")
+}
+
+// Save persists state in fname.
+func Save(ctx context.Context, fname string, state *State) error {
+	panic("Save: not implemented")
+}
+
 // State returns a State of the HashFS.
 func (hfs *HashFS) State(ctx context.Context) *State {
 	panic("hashfs.State: not implemented")
+}
+
+func (s *State) Map() map[string]EntryState {
+	panic("hashfs.Map: not implemented")
 }
