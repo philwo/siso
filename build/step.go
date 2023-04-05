@@ -19,8 +19,6 @@ import (
 	"infra/build/siso/o11y/trace"
 )
 
-// TODO(b/266518906): some fields have been changed to pubilc for migration.
-
 // StepDef is a build step definition.
 // unless specified, path is execroot relative.
 type StepDef interface {
@@ -97,6 +95,7 @@ type StepDef interface {
 
 // Step is a build step.
 type Step struct {
+	// TODO(b/266518906): make fields private after the migration.
 	Def      StepDef
 	Nwaits   int
 	Cmd      *execute.Cmd
@@ -115,6 +114,7 @@ type Step struct {
 	State *StepState
 }
 
+// TODO(b/266518906): make this private after the migration.
 type StepState struct {
 	mu               sync.Mutex
 	phase            StepPhase
@@ -169,6 +169,7 @@ func (s *Step) String() string {
 	return s.Def.String()
 }
 
+// TODO(b/266518906): make this private after the migration.
 type StepPhase int
 
 const (
@@ -270,6 +271,7 @@ func stepBacktraces(step *Step) []string {
 	return locs
 }
 
+// TODO(b/266518906): make this private after the migration.
 func (s *Step) Init(ctx context.Context, b *Builder) {
 	ctx, span := trace.NewSpan(ctx, "step-init")
 	defer span.Close(nil)
