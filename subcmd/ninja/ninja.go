@@ -6,17 +6,25 @@
 package ninja
 
 import (
+	"bytes"
 	"context"
+	"errors"
+	"flag"
 	"fmt"
+	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"text/tabwriter"
 	"time"
 
 	log "github.com/golang/glog"
+	"github.com/google/uuid"
 	"github.com/maruel/subcommands"
 	"go.chromium.org/luci/auth"
 	"go.chromium.org/luci/common/cli"
@@ -24,11 +32,15 @@ import (
 
 	"infra/build/siso/auth/cred"
 	"infra/build/siso/build"
+	"infra/build/siso/build/buildconfig"
 	"infra/build/siso/build/ninjabuild"
 	"infra/build/siso/hashfs"
 	"infra/build/siso/o11y/clog"
 	"infra/build/siso/reapi"
+	"infra/build/siso/reapi/digest"
 	"infra/build/siso/sync/semaphore"
+	"infra/build/siso/toolsupport/ninjautil"
+	"infra/build/siso/ui"
 )
 
 // Cmd returns the Command for the `ninja` subcommand provided by this package.
@@ -95,17 +107,238 @@ type ninjaCmdRun struct {
 // Run runs the `ninja` subcommand.
 func (c *ninjaCmdRun) Run(a subcommands.Application, args []string, env subcommands.Env) int {
 	ctx := cli.GetContext(a, c, env)
+	err := c.run(ctx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		return 1
+	}
+	return 0
+}
+
+func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer signals.HandleInterrupt(cancel)()
 
-	_, err := cred.New(ctx, c.authOpts)
+	credential, err := cred.New(ctx, c.authOpts)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "Failed to authenticate. Please login with `siso login`.")
-		return 1
+		return err
 	}
-	// Use au.PerRPCCredentials() to get PerRPCCredentials of google.golang.org/grpc/credentials.
-	// Use au.TokenSource() to get oauth2.TokenSource.
-	return 0
+	projectID := c.reopt.UpdateProjectID(c.projectID)
+	wd, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+	buildID := uuid.New().String()
+	// enable cloud logging
+
+	clog.Infof(ctx, "build id: %q", buildID)
+	clog.Infof(ctx, "project id: %q", projectID)
+	clog.Infof(ctx, "commandline %q", os.Args)
+
+	// enable cloud profiler
+	// enable cloud trace
+	// upload build pprof
+
+	clog.Infof(ctx, "wd: %s", wd)
+	if !filepath.IsAbs(c.configRepoDir) {
+		c.configRepoDir = filepath.Join(wd, c.configRepoDir)
+	}
+	cfgrepos := map[string]fs.FS{
+		"config":           os.DirFS(c.configRepoDir),
+		"config_overrieds": os.DirFS(filepath.Join(wd, ".siso_remote")),
+	}
+	err = os.Chdir(c.dir)
+	if err != nil {
+		return err
+	}
+	clog.Infof(ctx, "change dir to %s", c.dir)
+	logSymlink(ctx)
+
+	if c.configFilename == "" {
+		return err
+	}
+	gnargs, err := os.ReadFile("args.gn")
+	if err != nil {
+		clog.Warningf(ctx, "no args.gn: %v", err)
+	}
+	flags := make(map[string]string)
+	c.Flags.Visit(func(f *flag.Flag) {
+		name := f.Name
+		if name == "C" {
+			name = "dir"
+		}
+		flags[name] = f.Value.String()
+	})
+	flags["targets"] = strings.Join(c.Flags.Args(), " ")
+
+	config, err := buildconfig.New(ctx, c.configFilename, flags, cfgrepos)
+	if err != nil {
+		return err
+	}
+	config.Metadata.KV["args.gn"] = string(gnargs)
+
+	var spin ui.Spinner
+	// depsLogBucket
+
+	var localDepsLog *ninjautil.DepsLog
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		depsLog, err := ninjautil.NewDepsLog(ctx, c.depsLogFile)
+		if err != nil {
+			clog.Warningf(ctx, "failed to load deps log: %v", err)
+		} else {
+			localDepsLog = depsLog
+		}
+	}()
+
+	if !c.localCacheEnable {
+		c.cacheDir = ""
+	}
+	var cacheStore build.CacheStore
+	cacheStore, err = build.NewLocalCache(c.cacheDir)
+	if err != nil {
+		clog.Warningf(ctx, "no local cache enabled: %v", err)
+	}
+	var client *reapi.Client
+	if c.reopt.IsValid() {
+		client, err = reapi.New(ctx, credential, *c.reopt)
+		if err != nil {
+			return err
+		}
+		cacheStore = client.CacheStore()
+	}
+	cache, err := build.NewCache(ctx, build.CacheOptions{
+		Store:      cacheStore,
+		EnableRead: c.cacheEnableRead,
+	})
+	if err != nil {
+		clog.Warningf(ctx, "no cache enabled: %v", err)
+	}
+	spin.Start("loading fs state...")
+	c.fsopt.DataSource = dataSource{
+		cache:  cacheStore,
+		client: client,
+	}
+	hashFS, err := hashfs.New(ctx, *c.fsopt)
+	spin.Stop(err)
+	if err != nil {
+		return err
+	}
+	var localexecLogWriter io.Writer
+	if c.localexecLogFile != "" {
+		f, err := os.Create(c.localexecLogFile)
+		if err != nil {
+			return err
+		}
+		defer func() {
+			clog.Infof(ctx, "close localexec log")
+			cerr := f.Close()
+			if cerr != nil {
+				err = cerr
+			}
+		}()
+		localexecLogWriter = f
+	}
+	var metricsJSONWriter io.Writer
+	if c.metricsJSON != "" {
+		rotateFiles(ctx, c.metricsJSON)
+		f, err := os.Create(c.metricsJSON)
+		if err != nil {
+			return err
+		}
+		defer func() {
+			clog.Infof(ctx, "close metrics json")
+			cerr := f.Close()
+			if cerr != nil {
+				err = cerr
+			}
+		}()
+		metricsJSONWriter = f
+	}
+	var actionSaltBytes []byte
+	if c.actionSalt != "" {
+		actionSaltBytes = []byte(c.actionSalt)
+	}
+	if filepath.IsAbs(c.dir) {
+		// recipe may use absolute path for -C.
+		rdir, err := filepath.Rel(wd, c.dir)
+		if err != nil {
+			return err
+		}
+		if rdir == ".." || strings.HasPrefix(filepath.ToSlash(rdir), "../") {
+			return fmt.Errorf("dir %q is out of exec root %q", c.dir, wd)
+		}
+		c.dir = rdir
+	}
+	buildPath := build.NewPath(wd, c.dir)
+	if c.traceJSON != "" {
+		rotateFiles(ctx, c.traceJSON)
+	}
+	var outputLocal func(context.Context, string) bool
+	switch c.outputLocalStrategy {
+	case "full":
+		outputLocal = func(context.Context, string) bool { return true }
+	case "greedy":
+		outputLocal = func(ctx context.Context, fname string) bool {
+			// Note: d. wil be downloaded to get deps anyway,
+			// but will not be written to disk.
+			switch filepath.Ext(fname) {
+			case ".o", ".obj", ".a", ".d", ".stamp":
+				return false
+			}
+			return true
+		}
+	case "minimum":
+		outputLocal = func(context.Context, string) bool { return false }
+	default:
+		return fmt.Errorf("unknown output local strategy:%q. should be full/greedy/minmum", c.outputLocalStrategy)
+	}
+	wg.Wait() // wait for localDepsLog loading
+	if localDepsLog != nil {
+		defer localDepsLog.Close()
+	}
+	bopts := build.Options{
+		ID:                 buildID,
+		ProjectID:          projectID,
+		Metadata:           config.Metadata,
+		Path:               buildPath,
+		HashFS:             hashFS,
+		REAPIClient:        client,
+		RECacheEnableRead:  c.reCacheEnableRead,
+		ActionSalt:         actionSaltBytes,
+		OutputLocal:        outputLocal,
+		Cache:              cache,
+		LocalexecLogWriter: localexecLogWriter,
+		MetricsJSONWriter:  metricsJSONWriter,
+		TraceJSON:          c.traceJSON,
+		Pprof:              c.buildPprof,
+		Clobber:            c.clobber,
+		DryRun:             c.dryRun,
+	}
+	for {
+		graph, err := ninjabuild.NewGraph(ctx, c.fname, config, buildPath, hashFS, localDepsLog)
+		if err != nil {
+			return err
+		}
+		err = doBuild(ctx, graph, bopts, c.Flags.Args()...)
+		if err == build.ErrManifestModified {
+			clog.Infof(ctx, "%s modified. refresh hashfs...", c.fname)
+			// need to refresh cached entries as `gn gen` updated files
+			// but nnja manifest doesn't know what files are updated.
+			err := hashFS.Refresh(ctx, buildPath.ExecRoot)
+			if err != nil {
+				return err
+			}
+			clog.Infof(ctx, "refresh hashfs done. build retry")
+			continue
+		}
+		clog.Infof(ctx, "build finished: %v", err)
+		if err != nil {
+			return err
+		}
+	}
 }
 
 func (c *ninjaCmdRun) init() {
@@ -294,4 +527,100 @@ type semaTrace struct {
 	n                        int
 	waitAvg, servAvg         time.Duration
 	waitBuckets, servBuckets [7]int
+}
+
+func logSymlink(ctx context.Context) {
+	var logDirs []string
+	logDirFlag := flag.Lookup("log_dir")
+	if logDirFlag != nil && logDirFlag.Value.String() != "" {
+		logDirs = append(logDirs, logDirFlag.Value.String())
+	}
+	logDirs = append(logDirs, os.TempDir())
+	logFilename := "siso.INFO"
+	if runtime.GOOS == "windows" {
+		logFilename = "siso.exe.INFO"
+	}
+	rotateFiles(ctx, logFilename)
+	for _, dir := range logDirs {
+		target, err := os.Readlink(filepath.Join(dir, logFilename))
+		if err != nil {
+			if log.V(1) {
+				clog.Infof(ctx, "log file not found in %s: %v", dir, err)
+			}
+			continue
+		}
+		os.Remove(logFilename)
+		logFname := filepath.Join(dir, target)
+		err = os.Symlink(logFname, logFilename)
+		if err != nil {
+			clog.Warningf(ctx, "failed to create %s: %v", logFilename, err)
+			return
+		}
+		clog.Infof(ctx, "logfile: %s", logFname)
+		return
+	}
+	clog.Warningf(ctx, "failed to find %s in %q", logFilename, logDirs)
+}
+
+type dataSource struct {
+	cache  build.CacheStore
+	client *reapi.Client
+}
+
+func (ds dataSource) DigestData(d digest.Digest, fname string) digest.Data {
+	return digest.NewData(ds.Source(d, fname), d)
+}
+
+func (ds dataSource) Source(d digest.Digest, fname string) digest.Source {
+	return source{
+		dataSource: ds,
+		d:          d,
+		fname:      fname,
+	}
+}
+
+type source struct {
+	dataSource dataSource
+	d          digest.Digest
+	fname      string
+}
+
+func (s source) Open(ctx context.Context) (io.ReadCloser, error) {
+	if s.dataSource.cache != nil {
+		dd := s.dataSource.cache.DigestData(s.d, s.fname)
+		r, err := dd.Open(ctx)
+		if err == nil {
+			return r, nil
+		}
+		// fallback
+	}
+	if s.dataSource.client != nil {
+		buf, err := s.dataSource.client.Get(ctx, s.d, s.fname)
+		if err != nil {
+			return nil, err
+		}
+		return io.NopCloser(bytes.NewReader(buf)), nil
+	}
+	// no reapi configured. use local file?
+	f, err := os.Open(s.fname)
+	return f, err
+}
+
+func (s source) String() string {
+	return fmt.Sprintf("dataSource:%s", s.fname)
+}
+
+func rotateFiles(ctx context.Context, fname string) {
+	for i := 8; i >= 0; i-- {
+		err := os.Rename(
+			fmt.Sprintf("%s.%d", fname, i),
+			fmt.Sprintf("%s.%d", fname, i+1))
+		if err != nil && !errors.Is(err, fs.ErrNotExist) {
+			clog.Warningf(ctx, "rotate %s %d->%d failed: %v", fname, i, i+1, err)
+		}
+	}
+	err := os.Rename(fname, fmt.Sprintf("%s.0", fname))
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		clog.Warningf(ctx, "rotate %s ->0 failed: %v", fname, err)
+	}
 }
