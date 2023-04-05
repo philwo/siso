@@ -9,12 +9,14 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
 	"text/tabwriter"
 	"time"
 
+	log "github.com/golang/glog"
 	"github.com/maruel/subcommands"
 	"go.chromium.org/luci/auth"
 	"go.chromium.org/luci/common/cli"
@@ -23,7 +25,9 @@ import (
 	"infra/build/siso/auth/cred"
 	"infra/build/siso/build"
 	"infra/build/siso/build/ninjabuild"
+	"infra/build/siso/hashfs"
 	"infra/build/siso/o11y/clog"
+	"infra/build/siso/reapi"
 	"infra/build/siso/sync/semaphore"
 )
 
@@ -35,6 +39,7 @@ func Cmd(authOpts auth.Options) *subcommands.Command {
 			r := ninjaCmdRun{
 				authOpts: authOpts,
 			}
+			r.init()
 			return &r
 		},
 	}
@@ -43,6 +48,48 @@ func Cmd(authOpts auth.Options) *subcommands.Command {
 type ninjaCmdRun struct {
 	subcommands.CommandRunBase
 	authOpts auth.Options
+
+	// flag values
+	dir        string
+	configName string
+	projectID  string
+
+	dryRun     bool
+	clobber    bool
+	actionSalt string
+
+	fname string
+
+	cacheDir         string
+	localCacheEnable bool
+	cacheEnableRead  bool
+	// cacheEnableWrite bool
+
+	configRepoDir  string
+	configFilename string
+
+	outputLocalStrategy string
+
+	depsLogFile string
+	// depsLogBucket
+
+	localexecLogFile string
+	metricsJSON      string
+	traceJSON        string
+	buildPprof       string
+	// uploadBuildPprof bool
+
+	fsopt             *hashfs.Option
+	reopt             *reapi.Option
+	reCacheEnableRead bool
+	// reCacheEnableWrite bool
+
+	// enableCloudLogging bool
+	// enableCPUProfiler bool
+	// cloudProfilerServiceName string
+	// enableCloudTrace bool
+	traceThreshold     time.Duration
+	traceSpanThreshold time.Duration
 }
 
 // Run runs the `ninja` subcommand.
@@ -56,10 +103,54 @@ func (c *ninjaCmdRun) Run(a subcommands.Application, args []string, env subcomma
 		fmt.Fprintln(os.Stderr, "Failed to authenticate. Please login with `siso login`.")
 		return 1
 	}
-
 	// Use au.PerRPCCredentials() to get PerRPCCredentials of google.golang.org/grpc/credentials.
 	// Use au.TokenSource() to get oauth2.TokenSource.
 	return 0
+}
+
+func (c *ninjaCmdRun) init() {
+	c.Flags.StringVar(&c.dir, "C", ".", "ninja running directory")
+	c.Flags.StringVar(&c.configName, "config", "", "config name passed to starlark")
+	c.Flags.StringVar(&c.projectID, "project", os.Getenv("SISO_PROJECT"), "cloud project ID. can set by $SISO_PROJECT")
+
+	c.Flags.BoolVar(&c.dryRun, "n", false, "dry run")
+	c.Flags.BoolVar(&c.clobber, "clobber", false, "clobber build")
+	c.Flags.StringVar(&c.actionSalt, "action_salt", "", "action salt")
+
+	c.Flags.StringVar(&c.fname, "f", "build.ninja", "input build manifet filename (relative to -C)")
+
+	c.Flags.StringVar(&c.cacheDir, "cache_dir", defaultCacheDir(), "cache directory")
+	c.Flags.BoolVar(&c.localCacheEnable, "local_cache_enable", false, "local cache enable")
+	c.Flags.BoolVar(&c.cacheEnableRead, "cache_enable_read", true, "cache enable read")
+
+	c.Flags.StringVar(&c.configRepoDir, "config_repo_dir", "build/config/siso", "config repo directory (relative to exec root)")
+	c.Flags.StringVar(&c.configFilename, "load", "@config//main.star", "config filename (@config// is --config_repo_dir)")
+	c.Flags.StringVar(&c.outputLocalStrategy, "output_local_strategy", "full", `strategy for output_local. "full": download all outputs. "greedy": downloads most outputs except intermediate objs. "minimum": downloads as few as possible`)
+	c.Flags.StringVar(&c.depsLogFile, "deps_log", ".siso_deps", "deps log filename (relative to -C)")
+	c.Flags.StringVar(&c.localexecLogFile, "localexec_log", ".siso_localexec", "localexec log filename (relative to -C")
+	c.Flags.StringVar(&c.metricsJSON, "metrics_json", "siso_metrics.json", "metrics JSON filename (relative to -C)")
+	c.Flags.StringVar(&c.traceJSON, "trace_json", "siso_trace.json", "trace JSON filename (relative to -C)")
+	c.Flags.StringVar(&c.buildPprof, "build_pprof", "siso_build.pprof", "build pprof filename (relative to -C)")
+
+	c.fsopt = new(hashfs.Option)
+	c.fsopt.StateFile = ".siso_fs_state"
+	c.fsopt.RegisterFlags(&c.Flags)
+
+	c.reopt = new(reapi.Option)
+	c.reopt.RegisterFlags(&c.Flags)
+	c.Flags.BoolVar(&c.reCacheEnableRead, "re_cache_enable_read", true, "remote exec cache enable read")
+
+	c.Flags.DurationVar(&c.traceThreshold, "trace_threshold", 1*time.Minute, "threshold for trace record")
+	c.Flags.DurationVar(&c.traceSpanThreshold, "trace_span_threshold", 100*time.Millisecond, "theshold for trace span record")
+}
+
+func defaultCacheDir() string {
+	d, err := os.UserCacheDir()
+	if err != nil {
+		log.Warningf("Failed to get user cache dir: %v", err)
+		return ""
+	}
+	return filepath.Join(d, "siso")
 }
 
 func doBuild(ctx context.Context, graph *ninjabuild.Graph, bopts build.Options, args ...string) error {
