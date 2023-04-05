@@ -737,7 +737,7 @@ func (hfs *HashFS) Flush(ctx context.Context, execRoot string, files []string) e
 
 // Refresh refreshes cached file entries under execRoot.
 func (hfs *HashFS) Refresh(ctx context.Context, execRoot string) error {
-	// XXX: optimize?
+	// TODO: optimize?
 	state := hfs.State(ctx)
 	return hfs.SetState(ctx, state)
 }

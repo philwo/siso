@@ -389,7 +389,7 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 	b.traceEvents.Start(ctx, semas, []*iometrics.IOMetrics{
 		b.hashFS.IOMetrics,
 		b.reapiclient.IOMetrics(),
-		// XXX: cache iometrics?
+		// TODO: cache iometrics?
 	})
 	defer b.traceEvents.Close(ctx)
 	b.tracePprof.SetMetadata(b.metadata)

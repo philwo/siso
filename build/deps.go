@@ -134,7 +134,7 @@ func depsCmd(ctx context.Context, b *Builder, step *Step) error {
 	ds, found := depsProcessors[step.Cmd.Deps]
 	if found {
 		start := time.Now()
-		// XXX: same as depsFastStep
+		// TODO: same as depsFastStep
 		var stepInputs []string
 		switch step.Cmd.Deps {
 		case "gcc", "msvc":

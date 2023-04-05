@@ -162,13 +162,13 @@ type StepRule struct {
 	// PlatformRef is reference to platform properties.
 	PlatformRef string `json:"platform_ref,omitempty"`
 	// Platform is platform properties.
-	// XXX: siso: prefix will not send to remote backend.
+	// TODO: siso: prefix will not send to remote backend.
 	Platform map[string]string `json:"platform,omitempty"`
 
 	// Remote marks the step is remote executable.
 	Remote bool `json:"remote,omitempty"`
 	// RemoteWrapper is a wrapper used in remote execution.
-	// XXX: put RemoteWrapper in Platform["siso:remote_wrapper"]
+	// TODO: put RemoteWrapper in Platform["siso:remote_wrapper"]
 	RemoteWrapper string `json:"remote_wrapper,omitempty"`
 	// RemoteInputs is a map for remote execution.
 	// path in remote action -> local path
@@ -197,13 +197,13 @@ type StepRule struct {
 
 	// OutputLocal indicates to force to write output files to local disk
 	// for subsequent steps.
-	// XXX: better to have `require_local_inputs`=[<globs>] to reduce unnecessary downloads?
+	// TODO: better to have `require_local_inputs`=[<globs>] to reduce unnecessary downloads?
 	OutputLocal bool `json:"output_local,omitempty"`
 
 	// AllowMissingOutputs indicates to allow missing outputs.
 	// if files in outputs doesn't exist, it causes an error by default.
 	// allow_missing_outputs=true suppress this error.
-	// XXX: glog list?
+	// TODO: glog list?
 	AllowMissingOutputs bool `json:"allow_missing_outputs,omitempty"`
 
 	// IgnoreExtraInputPattern specifies regexp to ignore extra inputs.

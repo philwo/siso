@@ -31,7 +31,7 @@ func (gcc depsGCC) DepsFastCmd(ctx context.Context, b *Builder, cmd *execute.Cmd
 	return newCmd, nil
 }
 
-// XXX: use handler?
+// TODO: use handler?
 func (depsGCC) sysroot(ctx context.Context, b *Builder, cmd *execute.Cmd) []string {
 	// sysroot directory must be included, even if no include files there.
 	// or error with
@@ -63,7 +63,7 @@ func (depsGCC) fixArgsForDeps(ctx context.Context, cmd *execute.Cmd) {
 	}
 }
 
-// XXX: use handler?
+// TODO: use handler?
 func (depsGCC) fixForSplitDwarf(ctx context.Context, cmd *execute.Cmd) {
 	hasSplitDwarf := false
 	for _, arg := range cmd.Args {
@@ -77,7 +77,7 @@ func (depsGCC) fixForSplitDwarf(ctx context.Context, cmd *execute.Cmd) {
 	}
 	dwo := ""
 	for _, out := range cmd.Outputs {
-		if strings.HasSuffix(out, ".o") { // XXX or ".obj" for win?
+		if strings.HasSuffix(out, ".o") { // TODO: or ".obj" for win?
 			dwo = strings.TrimSuffix(out, ".o") + ".dwo"
 			continue
 		}
@@ -134,7 +134,7 @@ func (depsGCC) depsInputs(ctx context.Context, b *Builder, step *Step) ([]string
 	}
 	var inputs []string
 	for _, in := range ins {
-		// XXX: need to preserve intermediate dirs
+		// TODO: need to preserve intermediate dirs
 		// e.g.
 		//  /usr/local/google/home/ukai/src/chromium/src/native_client/toolchain/linux_x86/nacl_x86_glibc/bin/../lib/gcc/x86_64-nacl/4.4.3/../../../../x86_64-nacl/include/stdint.h
 		inpath := b.path.MustFromWD(in)
