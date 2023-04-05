@@ -308,7 +308,10 @@ func (b numBytes) String() string {
 func (b *Builder) Build(ctx context.Context, name string, args ...string) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			clog.Errorf(ctx, "panic in build: %v", r)
+			const size = 64 << 10
+			buf := make([]byte, size)
+			buf = buf[:runtime.Stack(buf, false)]
+			clog.Errorf(ctx, "panic in build: %v\n%s", r, buf)
 			if err == nil {
 				err = fmt.Errorf("panic in build: %v", r)
 			}
