@@ -8,7 +8,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"sort"
 	"sync"
 	"time"
@@ -64,7 +63,6 @@ type plan struct {
 
 // schedulerOption is scheduler option.
 type schedulerOption struct {
-	Writer      io.Writer
 	Path        *Path
 	HashFS      *hashfs.HashFS
 	EnableTrace bool
@@ -72,7 +70,6 @@ type schedulerOption struct {
 
 // scheduler creates a plan.
 type scheduler struct {
-	w      io.Writer
 	path   *Path
 	hashFS *hashfs.HashFS
 
@@ -191,7 +188,6 @@ func newScheduler(ctx context.Context, opt schedulerOption) *scheduler {
 		clog.Infof(ctx, "schedule: enable trace")
 	}
 	return &scheduler{
-		w:      opt.Writer,
 		path:   opt.Path,
 		hashFS: opt.HashFS,
 		plan: &plan{

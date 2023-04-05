@@ -13,6 +13,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
+	"runtime/debug"
 	"sort"
 	"strings"
 	"sync"
@@ -38,14 +40,60 @@ import (
 	"infra/build/siso/ui"
 )
 
-// OutputLocalFunc is a function to determine the file should be downloaded or not.
-type OutputLocalFunc func(context.Context, string) bool
-
 // logging labels's key.
 const (
 	logLabelKeyID        = "id"
 	logLabelKeyBacktrace = "backtrace"
 )
+
+const (
+	// limit # of concurrent steps at most 1024 times of num cpus
+	// to protect from out of memory, or too many threads.
+	stepLimitFactor = 1024
+
+	// limit # of concurrent steps at most 40 times of num cpus
+	// to protect from out of memory, or DDoS to RE API.
+	remoteLimitFactor = 40
+)
+
+// OutputLocalFunc is a function to determine the file should be downloaded or not.
+type OutputLocalFunc func(context.Context, string) bool
+
+// Options is builder options.
+type Options struct {
+	ID                string
+	Metadata          Metadata
+	ProjectID         string
+	Path              *Path
+	HashFS            *hashfs.HashFS
+	REAPIClient       *reapi.Client
+	RECacheEnableRead bool
+	// TODO(b/266518906): enable RECacheEnableWrite option for read-only client.
+	// RECacheEnableWrite bool
+	ActionSalt []byte
+	// TODO(b/266518906): enable shared deps log
+	// SharedDepsLog      SharedDepsLog
+	OutputLocal        OutputLocalFunc
+	Cache              *Cache
+	LocalexecLogWriter io.Writer
+	MetricsJSONWriter  io.Writer
+	TraceJSON          string
+	Pprof              string
+	// TODO(b/266518906): add exporter
+	// TraceExporter      *trace.Exporter
+	PprofUploader *pprof.Uploader
+
+	// Clobber forces to rebuild ignoring existing generated files.
+	Clobber bool
+
+	// DryRun just prints the command to build, but does nothing.
+	DryRun bool
+
+	// RebuildManifest is a build manifest filename (i.e. build.ninja)
+	// when rebuilding manifest.
+	// empty for normal build.
+	RebuildManifest string
+}
 
 var experiments Experiments
 
@@ -128,9 +176,103 @@ type Builder struct {
 	rebuildManifest string
 }
 
+// New creates new builder.
+func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
+	logger := clog.FromContext(ctx)
+	if logger != nil {
+		logger.Formatter = logFormat
+	}
+	lelw := opts.LocalexecLogWriter
+	if lelw == nil {
+		lelw = io.Discard
+	}
+	mw := opts.MetricsJSONWriter
+	if mw == nil {
+		mw = io.Discard
+	}
+
+	if err := opts.Path.Check(); err != nil {
+		return nil, err
+	}
+	if opts.HashFS == nil {
+		return nil, fmt.Errorf("hash fs must be set")
+	}
+	var le localexec.LocalExec
+	var re *remoteexec.RemoteExec
+	if opts.REAPIClient != nil {
+		logger.Infof("enable remote exec")
+		re = remoteexec.New(ctx, opts.REAPIClient)
+	} else {
+		logger.Infof("disable remote exec")
+	}
+	experiments.ShowOnce()
+	numCPU := runtime.NumCPU()
+	stepLimit := stepLimitFactor * numCPU
+	localLimit := numCPU
+	remoteLimit := remoteLimitFactor * numCPU
+	// on many cores machine, it would hit default max thread limit = 10000
+	// usually, it would require 1/3 threads of stepLimit (cache miss case?)
+	maxThreads := stepLimit / 3
+	if maxThreads > 10000 {
+		debug.SetMaxThreads(maxThreads)
+	} else {
+		maxThreads = 10000
+	}
+	logger.Infof("numcpu=%d threads:%d - step limit=%d local limit=%d remote limit=%d",
+		numCPU, maxThreads, stepLimit, localLimit, remoteLimit)
+	logger.Infof("tool_invocation_id: %s", opts.ID)
+
+	return &Builder{
+		id:        opts.ID,
+		projectID: opts.ProjectID,
+		metadata:  opts.Metadata,
+
+		path:              opts.Path,
+		hashFS:            opts.HashFS,
+		graph:             graph,
+		stepSema:          semaphore.New("step", stepLimit),
+		preprocSema:       semaphore.New("preproc", stepLimit),
+		localSema:         semaphore.New("localexec", localLimit),
+		localExec:         le,
+		remoteSema:        semaphore.New("remoteexec", remoteLimit),
+		remoteExec:        re,
+		reCacheEnableRead: opts.RECacheEnableRead,
+		// reCacheEnableWrite: opts.RECacheEnableWrite,
+		actionSalt:  opts.ActionSalt,
+		reapiclient: opts.REAPIClient,
+		// sharedDepsLog:      opts.SharedDepsLog,
+		outputLocal:        opts.OutputLocal,
+		cacheSema:          semaphore.New("cache", stepLimit),
+		cache:              opts.Cache,
+		localexecLogWriter: lelw,
+		metricsJSONWriter:  mw,
+		// traceExporter:      opts.TraceExporter,
+		traceEvents:     newTraceEvents(opts.TraceJSON, opts.Metadata),
+		traceStats:      newTraceStats(),
+		tracePprof:      newTracePprof(opts.Pprof),
+		pprofUploader:   opts.PprofUploader,
+		clobber:         opts.Clobber,
+		dryRun:          opts.DryRun,
+		rebuildManifest: opts.RebuildManifest,
+	}, nil
+}
+
+// Closes closes the builder.
+func (b *Builder) Close(ctx context.Context) error {
+	if b.dryRun {
+		return nil
+	}
+	return b.hashFS.Close(ctx)
+}
+
 // Stats returns stats of the builder.
 func (b *Builder) Stats() Stats {
 	return b.stats.stats()
+}
+
+// TraceStats returns trace stats of the builder.
+func (b *Builder) TraceStats() []*TraceStat {
+	return b.traceStats.get()
 }
 
 // ErrManifestModified is an error to indicate that manifest is modified.
@@ -177,7 +319,6 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 	// scheduling
 	// TODO: run asynchronously?
 	schedOpts := schedulerOption{
-		Writer: b.w,
 		Path:   b.path,
 		HashFS: b.hashFS,
 		// TODO(b/267576561): enable trace export
