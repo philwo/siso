@@ -5,9 +5,11 @@
 package hashfs
 
 import (
-	"errors"
+	"context"
+	"fmt"
 	"io"
 	"io/fs"
+	"path/filepath"
 )
 
 // File implements https://pkg.go.dev/io/fs#File.
@@ -86,30 +88,108 @@ func (d *Dir) ReadDir(n int) ([]fs.DirEntry, error) {
 
 // FileSystem provides fs.{FS,ReadDirFS,ReadFileFS,StatFS,SubFS} interfaces.
 type FileSystem struct {
-	// TODO(b/266518906): migrate from infra_internal
+	hashFS *HashFS
+	ctx    context.Context
+	dir    string
 }
 
 // Open opens a file for name.
 func (fsys FileSystem) Open(name string) (fs.File, error) {
-	return nil, errors.New("hashfs.FileSystem.Open: not implemented")
+	fi, err := fsys.hashFS.Stat(fsys.ctx, fsys.dir, name)
+	if err != nil {
+		return nil, &fs.PathError{
+			Op:   "open",
+			Path: name,
+			Err:  err,
+		}
+	}
+	if fi.IsDir() {
+		ents, err := fsys.hashFS.ReadDir(fsys.ctx, fsys.dir, name)
+		if err != nil {
+			return nil, &fs.PathError{
+				Op:   "open",
+				Path: name,
+				Err:  err,
+			}
+		}
+		return &Dir{
+			Ents: ents,
+			Fi:   fi,
+		}, nil
+	}
+	buf, err := fsys.hashFS.ReadFile(fsys.ctx, fsys.dir, name)
+	if err != nil {
+		return nil, &fs.PathError{
+			Op:   "open",
+			Path: name,
+			Err:  err,
+		}
+	}
+	return &File{
+		Buf: buf,
+		Fi:  fi,
+	}, nil
 }
 
 // ReadDir reads directory at name.
 func (fsys FileSystem) ReadDir(name string) ([]fs.DirEntry, error) {
-	return nil, errors.New("hashfs.FileSystem.ReadDir: not implemented")
+	ents, err := fsys.hashFS.ReadDir(fsys.ctx, fsys.dir, name)
+	if err != nil {
+		return nil, &fs.PathError{
+			Op:   "readdir",
+			Path: name,
+			Err:  err,
+		}
+	}
+	dirents := make([]fs.DirEntry, 0, len(ents))
+	for _, e := range ents {
+		dirents = append(dirents, e)
+	}
+	return dirents, nil
 }
 
 // ReadFile reads contents of name.
 func (fsys FileSystem) ReadFile(name string) ([]byte, error) {
-	return nil, errors.New("hashfs.FileSystem.ReadFile: not implemented")
+	buf, err := fsys.hashFS.ReadFile(fsys.ctx, fsys.dir, name)
+	if err != nil {
+		return nil, &fs.PathError{
+			Op:   "readfile",
+			Path: name,
+			Err:  err,
+		}
+	}
+	return buf, nil
 }
 
 // Stat gets stat of name.
 func (fsys FileSystem) Stat(name string) (fs.FileInfo, error) {
-	return nil, errors.New("hashfs.FileSystem.Stat: not implemented")
+	fi, err := fsys.hashFS.Stat(fsys.ctx, fsys.dir, name)
+	if err != nil {
+		return nil, &fs.PathError{
+			Op:   "stat",
+			Path: name,
+			Err:  err,
+		}
+	}
+	return fi, nil
 }
 
 // Sub returns an FS corresponding to the subtree rooted at dir.
 func (fsys FileSystem) Sub(dir string) (fs.FS, error) {
-	return nil, errors.New("hashfs.FileSystem.Sub: not implemented")
+	fi, err := fsys.Stat(dir)
+	if err != nil {
+		return nil, err
+	}
+	if !fi.IsDir() {
+		return nil, &fs.PathError{
+			Op:   "sub",
+			Path: dir,
+			Err:  fmt.Errorf("not directory: %s", dir),
+		}
+	}
+	return FileSystem{
+		hashFS: fsys.hashFS,
+		ctx:    fsys.ctx,
+		dir:    filepath.Join(fsys.dir, dir),
+	}, nil
 }
