@@ -125,7 +125,6 @@ func TestStepConfigExpandInputs(t *testing.T) {
 	}
 
 	p := build.NewPath(tdir, "out/Default")
-	t.Skip("TODO(b/266518906): hashfs is not implemented yet")
 	hashFS, err := hashfs.New(ctx, hashfs.Option{})
 	if err != nil {
 		t.Fatalf("hashfs.New(...)=_, %v; want _, nil", err)
