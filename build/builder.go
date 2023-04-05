@@ -349,7 +349,7 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 		if b.rebuildManifest != "" {
 			fi, mferr := b.hashFS.Stat(ctx, b.path.ExecRoot, filepath.Join(b.path.Dir, b.rebuildManifest))
 			if mferr != nil {
-				clog.Warningf(ctx, "failed to stat %s: %v", b.rebuildManifest, err)
+				clog.Warningf(ctx, "failed to stat %s: %v", b.rebuildManifest, mferr)
 				return
 			}
 			clog.Infof(ctx, "rebuild manifest %#v %s: %s->%s: %s", stat, b.rebuildManifest, mftime, fi.ModTime(), time.Since(started))
