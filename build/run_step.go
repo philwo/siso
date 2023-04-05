@@ -23,7 +23,7 @@ import (
 //   - check if up-to-date. do nothing if so.
 //   - expand inputs with step defs (except deps=gcc, msvc)
 //   - run handler if set.
-//   - setup RPS file.
+//   - setup RSP file.
 //   - try cmd with deps log cache (fast deps)
 //   - if failed, preproc runs deps command (e.g.clang -M)
 //   - run cmd

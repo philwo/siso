@@ -678,19 +678,19 @@ func (b *Builder) progressStepCacheHit(ctx context.Context, step *Step) {
 	b.progress.step(ctx, b, step, "c "+step.Cmd.Desc)
 }
 
-// progressStepCacheHit shows progress of the skipped step.
+// progressStepSkipped shows progress of the skipped step.
 func (b *Builder) progressStepSkipped(ctx context.Context, step *Step) {
 	b.progress.step(ctx, b, step, "- "+step.Cmd.Desc)
 }
 
-// progressStepCacheHit shows progress of the started step.
+// progressStepStarted shows progress of the started step.
 func (b *Builder) progressStepStarted(ctx context.Context, step *Step) {
 	step.SetPhase(stepStart)
 	step.StartTime = time.Now()
 	b.progress.step(ctx, b, step, "S "+step.Cmd.Desc)
 }
 
-// progressStepCacheHit shows progress of the finished step.
+// progressStepFinished shows progress of the finished step.
 func (b *Builder) progressStepFinished(ctx context.Context, step *Step) {
 	step.SetPhase(stepDone)
 	b.progress.step(ctx, b, step, "F "+step.Cmd.Desc)
