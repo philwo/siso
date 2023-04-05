@@ -73,6 +73,14 @@ type Logger struct {
 
 // Span returns a sub logger for the trace span.
 func (l *Logger) Span(trace, spanID string, labels map[string]string) *Logger {
+	if l == nil {
+		return &Logger{
+			Formatter: defaultFormatter,
+			trace:     trace,
+			spanID:    spanID,
+			labels:    labels,
+		}
+	}
 	return &Logger{
 		Formatter: l.Formatter,
 		trace:     trace,
