@@ -152,9 +152,9 @@ func (hfs *HashFS) SetState(ctx context.Context, state *State) error {
 				continue
 			}
 			e, _ := newStateEntry(ent, time.Time{}, hfs.opt.DataSource, hfs.IOMetrics)
-			e.Cmdhash = h
-			e.Action = ent.Action
-			if err := hfs.directory.Store(ctx, filepath.ToSlash(ent.Name), e); err != nil {
+			e.cmdhash = h
+			e.action = ent.Action
+			if err := hfs.directory.store(ctx, filepath.ToSlash(ent.Name), e); err != nil {
 				return err
 			}
 			continue
@@ -165,14 +165,14 @@ func (hfs *HashFS) SetState(ctx context.Context, state *State) error {
 			continue
 		}
 		e, et := newStateEntry(ent, fi.ModTime(), hfs.opt.DataSource, hfs.IOMetrics)
-		e.Cmdhash = h
-		e.Action = ent.Action
+		e.cmdhash = h
+		e.action = ent.Action
 		ftype := "file"
-		if e.D.IsZero() && e.Target == "" {
+		if e.d.IsZero() && e.target == "" {
 			ftype = "dir"
 			clog.Infof(ctx, "ignore %s %s", ftype, ent.Name)
 			continue
-		} else if e.D.IsZero() && e.Target != "" {
+		} else if e.d.IsZero() && e.target != "" {
 			ftype = "symlink"
 		}
 		switch et {
@@ -181,27 +181,27 @@ func (hfs *HashFS) SetState(ctx context.Context, state *State) error {
 			if len(h) == 0 {
 				continue
 			}
-			clog.Infof(ctx, "not exist %s %s cmdhash:%s", ftype, ent.Name, hex.EncodeToString(e.Cmdhash))
+			clog.Infof(ctx, "not exist %s %s cmdhash:%s", ftype, ent.Name, hex.EncodeToString(e.cmdhash))
 		case entryBeforeLocal:
 			ninvalidate++
-			clog.Warningf(ctx, "invalidate %s %s: state:%s disk:%s", ftype, ent.Name, e.Mtime, fi.ModTime())
+			clog.Warningf(ctx, "invalidate %s %s: state:%s disk:%s", ftype, ent.Name, e.mtime, fi.ModTime())
 			continue
 		case entryEqLocal:
 			neq++
 			if log.V(1) {
-				clog.Infof(ctx, "equal local %s %s: %s", ftype, ent.Name, e.Mtime)
+				clog.Infof(ctx, "equal local %s %s: %s", ftype, ent.Name, e.mtime)
 			}
 		case entryAfterLocal:
 			nnew++
 			if len(h) == 0 {
 				continue
 			}
-			clog.Infof(ctx, "old local %s %s: state:%s disk:%s cmdhash:%s", ftype, ent.Name, e.Mtime, fi.ModTime(), hex.EncodeToString(e.Cmdhash))
+			clog.Infof(ctx, "old local %s %s: state:%s disk:%s cmdhash:%s", ftype, ent.Name, e.mtime, fi.ModTime(), hex.EncodeToString(e.cmdhash))
 		}
 		if log.V(1) {
-			clog.Infof(ctx, "set state %s: d:%s x:%t s:%s m:%s cmdhash:%s action:%s", ent.Name, e.D, e.IsExecutable, e.Target, e.Mtime, hex.EncodeToString(e.Cmdhash), e.Action)
+			clog.Infof(ctx, "set state %s: d:%s x:%t s:%s m:%s cmdhash:%s action:%s", ent.Name, e.d, e.isExecutable, e.target, e.mtime, hex.EncodeToString(e.cmdhash), e.action)
 		}
-		if err := hfs.directory.Store(ctx, filepath.ToSlash(ent.Name), e); err != nil {
+		if err := hfs.directory.store(ctx, filepath.ToSlash(ent.Name), e); err != nil {
 			return err
 		}
 	}
@@ -244,16 +244,16 @@ func newStateEntry(ent EntryState, ftime time.Time, dataSource DataSource, m *io
 		dir = &directory{}
 	}
 	e := &entry{
-		Lready:       lready,
-		Mtime:        entTime,
-		Readyq:       readyq,
-		D:            ent.Digest,
-		IsExecutable: ent.IsExecutable,
-		Target:       ent.Target,
-		Data:         data,
-		Directory:    dir,
+		lready:       lready,
+		mtime:        entTime,
+		readyq:       readyq,
+		d:            ent.Digest,
+		isExecutable: ent.IsExecutable,
+		target:       ent.Target,
+		data:         data,
+		directory:    dir,
 	}
-	e.Ready.Store(true)
+	e.ready.Store(true)
 	return e, entType
 }
 
@@ -314,7 +314,7 @@ func (hfs *HashFS) State(ctx context.Context) *State {
 			clog.Infof(ctx, "state dir=%s dirs=%d", dir.name, len(dirs))
 		}
 		// TODO(b/254182269): need mutex here?
-		dir.dir.M.Range(func(k, _ any) bool {
+		dir.dir.m.Range(func(k, _ any) bool {
 			name := filepath.Join(dir.name, k.(string))
 			names = append(names, name)
 			return true
@@ -324,13 +324,13 @@ func (hfs *HashFS) State(ctx context.Context) *State {
 			clog.Infof(ctx, "state dir=%s -> %q", dir.name, names)
 		}
 		for _, name := range names {
-			v, ok := dir.dir.M.Load(filepath.Base(name))
+			v, ok := dir.dir.m.Load(filepath.Base(name))
 			if !ok {
 				clog.Errorf(ctx, "dir:%s name:%s entries:%v", dir.name, name, dir.dir)
 				continue
 			}
 			e := v.(*entry)
-			if err := e.GetError(); err != nil {
+			if err := e.getError(); err != nil {
 				if log.V(1) {
 					clog.Infof(ctx, "ignore %s: err:%v", name, err)
 				}
@@ -342,29 +342,29 @@ func (hfs *HashFS) State(ctx context.Context) *State {
 					name += `\`
 				}
 			}
-			if e.Mtime.IsZero() {
+			if e.mtime.IsZero() {
 				if log.V(1) {
 					clog.Infof(ctx, "ignore %s: no mtime", name)
 				}
 			} else {
 				// ignore directory
 				// TODO(b/253541407): record mtime for directory?
-				if !e.D.IsZero() || e.Target != "" {
+				if !e.d.IsZero() || e.target != "" {
 					state.Entries = append(state.Entries, EntryState{
 						ID: fileID{
-							ModTime: e.Mtime.UnixNano(),
+							ModTime: e.mtime.UnixNano(),
 						},
 						Name:         name,
-						Digest:       e.D,
-						IsExecutable: e.IsExecutable,
-						Target:       e.Target,
-						CmdHash:      hex.EncodeToString(e.Cmdhash),
-						Action:       e.Action,
+						Digest:       e.d,
+						IsExecutable: e.isExecutable,
+						Target:       e.target,
+						CmdHash:      hex.EncodeToString(e.cmdhash),
+						Action:       e.action,
 					})
 				}
 			}
-			if e.Directory != nil {
-				dirs = append(dirs, d{name: name, dir: e.Directory})
+			if e.directory != nil {
+				dirs = append(dirs, d{name: name, dir: e.directory})
 			}
 		}
 	}
