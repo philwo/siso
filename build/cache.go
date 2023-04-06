@@ -50,6 +50,7 @@ type Cache struct {
 	store      CacheStore
 	enableRead bool
 
+	// TODO(b/266518906): make this private after the migration.
 	Sema *semaphore.Semaphore
 
 	m *iometrics.IOMetrics
