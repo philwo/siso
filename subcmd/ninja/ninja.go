@@ -109,7 +109,12 @@ func (c *ninjaCmdRun) Run(a subcommands.Application, args []string, env subcomma
 	ctx := cli.GetContext(a, c, env)
 	err := c.run(ctx)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		switch {
+		case errors.Is(err, auth.ErrLoginRequired):
+			fmt.Fprintf(os.Stderr, "need to login: run `siso login`\n")
+		default:
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		}
 		return 1
 	}
 	return 0
@@ -119,11 +124,14 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer signals.HandleInterrupt(cancel)()
 
-	credential, err := cred.New(ctx, c.authOpts)
-	if err != nil {
-		return err
-	}
 	projectID := c.reopt.UpdateProjectID(c.projectID)
+	var credential cred.Cred
+	if projectID != "" {
+		credential, err = cred.New(ctx, c.authOpts)
+		if err != nil {
+			return err
+		}
+	}
 	wd, err := os.Getwd()
 	if err != nil {
 		return err
