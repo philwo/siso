@@ -335,9 +335,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 			continue
 		}
 		clog.Infof(ctx, "build finished: %v", err)
-		if err != nil {
-			return err
-		}
+		return err
 	}
 }
 
