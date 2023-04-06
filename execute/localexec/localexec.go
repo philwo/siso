@@ -97,7 +97,9 @@ func run(ctx context.Context, cmd *execute.Cmd) (*rpb.ActionResult, error) {
 		err = c.Run()
 		if err == nil {
 			cmd.FileTrace.Inputs, cmd.FileTrace.Outputs, err = st.PostProcess(ctx)
-			err = fmt.Errorf("failed to postprocess: %w", err)
+			if err != nil {
+				err = fmt.Errorf("failed to postprocess: %w", err)
+			}
 		}
 		st.Close(ctx)
 		log.V(1).Infof("%s filetrace=false n_traced_inputs=%d n_traced_outputs=%d err=%v", cmd.ID, len(cmd.Inputs), len(cmd.Outputs), err)
@@ -142,6 +144,5 @@ func exitCode(err error) int32 {
 
 // TraceEnabled returns whether file trace is enabled or not.
 func TraceEnabled(ctx context.Context) bool {
-	// TODO(b/266518906): migrate from infra_internal/experimental
-	return false
+	return straceutil.Available(ctx)
 }
