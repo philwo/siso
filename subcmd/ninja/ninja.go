@@ -323,7 +323,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 			return err
 		}
 		err = doBuild(ctx, graph, bopts, c.Flags.Args()...)
-		if err == build.ErrManifestModified {
+		if errors.Is(err, build.ErrManifestModified) {
 			clog.Infof(ctx, "%s modified. refresh hashfs...", c.fname)
 			// need to refresh cached entries as `gn gen` updated files
 			// but nnja manifest doesn't know what files are updated.
