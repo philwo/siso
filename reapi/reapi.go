@@ -59,6 +59,10 @@ func (o *Option) UpdateProjectID(projID string) string {
 	if projID == "" && strings.HasPrefix(o.Instance, "projects/") {
 		projID = strings.Split(o.Instance, "/")[1]
 	}
+	if projID == "" && !strings.HasPrefix(o.Instance, "projects/") {
+		// make Option invalid.
+		o.Instance = ""
+	}
 	return projID
 }
 
