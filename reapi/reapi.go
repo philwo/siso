@@ -38,9 +38,17 @@ type Option struct {
 }
 
 // RegisterFlags registers flags on the option.
-func (o *Option) RegisterFlags(fs *flag.FlagSet) {
-	fs.StringVar(&o.Address, "reapi_address", "remotebuildexecution.googleapis.com:443", "reapi address")
-	fs.StringVar(&o.Instance, "reapi_instance", "", "reapi instance name")
+func (o *Option) RegisterFlags(fs *flag.FlagSet, envs map[string]string) {
+	addr := envs["SISO_REAPI_ADDRESS"]
+	if addr == "" {
+		addr = "remotebuildexecution.googleapis.com:443"
+	}
+	fs.StringVar(&o.Address, "reapi_address", addr, "reapi address")
+	instance := envs["SISO_REAPI_INSTANCE"]
+	if instance == "" {
+		instance = "default_instance"
+	}
+	fs.StringVar(&o.Instance, "reapi_instance", instance, "reapi instance name")
 	fs.Int64Var(&o.CompressedBlob, "reapi_compress_blob", 1024, "use compressed blobs if server supports compressed blobs and size is bigger than this. specify 0 to disable comporession.")
 }
 

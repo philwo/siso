@@ -203,6 +203,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 	}
 	var client *reapi.Client
 	if c.reopt.IsValid() {
+		ui.PrintLines(fmt.Sprintf("reapi instance: %s\n", c.reopt.Instance))
 		client, err = reapi.New(ctx, credential, *c.reopt)
 		if err != nil {
 			return err
@@ -318,6 +319,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 		DryRun:             c.dryRun,
 	}
 	for {
+		clog.Infof(ctx, "build starts")
 		graph, err := ninjabuild.NewGraph(ctx, c.fname, config, buildPath, hashFS, localDepsLog)
 		if err != nil {
 			return err
@@ -368,7 +370,11 @@ func (c *ninjaCmdRun) init() {
 	c.fsopt.RegisterFlags(&c.Flags)
 
 	c.reopt = new(reapi.Option)
-	c.reopt.RegisterFlags(&c.Flags)
+	envs := map[string]string{
+		"SISO_REAPI_INSTANCE": os.Getenv("SISO_REAPI_INSTANCE"),
+		"SISO_REAPI_ADDRESS":  os.Getenv("SISO_REAPI_ADDRESS"),
+	}
+	c.reopt.RegisterFlags(&c.Flags, envs)
 	c.Flags.BoolVar(&c.reCacheEnableRead, "re_cache_enable_read", true, "remote exec cache enable read")
 
 	c.Flags.DurationVar(&c.traceThreshold, "trace_threshold", 1*time.Minute, "threshold for trace record")

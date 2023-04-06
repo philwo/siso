@@ -53,6 +53,21 @@ func getApplication() *cli.Application {
 			authcli.SubcommandLogout(authOpts, "logout", false),
 			versioncli.CmdVersion(version),
 		},
+		EnvVars: map[string]subcommands.EnvVarDefinition{
+			"SISO_PROJECT": {
+				ShortDesc: "cloud project ID",
+			},
+			"SISO_REAPI_INSTANCE": {
+				Advanced:  true,
+				ShortDesc: "RE API instance name",
+				Default:   "default_instance",
+			},
+			"SISO_REAPI_ADDRESS": {
+				Advanced:  true,
+				ShortDesc: "RE API address",
+				Default:   "remotebuildexecution.googleapis.com:443",
+			},
+		},
 	}
 }
 
