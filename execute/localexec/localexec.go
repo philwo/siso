@@ -21,6 +21,7 @@ import (
 
 	"infra/build/siso/execute"
 	"infra/build/siso/o11y/clog"
+	"infra/build/siso/reapi/digest"
 	"infra/build/siso/toolsupport/straceutil"
 )
 
@@ -55,6 +56,17 @@ func (_ LocalExec) Run(ctx context.Context, cmd *execute.Cmd) (err error) {
 	if cmd.HashFS == nil {
 		return nil
 	}
+	entries, err := cmd.HashFS.LocalEntries(ctx, cmd.ExecRoot, cmd.AllOutputs())
+	if err != nil {
+		return err
+	}
+	clog.Infof(ctx, "output entries %d", len(entries))
+	// TODO(b/254158307): calculate action digest if cmd is pure?
+	err = cmd.HashFS.Update(ctx, cmd.ExecRoot, entries, time.Now(), cmd.CmdHash, digest.Digest{})
+	if err != nil {
+		return err
+	}
+
 	if cmd.Depfile != "" {
 		// The HashFS needs to forget about the file because Siso doesn't upload it to CAS after local execution.
 		// Otherwise, Siso might try to fetch it in the next incremental builds, which would cause an error.
