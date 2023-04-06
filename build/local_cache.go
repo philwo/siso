@@ -65,6 +65,9 @@ func (c *LocalCache) contentCacheFilename(d digest.Digest) string {
 
 // GetActionResult gets the action result of the action identified by the digest.
 func (c *LocalCache) GetActionResult(ctx context.Context, d digest.Digest) (*rpb.ActionResult, error) {
+	if c == nil {
+		return nil, status.Error(codes.NotFound, "cache is not configured")
+	}
 	fname := c.actionCacheFilename(d)
 	b, err := os.ReadFile(fname)
 	c.m.ReadDone(len(b), err)

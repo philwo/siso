@@ -181,6 +181,9 @@ func (c *Client) Close() error {
 
 // IOMetrics returns an IOMetrics of the client.
 func (c *Client) IOMetrics() *iometrics.IOMetrics {
+	if c == nil {
+		return nil
+	}
 	return c.m
 }
 
