@@ -14,7 +14,7 @@ import (
 
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
 	log "github.com/golang/glog"
-	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"infra/build/siso/execute"
 	"infra/build/siso/execute/localexec"

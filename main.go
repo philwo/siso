@@ -25,6 +25,7 @@ import (
 
 	"infra/build/siso/auth/cred"
 	"infra/build/siso/subcmd/ninja"
+	"infra/build/siso/ui"
 )
 
 var (
@@ -143,6 +144,10 @@ func sisoMain() int {
 		}
 		defer trace.Stop()
 	}
+
+	// Initialize the UI and ensure we restore the state of the terminal upon exit.
+	ui.Init()
+	defer ui.Restore()
 
 	return subcommands.Run(getApplication(), nil)
 }

@@ -18,7 +18,7 @@ import (
 	log "github.com/golang/glog"
 	"github.com/google/uuid"
 	spb "google.golang.org/genproto/googleapis/rpc/status"
-	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"infra/build/siso/o11y/clog"
 )
