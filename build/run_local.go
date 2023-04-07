@@ -40,6 +40,7 @@ func (b *Builder) runLocal(ctx context.Context, step *Step) error {
 	if err != nil {
 		return err
 	}
+	enableTrace := experiments.Enabled("file-access-trace", "enable file-access-trace")
 	if localexec.TraceEnabled(ctx) {
 		// check impure explicitly set in config,
 		// rather than step.cmd.Pure.
@@ -48,13 +49,15 @@ func (b *Builder) runLocal(ctx context.Context, step *Step) error {
 		// file-access-trace only for the step with impure=true.
 		// http://b/261655377 errorprone_plugin_tests: too slow under strace?
 		impure := step.Def.Binding("impure") == "true"
-		x := experiments.Enabled("no-file-access-trace", "disabled file-access-trace")
-		if !impure && !x {
+		if !impure && enableTrace {
 			step.Cmd.FileTrace = &execute.FileTrace{}
 		} else {
-			clog.Warningf(ctx, "disable file-access-trace impure=%t no-file-access-trace=%t", impure, x)
+			clog.Warningf(ctx, "disable file-access-trace impure=%t file-access-trace=%t", impure, enableTrace)
 		}
+	} else if enableTrace {
+		clog.Warningf(ctx, "unable to use file-access-trace")
 	}
+
 	queueTime := time.Now()
 	var dur time.Duration
 	err = b.localSema.Do(ctx, func(ctx context.Context) error {

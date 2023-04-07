@@ -18,7 +18,7 @@ import (
 var knownExperiments = map[string]string{
 	"keep-going-impure":           "check .siso_localexec",
 	"keep-going-handle-error":     "",
-	"no-file-access-trace":        "",
+	"file-access-trace":           "",
 	"no-fallback":                 "",
 	"no-fast-deps-fallback":       "",
 	"fail-on-stdouterr":           "",
