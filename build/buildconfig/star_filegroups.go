@@ -47,7 +47,7 @@ func parseFilegroupUpdater(ctx context.Context, key string, v starlark.Value) (f
 	}
 	typeval, _, err := d.Get(starlark.String("type"))
 	if err != nil {
-		return nil, fmt.Errorf("filegroup type %w", err)
+		return nil, fmt.Errorf("filegroup type: %w", err)
 	}
 	tv, ok := starlark.AsString(typeval)
 	if !ok {
@@ -65,7 +65,7 @@ func parseFilegroupUpdater(ctx context.Context, key string, v starlark.Value) (f
 			}
 		} else {
 			if err != nil {
-				return nil, fmt.Errorf("filegroup glob dir %w", err)
+				return nil, fmt.Errorf("filegroup glob dir: %w", err)
 			}
 			var ok bool
 			dir, ok = starlark.AsString(dirval)
@@ -75,21 +75,21 @@ func parseFilegroupUpdater(ctx context.Context, key string, v starlark.Value) (f
 		}
 		includesVal, _, err := d.Get(starlark.String("includes"))
 		if err != nil {
-			return nil, fmt.Errorf("filegroup glob includes %w", err)
+			return nil, fmt.Errorf("filegroup glob includes: %w", err)
 		}
 		includes, err := unpackList(includesVal)
 		if err != nil {
-			return nil, fmt.Errorf("filegroup glob includes %w", err)
+			return nil, fmt.Errorf("filegroup glob includes: %w", err)
 		}
 		excludesVal, ok, err := d.Get(starlark.String("excludes"))
 		if err != nil {
-			return nil, fmt.Errorf("filegroup glob excludes %w", err)
+			return nil, fmt.Errorf("filegroup glob excludes: %w", err)
 		}
 		var excludes []string
 		if ok {
 			excludes, err = unpackList(excludesVal)
 			if err != nil {
-				return nil, fmt.Errorf("filegroup glob excludes %w", err)
+				return nil, fmt.Errorf("filegroup glob excludes: %w", err)
 			}
 		}
 		return globSpec{

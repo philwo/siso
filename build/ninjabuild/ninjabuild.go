@@ -62,7 +62,7 @@ func NewGraph(ctx context.Context, fname string, config *buildconfig.Config, p *
 	clog.Infof(ctx, "loaded %d platforms / %d input deps / %d rules", len(stepConfig.Platforms), len(stepConfig.InputDeps), len(stepConfig.Rules))
 	buf, err := json.MarshalIndent(stepConfig, "", " ")
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal config %w", err)
+		return nil, fmt.Errorf("failed to marshal config: %v", err)
 	}
 	err = os.WriteFile(".siso_config", buf, 0644)
 	if err != nil {
@@ -140,7 +140,7 @@ func updateFilegroups(ctx context.Context, config *buildconfig.Config, hashFS *h
 	clog.Infof(ctx, "updated %d filegroups", len(fg.Filegroups))
 	buf, err := json.MarshalIndent(fg, "", " ")
 	if err != nil {
-		return fmt.Errorf("failed to marshal filegroups %w", err)
+		return fmt.Errorf("failed to marshal filegroups: %v", err)
 	}
 	err = os.WriteFile(".siso_filegroups", buf, 0644)
 	if err != nil {

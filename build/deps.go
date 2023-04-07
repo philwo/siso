@@ -176,7 +176,7 @@ func depsAfterRun(ctx context.Context, b *Builder, step *Step) ([]string, error)
 			if filepath.IsAbs(dep) {
 				clog.Warningf(ctx, "update deps: abs path in deps %s in depfile=%s. use input_root_absolute_path. platform=%v", dep, step.Cmd.Depfile, step.Cmd.Platform)
 				if step.Cmd.Pure {
-					return nil, fmt.Errorf("absolute path in deps %s of %s: use input_root_absolute_path=true. %w", dep, step, errNotRelocatable)
+					return nil, fmt.Errorf("absolute path in deps %s of %s: use input_root_absolute_path=true: %w", dep, step, errNotRelocatable)
 				}
 			}
 		}
