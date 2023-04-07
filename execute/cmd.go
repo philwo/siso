@@ -160,7 +160,7 @@ type Cmd struct {
 	FileTrace *FileTrace
 
 	stdoutWriter, stderrWriter io.Writer
-	stdoutBuffer, stderrBuffer bytes.Buffer
+	stdoutBuffer, stderrBuffer *bytes.Buffer
 
 	actionDigest digest.Digest
 	actionResult *rpb.ActionResult
@@ -213,24 +213,33 @@ func (c *Cmd) SetStderrWriter(w io.Writer) {
 
 // StdoutWriter returns a writer set for stdout.
 func (c *Cmd) StdoutWriter() io.Writer {
+	if c.stdoutBuffer == nil {
+		c.stdoutBuffer = new(bytes.Buffer)
+	}
 	c.stdoutBuffer.Reset()
 	if c.stdoutWriter == nil {
-		return &c.stdoutBuffer
+		return c.stdoutBuffer
 	}
-	return io.MultiWriter(c.stdoutWriter, &c.stdoutBuffer)
+	return io.MultiWriter(c.stdoutWriter, c.stdoutBuffer)
 }
 
 // StderrWriter returns a writer set for stderr.
 func (c *Cmd) StderrWriter() io.Writer {
+	if c.stderrBuffer == nil {
+		c.stderrBuffer = new(bytes.Buffer)
+	}
 	c.stderrBuffer.Reset()
 	if c.stderrWriter == nil {
-		return &c.stderrBuffer
+		return c.stderrBuffer
 	}
-	return io.MultiWriter(c.stderrWriter, &c.stderrBuffer)
+	return io.MultiWriter(c.stderrWriter, c.stderrBuffer)
 }
 
 // Stdout returns stdout output of the cmd.
 func (c *Cmd) Stdout() []byte {
+	if c.stdoutBuffer == nil {
+		return nil
+	}
 	return c.stdoutBuffer.Bytes()
 }
 
@@ -239,6 +248,9 @@ func (c *Cmd) Stdout() []byte {
 // Therefore, we need to be careful how we use stdout/stderr for now.
 // For example, if we use /showIncludes to stderr, it will be on stdout from a remote action.
 func (c *Cmd) Stderr() []byte {
+	if c.stderrBuffer == nil {
+		return nil
+	}
 	return c.stderrBuffer.Bytes()
 }
 
