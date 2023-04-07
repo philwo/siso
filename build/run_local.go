@@ -79,9 +79,6 @@ func (b *Builder) runLocal(ctx context.Context, step *Step) error {
 		step.Metrics.Done(ctx, step)
 		return err
 	})
-	if err != nil {
-		return err
-	}
 	if !errors.Is(err, context.Canceled) {
 		if step.Cmd.FileTrace != nil {
 			cerr := b.checkTrace(ctx, step, dur)
