@@ -194,7 +194,7 @@ func erespErr(ctx context.Context, eresp *rpb.ExecuteResponse) error {
 			// ctx is not canceled, but returned
 			// code = Aborted, context canceled
 			// in this case, it would be retriable.
-			clog.Warningf(ctx, "execute reponse: aborted %s, but ctx is still active", st)
+			clog.Warningf(ctx, "execute response: aborted %s, but ctx is still active", st)
 			if st.GetMessage() == "context canceled" {
 				st = proto.Clone(st).(*spb.Status)
 				// codes.Unavailable, so that rpc.Retry will retry.

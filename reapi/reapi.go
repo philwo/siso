@@ -88,7 +88,7 @@ func New(ctx context.Context, cred cred.Cred, opt Option) (*Client, error) {
 		return nil, errors.New("no reapi address")
 	}
 	if opt.Instance == "" {
-		return nil, errors.New("no reapi isntance")
+		return nil, errors.New("no reapi instance")
 	}
 	clog.Infof(ctx, "address: %q instance: %q", opt.Address, opt.Instance)
 

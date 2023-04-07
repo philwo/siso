@@ -1063,7 +1063,7 @@ func (e *entry) flush(ctx context.Context, fname string, m *iometrics.IOMetrics)
 // directory is per-directory entry map to reduce mutex contention.
 // TODO: use generics as DirMap<K,V>?
 type directory struct {
-	// m is a map of file in a directoy's basename to *entry.
+	// m is a map of file in a directory's basename to *entry.
 	m sync.Map
 }
 

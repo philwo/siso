@@ -302,7 +302,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 	case "minimum":
 		outputLocal = func(context.Context, string) bool { return false }
 	default:
-		return fmt.Errorf("unknown output local strategy:%q. should be full/greedy/minmum", c.outputLocalStrategy)
+		return fmt.Errorf("unknown output local strategy:%q. should be full/greedy/minimum", c.outputLocalStrategy)
 	}
 	wg.Wait() // wait for localDepsLog loading
 	if localDepsLog != nil {

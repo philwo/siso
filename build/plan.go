@@ -286,7 +286,7 @@ func (p *plan) pushReady() {
 	select {
 	case p.q <- p.ready[0]:
 		p.ready[0].QueueDuration = time.Since(p.ready[0].QueueTime)
-		// Deallocate p.ready[0] explcitily.
+		// Deallocate p.ready[0] explicitly.
 		copy(p.ready, p.ready[1:])
 		p.ready[len(p.ready)-1] = nil
 		p.ready = p.ready[:len(p.ready)-1]
