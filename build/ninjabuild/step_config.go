@@ -59,7 +59,7 @@ func (ii *IndirectInputs) filter(ctx context.Context) func(context.Context, stri
 			continue
 		}
 		if strings.HasPrefix(in, "*") && !strings.ContainsAny(in[1:], "*?[\\/") {
-			// just has * prefix, and no patterm meta or '/' in suffix.
+			// just has * prefix, and no pattern meta or '/' in suffix.
 			// just suffix match with base name.
 			suffix := in[1:]
 			m = append(m, func(ctx context.Context, p string, debug bool) bool {
@@ -189,8 +189,8 @@ type StepRule struct {
 
 	// Deps specifies deps type.
 	//
-	//   deps="gcc". Use `gcc -M` or deps log.
-	//   deps="msvc". Use `clang-cl /showIncludes` or deps log.
+	//   deps="gcc": Use `gcc -M` or deps log.
+	//   deps="msvc": Use `clang-cl /showIncludes` or deps log.
 	//   deps="depfile": Use `depfile` if `depfile` is specified.
 	//   deps="none": ignore deps of the step.
 	Deps string `json:"deps,omitempty"`
