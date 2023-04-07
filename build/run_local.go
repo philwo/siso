@@ -25,8 +25,8 @@ import (
 func (b *Builder) runLocal(ctx context.Context, step *Step) error {
 	ctx, span := trace.NewSpan(ctx, "run-local")
 	defer span.Close(nil)
-	clog.Infof(ctx, "run local %s", step.Cmd.Desc)
-	step.Cmd.RemoteWrapper = ""
+	clog.Infof(ctx, "run local %s", step.cmd.Desc)
+	step.cmd.RemoteWrapper = ""
 
 	step.SetPhase(stepInput)
 	// expand inputs to get full action inputs,
@@ -48,9 +48,9 @@ func (b *Builder) runLocal(ctx context.Context, step *Step) error {
 		// for the step too, but we want to disable
 		// file-access-trace only for the step with impure=true.
 		// http://b/261655377 errorprone_plugin_tests: too slow under strace?
-		impure := step.Def.Binding("impure") == "true"
+		impure := step.def.Binding("impure") == "true"
 		if !impure && enableTrace {
-			step.Cmd.FileTrace = &execute.FileTrace{}
+			step.cmd.FileTrace = &execute.FileTrace{}
 		} else {
 			clog.Warningf(ctx, "disable file-access-trace impure=%t file-access-trace=%t", impure, enableTrace)
 		}
@@ -64,23 +64,23 @@ func (b *Builder) runLocal(ctx context.Context, step *Step) error {
 		clog.Infof(ctx, "step state: local exec")
 		step.SetPhase(stepLocalRun)
 		started := time.Now()
-		err := b.localExec.Run(ctx, step.Cmd)
+		err := b.localExec.Run(ctx, step.cmd)
 		dur = time.Since(started)
 		step.SetPhase(stepOutput)
 		b.stats.localDone(ctx, err)
-		if step.Cmd.ActionResult() != nil {
-			if step.Cmd.ActionResult().ExecutionMetadata == nil {
-				step.Cmd.ActionResult().ExecutionMetadata = &rpb.ExecutedActionMetadata{}
+		if step.cmd.ActionResult() != nil {
+			if step.cmd.ActionResult().ExecutionMetadata == nil {
+				step.cmd.ActionResult().ExecutionMetadata = &rpb.ExecutedActionMetadata{}
 			}
-			step.Cmd.ActionResult().ExecutionMetadata.QueuedTimestamp = timestamppb.New(queueTime)
-			step.Cmd.ActionResult().ExecutionMetadata.WorkerStartTimestamp = timestamppb.New(started)
+			step.cmd.ActionResult().ExecutionMetadata.QueuedTimestamp = timestamppb.New(queueTime)
+			step.cmd.ActionResult().ExecutionMetadata.WorkerStartTimestamp = timestamppb.New(started)
 		}
-		step.Metrics.RunTime = IntervalMetric(time.Since(started))
-		step.Metrics.Done(ctx, step)
+		step.metrics.RunTime = IntervalMetric(time.Since(started))
+		step.metrics.done(ctx, step)
 		return err
 	})
 	if !errors.Is(err, context.Canceled) {
-		if step.Cmd.FileTrace != nil {
+		if step.cmd.FileTrace != nil {
 			cerr := b.checkTrace(ctx, step, dur)
 			if cerr != nil {
 				clog.Warningf(ctx, "failed to check trace %v", cerr)
@@ -109,13 +109,13 @@ func (b *Builder) runLocal(ctx context.Context, step *Step) error {
 func (b *Builder) prepareLocalInputs(ctx context.Context, step *Step) error {
 	ctx, span := trace.NewSpan(ctx, "prepare-local-inputs")
 	defer span.Close(nil)
-	inputs := step.Cmd.AllInputs()
+	inputs := step.cmd.AllInputs()
 	span.SetAttr("inputs", len(inputs))
 	start := time.Now()
 	if log.V(1) {
 		clog.Infof(ctx, "prepare-local-inputs %d", len(inputs))
 	}
-	err := b.hashFS.Flush(ctx, step.Cmd.ExecRoot, inputs)
+	err := b.hashFS.Flush(ctx, step.cmd.ExecRoot, inputs)
 	clog.Infof(ctx, "prepare-local-inputs %d %s: %v", len(inputs), time.Since(start), err)
 	return err
 }
@@ -125,7 +125,7 @@ func (b *Builder) prepareLocalOutdirs(ctx context.Context, step *Step) error {
 	defer span.Close(nil)
 
 	seen := make(map[string]bool)
-	for _, out := range step.Cmd.Outputs {
+	for _, out := range step.cmd.Outputs {
 		outdir := filepath.Dir(out)
 		if seen[outdir] {
 			continue
@@ -137,19 +137,19 @@ func (b *Builder) prepareLocalOutdirs(ctx context.Context, step *Step) error {
 		}
 		seen[outdir] = true
 	}
-	b.hashFS.Forget(ctx, b.path.ExecRoot, step.Cmd.Outputs)
+	b.hashFS.Forget(ctx, b.path.ExecRoot, step.cmd.Outputs)
 	return nil
 }
 
 func (b *Builder) captureLocalOutputs(ctx context.Context, step *Step) error {
 	ctx, span := trace.NewSpan(ctx, "capture-local-outputs")
 	defer span.Close(nil)
-	span.SetAttr("outputs", len(step.Cmd.Outputs))
-	result := step.Cmd.ActionResult()
+	span.SetAttr("outputs", len(step.cmd.Outputs))
+	result := step.cmd.ActionResult()
 	if result.GetExitCode() != 0 {
 		return nil
 	}
-	entries, err := step.Cmd.HashFS.Entries(ctx, step.Cmd.ExecRoot, step.Cmd.Outputs)
+	entries, err := step.cmd.HashFS.Entries(ctx, step.cmd.ExecRoot, step.cmd.Outputs)
 	if err != nil {
 		return fmt.Errorf("failed to get output fs entries %s: %w", step, err)
 	}
@@ -185,8 +185,8 @@ func argsForLogLocalExec(cmdArgs []string) []string {
 }
 
 func (b *Builder) logLocalExec(ctx context.Context, step *Step, dur time.Duration) {
-	args := argsForLogLocalExec(step.Cmd.Args)
-	allOutputs := step.Cmd.AllOutputs()
+	args := argsForLogLocalExec(step.cmd.Args)
+	allOutputs := step.cmd.AllOutputs()
 	var output string
 	if len(allOutputs) > 0 {
 		output = allOutputs[0]
@@ -197,8 +197,8 @@ action: %s %s
 args: %q %d
 
 `,
-		step, step.Cmd.Pure, step.Cmd.Restat, dur,
-		step.Cmd.ActionName, output,
+		step, step.cmd.Pure, step.cmd.Restat, dur,
+		step.cmd.ActionName, output,
 		args, dur.Milliseconds())
 	_, err := b.localexecLogWriter.Write(buf.Bytes())
 	if err != nil {

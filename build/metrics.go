@@ -95,20 +95,18 @@ type StepMetric struct {
 	Inputs  int `json:"inputs"`  // how many input files.
 	Outputs int `json:"outputs"` // how many output files.
 
-	// TODO(b/266518906): make this private after the migration.
-	Skip bool // whether the step was skipped during the build.
+	skip bool // whether the step was skipped during the build.
 }
 
-// TODO(b/266518906): make this private after the migration.
-func (m *StepMetric) Done(ctx context.Context, step *Step) {
+func (m *StepMetric) done(ctx context.Context, step *Step) {
 	m.WeightedDuration = IntervalMetric(step.getWeightedDuration())
-	m.Inputs = len(step.Cmd.Inputs)
-	m.Outputs = len(step.Cmd.Outputs)
+	m.Inputs = len(step.cmd.Inputs)
+	m.Outputs = len(step.cmd.Outputs)
 
-	m.CmdHash = hex.EncodeToString(step.Cmd.CmdHash)
-	m.Digest = step.Cmd.ActionDigest().String()
+	m.CmdHash = hex.EncodeToString(step.cmd.CmdHash)
+	m.Digest = step.cmd.ActionDigest().String()
 
-	md := step.Cmd.ActionResult().GetExecutionMetadata()
+	md := step.cmd.ActionResult().GetExecutionMetadata()
 	if !m.Cached {
 		m.QueueTime = IntervalMetric(md.GetWorkerStartTimestamp().AsTime().Sub(md.GetQueuedTimestamp().AsTime()))
 	}

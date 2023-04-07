@@ -250,8 +250,8 @@ func (s *scheduler) add(ctx context.Context, stepDef StepDef, waits []string) {
 		select {
 		case s.plan.q <- step:
 		default:
-			step.QueueTime = time.Now()
-			step.QueueSize = len(s.plan.ready)
+			step.queueTime = time.Now()
+			step.queueSize = len(s.plan.ready)
 			s.plan.ready = append(s.plan.ready, step)
 		}
 		return
@@ -285,7 +285,7 @@ func (p *plan) pushReady() {
 	}
 	select {
 	case p.q <- p.ready[0]:
-		p.ready[0].QueueDuration = time.Since(p.ready[0].QueueTime)
+		p.ready[0].queueDuration = time.Since(p.ready[0].queueTime)
 		// Deallocate p.ready[0] explicitly.
 		copy(p.ready, p.ready[1:])
 		p.ready[len(p.ready)-1] = nil
@@ -304,7 +304,7 @@ func (p *plan) done(ctx context.Context, step *Step, outs []string) {
 	for _, s := range p.ready {
 		select {
 		case p.q <- s:
-			s.QueueDuration = time.Since(s.QueueTime)
+			s.queueDuration = time.Since(s.queueTime)
 		default:
 			p.ready[i] = s
 			i++
@@ -334,8 +334,8 @@ func (p *plan) done(ctx context.Context, step *Step, outs []string) {
 				select {
 				case p.q <- s:
 				default:
-					s.QueueTime = time.Now()
-					s.QueueSize = len(ready)
+					s.queueTime = time.Now()
+					s.queueSize = len(ready)
 					ready = append(ready, s)
 				}
 				continue
@@ -393,7 +393,7 @@ func (p *plan) dump(ctx context.Context) {
 		}
 	}
 	for _, s := range steps {
-		for _, o := range s.Def.Outputs() {
+		for _, o := range s.def.Outputs() {
 			if !waits[o] {
 				clog.Infof(ctx, "step %s output:%s no trigger", s, o)
 				continue

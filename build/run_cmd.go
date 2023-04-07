@@ -20,11 +20,11 @@ import (
 // runCmdWithCache checks and returns the ActionResult cache,
 // or runs the command if the cache doesn't exist.
 func (b *Builder) runCmdWithCache(ctx context.Context, step *Step, allowLocalFallback bool) error {
-	dedupInputs(ctx, step.Cmd)
-	if b.cache != nil && step.Cmd.Pure && b.reCacheEnableRead {
+	dedupInputs(ctx, step.cmd)
+	if b.cache != nil && step.cmd.Pure && b.reCacheEnableRead {
 		err := b.cacheSema.Do(ctx, func(ctx context.Context) error {
 			start := time.Now()
-			err := b.cache.GetActionResult(ctx, step.Cmd)
+			err := b.cache.GetActionResult(ctx, step.cmd)
 			if err != nil {
 				return err
 			}
@@ -34,9 +34,9 @@ func (b *Builder) runCmdWithCache(ctx context.Context, step *Step, allowLocalFal
 			}
 			b.stats.cacheHit(ctx)
 			b.progressStepCacheHit(ctx, step)
-			step.Metrics.Cached = true
-			step.Metrics.RunTime = IntervalMetric(time.Since(start))
-			step.Metrics.Done(ctx, step)
+			step.metrics.Cached = true
+			step.metrics.RunTime = IntervalMetric(time.Since(start))
+			step.metrics.done(ctx, step)
 			// need to update deps for cache hit for deps=gcc, msvc.
 			// even if cache hit, deps should be updated with gcc depsfile,
 			// or with msvc showIncludes outputs.
@@ -69,9 +69,9 @@ func (b *Builder) runCmd(ctx context.Context, step *Step, allowLocalFallback boo
 	ctx, span := trace.NewSpan(ctx, "run")
 	defer span.Close(nil)
 	if log.V(1) {
-		clog.Infof(ctx, "run %s [allow-localfallback=%t]", step.Cmd.Desc, allowLocalFallback)
+		clog.Infof(ctx, "run %s [allow-localfallback=%t]", step.cmd.Desc, allowLocalFallback)
 	}
-	if step.Cmd.Pure && len(step.Cmd.Platform) > 0 && step.Cmd.Platform["container-image"] != "" && b.remoteExec != nil {
+	if step.cmd.Pure && len(step.cmd.Platform) > 0 && step.cmd.Platform["container-image"] != "" && b.remoteExec != nil {
 		err := b.runRemote(ctx, step)
 		if err == nil {
 			// need to check remote outptus matches cmd.Outputs?
@@ -94,7 +94,7 @@ func (b *Builder) runCmd(ctx context.Context, step *Step, allowLocalFallback boo
 		if experiments.Enabled("no-fallback", "remote-exec %s failed. no-fallback", step) {
 			return fmt.Errorf("remote-exec %s failed. no-fallback: %w", step, err)
 		}
-		step.Metrics.Fallback = true
+		step.metrics.Fallback = true
 	}
 	if !allowLocalFallback {
 		return errors.New("no allow-localfallback")

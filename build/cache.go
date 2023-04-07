@@ -50,8 +50,7 @@ type Cache struct {
 	store      CacheStore
 	enableRead bool
 
-	// TODO(b/266518906): make this private after the migration.
-	Sema *semaphore.Semaphore
+	sema *semaphore.Semaphore
 
 	m *iometrics.IOMetrics
 }
@@ -69,7 +68,7 @@ func NewCache(ctx context.Context, opts CacheOptions) (*Cache, error) {
 		enableRead: opts.EnableRead,
 
 		// TODO(b/274038010): cache-digest semaphore should share with execute/remotecache?
-		Sema: semaphore.New("cache-digest", runtime.NumCPU()*10),
+		sema: semaphore.New("cache-digest", runtime.NumCPU()*10),
 
 		m: iometrics.New("cache-content"),
 	}, nil
@@ -88,7 +87,7 @@ func (c *Cache) GetActionResult(ctx context.Context, cmd *execute.Cmd) error {
 	defer span.Close(nil)
 
 	var d digest.Digest
-	err := c.Sema.Do(ctx, func(ctx context.Context) error {
+	err := c.sema.Do(ctx, func(ctx context.Context) error {
 		var err error
 		d, err = cmd.Digest(ctx, nil)
 		return err

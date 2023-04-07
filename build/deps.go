@@ -37,18 +37,18 @@ var depsProcessors = map[string]depsProcessor{
 }
 
 func depsFastStep(ctx context.Context, b *Builder, step *Step) (*Step, error) {
-	ds, found := depsProcessors[step.Cmd.Deps]
+	ds, found := depsProcessors[step.cmd.Deps]
 	if !found {
-		return nil, fmt.Errorf("no fast-deps (deps=%q depfile=%q)", step.Cmd.Deps, step.Cmd.Depfile)
+		return nil, fmt.Errorf("no fast-deps (deps=%q depfile=%q)", step.cmd.Deps, step.cmd.Depfile)
 	}
-	depsIns, err := step.Def.DepInputs(ctx)
+	depsIns, err := step.def.DepInputs(ctx)
 	if err != nil {
-		depsIns, err = fastDepsLogInputs(ctx, b, step.Cmd)
+		depsIns, err = fastDepsLogInputs(ctx, b, step.cmd)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get fast deps log (deps=%q): %v", step.Cmd.Deps, err)
+			return nil, fmt.Errorf("failed to get fast deps log (deps=%q): %v", step.cmd.Deps, err)
 		}
 	}
-	newCmd, err := ds.DepsFastCmd(ctx, b, step.Cmd)
+	newCmd, err := ds.DepsFastCmd(ctx, b, step.cmd)
 	if err != nil {
 		return nil, err
 	}
@@ -56,22 +56,22 @@ func depsFastStep(ctx context.Context, b *Builder, step *Step) (*Step, error) {
 
 	// Inputs may contains unnecessary inputs.
 	// just needs ToolInputs.
-	stepInputs := step.Cmd.ToolInputs
-	if step.Cmd.Platform["OSFamily"] != "Windows" {
-		depsIns = step.Def.ExpandCaseSensitives(ctx, depsIns)
+	stepInputs := step.cmd.ToolInputs
+	if step.cmd.Platform["OSFamily"] != "Windows" {
+		depsIns = step.def.ExpandCaseSensitives(ctx, depsIns)
 	}
 	inputs, err := fixInputsByDeps(ctx, b, stepInputs, depsIns)
 	if err != nil {
 		clog.Warningf(ctx, "failed to fix inputs by deps: %v", err)
 		return nil, err
 	}
-	clog.Infof(ctx, "fix inputs by deps %d -> %d", len(step.Cmd.Inputs), len(inputs))
+	clog.Infof(ctx, "fix inputs by deps %d -> %d", len(step.cmd.Inputs), len(inputs))
 	newCmd.Inputs = inputs
 	newCmd.Pure = true
 	fastStep := &Step{}
 	*fastStep = *step
-	fastStep.Cmd = newCmd
-	fastStep.FastDeps = true
+	fastStep.cmd = newCmd
+	fastStep.fastDeps = true
 	return fastStep, nil
 }
 
@@ -80,18 +80,18 @@ func depsExpandInputs(ctx context.Context, b *Builder, step *Step) {
 	defer span.Close(nil)
 	// deps=gcc, msvc will get correct inputs from deps log,
 	// so no need to expand inputs here.
-	switch step.Cmd.Deps {
+	switch step.cmd.Deps {
 	case "gcc", "msvc":
 	default:
-		if step.Def.Binding("siso_handler") != "" {
+		if step.def.Binding("siso_handler") != "" {
 			// already expanded before handle.
 			return
 		}
-		oldlen := len(step.Cmd.Inputs)
-		expanded := step.Def.ExpandedInputs(ctx)
+		oldlen := len(step.cmd.Inputs)
+		expanded := step.def.ExpandedInputs(ctx)
 		inputs := make([]string, 0, oldlen+len(expanded))
 		seen := make(map[string]bool)
-		for _, in := range step.Cmd.Inputs {
+		for _, in := range step.cmd.Inputs {
 			if seen[in] {
 				continue
 			}
@@ -109,61 +109,61 @@ func depsExpandInputs(ctx context.Context, b *Builder, step *Step) {
 			}
 			inputs = append(inputs, in)
 		}
-		clog.Infof(ctx, "deps expands %d -> %d", len(step.Cmd.Inputs), len(inputs))
-		step.Cmd.Inputs = make([]string, len(inputs))
-		copy(step.Cmd.Inputs, inputs)
+		clog.Infof(ctx, "deps expands %d -> %d", len(step.cmd.Inputs), len(inputs))
+		step.cmd.Inputs = make([]string, len(inputs))
+		copy(step.cmd.Inputs, inputs)
 	}
 }
 
 func depsFixCmd(ctx context.Context, b *Builder, step *Step, deps []string) {
-	stepInputs := step.Def.Inputs(ctx) // use ToolInputs?
-	if step.Cmd.Platform["OSFamily"] != "Windows" {
-		deps = step.Def.ExpandCaseSensitives(ctx, deps)
+	stepInputs := step.def.Inputs(ctx) // use ToolInputs?
+	if step.cmd.Platform["OSFamily"] != "Windows" {
+		deps = step.def.ExpandCaseSensitives(ctx, deps)
 	}
 	inputs, err := fixInputsByDeps(ctx, b, stepInputs, deps)
 	if err != nil {
 		clog.Warningf(ctx, "fix inputs by deps: %v", err)
-		step.Cmd.Pure = false
+		step.cmd.Pure = false
 		return
 	}
-	step.Cmd.Inputs = inputs
-	step.Cmd.Pure = true
+	step.cmd.Inputs = inputs
+	step.cmd.Pure = true
 }
 
 func depsCmd(ctx context.Context, b *Builder, step *Step) error {
-	ds, found := depsProcessors[step.Cmd.Deps]
+	ds, found := depsProcessors[step.cmd.Deps]
 	if found {
 		start := time.Now()
 		// TODO: same as depsFastStep
 		var stepInputs []string
-		switch step.Cmd.Deps {
+		switch step.cmd.Deps {
 		case "gcc", "msvc":
 			// Inputs may contains unnecessary inputs.
 			// just needs ToolInputs for deps=gcc, msvc.
-			stepInputs = step.Cmd.ToolInputs
+			stepInputs = step.cmd.ToolInputs
 		default:
-			stepInputs = step.Def.Inputs(ctx) // use ToolInputs?
+			stepInputs = step.def.Inputs(ctx) // use ToolInputs?
 		}
 		depsIns, err := ds.DepsCmd(ctx, b, step)
-		if step.Cmd.Platform["OSFamily"] != "Windows" {
-			depsIns = step.Def.ExpandCaseSensitives(ctx, depsIns)
+		if step.cmd.Platform["OSFamily"] != "Windows" {
+			depsIns = step.def.ExpandCaseSensitives(ctx, depsIns)
 		}
 		inputs := uniqueFiles(stepInputs, depsIns)
-		clog.Infof(ctx, "%s-deps %d %s: %v", step.Cmd.Deps, len(inputs), time.Since(start), err)
+		clog.Infof(ctx, "%s-deps %d %s: %v", step.cmd.Deps, len(inputs), time.Since(start), err)
 		if err != nil {
 			return err
 		}
-		step.Cmd.Inputs = inputs
+		step.cmd.Inputs = inputs
 		// DepsCmd should set Pure=true or false.
 	}
 	return nil
 }
 
 func depsAfterRun(ctx context.Context, b *Builder, step *Step) ([]string, error) {
-	ds, found := depsProcessors[step.Cmd.Deps]
+	ds, found := depsProcessors[step.cmd.Deps]
 	if !found {
 		if log.V(1) {
-			clog.Infof(ctx, "update deps; unexpected deps=%q", step.Cmd.Deps)
+			clog.Infof(ctx, "update deps; unexpected deps=%q", step.cmd.Deps)
 		}
 		return nil, nil
 	}
@@ -171,11 +171,11 @@ func depsAfterRun(ctx context.Context, b *Builder, step *Step) ([]string, error)
 	if err != nil {
 		return nil, err
 	}
-	if step.Cmd.Platform["InputRootAbsolutePath"] == "" {
+	if step.cmd.Platform["InputRootAbsolutePath"] == "" {
 		for _, dep := range deps {
 			if filepath.IsAbs(dep) {
-				clog.Warningf(ctx, "update deps: abs path in deps %s in depfile=%s. use input_root_absolute_path. platform=%v", dep, step.Cmd.Depfile, step.Cmd.Platform)
-				if step.Cmd.Pure {
+				clog.Warningf(ctx, "update deps: abs path in deps %s in depfile=%s. use input_root_absolute_path. platform=%v", dep, step.cmd.Depfile, step.cmd.Platform)
+				if step.cmd.Pure {
 					return nil, fmt.Errorf("absolute path in deps %s of %s: use input_root_absolute_path=true: %w", dep, step, errNotRelocatable)
 				}
 			}

@@ -46,24 +46,24 @@ import (
 func (b *Builder) checkTrace(ctx context.Context, step *Step, dur time.Duration) error {
 	ctx, span := trace.NewSpan(ctx, "check-trace")
 	defer span.Close(nil)
-	args := argsForLogLocalExec(step.Cmd.Args)
-	allInputs := step.Cmd.AllInputs()
-	allOutputs := step.Cmd.AllOutputs()
+	args := argsForLogLocalExec(step.cmd.Args)
+	allInputs := step.cmd.AllInputs()
+	allOutputs := step.cmd.AllOutputs()
 	var output string
 	if len(allOutputs) > 0 {
 		output = allOutputs[0]
 	}
 	var inouts []string
-	if step.Cmd.Restat {
+	if step.cmd.Restat {
 		inouts = allOutputs
 		allOutputs = nil
 	}
-	inadds, indels, inplatforms, inerrs := filesDiff(ctx, b, allInputs, inouts, step.Cmd.FileTrace.Inputs, step.Def.Binding("ignore_extra_input_pattern"))
-	outadds, outdels, outplatforms, outerrs := filesDiff(ctx, b, allOutputs, inouts, step.Cmd.FileTrace.Outputs, step.Def.Binding("ignore_extra_output_pattern"))
+	inadds, indels, inplatforms, inerrs := filesDiff(ctx, b, allInputs, inouts, step.cmd.FileTrace.Inputs, step.def.Binding("ignore_extra_input_pattern"))
+	outadds, outdels, outplatforms, outerrs := filesDiff(ctx, b, allOutputs, inouts, step.cmd.FileTrace.Outputs, step.def.Binding("ignore_extra_output_pattern"))
 	clog.Infof(ctx, "check-trace inputs=%d+%d+%d=>%d+%d+%d outputs=%d+%d+%d=>%d+%d+%d",
-		len(allInputs), len(inouts), len(step.Cmd.FileTrace.Inputs),
+		len(allInputs), len(inouts), len(step.cmd.FileTrace.Inputs),
 		len(inadds), len(indels), len(inplatforms),
-		len(allOutputs), len(inouts), len(step.Cmd.FileTrace.Outputs),
+		len(allOutputs), len(inouts), len(step.cmd.FileTrace.Outputs),
 		len(outadds), len(outdels), len(outplatforms))
 
 	if len(inerrs) > 0 {
@@ -84,8 +84,8 @@ in:%d in/out:%d out:%d
 inerr:%d outerr:%d
 
 `,
-			step, step.Cmd.Pure, step.Cmd.Restat, dur,
-			step.Cmd.ActionName, output,
+			step, step.cmd.Pure, step.cmd.Restat, dur,
+			step.cmd.ActionName, output,
 			args, dur.Milliseconds(),
 			len(allInputs), len(inouts), len(allOutputs),
 			len(inerrs), len(outerrs))
@@ -110,8 +110,8 @@ outputs:
 -%s
 
 `,
-			step, step.Cmd.Pure, step.Cmd.Restat, dur,
-			step.Cmd.ActionName, output,
+			step, step.cmd.Pure, step.cmd.Restat, dur,
+			step.cmd.ActionName, output,
 			args, dur.Milliseconds(),
 			len(allInputs), len(inouts), len(allOutputs),
 			strings.Join(indels, "\n-"),
@@ -129,7 +129,7 @@ outputs:
 		strings.Join(outerrs, "\n?"))
 	log.V(1).Infof("%s trace-diff-platform\ninputs\n %s\noutputs\n %s", step, strings.Join(inplatforms, "\n "), strings.Join(outplatforms, "\n "))
 
-	ruleBuf := step.Def.RuleFix(ctx, inadds, outadds)
+	ruleBuf := step.def.RuleFix(ctx, inadds, outadds)
 
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, `cmd: %s pure:%t/false restat:%t %s
@@ -149,8 +149,8 @@ allInputs:
  %s
 
 `,
-		step, step.Cmd.Pure, step.Cmd.Restat, dur,
-		step.Cmd.ActionName, output,
+		step, step.cmd.Pure, step.cmd.Restat, dur,
+		step.cmd.ActionName, output,
 		args, dur.Milliseconds(),
 		len(allInputs), len(inouts), len(allOutputs),
 		len(inerrs), len(outerrs),
@@ -161,8 +161,8 @@ allInputs:
 		ruleBuf,
 		strings.Join(allInputs, "\n "))
 	b.localexecLogWriter.Write(buf.Bytes())
-	if step.Cmd.Pure {
-		clog.Warningf(ctx, "impure cmd deps=%q marked as pure", step.Cmd.Deps)
+	if step.cmd.Pure {
+		clog.Warningf(ctx, "impure cmd deps=%q marked as pure", step.cmd.Deps)
 		return depsImpureCheck(ctx, step, args)
 	}
 	return nil
@@ -264,13 +264,13 @@ func filesDiff(ctx context.Context, b *Builder, x, opts, y []string, ignorePatte
 
 func depsImpureCheck(ctx context.Context, step *Step, args []string) error {
 	// deps="gcc","msvc" doesn't use file access. new *.d will have correct deps.
-	switch step.Cmd.Deps {
+	switch step.cmd.Deps {
 	case "gcc", "msvc":
 		return nil
 	default:
-		if experiments.Enabled("keep-going-impure", "impure cmd %s %s %q marked as pure", step, step.Cmd.ActionName, args) {
+		if experiments.Enabled("keep-going-impure", "impure cmd %s %s %q marked as pure", step, step.cmd.ActionName, args) {
 			return nil
 		}
 	}
-	return fmt.Errorf("impure cmd %s %s %q marked as pure", step, step.Cmd.ActionName, args)
+	return fmt.Errorf("impure cmd %s %s %q marked as pure", step, step.cmd.ActionName, args)
 }

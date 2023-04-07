@@ -24,8 +24,8 @@ func (b *Builder) checkUpToDate(ctx context.Context, step *Step) bool {
 	ctx, span := trace.NewSpan(ctx, "mtime-check")
 	defer span.Close(nil)
 
-	out0, outmtime, cmdhash := outputMtime(ctx, b, step.Cmd)
-	lastIn, inmtime, err := inputMtime(ctx, b, step.Cmd)
+	out0, outmtime, cmdhash := outputMtime(ctx, b, step.cmd)
+	lastIn, inmtime, err := inputMtime(ctx, b, step.cmd)
 	if err != nil {
 		// missing inputs in deps file? maybe need to rebuild.
 		clog.Infof(ctx, "need: %v", err)
@@ -44,8 +44,8 @@ func (b *Builder) checkUpToDate(ctx context.Context, step *Step) bool {
 		clog.Infof(ctx, "need: in:%s > out:%s %s: in:%s out:%s", lastIn, out0, inmtime.Sub(outmtime), inmtime, outmtime)
 		span.SetAttr("run-reason", "dirty")
 		return false
-	} else if !bytes.Equal(cmdhash, step.Cmd.CmdHash) {
-		clog.Infof(ctx, "need: cmdhash differ %q -> %q", hex.EncodeToString(cmdhash), hex.EncodeToString(step.Cmd.CmdHash))
+	} else if !bytes.Equal(cmdhash, step.cmd.CmdHash) {
+		clog.Infof(ctx, "need: cmdhash differ %q -> %q", hex.EncodeToString(cmdhash), hex.EncodeToString(step.cmd.CmdHash))
 		span.SetAttr("run-reason", "cmdhash-update")
 		return false
 	}

@@ -22,23 +22,23 @@ func (depsDepfile) DepsFastCmd(ctx context.Context, b *Builder, cmd *execute.Cmd
 }
 
 func (depsDepfile) DepsAfterRun(ctx context.Context, b *Builder, step *Step) ([]string, error) {
-	_, err := b.hashFS.Stat(ctx, b.path.ExecRoot, step.Cmd.Depfile)
+	_, err := b.hashFS.Stat(ctx, b.path.ExecRoot, step.cmd.Depfile)
 	if err != nil {
 		return nil, err
 	}
 	fsys := b.hashFS.FileSystem(ctx, b.path.ExecRoot)
-	depins, err := makeutil.ParseDepsFile(ctx, fsys, step.Cmd.Depfile)
+	depins, err := makeutil.ParseDepsFile(ctx, fsys, step.cmd.Depfile)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load depfile %s: %w", step.Cmd.Depfile, err)
+		return nil, fmt.Errorf("failed to load depfile %s: %w", step.cmd.Depfile, err)
 	}
-	clog.Infof(ctx, "depfile %s: %d", step.Cmd.Depfile, len(depins))
+	clog.Infof(ctx, "depfile %s: %d", step.cmd.Depfile, len(depins))
 	return depins, nil
 }
 
 func (depsDepfile) DepsCmd(ctx context.Context, b *Builder, step *Step) ([]string, error) {
 	// depfile can use "remote" only for fastDeps case.
 	// Otherwise, should disable "remote"
-	clog.Infof(ctx, "deps= depfile=%s. no pure, no remote", step.Cmd.Depfile)
-	step.Cmd.Pure = false
-	return step.Cmd.Inputs, nil
+	clog.Infof(ctx, "deps= depfile=%s. no pure, no remote", step.cmd.Depfile)
+	step.cmd.Pure = false
+	return step.cmd.Inputs, nil
 }

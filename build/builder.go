@@ -380,7 +380,7 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 		b.localSema,
 		b.remoteSema,
 		b.cacheSema,
-		b.cache.Sema,
+		b.cache.sema,
 		gccutil.Semaphore,
 		hashfs.FlushSemaphore,
 		msvcutil.Semaphore,
@@ -462,51 +462,51 @@ loop:
 			defer wg.Done()
 			defer done()
 			stepStart := time.Now()
-			tc := trace.New(ctx, step.Def.String())
+			tc := trace.New(ctx, step.def.String())
 			ctx := trace.NewContext(ctx, tc)
-			spanName := stepSpanName(step.Def)
+			spanName := stepSpanName(step.def)
 			ctx, span := trace.NewSpan(ctx, "step:"+spanName)
 			traceID, spanID := span.ID(b.projectID)
 			sctx := clog.NewSpan(ctx, traceID, spanID, map[string]string{
-				"id": step.Def.String(),
+				"id": step.def.String(),
 			})
 			logger := clog.FromContext(sctx)
 			if logger.Formatter == nil {
 				logger.Formatter = logFormat
 			}
-			logEntry := logger.Entry(logging.Info, step.Def.Binding("description"))
+			logEntry := logger.Entry(logging.Info, step.def.Binding("description"))
 			logEntry.Labels = map[string]string{
-				"id":          step.Def.String(),
-				"command":     step.Def.Binding("command"),
-				"description": step.Def.Binding("description"),
-				"action":      step.Def.ActionName(),
+				"id":          step.def.String(),
+				"command":     step.def.Binding("command"),
+				"description": step.def.Binding("description"),
+				"action":      step.def.ActionName(),
 				"span_name":   spanName,
-				"output0":     step.Def.Outputs()[0],
+				"output0":     step.def.Outputs()[0],
 			}
 			logger.Log(logEntry)
-			step.Metrics.BuildID = b.id
-			step.Metrics.StepID = step.Def.String()
-			step.Metrics.Action = step.Def.ActionName()
-			step.Metrics.Output = step.Def.Outputs()[0]
-			step.Metrics.PrevStepID = step.PrevStepID
-			step.Metrics.PrevStepOut = step.PrevStepOut
-			step.Metrics.Ready = IntervalMetric(step.ReadyTime.Sub(started))
-			step.Metrics.Start = IntervalMetric(stepStart.Sub(step.ReadyTime))
+			step.metrics.BuildID = b.id
+			step.metrics.StepID = step.def.String()
+			step.metrics.Action = step.def.ActionName()
+			step.metrics.Output = step.def.Outputs()[0]
+			step.metrics.PrevStepID = step.prevStepID
+			step.metrics.PrevStepOut = step.prevStepOut
+			step.metrics.Ready = IntervalMetric(step.readyTime.Sub(started))
+			step.metrics.Start = IntervalMetric(stepStart.Sub(step.readyTime))
 
-			span.SetAttr("ready_time", time.Since(step.ReadyTime).Milliseconds())
-			span.SetAttr("prev", step.PrevStepID)
-			span.SetAttr("prev_out", step.PrevStepOut)
-			span.SetAttr("queue_time", time.Since(step.QueueTime).Milliseconds())
-			span.SetAttr("queue_size", step.QueueSize)
+			span.SetAttr("ready_time", time.Since(step.readyTime).Milliseconds())
+			span.SetAttr("prev", step.prevStepID)
+			span.SetAttr("prev_out", step.prevStepOut)
+			span.SetAttr("queue_time", time.Since(step.queueTime).Milliseconds())
+			span.SetAttr("queue_size", step.queueSize)
 			span.SetAttr("build_id", b.id)
-			span.SetAttr("id", step.Def.String())
-			span.SetAttr("command", step.Def.Binding("command"))
-			span.SetAttr("description", step.Def.Binding("description"))
-			span.SetAttr("action", step.Def.ActionName())
+			span.SetAttr("id", step.def.String())
+			span.SetAttr("command", step.def.Binding("command"))
+			span.SetAttr("description", step.def.Binding("description"))
+			span.SetAttr("action", step.def.ActionName())
 			span.SetAttr("span_name", spanName)
-			span.SetAttr("output0", step.Def.Outputs()[0])
-			if next := step.Def.Next(); next != nil {
-				span.SetAttr("next_id", step.Def.Next().String())
+			span.SetAttr("output0", step.def.Outputs()[0])
+			if next := step.def.Next(); next != nil {
+				span.SetAttr("next_id", step.def.Next().String())
 			}
 			span.SetAttr("backtraces", stepBacktraces(step))
 			err := b.runStep(sctx, step)
@@ -514,14 +514,14 @@ loop:
 			duration := time.Since(stepStart)
 			stepLogEntry(sctx, logger, step, duration, err)
 
-			if !step.Def.IsPhony() && !step.Metrics.Skip {
+			if !step.def.IsPhony() && !step.metrics.skip {
 				// $ cat siso_metrcis.json |
 				//     jq --slurp 'sort_by(.duration)|reverse'
 				//
 				//     jq --slurp 'sort_by(.duration) | reverse | .[] | select(.cached==false)'
-				step.Metrics.Duration = IntervalMetric(duration)
-				step.Metrics.Err = err != nil
-				mb, err := json.Marshal(step.Metrics)
+				step.metrics.Duration = IntervalMetric(duration)
+				step.metrics.Err = err != nil
+				mb, err := json.Marshal(step.metrics)
 				if err != nil {
 					clog.Warningf(ctx, "metrics marshal err: %v", err)
 				} else {
@@ -539,7 +539,7 @@ loop:
 			// TODO(b/267576561): export trace
 			b.tracePprof.Add(ctx, tc)
 			tc = nil
-			step.Cmd = nil
+			step.cmd = nil
 			if err != nil {
 				select {
 				case <-ctx.Done():
@@ -616,8 +616,8 @@ func dedupInputs(ctx context.Context, cmd *execute.Cmd) {
 func (b *Builder) outputs(ctx context.Context, step *Step) error {
 	ctx, span := trace.NewSpan(ctx, "outputs")
 	defer span.Close(nil)
-	span.SetAttr("outputs", len(step.Cmd.Outputs))
-	localOutputs := step.Def.LocalOutputs()
+	span.SetAttr("outputs", len(step.cmd.Outputs))
+	localOutputs := step.def.LocalOutputs()
 	span.SetAttr("outputs-local", len(localOutputs))
 	seen := make(map[string]bool)
 	for _, o := range localOutputs {
@@ -627,11 +627,11 @@ func (b *Builder) outputs(ctx context.Context, step *Step) error {
 		seen[o] = true
 	}
 
-	clog.Infof(ctx, "outputs %d->%d", len(step.Cmd.Outputs), len(localOutputs))
-	allowMissing := step.Def.Binding("allow_missing_outputs") != ""
+	clog.Infof(ctx, "outputs %d->%d", len(step.cmd.Outputs), len(localOutputs))
+	allowMissing := step.def.Binding("allow_missing_outputs") != ""
 	// need to check against step.cmd.Outputs, not step.def.Outputs, since
 	// handler may add to step.cmd.Outputs.
-	for _, out := range step.Cmd.Outputs {
+	for _, out := range step.cmd.Outputs {
 		// force to output local for inputs
 		// .h,/.hxx/.hpp/.inc/.c/.cc/.cxx/.cpp/.m/.mm for gcc deps or msvc showIncludes
 		// .json/.js/.ts for tsconfig.json, .js for grit etc.
@@ -650,7 +650,7 @@ func (b *Builder) outputs(ctx context.Context, step *Step) error {
 			localOutputs = append(localOutputs, out)
 			seen[out] = true
 		}
-		_, err := b.hashFS.Stat(ctx, step.Cmd.ExecRoot, out)
+		_, err := b.hashFS.Stat(ctx, step.cmd.ExecRoot, out)
 		if err != nil {
 			if allowMissing {
 				clog.Warningf(ctx, "missing outputs %s: %v", out, err)
@@ -668,7 +668,7 @@ func (b *Builder) outputs(ctx context.Context, step *Step) error {
 		}
 	}
 	if len(localOutputs) > 0 {
-		err := b.hashFS.Flush(ctx, step.Cmd.ExecRoot, localOutputs)
+		err := b.hashFS.Flush(ctx, step.cmd.ExecRoot, localOutputs)
 		if err != nil {
 			return fmt.Errorf("failed to flush outputs to local: %w", err)
 		}
@@ -678,25 +678,25 @@ func (b *Builder) outputs(ctx context.Context, step *Step) error {
 
 // progressStepCacheHit shows progress of the cache hit step.
 func (b *Builder) progressStepCacheHit(ctx context.Context, step *Step) {
-	b.progress.step(ctx, b, step, "c "+step.Cmd.Desc)
+	b.progress.step(ctx, b, step, "c "+step.cmd.Desc)
 }
 
 // progressStepSkipped shows progress of the skipped step.
 func (b *Builder) progressStepSkipped(ctx context.Context, step *Step) {
-	b.progress.step(ctx, b, step, "- "+step.Cmd.Desc)
+	b.progress.step(ctx, b, step, "- "+step.cmd.Desc)
 }
 
 // progressStepStarted shows progress of the started step.
 func (b *Builder) progressStepStarted(ctx context.Context, step *Step) {
 	step.SetPhase(stepStart)
-	step.StartTime = time.Now()
-	b.progress.step(ctx, b, step, "S "+step.Cmd.Desc)
+	step.startTime = time.Now()
+	b.progress.step(ctx, b, step, "S "+step.cmd.Desc)
 }
 
 // progressStepFinished shows progress of the finished step.
 func (b *Builder) progressStepFinished(ctx context.Context, step *Step) {
 	step.SetPhase(stepDone)
-	b.progress.step(ctx, b, step, "F "+step.Cmd.Desc)
+	b.progress.step(ctx, b, step, "F "+step.cmd.Desc)
 }
 
 var errNotRelocatable = errors.New("request is not relocatable")
@@ -704,18 +704,18 @@ var errNotRelocatable = errors.New("request is not relocatable")
 func (b *Builder) updateDeps(ctx context.Context, step *Step) error {
 	ctx, span := trace.NewSpan(ctx, "update-deps")
 	defer span.Close(nil)
-	if len(step.Cmd.Outputs) == 0 {
+	if len(step.cmd.Outputs) == 0 {
 		clog.Warningf(ctx, "update deps: no outputs")
 		return nil
 	}
-	output, err := filepath.Rel(step.Cmd.Dir, step.Cmd.Outputs[0])
+	output, err := filepath.Rel(step.cmd.Dir, step.cmd.Outputs[0])
 	if err != nil {
-		clog.Warningf(ctx, "update deps: failed to get rel %s,%s: %v", step.Cmd.Dir, step.Cmd.Outputs[0], err)
+		clog.Warningf(ctx, "update deps: failed to get rel %s,%s: %v", step.cmd.Dir, step.cmd.Outputs[0], err)
 		return nil
 	}
-	fi, err := b.hashFS.Stat(ctx, step.Cmd.ExecRoot, step.Cmd.Outputs[0])
+	fi, err := b.hashFS.Stat(ctx, step.cmd.ExecRoot, step.cmd.Outputs[0])
 	if err != nil {
-		clog.Warningf(ctx, "update deps: missing outputs %s: %v", step.Cmd.Outputs[0], err)
+		clog.Warningf(ctx, "update deps: missing outputs %s: %v", step.cmd.Outputs[0], err)
 		return nil
 	}
 	deps, err := depsAfterRun(ctx, b, step)
@@ -727,18 +727,18 @@ func (b *Builder) updateDeps(ctx context.Context, step *Step) error {
 		return nil
 	}
 	var updated bool
-	if step.FastDeps {
+	if step.fastDeps {
 		// if fastDeps case, we already know the correct deps for this cmd.
 		// just update for local deps log for incremental build.
-		updated, err = step.Def.RecordDeps(ctx, output, fi.ModTime(), deps)
+		updated, err = step.def.RecordDeps(ctx, output, fi.ModTime(), deps)
 	} else {
 		// otherwise, update both local and shared.
-		updated, err = b.recordDepsLog(ctx, step.Def, output, step.Cmd.CmdHash, fi.ModTime(), deps)
+		updated, err = b.recordDepsLog(ctx, step.def, output, step.cmd.CmdHash, fi.ModTime(), deps)
 	}
 	if err != nil {
-		clog.Warningf(ctx, "update deps: failed to record deps %s, %s, %s, %s: %v", output, hex.EncodeToString(step.Cmd.CmdHash), fi.ModTime(), deps, err)
+		clog.Warningf(ctx, "update deps: failed to record deps %s, %s, %s, %s: %v", output, hex.EncodeToString(step.cmd.CmdHash), fi.ModTime(), deps, err)
 	}
-	clog.Infof(ctx, "update deps=%s: %s %s %d updated:%t pure:%t/%t->true", step.Cmd.Deps, output, hex.EncodeToString(step.Cmd.CmdHash), len(deps), updated, step.Cmd.Pure, step.Cmd.Pure)
+	clog.Infof(ctx, "update deps=%s: %s %s %d updated:%t pure:%t/%t->true", step.cmd.Deps, output, hex.EncodeToString(step.cmd.CmdHash), len(deps), updated, step.cmd.Pure, step.cmd.Pure)
 	span.SetAttr("deps", len(deps))
 	span.SetAttr("updated", updated)
 	for i := range deps {
@@ -752,7 +752,7 @@ func (b *Builder) phonyDone(ctx context.Context, step *Step) error {
 	if log.V(1) {
 		clog.Infof(ctx, "step phony %s", step)
 	}
-	b.plan.done(ctx, step, step.Def.Outputs())
+	b.plan.done(ctx, step, step.def.Outputs())
 	return nil
 }
 
@@ -760,14 +760,14 @@ func (b *Builder) done(ctx context.Context, step *Step) error {
 	ctx, span := trace.NewSpan(ctx, "done")
 	defer span.Close(nil)
 	var outputs []string
-	allowMissing := step.Def.Binding("allow_missing_outputs") != ""
-	for _, out := range step.Cmd.Outputs {
+	allowMissing := step.def.Binding("allow_missing_outputs") != ""
+	for _, out := range step.cmd.Outputs {
 		out := out
 		var mtime time.Time
 		if log.V(1) {
 			clog.Infof(ctx, "output -> %s", out)
 		}
-		fi, err := b.hashFS.Stat(ctx, step.Cmd.ExecRoot, out)
+		fi, err := b.hashFS.Stat(ctx, step.cmd.ExecRoot, out)
 		if err != nil {
 			if allowMissing {
 				clog.Warningf(ctx, "missing output %s: %v", out, err)
@@ -785,7 +785,7 @@ func (b *Builder) done(ctx context.Context, step *Step) error {
 		}
 		outputs = append(outputs, out)
 	}
-	b.stats.done(step.Cmd.Pure)
+	b.stats.done(step.cmd.Pure)
 	b.plan.done(ctx, step, outputs)
 	return nil
 }

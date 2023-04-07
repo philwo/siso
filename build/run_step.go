@@ -35,7 +35,7 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 			const size = 64 << 10
 			buf := make([]byte, size)
 			buf = buf[:runtime.Stack(buf, false)]
-			clog.Errorf(ctx, "runStep panic %v\nstep.cmd: %p\n%s", r, step.Cmd, buf)
+			clog.Errorf(ctx, "runStep panic %v\nstep.cmd: %p\n%s", r, step.cmd, buf)
 			err = fmt.Errorf("panic: %v", r)
 		}
 	}()
@@ -44,7 +44,7 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 		clog.Infof(ctx, "run step %s", step)
 	}
 	// defer some initialization after mtimeCheck?
-	if step.Def.IsPhony() {
+	if step.def.IsPhony() {
 		return b.phonyDone(ctx, step)
 	}
 
@@ -54,7 +54,7 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 
 	skip := b.checkUpToDate(ctx, step)
 	if skip {
-		step.Metrics.Skip = true
+		step.metrics.skip = true
 		return b.done(ctx, step)
 	}
 
@@ -64,7 +64,7 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 			return ctx.Err()
 		default:
 		}
-		fmt.Printf("%s\n", step.Cmd.Command())
+		fmt.Printf("%s\n", step.cmd.Command())
 		return b.done(ctx, step)
 	}
 
@@ -74,14 +74,14 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 	err = b.handleStep(ctx, step)
 	if err != nil {
 		if !experiments.Enabled("keep-going-handle-error", "handle %s failed: %v", step, err) {
-			b.failedToRun(ctx, step.Cmd, err)
+			b.failedToRun(ctx, step.cmd, err)
 			return fmt.Errorf("failed to run handler for %s: %w", step, err)
 		}
-	} else if step.Cmd.ActionResult() != nil {
+	} else if step.cmd.ActionResult() != nil {
 		// store handler generated outputs to local disk.
 		// better to upload to CAS, or store in fs_state?
-		clog.Infof(ctx, "outputs[handler] %d", len(step.Cmd.Outputs))
-		err = b.hashFS.Flush(ctx, step.Cmd.ExecRoot, step.Cmd.Outputs)
+		clog.Infof(ctx, "outputs[handler] %d", len(step.cmd.Outputs))
+		err = b.hashFS.Flush(ctx, step.cmd.ExecRoot, step.cmd.Outputs)
 		if err == nil {
 			return b.done(ctx, step)
 		}
@@ -90,12 +90,12 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 
 	err = b.setupRSP(ctx, step)
 	if err != nil {
-		b.failedToRun(ctx, step.Cmd, err)
+		b.failedToRun(ctx, step.cmd, err)
 		return fmt.Errorf("failed to setup rsp: %s: %w", step, err)
 	}
 	defer func() {
 		if err != nil && !errors.Is(err, context.Canceled) {
-			clog.Warningf(ctx, "failed to exec %v: preserve rsp=%s", err, step.Cmd.RSPFile)
+			clog.Warningf(ctx, "failed to exec %v: preserve rsp=%s", err, step.cmd.RSPFile)
 			return
 		}
 		b.teardownRSP(ctx, step)
@@ -115,17 +115,17 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 		return nil
 	})
 	err = b.runCmdWithCache(ctx, step, true)
-	stdout := step.Cmd.Stdout()
-	stderr := step.Cmd.Stderr()
+	stdout := step.cmd.Stdout()
+	stderr := step.cmd.Stderr()
 	clog.Infof(ctx, "done err=%v", err)
 	if err != nil {
 		if !errors.Is(err, context.Canceled) {
-			b.failedToRun(ctx, step.Cmd, err)
+			b.failedToRun(ctx, step.cmd, err)
 		}
 		return err
 	}
 	if (len(stdout) > 0 || len(stderr) > 0) && experiments.Enabled("fail-on-stdouterr", "step %s emit stdout=%d stderr=%d", step, len(stdout), len(stderr)) {
-		b.failedToRun(ctx, step.Cmd, err)
+		b.failedToRun(ctx, step.cmd, err)
 		return fmt.Errorf("%s emit stdout/stderr", step)
 	}
 	return b.done(ctx, step)
@@ -134,7 +134,7 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 func (b *Builder) handleStep(ctx context.Context, step *Step) error {
 	ctx, span := trace.NewSpan(ctx, "handle-step")
 	defer span.Close(nil)
-	return step.Def.Handle(ctx, step.Cmd)
+	return step.def.Handle(ctx, step.cmd)
 }
 
 func (b *Builder) tryFastStep(ctx context.Context, step, fastStep *Step) (bool, error) {
@@ -146,13 +146,13 @@ func (b *Builder) tryFastStep(ctx context.Context, step, fastStep *Step) (bool, 
 	fastSpan.Close(nil)
 	if err == nil {
 		b.stats.fastDepsSuccess(ctx)
-		step.Metrics = fastStep.Metrics
-		step.Metrics.DepsLog = true
-		stdout := fastStep.Cmd.Stdout()
-		stderr := fastStep.Cmd.Stderr()
+		step.metrics = fastStep.metrics
+		step.metrics.DepsLog = true
+		stdout := fastStep.cmd.Stdout()
+		stderr := fastStep.cmd.Stderr()
 		clog.Infof(ctx, "fast done err=%v", err)
 		if (len(stdout) > 0 || len(stderr) > 0) && experiments.Enabled("fail-on-stdouterr", "step %s emit stdout=%d stderr=%d", step, len(stdout), len(stderr)) {
-			b.failedToRun(ctx, step.Cmd, err)
+			b.failedToRun(ctx, step.cmd, err)
 			return true, fmt.Errorf("%s emit stdout/stderr", step)
 		}
 		os.Stdout.Write(stdout)
@@ -166,7 +166,7 @@ func (b *Builder) tryFastStep(ctx context.Context, step, fastStep *Step) (bool, 
 		// RBE returns permission denied when
 		// platform container image are not available
 		// on RBE worker.
-		b.failedToRun(ctx, step.Cmd, err)
+		b.failedToRun(ctx, step.cmd, err)
 		return true, err
 	}
 	b.stats.fastDepsFailed(ctx, err)
