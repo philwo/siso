@@ -23,6 +23,7 @@ import (
 	"infra/build/siso/o11y/clog"
 )
 
+// ErrBadPlatformContainerImage is an error if the request used bad platform container image.
 var ErrBadPlatformContainerImage = errors.New("reapi: bad platform container image")
 
 // ExecuteAndWait executes a cmd and waits for the result.

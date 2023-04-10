@@ -48,7 +48,7 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 		return b.phonyDone(ctx, step)
 	}
 
-	step.Init(ctx, b)
+	step.init(ctx, b)
 	ctx, span := trace.NewSpan(ctx, "run-step")
 	defer span.Close(nil)
 

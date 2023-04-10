@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// Package hashfs provides a filesystem with digest hash.
 package hashfs
 
 import (
@@ -371,6 +370,7 @@ func (hfs *HashFS) State(ctx context.Context) *State {
 	return state
 }
 
+// Map returns a map of EntryState of each file.
 func (s *State) Map() map[string]EntryState {
 	m := make(map[string]EntryState)
 	for _, e := range s.Entries {

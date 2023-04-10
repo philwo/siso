@@ -535,7 +535,7 @@ func (c *Cmd) commandDigest(ctx context.Context, ds *digest.Store) (digest.Diges
 	return data.Digest(), nil
 }
 
-// SetActionResults sets action result to the cmd.
+// SetActionResult sets action result to the cmd.
 func (c *Cmd) SetActionResult(result *rpb.ActionResult) {
 	c.actionResult = result
 }

@@ -31,6 +31,7 @@ import (
 	"infra/build/siso/sync/semaphore"
 )
 
+// FlushSemaphore is a semaphore to control concurrent flushes.
 var FlushSemaphore = semaphore.New("fs-flush", runtime.NumCPU()*2)
 
 func localDigest(ctx context.Context, fname string, m *iometrics.IOMetrics) (digest.Data, error) {

@@ -257,7 +257,7 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 	}, nil
 }
 
-// Closes closes the builder.
+// Close closes the builder.
 func (b *Builder) Close(ctx context.Context) error {
 	if b.dryRun {
 		return nil

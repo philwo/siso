@@ -1,6 +1,7 @@
 // Copyright 2023 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+
 // Package reapi provides remote execution API.
 package reapi
 
@@ -52,6 +53,7 @@ func (o *Option) RegisterFlags(fs *flag.FlagSet, envs map[string]string) {
 	fs.Int64Var(&o.CompressedBlob, "reapi_compress_blob", 1024, "use compressed blobs if server supports compressed blobs and size is bigger than this. specify 0 to disable comporession.")
 }
 
+// UpdateProjectID updates the Option for projID and returns cloud project ID to use.
 func (o *Option) UpdateProjectID(projID string) string {
 	if projID != "" && !strings.HasPrefix(o.Instance, "projects/") {
 		o.Instance = path.Join("projects", projID, "instances", o.Instance)

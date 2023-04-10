@@ -115,17 +115,17 @@ type Step struct {
 
 type stepState struct {
 	mu               sync.Mutex
-	phase            StepPhase
+	phase            stepPhase
 	weightedDuration time.Duration
 }
 
-func (s *stepState) SetPhase(phase StepPhase) {
+func (s *stepState) SetPhase(phase stepPhase) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.phase = phase
 }
 
-func (s *stepState) Phase() StepPhase {
+func (s *stepState) Phase() stepPhase {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.phase
@@ -167,11 +167,10 @@ func (s *Step) String() string {
 	return s.def.String()
 }
 
-// TODO(b/266518906): make this private after the migration.
-type StepPhase int
+type stepPhase int
 
 const (
-	stepPhaseNone StepPhase = iota
+	stepPhaseNone stepPhase = iota
 	stepStart
 	stepPreproc
 	stepInput
@@ -181,7 +180,7 @@ const (
 	stepDone
 )
 
-func (s StepPhase) String() string {
+func (s stepPhase) String() string {
 	switch s {
 	case stepPhaseNone:
 		return "none"
@@ -205,12 +204,12 @@ func (s StepPhase) String() string {
 }
 
 // SetPhase sets a phase of the step.
-func (s *Step) SetPhase(phase StepPhase) {
+func (s *Step) SetPhase(phase stepPhase) {
 	s.state.SetPhase(phase)
 }
 
 // Phase returns the phase of the step.
-func (s *Step) Phase() StepPhase {
+func (s *Step) Phase() stepPhase {
 	return s.state.Phase()
 }
 
@@ -269,8 +268,7 @@ func stepBacktraces(step *Step) []string {
 	return locs
 }
 
-// TODO(b/266518906): make this private after the migration.
-func (s *Step) Init(ctx context.Context, b *Builder) {
+func (s *Step) init(ctx context.Context, b *Builder) {
 	ctx, span := trace.NewSpan(ctx, "step-init")
 	defer span.Close(nil)
 	s.cmd = newCmd(ctx, b, s.def)

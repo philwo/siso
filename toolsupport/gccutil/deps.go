@@ -18,6 +18,7 @@ import (
 	"infra/build/siso/toolsupport/makeutil"
 )
 
+// Semaphore is a semaphore to control concurrent `gcc -M` invocations.
 var Semaphore = semaphore.New("deps-gcc", runtime.NumCPU()*2)
 
 // DepsArgs returns command line args to get deps for args.

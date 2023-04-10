@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// Cred provides gRPC / API credentials to authenticate to network services.
+// Package cred provides gRPC / API credentials to authenticate to network services.
 package cred
 
 import (

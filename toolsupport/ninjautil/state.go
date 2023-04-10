@@ -161,7 +161,7 @@ func (s *State) AddBinding(name, value string) {
 	s.bindings.AddBinding(name, value)
 }
 
-// Lookup looks up binding.
+// LookupBinding looks up binding.
 func (s *State) LookupBinding(name string) string {
 	return s.bindings.Lookup(name)
 }

@@ -39,7 +39,7 @@ func Run(ctx context.Context, cmd *execute.Cmd) error {
 }
 
 // Run runs a cmd.
-func (_ LocalExec) Run(ctx context.Context, cmd *execute.Cmd) (err error) {
+func (LocalExec) Run(ctx context.Context, cmd *execute.Cmd) (err error) {
 	res, err := run(ctx, cmd)
 	if err != nil {
 		return err

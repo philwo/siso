@@ -66,6 +66,7 @@ func ParseShowIncludes(b []byte) ([]string, []byte) {
 	return deps, outs
 }
 
+// Semaphore is a semaphore to control concurrent `clang-cl /showIncludes` invocations.
 var Semaphore = semaphore.New("deps-msvc", runtime.NumCPU()*2)
 
 // DepsArgs returns command line args to get deps for args.

@@ -82,7 +82,7 @@ func (s *Semaphore) Capacity() int {
 	return cap(s.ch)
 }
 
-// NumServes returns number of currently served.
+// NumServs returns number of currently served.
 func (s *Semaphore) NumServs() int {
 	return cap(s.ch) - len(s.ch)
 }
