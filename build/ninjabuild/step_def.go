@@ -22,6 +22,7 @@ import (
 	"infra/build/siso/build"
 	"infra/build/siso/execute"
 	"infra/build/siso/o11y/clog"
+	"infra/build/siso/o11y/trace"
 	"infra/build/siso/toolsupport/cmdutil"
 	"infra/build/siso/toolsupport/makeutil"
 	"infra/build/siso/toolsupport/ninjautil"
@@ -304,6 +305,8 @@ func edgeSolibs(edge *ninjautil.Edge) []string {
 
 // Inputs returns inputs of the step.
 func (s *StepDef) Inputs(ctx context.Context) []string {
+	ctx, span := trace.NewSpan(ctx, "stepdef-inputs")
+	defer span.Close(nil)
 	seen := make(map[string]bool)
 	var targets []string
 	for _, in := range s.edge.Inputs() {
@@ -334,6 +337,8 @@ func (s *StepDef) Inputs(ctx context.Context) []string {
 
 // DepInputs returns inputs stored in depfile / depslog.
 func (s *StepDef) DepInputs(ctx context.Context) ([]string, error) {
+	ctx, span := trace.NewSpan(ctx, "stepdef-dep-inputs")
+	defer span.Close(nil)
 	if len(s.deps) == 0 && s.deperr == nil {
 		s.deps, s.deperr = depInputs(ctx, s)
 	}
@@ -392,6 +397,9 @@ func depInputs(ctx context.Context, s *StepDef) ([]string, error) {
 
 // ToolInputs returns tool inputs of the step.
 func (s *StepDef) ToolInputs(ctx context.Context) []string {
+	ctx, span := trace.NewSpan(ctx, "stepdef-tool-inputs")
+	defer span.Close(nil)
+
 	var inputs []string
 	for _, in := range s.rule.Inputs {
 		inputs = append(inputs, fromConfigPath(s.globals.path, in))
@@ -471,6 +479,8 @@ func fixInputs(ctx context.Context, stepDef *StepDef, inputs, excludes []string)
 
 // ExpandCaseSensitives expands inputs for the case sensitive FS.
 func (s *StepDef) ExpandCaseSensitives(ctx context.Context, inputs []string) []string {
+	ctx, span := trace.NewSpan(ctx, "stepdef-expand-case-sensitives")
+	defer span.Close(nil)
 	if len(s.globals.caseSensitives) == 0 {
 		return inputs
 	}
@@ -505,6 +515,9 @@ func (s *StepDef) ExpandCaseSensitives(ctx context.Context, inputs []string) []s
 
 // ExpandLabels expands labels in given inputs.
 func (s *StepDef) ExpandLabels(ctx context.Context, inputs []string) []string {
+	ctx, span := trace.NewSpan(ctx, "stepdef-expand-labels")
+	defer span.Close(nil)
+
 	if s.rule.Debug {
 		clog.Infof(ctx, "expands labels")
 	}
@@ -541,6 +554,8 @@ func (s *StepDef) ExpandLabels(ctx context.Context, inputs []string) []string {
 
 // ExpandedInputs returns expanded inputs, i.e. may include indirect inputs.
 func (s *StepDef) ExpandedInputs(ctx context.Context) []string {
+	ctx, span := trace.NewSpan(ctx, "stepdef-expanded-inputs")
+	defer span.Close(nil)
 	if s.rule.Debug {
 		clog.Infof(ctx, "expanded inputs")
 	}
