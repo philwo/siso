@@ -336,9 +336,13 @@ func (sc StepConfig) Lookup(ctx context.Context, bpath *build.Path, edge *ninjau
 	// ptyhon3.exe may be absolute path in depot_tools, but
 	// config uses "python3.exe"...
 	// TODO(ukai): use execroot relative if it is in execroot?
-	if ok && filepath.IsAbs(args0) && !strings.HasPrefix(args0, bpath.ExecRoot) {
-		args0 = filepath.Base(args0)
-		command = args0 + " " + args
+	if ok {
+		args0 = strings.Trim(args0, `"`)
+		if filepath.IsAbs(args0) && !strings.HasPrefix(args0, bpath.ExecRoot) {
+			args0 = filepath.Base(args0)
+			command = args0 + " " + args
+			// TODO(b/277532415): preserve quote of args0?
+		}
 	}
 	if log.V(1) {
 		clog.Infof(ctx, "lookup action:%s out:%s args0:%s", actionName, out, args0)

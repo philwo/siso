@@ -239,6 +239,7 @@ func (s *StepDef) Binding(name string) string {
 		if !ok || args0 == "" {
 			return ""
 		}
+		args0 = strings.Trim(args0, `"`) // unquote
 		if strings.ContainsAny(args0, `/\`) {
 			return ""
 		}
