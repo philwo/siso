@@ -27,6 +27,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/maruel/subcommands"
 	"go.chromium.org/luci/auth"
+	"go.chromium.org/luci/cipd/version"
 	"go.chromium.org/luci/common/cli"
 	"go.chromium.org/luci/common/system/signals"
 
@@ -138,6 +139,13 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 	}
 	buildID := uuid.New().String()
 	// enable cloud logging
+
+	if cmdver, err := version.GetStartupVersion(); err != nil {
+		clog.Warningf(ctx, "cannot determine CIPD package version: %s", err)
+	} else {
+		clog.Infof(ctx, "CIPD package name: %s", cmdver.PackageName)
+		clog.Infof(ctx, "CIPD instance ID: %s", cmdver.InstanceID)
+	}
 
 	clog.Infof(ctx, "build id: %q", buildID)
 	clog.Infof(ctx, "project id: %q", projectID)
