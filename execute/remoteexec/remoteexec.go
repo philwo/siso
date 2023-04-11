@@ -17,6 +17,7 @@ import (
 
 	"infra/build/siso/execute"
 	"infra/build/siso/o11y/clog"
+	"infra/build/siso/o11y/trace"
 	"infra/build/siso/reapi"
 	"infra/build/siso/reapi/digest"
 	"infra/build/siso/reapi/merkletree"
@@ -59,15 +60,19 @@ func (re *RemoteExec) prepareInputs(ctx context.Context, cmd *execute.Cmd) (dige
 
 // Run runs a cmd.
 func (re *RemoteExec) Run(ctx context.Context, cmd *execute.Cmd) error {
+	ctx, span := trace.NewSpan(ctx, "remote-exec")
+	defer span.Close(nil)
 	actionDigest, err := re.prepareInputs(ctx, cmd)
 	if err != nil {
 		return err
 	}
 
-	opName, resp, err := re.client.ExecuteAndWait(ctx, &rpb.ExecuteRequest{
+	cctx, cspan := trace.NewSpan(ctx, "execute-and-wait")
+	opName, resp, err := re.client.ExecuteAndWait(cctx, &rpb.ExecuteRequest{
 		ActionDigest:    actionDigest.Proto(),
 		SkipCacheLookup: cmd.SkipCacheLookup,
 	})
+	cspan.Close(nil)
 	clog.Infof(ctx, "digest: %s, opName: %s", actionDigest, opName)
 	if log.V(1) {
 		clog.Infof(ctx, "response: %s", resp)
@@ -76,10 +81,67 @@ func (re *RemoteExec) Run(ctx context.Context, cmd *execute.Cmd) error {
 		clog.Warningf(ctx, "digest: %s, err: %v", actionDigest, err)
 	}
 	result := resp.GetResult()
-
-	// TODO(b/267576561): Record execution metadata after integrating with Cloud trace.
-
+	re.recordExecuteMetadata(ctx, cmd, result, resp.GetCachedResult(), span)
 	return re.processResult(ctx, actionDigest, cmd, result, resp.GetCachedResult(), err)
+}
+
+func (re *RemoteExec) recordExecuteMetadata(ctx context.Context, cmd *execute.Cmd, result *rpb.ActionResult, cached bool, span *trace.Span) {
+	md := result.GetExecutionMetadata()
+	queue := trace.SpanData{
+		Name:  "rbe:queue",
+		Start: md.GetQueuedTimestamp().AsTime(),
+		End:   md.GetWorkerStartTimestamp().AsTime(),
+	}
+	if cached {
+		span.SetAttr("rbe:queue", queue.Duration())
+	} else {
+		span.Add(ctx, queue)
+	}
+	worker := trace.SpanData{
+		Name:  "rbe:worker",
+		Start: md.GetWorkerStartTimestamp().AsTime(),
+		End:   md.GetWorkerCompletedTimestamp().AsTime(),
+		Attrs: map[string]interface{}{
+			"worker": md.GetWorker(),
+		},
+	}
+	var wspan *trace.Span
+	if cached {
+		span.SetAttr("rbe:worker", worker.Duration())
+	} else {
+		wspan = span.Add(ctx, worker)
+	}
+	input := trace.SpanData{
+		Name:  "rbe:input",
+		Start: md.GetInputFetchStartTimestamp().AsTime(),
+		End:   md.GetInputFetchCompletedTimestamp().AsTime(),
+	}
+	if cached {
+		span.SetAttr("rbe:input", input.Duration())
+	} else {
+		wspan.Add(ctx, input)
+	}
+	exec := trace.SpanData{
+		Name:  "rbe:exec",
+		Start: md.GetExecutionStartTimestamp().AsTime(),
+		End:   md.GetExecutionCompletedTimestamp().AsTime(),
+	}
+	if cached {
+		span.SetAttr("rbe:exec", exec.Duration())
+	} else {
+		wspan.Add(ctx, exec)
+	}
+	output := trace.SpanData{
+		Name:  "rbe:output",
+		Start: md.GetOutputUploadStartTimestamp().AsTime(),
+		End:   md.GetOutputUploadCompletedTimestamp().AsTime(),
+	}
+	if cached {
+		span.SetAttr("rbe:output", output.Duration())
+	} else {
+		wspan.Add(ctx, output)
+	}
+	clog.Infof(ctx, "execution metadata: %s queue=%s worker=%s input=%s exec=%s output=%s", md.GetWorker(), queue.Duration(), worker.Duration(), input.Duration(), exec.Duration(), output.Duration())
 }
 
 func (re *RemoteExec) processResult(ctx context.Context, action digest.Digest, cmd *execute.Cmd, result *rpb.ActionResult, cached bool, err error) error {

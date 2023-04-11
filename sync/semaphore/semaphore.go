@@ -12,6 +12,8 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
+
+	"infra/build/siso/o11y/trace"
 )
 
 var (
@@ -59,12 +61,17 @@ func New(name string, n int) *Semaphore {
 // It returns a context for acquired semaphore and func to release it.
 // TODO(b/267576561): add Cloud Trace integration and add tid as an attribute of a Span.
 func (s *Semaphore) WaitAcquire(ctx context.Context) (context.Context, func(), error) {
+	_, span := trace.NewSpan(ctx, fmt.Sprintf("wait:%s", s.name))
 	s.waits.Add(1)
+	defer span.Close(nil)
 	defer s.waits.Add(-1)
 	select {
 	case tid := <-s.ch:
 		s.reqs.Add(1)
+		ctx, span := trace.NewSpan(ctx, fmt.Sprintf("serv:%s", s.name))
+		span.SetAttr("tid", tid)
 		return ctx, func() {
+			span.Close(nil)
 			s.ch <- tid
 		}, nil
 	case <-ctx.Done():
