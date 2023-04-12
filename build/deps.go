@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"time"
 
 	log "github.com/golang/glog"
@@ -131,6 +132,11 @@ func depsFixCmd(ctx context.Context, b *Builder, step *Step, deps []string) {
 }
 
 func depsCmd(ctx context.Context, b *Builder, step *Step) error {
+	// TODO(b/273407069): native integration instead of spwaning gomacc/rewrapper?
+	if strings.Contains(step.cmd.Args[0], "gomacc") || strings.Contains(step.cmd.Args[0], "rewrapper") {
+		// no need to run `clang -M`.
+		return nil
+	}
 	ds, found := depsProcessors[step.cmd.Deps]
 	if found {
 		start := time.Now()

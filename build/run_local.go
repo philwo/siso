@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"time"
 
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
@@ -40,8 +41,20 @@ func (b *Builder) runLocal(ctx context.Context, step *Step) error {
 	if err != nil {
 		return err
 	}
+	stateMessage := "local exec"
+	sema := b.localSema
 	enableTrace := experiments.Enabled("file-access-trace", "enable file-access-trace")
-	if localexec.TraceEnabled(ctx) {
+	switch {
+	// TODO(b/273407069): native integration instead of spwaning gomacc/rewrapper?
+	case strings.Contains(step.cmd.Args[0], "gomacc"):
+		// no need to file trace for gomacc/rewwapper.
+		stateMessage = "gomacc exec"
+		sema = b.remoteSema
+	case strings.Contains(step.cmd.Args[0], "rewrapper"):
+		// no need to file trace for gomacc/rewwapper.
+		stateMessage = "reclient exec"
+		sema = b.remoteSema
+	case localexec.TraceEnabled(ctx):
 		// check impure explicitly set in config,
 		// rather than step.cmd.Pure.
 		// step.cmd.Pure may be false when config is not set
@@ -54,14 +67,14 @@ func (b *Builder) runLocal(ctx context.Context, step *Step) error {
 		} else {
 			clog.Warningf(ctx, "disable file-access-trace impure=%t file-access-trace=%t", impure, enableTrace)
 		}
-	} else if enableTrace {
+	case enableTrace:
 		clog.Warningf(ctx, "unable to use file-access-trace")
 	}
 
 	queueTime := time.Now()
 	var dur time.Duration
-	err = b.localSema.Do(ctx, func(ctx context.Context) error {
-		clog.Infof(ctx, "step state: local exec")
+	err = sema.Do(ctx, func(ctx context.Context) error {
+		clog.Infof(ctx, "step state: %s", stateMessage)
 		step.SetPhase(stepLocalRun)
 		started := time.Now()
 		err := b.localExec.Run(ctx, step.cmd)
