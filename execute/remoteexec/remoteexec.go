@@ -101,7 +101,7 @@ func (re *RemoteExec) recordExecuteMetadata(ctx context.Context, cmd *execute.Cm
 		Name:  "rbe:worker",
 		Start: md.GetWorkerStartTimestamp().AsTime(),
 		End:   md.GetWorkerCompletedTimestamp().AsTime(),
-		Attrs: map[string]interface{}{
+		Attrs: map[string]any{
 			"worker": md.GetWorker(),
 		},
 	}
