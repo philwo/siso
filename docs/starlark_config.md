@@ -120,7 +120,7 @@ to register handlers and step configs.
      * key: handler name
      * value: handler function used in [per-step config](#per_step-config).
    * `step_config` string
-     [`StepConnfig`](../build/ninjabuild/step_config.go). It will be stored in `.siso_config` in working directory.
+     [`StepConfig`](../build/ninjabuild/step_config.go). It will be stored in `.siso_config` in working directory.
      * `platforms`
        * key: platform reference name. "default" is used by default.
        * value: a dict of [platform properties](https://developers.google.com/remote-build-execution/docs/remote-execution-properties)
@@ -243,22 +243,22 @@ All inputs should be ready to use (via `ctx.fs`).
 
 `@builtin` provides builtin modules/functions.
 
-### [@builtin//checkout.star](../build/checkout.star)
+### [@builtin//checkout.star](../build/buildconfig/checkout.star)
 provide `checkout`.
 
  * `git` struct:
    * `origin` string: origin URL
 
-### [@builtin//json.star](../build/json.star)
+### [@builtin//encoding.star](../build/buildconfig/encoding.star)
 provide [`json`](https://pkg.go.dev/go.starlark.net/lib/json)
 
-### [@builtin//ninjabuild/gn.star)(../build/ninjabuild/gn.star)
+### [@builtin//lib/gn.star](../build/buildconfig/lib/gn.star)
 provide `gn`.
 
  * `parse_args: parse gnargs to dict.
    `gnargs`: a content of args.gn.
 
-### [@builtin//path.star](../build/path.star)
+### [@builtin//path.star](../build/buildconfig/path.star)
 provide `path`.
 
  * `base`: returns base name.
@@ -273,14 +273,14 @@ provide `path`.
  * `isabs`: check path is abs.
    * fname: filename
 
-### [@builtin//runtime.star](../build/runtime.star)
+### [@builtin//runtime.star](../build/buildconfig/runtime.star)
 provide `runtime`.
 
  * `num_cpu` int: number of cpus
  * `os` string: `GOOS` string.
  * `arch` string: `GOARCH` string
 
-### [@builtin//struct.star](../build/struct.star)
+### [@builtin//struct.star](../build/buildconfig/struct.star)
 provide [`struct`](https://pkg.go.dev/go.starlark.net/starlarkstruct#Struct)
 and [`module`](https://pkg.go.dev/go.starlark.net/starlarkstruct#Module)
 
