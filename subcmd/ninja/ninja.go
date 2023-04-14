@@ -23,6 +23,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"cloud.google.com/go/logging"
 	log "github.com/golang/glog"
 	"github.com/google/uuid"
 	"github.com/maruel/subcommands"
@@ -30,6 +31,8 @@ import (
 	"go.chromium.org/luci/cipd/version"
 	"go.chromium.org/luci/common/cli"
 	"go.chromium.org/luci/common/system/signals"
+	mrpb "google.golang.org/genproto/googleapis/api/monitoredres"
+	"google.golang.org/grpc/grpclog"
 
 	"infra/build/siso/auth/cred"
 	"infra/build/siso/build"
@@ -97,7 +100,7 @@ type ninjaCmdRun struct {
 	reCacheEnableRead bool
 	// reCacheEnableWrite bool
 
-	// enableCloudLogging bool
+	enableCloudLogging bool
 	// enableCPUProfiler bool
 	// cloudProfilerServiceName string
 	// enableCloudTrace bool
@@ -138,7 +141,42 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 		return err
 	}
 	buildID := uuid.New().String()
-	// enable cloud logging
+	if c.enableCloudLogging {
+		log.Infof("enable cloud logging project=%s id=%s", projectID, buildID)
+
+		var spin ui.Spinner
+		spin.Start("init cloud logging to %s...", projectID)
+		// log_id: "siso.log" and "siso.step"
+		// use generic_task resource
+		// https://cloud.google.com/logging/docs/api/v2/resource-list
+		// https://cloud.google.com/monitoring/api/resources#tag_generic_task
+		client, err := logging.NewClient(ctx, projectID, credential.ClientOptions()...)
+		if err != nil {
+			return err
+		}
+		hostname, err := os.Hostname()
+		if err != nil {
+			return err
+		}
+		logger, err := clog.New(ctx, client, "siso.log", "siso.step", &mrpb.MonitoredResource{
+			Type: "generic_task",
+			Labels: map[string]string{
+				"project_id": projectID,
+				"location":   hostname,
+				"namespace":  wd,
+				"job":        fmt.Sprintf("%q", os.Args),
+				"task_id":    buildID,
+			},
+		})
+		spin.Stop(err)
+		fmt.Println(logger.URL())
+		if err != nil {
+			return err
+		}
+		defer logger.Close()
+		ctx = clog.NewContext(ctx, logger)
+		grpclog.SetLoggerV2(logger)
+	}
 
 	if cmdver, err := version.GetStartupVersion(); err != nil {
 		clog.Warningf(ctx, "cannot determine CIPD package version: %s", err)
@@ -395,6 +433,8 @@ func (c *ninjaCmdRun) init() {
 
 	c.Flags.DurationVar(&c.traceThreshold, "trace_threshold", 1*time.Minute, "threshold for trace record")
 	c.Flags.DurationVar(&c.traceSpanThreshold, "trace_span_threshold", 100*time.Millisecond, "theshold for trace span record")
+
+	c.Flags.BoolVar(&c.enableCloudLogging, "enable_cloud_logging", false, "enable cloud logging")
 }
 
 func defaultCacheDir() string {

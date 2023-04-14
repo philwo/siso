@@ -11,7 +11,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
+	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
@@ -471,9 +474,7 @@ loop:
 				"id": step.def.String(),
 			})
 			logger := clog.FromContext(sctx)
-			if logger.Formatter == nil {
-				logger.Formatter = logFormat
-			}
+			logger.Formatter = logFormat
 			logEntry := logger.Entry(logging.Info, step.def.Binding("description"))
 			logEntry.Labels = map[string]string{
 				"id":          step.def.String(),
@@ -560,7 +561,30 @@ loop:
 
 // stepLogEntry logs step in parent access log of the step.
 func stepLogEntry(ctx context.Context, logger *clog.Logger, step *Step, duration time.Duration, err error) {
-	// TODO(b/267575656): implement this for cloud logging.
+	httpStatus := http.StatusOK
+	logEntry := logger.Entry(logging.Info, fmt.Sprintf("%s -> %v", step.def.Binding("description"), err))
+	if isCanceled(ctx, err) {
+		logEntry.Severity = logging.Warning
+		// https://cloud.google.com/apis/design/errors#handling_errors
+		httpStatus = 499 // Client closed request
+	} else if err != nil {
+		logEntry.Severity = logging.Warning
+		httpStatus = http.StatusBadRequest
+	}
+	logEntry.HTTPRequest = &logging.HTTPRequest{
+		Request: &http.Request{
+			Method: http.MethodPost,
+			URL: &url.URL{
+				Path: path.Join("/step", step.def.ActionName(), filepath.ToSlash(step.def.Outputs()[0])),
+			},
+		},
+		Status: httpStatus,
+		// RequestSize
+		// ResponseSize
+		Latency: duration,
+		// CacheHit
+	}
+	logger.Log(logEntry)
 }
 
 func isCanceled(ctx context.Context, err error) bool {

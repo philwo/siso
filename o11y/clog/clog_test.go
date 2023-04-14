@@ -28,9 +28,8 @@ func testFormater(e logging.Entry) string {
 func Test(t *testing.T) {
 	ctx := context.Background()
 
-	l := clog.New(ctx)
+	l := clog.FromContext(ctx)
 	defer l.Close()
-	ctx = clog.NewContext(ctx, l)
 
 	clog.Infof(ctx, "Info")
 	clog.Warningf(ctx, "Warning")
