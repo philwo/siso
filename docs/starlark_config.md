@@ -35,9 +35,8 @@ def init(ctx):
   step_config = {}
   step_config["platforms"] = {
     "default": {
-        "default": {
-            "OSFamily": "Linux",
-            "container-image": "docker://gcr.io/chops-private-images-prod/rbe/siso-chromium/linux@sha256:d4fcda628ebcdb3dd79b166619c56da08d5d7bd43d1a7b1f69734904cc7a1bb2",
+        "OSFamily": "Linux",
+        "container-image": "docker://gcr.io/chops-private-images-prod/rbe/siso-chromium/linux@sha256:d4fcda628ebcdb3dd79b166619c56da08d5d7bd43d1a7b1f69734904cc7a1bb2",
     },
   }
   input_deps = {
