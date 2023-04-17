@@ -10,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
-	"strings"
 	"time"
 
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
@@ -46,13 +45,9 @@ func (b *Builder) runLocal(ctx context.Context, step *Step) error {
 	enableTrace := experiments.Enabled("file-access-trace", "enable file-access-trace")
 	switch {
 	// TODO(b/273407069): native integration instead of spwaning gomacc/rewrapper?
-	case strings.Contains(step.cmd.Args[0], "gomacc"):
+	case step.def.Binding("use_remote_exec_wrapper") != "":
 		// no need to file trace for gomacc/rewwapper.
-		stateMessage = "gomacc exec"
-		sema = b.remoteSema
-	case strings.Contains(step.cmd.Args[0], "rewrapper"):
-		// no need to file trace for gomacc/rewwapper.
-		stateMessage = "reclient exec"
+		stateMessage = "remote exec wrapper"
 		sema = b.remoteSema
 	case localexec.TraceEnabled(ctx):
 		// check impure explicitly set in config,

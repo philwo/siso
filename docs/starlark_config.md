@@ -169,6 +169,8 @@ to register handlers and step configs.
           * `canonicalize_dir`: ok to canonicalize work dir or not.
           * `use_system_input`: ok to use input outside of exec root
              as it assumes those are platform container image.
+          * `use_remote_exec_wrapper`: true if gomacc/rewrapper is used,
+             so it runs locally without using deps/file trace.
           * `timeout`: duration of the step remote execution.
           * `handler`: handler name to use for the step
           * `deps`: deps overrides
