@@ -173,6 +173,13 @@ func erespErr(ctx context.Context, eresp *rpb.ExecuteResponse) error {
 		if strings.Contains(st.GetMessage(), "runtime create failed") && strings.Contains(st.GetMessage(), "starting container process") {
 			return status.FromProto(st).Err()
 		}
+		// message::"docker: Error response from daemon: OCI runtime start failed: starting container: starting root container: starting sandbox: creating process: failed to load /b/chromium/src/native_client/toolchain/linux_x86/nacl_x86_glibc/bin/x86_64-nacl-g++: exec format error: unknown."
+		if strings.Contains(st.GetMessage(), "runtime start failed") && strings.Contains(st.GetMessage(), "exec format error") {
+			return status.FromProto(st).Err()
+		}
+		// https://docs.google.com/document/d/1KjBEeh0rglX2BgH908TLQfE6GGBbo9DsGllB25tZuds/edit#heading=h.1o0g6cf3lax4
+		// says
+		// an INTERNAL or UNAVAILABLE error code are used to imply the action should be retried (perhaps the error is transient or a different bot will succeed)
 		fallthrough
 	case codes.Unavailable:
 		st = proto.Clone(st).(*spb.Status)
