@@ -159,7 +159,7 @@ func (c *LocalCache) HasContent(ctx context.Context, d digest.Digest) bool {
 
 // DigestData returns digest data for fname identified by the digest.
 func (c *LocalCache) DigestData(d digest.Digest, fname string) digest.Data {
-	return digest.NewData(dataSource{c: c, d: d, fname: fname, m: c.m}, d)
+	return digest.NewData(dataSource{c: c, d: d, fname: fname, m: c.IOMetrics()}, d)
 }
 
 type dataReadCloser struct {
