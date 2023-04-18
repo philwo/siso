@@ -176,7 +176,12 @@ func depsAfterRun(ctx context.Context, b *Builder, step *Step) ([]string, error)
 	if err != nil {
 		return nil, err
 	}
-	if step.cmd.Platform["InputRootAbsolutePath"] == "" {
+	if step.def.Binding("use_remote_exec_wrapper") != "" {
+		// when remote_exec_wrapper is used,
+		// deps is managed by goma/reclient
+		// so no need to check it in siso.
+		// b/278661991
+	} else if step.cmd.Platform["InputRootAbsolutePath"] == "" {
 		for _, dep := range deps {
 			if filepath.IsAbs(dep) {
 				clog.Warningf(ctx, "update deps: abs path in deps %s in depfile=%s. use input_root_absolute_path. platform=%v", dep, step.cmd.Depfile, step.cmd.Platform)
