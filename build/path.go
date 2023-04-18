@@ -58,7 +58,8 @@ func (p *Path) MustFromWD(path string) string {
 	return s
 }
 
-// FromWD converts cwd relative to exec root relative.
+// FromWD converts cwd relative to exec root relative,
+// slash-separated.
 func (p *Path) FromWD(path string) (string, error) {
 	if path == "" {
 		return "", nil
@@ -72,17 +73,19 @@ func (p *Path) FromWD(path string) (string, error) {
 		if err != nil {
 			return "", err
 		}
+		rel = filepath.ToSlash(rel)
 		rel = p.intern.Intern(rel)
 		v, _ = p.m.LoadOrStore(path, rel)
 		return v.(string), nil
 	}
-	s := filepath.Join(p.Dir, path)
+	s := filepath.ToSlash(filepath.Join(p.Dir, path))
 	s = p.intern.Intern(s)
 	v, _ = p.m.LoadOrStore(path, s)
 	return v.(string), nil
 }
 
-// MustToWD converts exec root relative to cwd relative.
+// MustToWD converts exec root relative to cwd relative,
+// slash-separated.
 // TODO(b/273185597): consider rewriting as non-Must func.
 func (p *Path) MustToWD(path string) string {
 	if path == "" {
@@ -93,6 +96,7 @@ func (p *Path) MustToWD(path string) string {
 		log.Errorf("Failed to get rel %s, %s: %v", p.Dir, path, err)
 		return path
 	}
+	rel = filepath.ToSlash(rel)
 	return rel
 }
 
