@@ -16,7 +16,7 @@ import (
 
 // experiment id -> hint for the experiment (to check more details).
 var knownExperiments = map[string]string{
-	"keep-going-impure":           "check .siso_localexec",
+	"keep-going-impure":           "check siso_localexec",
 	"keep-going-handle-error":     "",
 	"file-access-trace":           "",
 	"no-fallback":                 "",
