@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"syscall"
 	"time"
 
@@ -22,6 +23,7 @@ import (
 	"infra/build/siso/execute"
 	"infra/build/siso/o11y/clog"
 	"infra/build/siso/reapi/digest"
+	"infra/build/siso/sync/semaphore"
 	"infra/build/siso/toolsupport/straceutil"
 )
 
@@ -75,6 +77,9 @@ func (LocalExec) Run(ctx context.Context, cmd *execute.Cmd) (err error) {
 	return nil
 }
 
+// fix for http://b/278658064 windows: fork/exec: Not enough memory resources are available to process this command.
+var forkSema = semaphore.New("fork", runtime.NumCPU())
+
 func run(ctx context.Context, cmd *execute.Cmd) (*rpb.ActionResult, error) {
 	if len(cmd.Args) == 0 {
 		return nil, fmt.Errorf("no arguments in the command. ID: %s", cmd.ID)
@@ -94,7 +99,12 @@ func run(ctx context.Context, cmd *execute.Cmd) (*rpb.ActionResult, error) {
 		}
 		st := straceutil.New(ctx, cmd.ID, c)
 		c = st.Cmd(ctx)
-		err = c.Run()
+		err = forkSema.Do(ctx, func(ctx context.Context) error {
+			return c.Start()
+		})
+		if err == nil {
+			err = c.Wait()
+		}
 		if err == nil {
 			cmd.FileTrace.Inputs, cmd.FileTrace.Outputs, err = st.PostProcess(ctx)
 			if err != nil {
@@ -104,7 +114,12 @@ func run(ctx context.Context, cmd *execute.Cmd) (*rpb.ActionResult, error) {
 		st.Close(ctx)
 		log.V(1).Infof("%s filetrace=false n_traced_inputs=%d n_traced_outputs=%d err=%v", cmd.ID, len(cmd.Inputs), len(cmd.Outputs), err)
 	} else {
-		err = c.Run()
+		err = forkSema.Do(ctx, func(ctx context.Context) error {
+			return c.Start()
+		})
+		if err == nil {
+			err = c.Wait()
+		}
 		log.V(1).Infof("%s filetrace=false %v", cmd.ID, err)
 	}
 	e := time.Now()
