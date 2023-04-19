@@ -251,12 +251,17 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		err := os.MkdirAll(filepath.Dir(c.depsLogFile), 0755)
+		if err != nil {
+			clog.Warningf(ctx, "failed to mkdir for deps log: %v", err)
+			return
+		}
 		depsLog, err := ninjautil.NewDepsLog(ctx, c.depsLogFile)
 		if err != nil {
 			clog.Warningf(ctx, "failed to load deps log: %v", err)
-		} else {
-			localDepsLog = depsLog
+			return
 		}
+		localDepsLog = depsLog
 	}()
 
 	if !c.localCacheEnable {
