@@ -21,7 +21,7 @@ import (
 // or runs the command if the cache doesn't exist.
 func (b *Builder) runCmdWithCache(ctx context.Context, step *Step, allowLocalFallback bool) error {
 	dedupInputs(ctx, step.cmd)
-	if b.cache != nil && step.cmd.Pure && b.reCacheEnableRead {
+	if b.cache != nil && step.cmd.Pure && b.reCacheEnableRead && step.def.Binding("use_remote_exec_wrapper") == "" {
 		err := b.cacheSema.Do(ctx, func(ctx context.Context) error {
 			start := time.Now()
 			err := b.cache.GetActionResult(ctx, step.cmd)

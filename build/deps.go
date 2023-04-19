@@ -37,6 +37,9 @@ var depsProcessors = map[string]depsProcessor{
 }
 
 func depsFastStep(ctx context.Context, b *Builder, step *Step) (*Step, error) {
+	if step.def.Binding("use_remote_exec_wrapper") != "" {
+		return nil, fmt.Errorf("no fast-deps (use_remote_exec_wrapper)")
+	}
 	ds, found := depsProcessors[step.cmd.Deps]
 	if !found {
 		return nil, fmt.Errorf("no fast-deps (deps=%q depfile=%q)", step.cmd.Deps, step.cmd.Depfile)
