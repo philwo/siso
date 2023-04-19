@@ -136,15 +136,9 @@ func (p *progress) step(ctx context.Context, b *Builder, step *Step, s string) {
 	}
 	pstat := b.plan.stats()
 	stat := b.stats.stats()
-	msg := s
-	if step != nil {
-		msg = fmt.Sprintf("%.2f%% %s %s",
-			float64(stat.Done)*100/float64(stat.Total),
-			time.Since(b.start).Round(10*time.Millisecond),
-			s)
-	}
-	ui.PrintLines(
-		fmt.Sprintf("[%d+%d+(%d+%d)[%d+(%d+%d),(%d+%d)](%d,%d,%d,%d){%d,%d,%d}]",
+	var lines []string
+	if ui.IsTerminal {
+		lines = append(lines, fmt.Sprintf("[%d+%d+(%d+%d)[%d+(%d+%d),(%d+%d)](%d,%d,%d,%d){%d,%d,%d}]",
 			pstat.npendings,
 			pstat.nready,
 			b.stepSema.NumWaits(),
@@ -160,11 +154,18 @@ func (p *progress) step(ctx context.Context, b *Builder, step *Step, s string) {
 			stat.Remote,
 			stat.FastDepsSuccess,
 			stat.FastDepsFailed,
-			stat.LocalFallback),
-		msg,
-	)
+			stat.LocalFallback))
+	}
+	msg := s
+	if step != nil {
+		msg = fmt.Sprintf("%.2f%% %s %s",
+			float64(stat.Done)*100/float64(stat.Total),
+			time.Since(b.start).Round(10*time.Millisecond),
+			s)
+	}
+	lines = append(lines, msg)
+	ui.PrintLines(lines...)
 	p.mu.Lock()
 	p.ts = time.Now()
 	p.mu.Unlock()
-
 }
