@@ -175,6 +175,7 @@ const (
 	stepPreproc
 	stepInput
 	stepLocalRun
+	stepREWrapperRun
 	stepRemoteRun
 	stepOutput
 	stepDone
@@ -192,6 +193,8 @@ func (s stepPhase) String() string {
 		return "input"
 	case stepLocalRun:
 		return "local"
+	case stepREWrapperRun:
+		return "rewrap"
 	case stepRemoteRun:
 		return "remote"
 	case stepOutput:
