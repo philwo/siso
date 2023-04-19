@@ -50,7 +50,7 @@ func (b *Builder) runLocal(ctx context.Context, step *Step) error {
 		// no need to file trace for gomacc/rewwapper.
 		stateMessage = "remote exec wrapper"
 		phase = stepREWrapperRun
-		sema = b.remoteSema
+		sema = b.rewrapSema
 	case localexec.TraceEnabled(ctx):
 		// check impure explicitly set in config,
 		// rather than step.cmd.Pure.

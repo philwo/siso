@@ -19,6 +19,7 @@ import (
 	"runtime"
 	"runtime/debug"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -151,6 +152,8 @@ type Builder struct {
 	localSema *semaphore.Semaphore
 	localExec localexec.LocalExec
 
+	rewrapSema *semaphore.Semaphore
+
 	remoteSema        *semaphore.Semaphore
 	remoteExec        *remoteexec.RemoteExec
 	reCacheEnableRead bool
@@ -212,6 +215,7 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 	numCPU := runtime.NumCPU()
 	stepLimit := stepLimitFactor * numCPU
 	localLimit := numCPU
+	rewrapLimit := limitForREWrapper(ctx, numCPU)
 	remoteLimit := remoteLimitFactor * numCPU
 	// on many cores machine, it would hit default max thread limit = 10000
 	// usually, it would require 1/3 threads of stepLimit (cache miss case?)
@@ -221,8 +225,8 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 	} else {
 		maxThreads = 10000
 	}
-	logger.Infof("numcpu=%d threads:%d - step limit=%d local limit=%d remote limit=%d",
-		numCPU, maxThreads, stepLimit, localLimit, remoteLimit)
+	logger.Infof("numcpu=%d threads:%d - step limit=%d local limit=%d rewrap limit=%d remote limit=%d",
+		numCPU, maxThreads, stepLimit, localLimit, rewrapLimit, remoteLimit)
 	logger.Infof("tool_invocation_id: %s", opts.ID)
 
 	return &Builder{
@@ -237,6 +241,7 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 		preprocSema:       semaphore.New("preproc", stepLimit),
 		localSema:         semaphore.New("localexec", localLimit),
 		localExec:         le,
+		rewrapSema:        semaphore.New("rewrap", rewrapLimit),
 		remoteSema:        semaphore.New("remoteexec", remoteLimit),
 		remoteExec:        re,
 		reCacheEnableRead: opts.RECacheEnableRead,
@@ -258,6 +263,46 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 		dryRun:          opts.DryRun,
 		rebuildManifest: opts.RebuildManifest,
 	}, nil
+}
+
+func limitForREWrapper(ctx context.Context, numCPU int) int {
+	// same logic in depot_tools/autoninja.py
+	// https://chromium.googlesource.com/chromium/tools/depot_tools.git/+/54762c22175e17dce4f4eab18c5942c06e82478f/autoninja.py#166
+	const defaultCoreMultiplier = 80
+	coreMultiplier := defaultCoreMultiplier
+	if v := os.Getenv("NINJA_CORE_MULTIPLIER"); v != "" {
+		p, err := strconv.Atoi(v)
+		if err != nil {
+			clog.Warningf(ctx, "wrong $NINJA_CORE_MULTIPLIER=%q; %v", v, err)
+		} else {
+			coreMultiplier = p
+		}
+	}
+	limit := numCPU * coreMultiplier
+	if v := os.Getenv("NINJA_CORE_LIMIT"); v != "" {
+		p, err := strconv.Atoi(v)
+		if err != nil {
+			clog.Warningf(ctx, "wrong $NINJA_CORE_LIMIT=%q; %v", v, err)
+		} else if limit > p {
+			limit = p
+		}
+	}
+	switch runtime.GOOS {
+	case "windows":
+		// on Windows, higher than 1000 does not improve build
+		// performance, but may cause namedpipe timeout
+		// b/70640154 b/223211029
+		if limit > 1000 {
+			limit = 1000
+		}
+	case "darwin":
+		// on macOS, higher than 800 causes 'Too many open files' error
+		// (crbug.com/936864).
+		if limit > 800 {
+			limit = 800
+		}
+	}
+	return limit
 }
 
 // Close closes the builder.
