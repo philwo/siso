@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/logging"
+	"cloud.google.com/go/profiler"
 	log "github.com/golang/glog"
 	"github.com/google/uuid"
 	"github.com/maruel/subcommands"
@@ -102,7 +103,8 @@ type ninjaCmdRun struct {
 
 	enableCloudLogging bool
 	// enableCPUProfiler bool
-	// cloudProfilerServiceName string
+	enableCloudProfiler      bool
+	cloudProfilerServiceName string
 	// enableCloudTrace bool
 	traceThreshold     time.Duration
 	traceSpanThreshold time.Duration
@@ -189,7 +191,17 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 	clog.Infof(ctx, "project id: %q", projectID)
 	clog.Infof(ctx, "commandline %q", os.Args)
 
-	// enable cloud profiler
+	if c.enableCloudProfiler {
+		clog.Infof(ctx, "enable cloud profiler %q in %s", c.cloudProfilerServiceName, projectID)
+		err := profiler.Start(profiler.Config{
+			Service:        c.cloudProfilerServiceName,
+			MutexProfiling: true,
+			ProjectID:      projectID,
+		}, credential.ClientOptions()...)
+		if err != nil {
+			clog.Errorf(ctx, "failed to start cloud profiler: %v", err)
+		}
+	}
 	// enable cloud trace
 	// upload build pprof
 
@@ -435,6 +447,8 @@ func (c *ninjaCmdRun) init() {
 	c.Flags.DurationVar(&c.traceSpanThreshold, "trace_span_threshold", 100*time.Millisecond, "theshold for trace span record")
 
 	c.Flags.BoolVar(&c.enableCloudLogging, "enable_cloud_logging", false, "enable cloud logging")
+	c.Flags.BoolVar(&c.enableCloudProfiler, "enable_cloud_profiler", false, "enable cloud profiler")
+	c.Flags.StringVar(&c.cloudProfilerServiceName, "cloud_profiler_service_name", "siso", "cloud profiler service name")
 }
 
 func defaultCacheDir() string {
