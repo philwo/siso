@@ -83,9 +83,8 @@ type Options struct {
 	MetricsJSONWriter  io.Writer
 	TraceJSON          string
 	Pprof              string
-	// TODO(b/266518906): add exporter
-	// TraceExporter      *trace.Exporter
-	PprofUploader *pprof.Uploader
+	TraceExporter      *trace.Exporter
+	PprofUploader      *pprof.Uploader
 
 	// Clobber forces to rebuild ignoring existing generated files.
 	Clobber bool
@@ -172,6 +171,7 @@ type Builder struct {
 
 	localexecLogWriter io.Writer
 	metricsJSONWriter  io.Writer
+	traceExporter      *trace.Exporter
 	traceEvents        *traceEvents
 	traceStats         *traceStats
 	tracePprof         *tracePprof
@@ -254,14 +254,14 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 		cache:              opts.Cache,
 		localexecLogWriter: lelw,
 		metricsJSONWriter:  mw,
-		// traceExporter:      opts.TraceExporter,
-		traceEvents:     newTraceEvents(opts.TraceJSON, opts.Metadata),
-		traceStats:      newTraceStats(),
-		tracePprof:      newTracePprof(opts.Pprof),
-		pprofUploader:   opts.PprofUploader,
-		clobber:         opts.Clobber,
-		dryRun:          opts.DryRun,
-		rebuildManifest: opts.RebuildManifest,
+		traceExporter:      opts.TraceExporter,
+		traceEvents:        newTraceEvents(opts.TraceJSON, opts.Metadata),
+		traceStats:         newTraceStats(),
+		tracePprof:         newTracePprof(opts.Pprof),
+		pprofUploader:      opts.PprofUploader,
+		clobber:            opts.Clobber,
+		dryRun:             opts.DryRun,
+		rebuildManifest:    opts.RebuildManifest,
 	}, nil
 }
 
@@ -372,7 +372,6 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 	schedOpts := schedulerOption{
 		Path:   b.path,
 		HashFS: b.hashFS,
-		// TODO(b/267576561): enable trace export
 	}
 	sched := newScheduler(ctx, schedOpts)
 	err = schedule(ctx, sched, b.graph, args...)
@@ -580,10 +579,8 @@ loop:
 				return
 			default:
 			}
-			b.traceEvents.Add(ctx, tc)
-			b.traceStats.update(ctx, tc)
-			// TODO(b/267576561): export trace
-			b.tracePprof.Add(ctx, tc)
+			b.finalizeTrace(ctx, tc)
+			// unref for GC to reclaim memory.
 			tc = nil
 			step.cmd = nil
 			if err != nil {
@@ -880,4 +877,11 @@ func (b *Builder) failedToRun(ctx context.Context, cmd *execute.Cmd, err error) 
 	ui.PrintLines(msgs...)
 	os.Stdout.Write(cmd.Stdout())
 	os.Stderr.Write(append(cmd.Stderr(), '\n'))
+}
+
+func (b *Builder) finalizeTrace(ctx context.Context, tc *trace.Context) {
+	b.traceEvents.Add(ctx, tc)
+	b.traceStats.update(ctx, tc)
+	b.traceExporter.Export(ctx, tc)
+	b.tracePprof.Add(ctx, tc)
 }

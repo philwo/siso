@@ -32,6 +32,7 @@ import (
 	"go.chromium.org/luci/cipd/version"
 	"go.chromium.org/luci/common/cli"
 	"go.chromium.org/luci/common/system/signals"
+	"google.golang.org/api/option"
 	mrpb "google.golang.org/genproto/googleapis/api/monitoredres"
 	"google.golang.org/grpc/grpclog"
 
@@ -41,6 +42,7 @@ import (
 	"infra/build/siso/build/ninjabuild"
 	"infra/build/siso/hashfs"
 	"infra/build/siso/o11y/clog"
+	"infra/build/siso/o11y/trace"
 	"infra/build/siso/reapi"
 	"infra/build/siso/reapi/digest"
 	"infra/build/siso/sync/semaphore"
@@ -105,9 +107,9 @@ type ninjaCmdRun struct {
 	// enableCPUProfiler bool
 	enableCloudProfiler      bool
 	cloudProfilerServiceName string
-	// enableCloudTrace bool
-	traceThreshold     time.Duration
-	traceSpanThreshold time.Duration
+	enableCloudTrace         bool
+	traceThreshold           time.Duration
+	traceSpanThreshold       time.Duration
 }
 
 // Run runs the `ninja` subcommand.
@@ -202,7 +204,20 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 			clog.Errorf(ctx, "failed to start cloud profiler: %v", err)
 		}
 	}
-	// enable cloud trace
+	var traceExporter *trace.Exporter
+	if c.enableCloudTrace {
+		clog.Infof(ctx, "enable trace in %s [trace > %s]", projectID, c.traceThreshold)
+		traceExporter, err = trace.NewExporter(ctx, trace.Options{
+			ProjectID:     projectID,
+			StepThreshold: c.traceThreshold,
+			SpanThreshold: c.traceSpanThreshold,
+			ClientOptions: append([]option.ClientOption{}, credential.ClientOptions()...),
+		})
+		if err != nil {
+			clog.Errorf(ctx, "failed to start trace exporter: %v", err)
+		}
+		defer traceExporter.Close(ctx)
+	}
 	// upload build pprof
 
 	clog.Infof(ctx, "wd: %s", wd)
@@ -384,6 +399,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 		Cache:              cache,
 		LocalexecLogWriter: localexecLogWriter,
 		MetricsJSONWriter:  metricsJSONWriter,
+		TraceExporter:      traceExporter,
 		TraceJSON:          c.traceJSON,
 		Pprof:              c.buildPprof,
 		Clobber:            c.clobber,
@@ -454,6 +470,7 @@ func (c *ninjaCmdRun) init() {
 	c.Flags.BoolVar(&c.enableCloudLogging, "enable_cloud_logging", false, "enable cloud logging")
 	c.Flags.BoolVar(&c.enableCloudProfiler, "enable_cloud_profiler", false, "enable cloud profiler")
 	c.Flags.StringVar(&c.cloudProfilerServiceName, "cloud_profiler_service_name", "siso", "cloud profiler service name")
+	c.Flags.BoolVar(&c.enableCloudTrace, "enable_cloud_trace", false, "enable cloud trace")
 }
 
 func defaultCacheDir() string {
