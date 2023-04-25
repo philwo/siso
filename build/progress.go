@@ -83,6 +83,9 @@ func (p *progress) update(ctx context.Context, b *Builder) {
 				}
 			}
 			p.mu.Unlock()
+			if ui.IsTerminal {
+				continue
+			}
 			if si == nil || si.step == nil {
 				continue
 			}
@@ -122,7 +125,7 @@ const (
 func (p *progress) step(ctx context.Context, b *Builder, step *Step, s string) {
 	p.mu.Lock()
 	t := p.ts
-	if step != nil && ui.IsTerminal {
+	if step != nil {
 		if strings.HasPrefix(s, progressPrefixStart) {
 			heap.Push(&p.actives, &stepInfo{
 				step: step,
