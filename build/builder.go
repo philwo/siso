@@ -694,7 +694,7 @@ func (b *Builder) outputs(ctx context.Context, step *Step) error {
 	}
 
 	clog.Infof(ctx, "outputs %d->%d", len(step.cmd.Outputs), len(localOutputs))
-	allowMissing := step.def.Binding("allow_missing_outputs") != ""
+	defOutputs := step.def.Outputs()
 	// need to check against step.cmd.Outputs, not step.def.Outputs, since
 	// handler may add to step.cmd.Outputs.
 	for _, out := range step.cmd.Outputs {
@@ -718,7 +718,14 @@ func (b *Builder) outputs(ctx context.Context, step *Step) error {
 		}
 		_, err := b.hashFS.Stat(ctx, step.cmd.ExecRoot, out)
 		if err != nil {
-			if allowMissing {
+			reqOut := false
+			for _, o := range defOutputs {
+				if out == o {
+					reqOut = true
+					break
+				}
+			}
+			if !reqOut {
 				clog.Warningf(ctx, "missing outputs %s: %v", out, err)
 				outs := make([]string, 0, len(localOutputs))
 				for _, f := range localOutputs {
@@ -826,7 +833,7 @@ func (b *Builder) done(ctx context.Context, step *Step) error {
 	ctx, span := trace.NewSpan(ctx, "done")
 	defer span.Close(nil)
 	var outputs []string
-	allowMissing := step.def.Binding("allow_missing_outputs") != ""
+	defOutputs := step.def.Outputs()
 	for _, out := range step.cmd.Outputs {
 		out := out
 		var mtime time.Time
@@ -835,7 +842,14 @@ func (b *Builder) done(ctx context.Context, step *Step) error {
 		}
 		fi, err := b.hashFS.Stat(ctx, step.cmd.ExecRoot, out)
 		if err != nil {
-			if allowMissing {
+			reqOut := false
+			for _, o := range defOutputs {
+				if out == o {
+					reqOut = true
+					break
+				}
+			}
+			if !reqOut {
 				clog.Warningf(ctx, "missing output %s: %v", out, err)
 				continue
 			}

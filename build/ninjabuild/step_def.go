@@ -262,11 +262,6 @@ func (s *StepDef) Binding(name string) string {
 			return "true"
 		}
 		return ""
-	case "allow_missing_outputs":
-		if s.rule.AllowMissingOutputs {
-			return "true"
-		}
-		return ""
 	case "ignore_extra_input_pattern":
 		return s.rule.IgnoreExtraInputPattern
 	case "ignore_extra_output_pattern":

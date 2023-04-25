@@ -179,7 +179,6 @@ to register handlers and step configs.
              * `depfile`: depfile variable of the step
              * `none`: ignore deps variable in ninja
           * `output_local`: force download/outputs to local disk
-          * `allow_missing_outputs`: allow if output doesn't exist after run
           * `ignore_extra_input_pattern`: regexp to allow if it is used,
              but not listed in inputs.
           * `ignore_extra_output_pattern`: regexp to allow if it is generated,

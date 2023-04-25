@@ -207,12 +207,6 @@ type StepRule struct {
 	// TODO: better to have `require_local_inputs`=[<globs>] to reduce unnecessary downloads?
 	OutputLocal bool `json:"output_local,omitempty"`
 
-	// AllowMissingOutputs indicates to allow missing outputs.
-	// if files in outputs doesn't exist, it causes an error by default.
-	// allow_missing_outputs=true suppress this error.
-	// TODO: glog list?
-	AllowMissingOutputs bool `json:"allow_missing_outputs,omitempty"`
-
 	// IgnoreExtraInputPattern specifies regexp to ignore extra inputs.
 	// ignore extra input detected by strace if it matches with this pattern
 	// e.g. cache file
