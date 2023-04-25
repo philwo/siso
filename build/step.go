@@ -241,9 +241,15 @@ func stepSpanName(stepDef StepDef) string {
 		return stepDef.ActionName()
 	}
 	cmd := stepDef.Binding("command")
-	// TODO(ukai): need to handle python3.exe case on windows?
-	cmd = strings.TrimPrefix(cmd, "python3 ")
 	i := strings.Index(cmd, " ")
+	if i > 0 {
+		// use python script as step name, not python binary itself.
+		arg0 := cmd[:i]
+		if strings.HasSuffix(strings.TrimSuffix(arg0, ".exe"), "python3") {
+			cmd = cmd[i+1:]
+		}
+	}
+	i = strings.Index(cmd, " ")
 	if i > 0 {
 		cmd = cmd[:i]
 	}
