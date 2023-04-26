@@ -47,9 +47,7 @@ func (as *activeSteps) Pop() any {
 
 func (p *progress) start(ctx context.Context, b *Builder) {
 	p.done = make(chan struct{})
-	if ui.IsTerminal {
-		go p.update(ctx, b)
-	}
+	go p.update(ctx, b)
 }
 
 func (p *progress) update(ctx context.Context, b *Builder) {
