@@ -140,10 +140,20 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 			return err
 		}
 	}
-	wd, err := os.Getwd()
+	execRoot, err := os.Getwd()
 	if err != nil {
 		return err
 	}
+	clog.Infof(ctx, "wd: %s", execRoot)
+	if !filepath.IsAbs(c.configRepoDir) {
+		execRoot, err = detectExecRoot(ctx, execRoot, c.configRepoDir)
+		if err != nil {
+			return err
+		}
+		c.configRepoDir = filepath.Join(execRoot, c.configRepoDir)
+	}
+	clog.Infof(ctx, "exec_root: %s", execRoot)
+
 	buildID := uuid.New().String()
 	if c.enableCloudLogging {
 		log.Infof("enable cloud logging project=%s id=%s", projectID, buildID)
@@ -167,7 +177,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 			Labels: map[string]string{
 				"project_id": projectID,
 				"location":   hostname,
-				"namespace":  wd,
+				"namespace":  execRoot,
 				"job":        fmt.Sprintf("%q", os.Args),
 				"task_id":    buildID,
 			},
@@ -220,19 +230,30 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 	}
 	// upload build pprof
 
-	clog.Infof(ctx, "wd: %s", wd)
-	if !filepath.IsAbs(c.configRepoDir) {
-		c.configRepoDir = filepath.Join(wd, c.configRepoDir)
-	}
 	cfgrepos := map[string]fs.FS{
 		"config":           os.DirFS(c.configRepoDir),
-		"config_overrides": os.DirFS(filepath.Join(wd, ".siso_remote")),
+		"config_overrides": os.DirFS(filepath.Join(execRoot, ".siso_remote")),
 	}
 	err = os.Chdir(c.dir)
 	if err != nil {
 		return err
 	}
 	clog.Infof(ctx, "change dir to %s", c.dir)
+	cwd, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+	// recalculate dir as relative to exec_root.
+	// recipe may use absolute path for -C.
+	rdir, err := filepath.Rel(execRoot, cwd)
+	if err != nil {
+		return err
+	}
+	if rdir == ".." || strings.HasPrefix(filepath.ToSlash(rdir), "../") {
+		return fmt.Errorf("dir %q is out of exec root %q", cwd, execRoot)
+	}
+	c.dir = rdir
+	clog.Infof(ctx, "working_directory in exec_root: %s", c.dir)
 	logSymlink(ctx)
 
 	if c.configFilename == "" {
@@ -348,18 +369,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 	if c.actionSalt != "" {
 		actionSaltBytes = []byte(c.actionSalt)
 	}
-	if filepath.IsAbs(c.dir) {
-		// recipe may use absolute path for -C.
-		rdir, err := filepath.Rel(wd, c.dir)
-		if err != nil {
-			return err
-		}
-		if rdir == ".." || strings.HasPrefix(filepath.ToSlash(rdir), "../") {
-			return fmt.Errorf("dir %q is out of exec root %q", c.dir, wd)
-		}
-		c.dir = rdir
-	}
-	buildPath := build.NewPath(wd, c.dir)
+	buildPath := build.NewPath(execRoot, c.dir)
 	if c.traceJSON != "" {
 		rotateFiles(ctx, c.traceJSON)
 	}
@@ -593,6 +603,22 @@ func doBuild(ctx context.Context, graph *ninjabuild.Graph, bopts build.Options, 
 
 	// TODO(b/266518906): wait for completion of uploading manifest
 	return err
+}
+
+func detectExecRoot(ctx context.Context, execRoot, crdir string) (string, error) {
+	for {
+		_, err := os.Stat(filepath.Join(execRoot, crdir))
+		if err == nil {
+			return execRoot, nil
+		}
+		dir := filepath.Dir(execRoot)
+		if dir == execRoot {
+			// reached to root dir
+			return "", fmt.Errorf("can not detect exec_root: %s not found", crdir)
+		}
+		execRoot = dir
+	}
+
 }
 
 var histchar = [...]string{"▂", "▃", "▄", "▅", "▆", "▇", "█"}
