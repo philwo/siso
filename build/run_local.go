@@ -28,7 +28,7 @@ func (b *Builder) runLocal(ctx context.Context, step *Step) error {
 	clog.Infof(ctx, "run local %s", step.cmd.Desc)
 	step.cmd.RemoteWrapper = ""
 
-	step.SetPhase(stepInput)
+	step.setPhase(stepInput)
 	// expand inputs to get full action inputs,
 	// before preparing inputs on local disk for local action.
 	depsExpandInputs(ctx, b, step)
@@ -72,11 +72,11 @@ func (b *Builder) runLocal(ctx context.Context, step *Step) error {
 	var dur time.Duration
 	err = sema.Do(ctx, func(ctx context.Context) error {
 		clog.Infof(ctx, "step state: %s", stateMessage)
-		step.SetPhase(phase)
+		step.setPhase(phase)
 		started := time.Now()
 		err := b.localExec.Run(ctx, step.cmd)
 		dur = time.Since(started)
-		step.SetPhase(stepOutput)
+		step.setPhase(stepOutput)
 		b.stats.localDone(ctx, err)
 		if step.cmd.ActionResult() != nil {
 			if step.cmd.ActionResult().ExecutionMetadata == nil {

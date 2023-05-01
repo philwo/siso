@@ -92,7 +92,7 @@ func (p *progress) update(ctx context.Context, b *Builder) {
 			}
 			lastStepUpdate = time.Now()
 			dur := time.Since(si.step.startTime).Round(1 * time.Second)
-			p.step(ctx, b, si.step, fmt.Sprintf("%s[%s]: %s", dur.String(), si.step.Phase(), si.desc))
+			p.step(ctx, b, si.step, fmt.Sprintf("%s[%s]: %s", dur.String(), si.step.phase(), si.desc))
 		}
 	}
 }

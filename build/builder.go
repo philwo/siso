@@ -761,14 +761,14 @@ func (b *Builder) progressStepSkipped(ctx context.Context, step *Step) {
 
 // progressStepStarted shows progress of the started step.
 func (b *Builder) progressStepStarted(ctx context.Context, step *Step) {
-	step.SetPhase(stepStart)
+	step.setPhase(stepStart)
 	step.startTime = time.Now()
 	b.progress.step(ctx, b, step, "S "+step.cmd.Desc)
 }
 
 // progressStepFinished shows progress of the finished step.
 func (b *Builder) progressStepFinished(ctx context.Context, step *Step) {
-	step.SetPhase(stepDone)
+	step.setPhase(stepDone)
 	b.progress.step(ctx, b, step, "F "+step.cmd.Desc)
 }
 

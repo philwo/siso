@@ -16,7 +16,7 @@ import (
 	log "github.com/golang/glog"
 )
 
-// ParserDepsFile parses *.d file in fname on fsys.
+// ParseDepsFile parses *.d file in fname on fsys.
 func ParseDepsFile(ctx context.Context, fsys fs.FS, fname string) ([]string, error) {
 	if fname == "" {
 		return nil, nil

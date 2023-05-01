@@ -206,13 +206,13 @@ func (s stepPhase) String() string {
 	}
 }
 
-// SetPhase sets a phase of the step.
-func (s *Step) SetPhase(phase stepPhase) {
+// setPhase sets a phase of the step.
+func (s *Step) setPhase(phase stepPhase) {
 	s.state.SetPhase(phase)
 }
 
-// Phase returns the phase of the step.
-func (s *Step) Phase() stepPhase {
+// phase returns the phase of the step.
+func (s *Step) phase() stepPhase {
 	return s.state.Phase()
 }
 

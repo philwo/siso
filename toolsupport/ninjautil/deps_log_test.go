@@ -42,7 +42,7 @@ func TestReadWriteDepsLog(t *testing.T) {
 	if diff := cmp.Diff(deps, want); diff != "" {
 		t.Errorf(`d1.Get(ctx, "out.o")=%v, _, _ mismatch (-got +want):\n%s`, deps, diff)
 	}
-	if mtime != t1 {
+	if !mtime.Equal(t1) {
 		t.Errorf(`d1.Get(ctx, "out.o")=_, %v, _; want _, %v, _`, mtime, t1)
 	}
 
@@ -69,7 +69,7 @@ func TestReadWriteDepsLog(t *testing.T) {
 	if diff := cmp.Diff(deps, want); diff != "" {
 		t.Errorf(`dl2.Get(ctx, "out.o")=%v, _, _ mismatch (-got +want):\n%s`, deps, diff)
 	}
-	if mtime != t1 {
+	if !mtime.Equal(t1) {
 		t.Errorf(`dl2.Get(ctx, "out.o")=_, %v, _; want _, %v, _`, mtime, t1)
 	}
 	want = []string{"foo.h", "bar2.h"}
@@ -80,7 +80,7 @@ func TestReadWriteDepsLog(t *testing.T) {
 	if diff := cmp.Diff(deps, want); diff != "" {
 		t.Errorf(`dl2.Get(ctx, "out2.o")=%v, _, _ mismatch (-got +want):\n%s`, deps, diff)
 	}
-	if mtime != t2 {
+	if !mtime.Equal(t2) {
 		t.Errorf(`dl2.Get(ctx, "out2.o")=_, %v, _; want _, %v, _`, mtime, t2)
 	}
 }

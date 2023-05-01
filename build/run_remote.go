@@ -28,9 +28,9 @@ func (b *Builder) runRemote(ctx context.Context, step *Step) error {
 			TargetId:         step.cmd.Outputs[0],
 		})
 		clog.Infof(ctx, "step state: remote exec")
-		step.SetPhase(stepRemoteRun)
+		step.setPhase(stepRemoteRun)
 		err := b.remoteExec.Run(ctx, step.cmd)
-		step.SetPhase(stepOutput)
+		step.setPhase(stepOutput)
 		b.stats.remoteDone(ctx, err)
 		if err == nil {
 			step.metrics.IsRemote = true

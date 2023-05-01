@@ -107,7 +107,7 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 			return err
 		}
 	}
-	step.SetPhase(stepPreproc)
+	step.setPhase(stepPreproc)
 	b.preprocSema.Do(ctx, func(ctx context.Context) error {
 		b.stats.preprocStart(ctx)
 		preprocCmd(ctx, b, step)

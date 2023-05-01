@@ -32,10 +32,10 @@ func TestProgress_NotIsTerminal(t *testing.T) {
 		},
 		state: &stepState{},
 	}
-	step.SetPhase(stepStart)
+	step.setPhase(stepStart)
 	p.step(ctx, b, step, progressPrefixStart)
 	time.Sleep(200 * time.Millisecond)
-	step.SetPhase(stepDone)
+	step.setPhase(stepDone)
 	p.step(ctx, b, step, progressPrefixFinish)
 	p.stop(ctx)
 
