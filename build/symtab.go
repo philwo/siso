@@ -4,7 +4,10 @@
 
 package build
 
-import "sync"
+import (
+	"strings"
+	"sync"
+)
 
 type symtab struct {
 	// Map of string => string, where both key and value are the same.
@@ -20,6 +23,7 @@ func (s *symtab) Lookup(v string) (string, bool) {
 }
 
 func (s *symtab) Intern(v string) string {
+	v = strings.Clone(v)
 	vv, _ := s.m.LoadOrStore(v, v)
 	return vv.(string)
 }
@@ -35,8 +39,8 @@ func (s *symtab) InternSlice(list []string) []string {
 		// Make a copy of the string.
 		// In case string is substring of large string, if it is used as
 		// intern value, the large string would be kept in memory.
-		buf := []byte(v)
-		v = string(buf)
+		// https://github.com/golang/go/issues/40200
+		v = strings.Clone(v)
 		vv, _ = s.m.LoadOrStore(v, v)
 		ret = append(ret, vv.(string))
 	}
