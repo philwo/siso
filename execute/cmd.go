@@ -321,7 +321,7 @@ func (c *Cmd) inputTree(ctx context.Context) ([]merkletree.Entry, error) {
 	if c.UseSystemInput {
 		var newInputs []string
 		for _, input := range inputs {
-			if strings.HasPrefix(input, "../") {
+			if !filepath.IsLocal(input) {
 				continue
 			}
 			newInputs = append(newInputs, input)

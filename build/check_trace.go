@@ -214,7 +214,7 @@ func filesDiff(ctx context.Context, b *Builder, x, opts, y []string, ignorePatte
 			errs = append(errs, fmt.Sprintf("%s: rel %v", name, err))
 			continue
 		}
-		if strings.HasPrefix(relname, "../") {
+		if !filepath.IsLocal(relname) {
 			platforms = append(platforms, pathname)
 			continue
 		}

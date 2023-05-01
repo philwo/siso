@@ -249,7 +249,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 	if err != nil {
 		return err
 	}
-	if rdir == ".." || strings.HasPrefix(filepath.ToSlash(rdir), "../") {
+	if !filepath.IsLocal(rdir) {
 		return fmt.Errorf("dir %q is out of exec root %q", cwd, execRoot)
 	}
 	c.dir = rdir
