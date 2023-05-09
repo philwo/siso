@@ -6,6 +6,7 @@ package build
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
@@ -19,6 +20,9 @@ func (b *Builder) runRemote(ctx context.Context, step *Step) error {
 	ctx, span := trace.NewSpan(ctx, "run-remote")
 	defer span.Close(nil)
 	clog.Infof(ctx, "run remote %s", step.cmd.Desc)
+	if experiments.Enabled("use-reproxy", "enable use-reproxy") {
+		return fmt.Errorf("use-reproxy not implemented")
+	}
 	err := b.remoteSema.Do(ctx, func(ctx context.Context) error {
 		started := time.Now()
 		ctx = reapi.NewContext(ctx, &rpb.RequestMetadata{

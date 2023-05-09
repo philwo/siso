@@ -24,6 +24,7 @@ var knownExperiments = map[string]string{
 	"fail-on-stdouterr":           "",
 	"gvisor":                      "",
 	"ignore-missing-local-inputs": "",
+	"use-reproxy":                 "",
 }
 
 type experimentFeature struct {
