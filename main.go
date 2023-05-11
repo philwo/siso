@@ -29,10 +29,12 @@ import (
 )
 
 var (
-	pprofAddr  string
-	cpuprofile string
-	memprofile string
-	traceFile  string
+	pprofAddr     string
+	cpuprofile    string
+	memprofile    string
+	blockprofRate int
+	mutexprofFrac int
+	traceFile     string
 )
 
 const version = "siso v0.0.1"
@@ -81,6 +83,8 @@ func sisoMain() int {
 	flag.StringVar(&pprofAddr, "pprof_addr", "", `listen address for "go tool pprof". e.g. "localhost:6060"`)
 	flag.StringVar(&cpuprofile, "cpuprofile", "", "write cpu profile to this file")
 	flag.StringVar(&memprofile, "memprofile", "", "write memory profile to this file")
+	flag.IntVar(&blockprofRate, "blockprof_rate", 0, "block profile rate")
+	flag.IntVar(&mutexprofFrac, "mutexprof_frac", 0, "mutex profile fraction")
 	flag.StringVar(&traceFile, "trace", "", "go trace output for `go tool trace`")
 	flag.Parse()
 
@@ -96,6 +100,13 @@ func sisoMain() int {
 			log.Fatalf("panic: %v\n%s", r, buf)
 		}
 	}()
+
+	if blockprofRate > 0 {
+		runtime.SetBlockProfileRate(blockprofRate)
+	}
+	if mutexprofFrac > 0 {
+		runtime.SetMutexProfileFraction(mutexprofFrac)
+	}
 
 	// Start an HTTP server that can be used to profile Siso during runtime.
 	if pprofAddr != "" {
