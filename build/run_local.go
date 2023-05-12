@@ -61,8 +61,6 @@ func (b *Builder) runLocal(ctx context.Context, step *Step) error {
 		impure := step.def.Binding("impure") == "true"
 		if !impure && enableTrace {
 			step.cmd.FileTrace = &execute.FileTrace{}
-		} else {
-			clog.Warningf(ctx, "disable file-access-trace impure=%t file-access-trace=%t", impure, enableTrace)
 		}
 	case enableTrace:
 		clog.Warningf(ctx, "unable to use file-access-trace")
