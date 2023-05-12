@@ -92,7 +92,7 @@ func (b *Builder) runCmd(ctx context.Context, step *Step, allowLocalFallback boo
 		}
 		b.stats.localFallback(ctx)
 		if experiments.Enabled("no-fallback", "remote-exec %s failed. no-fallback", step) {
-			return fmt.Errorf("remote-exec %s failed. no-fallback: %w", step, err)
+			return fmt.Errorf("remote-exec %s failed no-fallback: %w", step.cmd.ActionDigest(), err)
 		}
 		step.metrics.Fallback = true
 	}
