@@ -34,15 +34,16 @@ func TestReadWriteDepsLog(t *testing.T) {
 	if err != nil || !r {
 		t.Errorf(`dl1.Record(ctx, "out2.o", %v, []string{"foo.h", "bar2.h"})=%t, %v; want true, nil error`, t2, r, err)
 	}
-	want := []string{"foo.h", "bar.h"}
+	// Get will not see recorded entry in the same session.
+	var want []string
 	deps, mtime, err := dl1.Get(ctx, "out.o")
-	if err != nil {
-		t.Errorf(`d1.Get(ctx, "out.o")=_, _, %v; want _, _, nil error`, err)
+	if err == nil {
+		t.Errorf(`d1.Get(ctx, "out.o")=_, _, %v; want _, _, error`, err)
 	}
 	if diff := cmp.Diff(deps, want); diff != "" {
 		t.Errorf(`d1.Get(ctx, "out.o")=%v, _, _ mismatch (-got +want):\n%s`, deps, diff)
 	}
-	if !mtime.Equal(t1) {
+	if mtime.Equal(t1) {
 		t.Errorf(`d1.Get(ctx, "out.o")=_, %v, _; want _, %v, _`, mtime, t1)
 	}
 
@@ -66,6 +67,7 @@ func TestReadWriteDepsLog(t *testing.T) {
 	if err != nil {
 		t.Errorf(`dl2.Get(ctx, "out.o")=_, _, %v; want _, _, nil error`, err)
 	}
+	want = []string{"foo.h", "bar.h"}
 	if diff := cmp.Diff(deps, want); diff != "" {
 		t.Errorf(`dl2.Get(ctx, "out.o")=%v, _, _ mismatch (-got +want):\n%s`, deps, diff)
 	}

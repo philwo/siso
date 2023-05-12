@@ -29,6 +29,11 @@ import (
 type DepsLog struct {
 	fname string
 
+	// read-only data for Get.
+	rPaths   []string
+	rPathIdx map[string]int
+	rDeps    []*depsRecord
+
 	mu      sync.Mutex
 	paths   []string
 	pathIdx map[string]int
@@ -171,7 +176,11 @@ func NewDepsLog(ctx context.Context, fname string) (*DepsLog, error) {
 	if fname == "" {
 		return nil, errors.New("no ninja_deps")
 	}
-	depsLog := &DepsLog{fname: fname, pathIdx: make(map[string]int)}
+	depsLog := &DepsLog{
+		fname:    fname,
+		rPathIdx: make(map[string]int),
+		pathIdx:  make(map[string]int),
+	}
 	fbuf, err := os.ReadFile(fname)
 	if os.IsNotExist(err) {
 		clog.Infof(ctx, "ninja_deps %s doesn't exist: %v", fname, err)
@@ -242,6 +251,11 @@ readLoop:
 		}
 	}
 	clog.Infof(ctx, "ninja deps %s => paths=%d, deps=%d", depsLog.fname, len(depsLog.paths), len(depsLog.deps))
+	depsLog.rPaths = depsLog.paths
+	for k, v := range depsLog.pathIdx {
+		depsLog.rPathIdx[k] = v
+	}
+	depsLog.rDeps = depsLog.deps
 	return depsLog, nil
 }
 
@@ -279,19 +293,19 @@ func (d *DepsLog) Get(ctx context.Context, output string) ([]string, time.Time, 
 		return nil, mtime, errors.New("no deps log")
 	}
 	output = filepath.ToSlash(output)
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	i, found := d.pathIdx[output]
+	i, found := d.rPathIdx[output]
 	if !found {
 		return nil, mtime, errors.New("not found")
 	}
-	if d.paths[i] != output {
-		clog.Errorf(ctx, "inconsistent paths %s -> %d -> %s", output, i, d.paths[i])
+	if d.rPaths[i] != output {
+		clog.Errorf(ctx, "inconsistent paths %s -> %d -> %s", output, i, d.rPaths[i])
 		return nil, mtime, errors.New("inconsistent path in deps log")
 	}
-	deps, err := d.lookupDepRecord(ctx, i)
-	if err != nil {
-		clog.Warningf(ctx, "no deps for %s: %v", output, err)
+	if i >= len(d.rDeps) {
+		return nil, mtime, errors.New("no deps log entry")
+	}
+	deps := d.rDeps[i]
+	if deps == nil {
 		return nil, mtime, errors.New("no deps log entry")
 	}
 	return deps.inputs, time.Unix(int64(deps.mtime), 0), nil
