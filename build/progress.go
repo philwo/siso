@@ -19,8 +19,9 @@ type progress struct {
 	mu sync.Mutex
 	ts time.Time
 
-	actives activeSteps
-	done    chan struct{}
+	actives       activeSteps
+	done          chan struct{}
+	updateStopped chan struct{}
 }
 
 type stepInfo struct {
@@ -47,12 +48,14 @@ func (as *activeSteps) Pop() any {
 
 func (p *progress) start(ctx context.Context, b *Builder) {
 	p.done = make(chan struct{})
+	p.updateStopped = make(chan struct{})
 	go p.update(ctx, b)
 }
 
 func (p *progress) update(ctx context.Context, b *Builder) {
 	lastUpdate := time.Now()
 	lastStepUpdate := time.Now()
+	defer close(p.updateStopped)
 	for {
 		select {
 		case <-p.done:
@@ -99,6 +102,7 @@ func (p *progress) update(ctx context.Context, b *Builder) {
 
 func (p *progress) stop(ctx context.Context) {
 	close(p.done)
+	<-p.updateStopped
 }
 
 func (p *progress) report(format string, args ...any) {
