@@ -72,7 +72,12 @@ func (b *Builder) runCmd(ctx context.Context, step *Step, allowLocalFallback boo
 		clog.Infof(ctx, "run %s [allow-localfallback=%t]", step.cmd.Desc, allowLocalFallback)
 	}
 	if step.cmd.Pure && len(step.cmd.Platform) > 0 && step.cmd.Platform["container-image"] != "" && b.remoteExec != nil {
-		err := b.runRemote(ctx, step)
+		var err error
+		if experiments.Enabled("use-reproxy", "enable use-reproxy") {
+			err = b.runReproxy(ctx, step)
+		} else {
+			err = b.runRemote(ctx, step)
+		}
 		if err == nil {
 			// need to check remote outptus matches cmd.Outputs?
 			return nil

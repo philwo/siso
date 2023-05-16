@@ -32,6 +32,7 @@ import (
 	"infra/build/siso/execute"
 	"infra/build/siso/execute/localexec"
 	"infra/build/siso/execute/remoteexec"
+	"infra/build/siso/execute/reproxyexec"
 	"infra/build/siso/hashfs"
 	"infra/build/siso/o11y/clog"
 	"infra/build/siso/o11y/iometrics"
@@ -160,6 +161,9 @@ type Builder struct {
 	// reCacheEnableWrite bool
 	reapiclient *reapi.Client
 
+	reproxySema *semaphore.Semaphore
+	reproxyExec *reproxyexec.ReproxyExec
+
 	actionSalt []byte
 
 	sharedDepsLog SharedDepsLog
@@ -205,11 +209,19 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 	}
 	var le localexec.LocalExec
 	var re *remoteexec.RemoteExec
+	var pe *reproxyexec.ReproxyExec
 	if opts.REAPIClient != nil {
 		logger.Infof("enable remote exec")
 		re = remoteexec.New(ctx, opts.REAPIClient)
 	} else {
 		logger.Infof("disable remote exec")
+	}
+	if experiments.Enabled("use-reproxy", "enable use-reproxy") {
+		proxyAddr := os.Getenv("RBE_server_address")
+		if proxyAddr == "" {
+			return nil, fmt.Errorf("RBE_server_address env var must be set")
+		}
+		pe = reproxyexec.New(ctx, proxyAddr)
 	}
 	experiments.ShowOnce()
 	numCPU := runtime.NumCPU()
@@ -246,6 +258,8 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 		remoteExec:        re,
 		reCacheEnableRead: opts.RECacheEnableRead,
 		// reCacheEnableWrite: opts.RECacheEnableWrite,
+		reproxyExec: pe,
+		reproxySema: semaphore.New("reproxyexec", remoteLimit),
 		actionSalt:  opts.ActionSalt,
 		reapiclient: opts.REAPIClient,
 		// sharedDepsLog:      opts.SharedDepsLog,
