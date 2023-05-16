@@ -393,13 +393,11 @@ func (l *Logger) Close() error {
 	if l.accessLogger != nil {
 		aerr = l.accessLogger.Flush()
 	}
+	// not close client to avoid 'panic: send on closed channel'
+	// b/282860686
+	// https://github.com/googleapis/google-cloud-go/issues/7944
 	if lerr != nil || aerr != nil {
-		l.client.Close()
 		return fmt.Errorf("failed to flush logging: %w, %w", lerr, aerr)
-	}
-	err := l.client.Close()
-	if err != nil {
-		return fmt.Errorf("failed to close logging: %w", err)
 	}
 	return nil
 }
