@@ -89,6 +89,9 @@ type Cmd struct {
 	// by build deps, nor in deps log.
 	ToolInputs []string
 
+	// TreeInputs are precomputed subtree inputs of the cmd.
+	TreeInputs []merkletree.TreeEntry
+
 	// If UseSystemInputs is true, inputs may include system includes,
 	// but it won't be included in remote exec request and expect such
 	// files exist in platform container image.
@@ -279,7 +282,7 @@ func (c *Cmd) Digest(ctx context.Context, ds *digest.Store) (digest.Digest, erro
 		ents = c.canonicalizeEntries(ctx, ents)
 	}
 
-	inputRootDigest, err := treeDigest(ctx, ents, ds)
+	inputRootDigest, err := treeDigest(ctx, c.TreeInputs, ents, ds)
 	if err != nil {
 		return digest.Digest{}, fmt.Errorf("failed to get input root for %s: %w", c, err)
 	}
@@ -392,13 +395,36 @@ func (c *Cmd) inputTree(ctx context.Context) ([]merkletree.Entry, error) {
 }
 
 // treeDigest returns a digest for the Merkle tree entries.
-func treeDigest(ctx context.Context, entries []merkletree.Entry, ds *digest.Store) (digest.Digest, error) {
+func treeDigest(ctx context.Context, subtrees []merkletree.TreeEntry, entries []merkletree.Entry, ds *digest.Store) (digest.Digest, error) {
 	t := merkletree.New(ds)
+	for _, subtree := range subtrees {
+		if log.V(2) {
+			clog.Infof(ctx, "input subtree: %#v", subtree)
+		}
+		err := t.SetTree(subtree)
+		if errors.Is(err, merkletree.ErrPrecomputedSubTree) {
+			// probably wrong TreeInputs are set.
+			// assume upper subtree covers lower subtree,
+			// so ignore ErrPrecomputedSubTree here.
+			clog.Warningf(ctx, "ignore subtree %v: %v", subtree, err)
+			continue
+		}
+		if err != nil {
+			return digest.Digest{}, err
+		}
+	}
 	for _, ent := range entries {
 		if log.V(2) {
 			clog.Infof(ctx, "input entry: %#v", ent)
 		}
 		err := t.Set(ent)
+		if errors.Is(err, merkletree.ErrPrecomputedSubTree) {
+			// wrong config or deps uses files in subtree.
+			// assume subtree contains the file,
+			// so ignore ErrPrecomputedSubTree here.
+			clog.Warningf(ctx, "ignore entry in subtree %v: %v", ent, err)
+			continue
+		}
 		if err != nil {
 			return digest.Digest{}, err
 		}
