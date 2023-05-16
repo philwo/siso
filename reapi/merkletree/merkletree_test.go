@@ -279,6 +279,9 @@ func getNode(mt *MerkleTree, path string) (proto.Message, error) {
 		if !ok {
 			return nil, fmt.Errorf("%s not found in %s", name, strings.Join(paths[:len(paths)-1], "/"))
 		}
+		if cur == nil {
+			return nil, fmt.Errorf("%s in subtree %s", name, strings.Join(paths[:len(paths)-1], "/"))
+		}
 	}
 }
 
@@ -409,6 +412,123 @@ func TestBuild(t *testing.T) {
 	_, isExecutable, err = getDigest(skiaPrivateDir, "SkSafe32.h")
 	if err != nil || isExecutable {
 		t.Errorf("SkSafe32 is executable: %t %v; want: false, nil", isExecutable, err)
+	}
+}
+
+func TestBuildWithSubTree(t *testing.T) {
+	ctx := context.Background()
+	ds := digest.NewStore()
+	mt := New(ds)
+
+	for _, ent := range []Entry{
+		{
+			Name:         "bin/clang",
+			Data:         digest.FromBytes("clang binary", []byte("clang binary")),
+			IsExecutable: true,
+		},
+		{
+			Name:   "bin/clang++",
+			Target: "clang",
+		},
+		{
+			Name: "lib/clang/17/include/stdint.h",
+			Data: digest.FromBytes("stdint.h", []byte("stdint.h")),
+		},
+		{
+			Name: "lib/libstdc++.so.6",
+			Data: digest.FromBytes("libstdc++.so.6", []byte("libstdc++.so.6")),
+		},
+	} {
+		err := mt.Set(ent)
+		if err != nil {
+			t.Fatalf("mt.Set(%v)=%v; want nil error", ent, err)
+		}
+	}
+	d, err := mt.Build(ctx)
+	if err != nil {
+		t.Fatalf("mt.Build()=%v, %v; want nil err", d, err)
+	}
+
+	tds := ds
+	ds = digest.NewStore()
+	t.Logf("set tree third_party/llvm-build/Release+Asserts %s", d)
+	mt = New(ds)
+	err = mt.SetTree(TreeEntry{
+		Name:   "third_party/llvm-build/Release+Asserts",
+		Digest: d,
+		Store:  tds,
+	})
+	if err != nil {
+		t.Errorf("SetTree(treeEntry)=%v; want nil err", err)
+	}
+	for _, e := range []struct {
+		ent     Entry
+		wantErr bool
+	}{
+		{
+			ent: Entry{
+				Name:         "third_party/llvm-build/Release+Asserts/bin/clang",
+				Data:         digest.FromBytes("clang binary", []byte("clang binary")),
+				IsExecutable: true,
+			},
+			wantErr: true,
+		},
+		{
+			ent: Entry{
+				Name: "base/base.h",
+				Data: digest.FromBytes("base.h", []byte("base.h")),
+			},
+		},
+		{
+			ent: Entry{
+				Name: "base/base.cc",
+				Data: digest.FromBytes("base.cc", []byte("base.cc")),
+			},
+		},
+	} {
+		err := mt.Set(e.ent)
+		if (err != nil) != e.wantErr {
+			t.Errorf("mt.Set(%v)=%v; want err %t", e.ent, err, e.wantErr)
+		}
+	}
+	d, err = mt.Build(ctx)
+	if err != nil {
+		t.Fatalf("mt.Build()=%v, %v; want nil err", d, err)
+	}
+
+	dir, err := openDir(ctx, ds, d)
+	if err != nil {
+		t.Fatalf("root %v not found: %v", d, err)
+	}
+	checkDir(ctx, t, ds, dir, "",
+		nil,
+		[]string{"base", "third_party"},
+		nil)
+	checkDir(ctx, t, ds, dir, "base",
+		[]string{"base.cc", "base.h"},
+		nil, nil)
+
+	tpDir := checkDir(ctx, t, ds, dir, "third_party", nil, []string{"llvm-build"}, nil)
+	llvmDir := checkDir(ctx, t, ds, tpDir, "llvm-build", nil, []string{"Release+Asserts"}, nil)
+	raDir := checkDir(ctx, t, ds, llvmDir, "Release+Asserts", nil, []string{"bin", "lib"}, nil)
+	binDir := checkDir(ctx, t, ds, raDir, "bin", []string{"clang"}, nil, []string{"clang++"})
+
+	_, isExecutable, err := getDigest(binDir, "clang")
+	if err != nil || !isExecutable {
+		t.Errorf("clang is not executable: %t %v; want: true, nil", isExecutable, err)
+	}
+	_, _, err = getDigest(binDir, "clang++")
+	if err != nil {
+		t.Errorf("clang++ not found: %v", err)
+	}
+
+	libDir := checkDir(ctx, t, ds, raDir, "lib", []string{"libstdc++.so.6"}, []string{"clang"}, nil)
+	libClangDir := checkDir(ctx, t, ds, libDir, "clang", nil, []string{"17"}, nil)
+	libClang17Dir := checkDir(ctx, t, ds, libClangDir, "17", nil, []string{"include"}, nil)
+	libClang17IncludeDir := checkDir(ctx, t, ds, libClang17Dir, "include", []string{"stdint.h"}, nil, nil)
+	_, isExecutable, err = getDigest(libClang17IncludeDir, "stdint.h")
+	if err != nil || isExecutable {
+		t.Errorf("stdint.h is executable: %t, %v; want: false, nil", isExecutable, err)
 	}
 }
 

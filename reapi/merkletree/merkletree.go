@@ -85,6 +85,12 @@ var (
 	// ErrBadPath indicates name in Entry contains bad path component
 	// e.g. "." or "..".
 	ErrBadPath = errors.New("merkletree: bad path component")
+
+	// ErrBadTree indicates TreeEntry has bad digest.
+	ErrBadTree = errors.New("merkletree: bad tree")
+
+	// ErrPrecomputedSubTree indicates to set an entry in precomputed subtree, but we can't change anything under the subtree because it used precomputed digest.
+	ErrPrecomputedSubTree = errors.New("merkletree: set in precomputed subtree")
 )
 
 type dirstate struct {
@@ -149,7 +155,10 @@ func (m *MerkleTree) Set(entry Entry) error {
 					})
 					return nil
 				}
-				m.setDir(cur, name)
+				_, err := m.setDir(cur, name)
+				if err != nil {
+					return err
+				}
 				return nil
 			}
 			if name == "." || name == ".." {
@@ -179,7 +188,11 @@ func (m *MerkleTree) Set(entry Entry) error {
 			continue
 		}
 		dirstack = append(dirstack, cur)
-		cur = m.setDir(cur, name)
+		var err error
+		cur, err = m.setDir(cur, name)
+		if err != nil {
+			return fmt.Errorf("set %s: %w", fname, err)
+		}
 	}
 }
 
@@ -195,7 +208,7 @@ func pathJoin(dir, base string) string {
 	return b.String()
 }
 
-func (m *MerkleTree) setDir(cur dirstate, name string) dirstate {
+func (m *MerkleTree) setDir(cur dirstate, name string) (dirstate, error) {
 	dirname := pathJoin(cur.name, name)
 	dir, exists := m.m[dirname]
 	if !exists {
@@ -207,7 +220,114 @@ func (m *MerkleTree) setDir(cur dirstate, name string) dirstate {
 		dir = &rpb.Directory{}
 		m.m[dirname] = dir
 	}
-	return dirstate{name: dirname, dir: dir}
+	if dir == nil {
+		return dirstate{}, ErrPrecomputedSubTree
+	}
+	return dirstate{name: dirname, dir: dir}, nil
+}
+
+// TreeEntry is a precomputed subtree entry in the tree.
+// When using the same sets in a directory many times, we can precompute
+// digest for the subtree to reduce computation cost and memory cost.
+type TreeEntry struct {
+	// Name is relative path from root dir.
+	// Name should not end with "." or "..".
+	Name string
+
+	// Digest is the digest of this sub tree.
+	Digest digest.Digest
+
+	// Store is the digest store used to build the subtree.
+	// It may be nil, if it is sure that the subtree was uploaded
+	// to CAS and no need to check missing blobs / upload blobs
+	// of the subtree.
+	Store *digest.Store
+}
+
+// SetTree sets a subtree entry.
+// It may return ErrAbsPath/ErrBadPath/ErrBadTree as error.
+func (m *MerkleTree) SetTree(tentry TreeEntry) error {
+	dname := tentry.Name
+	if tentry.Digest.IsZero() {
+		return fmt.Errorf("setTree %s: %w", dname, ErrBadTree)
+	}
+	if filepath.IsAbs(dname) || strings.HasPrefix(dname, "/") || strings.HasPrefix(dname, `\`) {
+		return fmt.Errorf("setTree %s: %w", dname, ErrAbsPath)
+	}
+	dname = filepath.ToSlash(dname)
+	_, exists := m.m[dname]
+	if exists {
+		return fmt.Errorf("setTree %s: %w", dname, ErrPrecomputedSubTree)
+	}
+	elems := splitElem(dname)
+	if len(elems) == 0 {
+		if !tentry.Digest.IsZero() {
+			return fmt.Errorf("setTree %s: %w", dname, ErrBadPath)
+		}
+		return nil
+	}
+	cur := dirstate{
+		name: ".",
+		dir:  m.RootDirectory(),
+	}
+	var dirstack []dirstate
+	for {
+		var name string
+		name, elems = elems[0], elems[1:]
+		if len(elems) == 0 {
+			// a leaf.
+			if name == "" {
+				return fmt.Errorf("setTree %s: empty path element: %w", dname, ErrBadPath)
+			}
+			if name == "." || name == ".." {
+				return fmt.Errorf("setTree %s: %s at the leaf: %w", dname, name, ErrBadPath)
+			}
+			m.setTree(cur, name, tentry.Digest, tentry.Store)
+			return nil
+		}
+		if name == "" {
+			continue
+		}
+		if name == "." {
+			continue
+		}
+		if name == ".." {
+			if len(dirstack) == 0 {
+				return fmt.Errorf("setTree %s: out of exec root: %w", dname, ErrBadPath)
+			}
+			cur, dirstack = dirstack[len(dirstack)-1], dirstack[:len(dirstack)-1]
+			continue
+		}
+		dirstack = append(dirstack, cur)
+		var err error
+		cur, err = m.setDir(cur, name)
+		if err != nil {
+			return fmt.Errorf("setTree %s: %w", dname, err)
+		}
+	}
+}
+
+func (m *MerkleTree) setTree(cur dirstate, name string, d digest.Digest, store *digest.Store) {
+	dirname := pathJoin(cur.name, name)
+	dirnode := &rpb.DirectoryNode{
+		Name:   name,
+		Digest: d.Proto(),
+	}
+	cur.dir.Directories = append(cur.dir.Directories, dirnode)
+	_, exists := m.m[dirname]
+	if !exists {
+		m.m[dirname] = nil
+	}
+	if m.store != nil && store != nil {
+		ds := store.List()
+		for _, d := range ds {
+			data, ok := store.Get(d)
+			if !ok {
+				continue
+			}
+			m.store.Set(data)
+		}
+	}
 }
 
 // Build builds merkle tree and returns root's digest.
@@ -275,12 +395,13 @@ func (m *MerkleTree) buildTree(ctx context.Context, curdir *rpb.Directory, dirna
 		if !found {
 			return nil, fmt.Errorf("directory not found: %s", dirname)
 		}
-		digest, err := m.buildTree(ctx, dir, dirname)
-		if err != nil {
-			return nil, err
+		if dir != nil && subdir.Digest == nil {
+			digest, err := m.buildTree(ctx, dir, dirname)
+			if err != nil {
+				return nil, err
+			}
+			subdir.Digest = digest
 		}
-		subdir.Digest = digest
-
 		p, found := names[subdir.Name]
 		if found {
 			if !proto.Equal(subdir, p) {
