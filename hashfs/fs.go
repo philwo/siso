@@ -591,7 +591,7 @@ func (hfs *HashFS) Entries(ctx context.Context, root string, inputs []string) ([
 				clog.Infof(ctx, "resolve symlink %s to %s", fname, name)
 				target = elink.target
 				data = elink.data
-				isExecutable = elink.isExecutable
+				isExecutable = elink.mode&0111 != 0
 			}
 		}
 		entries = append(entries, merkletree.Entry{
@@ -783,10 +783,9 @@ type entry struct {
 	// atomic flag for readiness of metadata.
 	// true - ready. readyq was closed.
 	// false - not ready. need to wait on readyq.
-	ready        atomic.Bool
-	d            digest.Digest
-	isExecutable bool
-	target       string // symlink.
+	ready  atomic.Bool
+	d      digest.Digest
+	target string // symlink.
 
 	data digest.Data // from local.
 	buf  []byte      // from WriteFile.
@@ -870,7 +869,7 @@ func (e *entry) init(ctx context.Context, fname string, m *iometrics.IOMetrics) 
 		}
 		e.d = e.data.Digest()
 		if log.V(1) {
-			clog.Infof(ctx, "tree entry %s: file %s x:%t", fname, e.d, e.isExecutable)
+			clog.Infof(ctx, "tree entry %s: file %s %s", fname, e.d, e.mode)
 		}
 	default:
 		e.setError(fmt.Errorf("unexpected filetype not regular %s: %s", fi.Mode(), fname))

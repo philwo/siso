@@ -198,7 +198,7 @@ func (hfs *HashFS) SetState(ctx context.Context, state *State) error {
 			clog.Infof(ctx, "old local %s %s: state:%s disk:%s cmdhash:%s", ftype, ent.Name, e.mtime, fi.ModTime(), hex.EncodeToString(e.cmdhash))
 		}
 		if log.V(1) {
-			clog.Infof(ctx, "set state %s: d:%s x:%t s:%s m:%s cmdhash:%s action:%s", ent.Name, e.d, e.isExecutable, e.target, e.mtime, hex.EncodeToString(e.cmdhash), e.action)
+			clog.Infof(ctx, "set state %s: d:%s %s s:%s m:%s cmdhash:%s action:%s", ent.Name, e.d, e.mode, e.target, e.mtime, hex.EncodeToString(e.cmdhash), e.action)
 		}
 		if err := hfs.directory.store(ctx, filepath.ToSlash(ent.Name), e); err != nil {
 			return err
@@ -242,15 +242,20 @@ func newStateEntry(ent EntryState, ftime time.Time, dataSource DataSource, m *io
 	} else if ent.Target == "" {
 		dir = &directory{}
 	}
+	mode := fs.FileMode(0644)
+	if ent.IsExecutable {
+		mode |= 0111
+	}
 	e := &entry{
-		lready:       lready,
-		mtime:        entTime,
-		readyq:       readyq,
-		d:            ent.Digest,
-		isExecutable: ent.IsExecutable,
-		target:       ent.Target,
-		data:         data,
-		directory:    dir,
+		lready:    lready,
+		size:      ent.Digest.SizeBytes,
+		mtime:     entTime,
+		mode:      mode,
+		readyq:    readyq,
+		d:         ent.Digest,
+		target:    ent.Target,
+		data:      data,
+		directory: dir,
 	}
 	e.ready.Store(true)
 	return e, entType
@@ -355,7 +360,7 @@ func (hfs *HashFS) State(ctx context.Context) *State {
 						},
 						Name:         name,
 						Digest:       e.d,
-						IsExecutable: e.isExecutable,
+						IsExecutable: e.mode&0111 != 0,
 						Target:       e.target,
 						CmdHash:      hex.EncodeToString(e.cmdhash),
 						Action:       e.action,
