@@ -1296,6 +1296,11 @@ func (fi *FileInfo) Action() digest.Digest {
 	return fi.e.action
 }
 
+// Target returns a symlink target of the file, or empty if it is not symlink.
+func (fi *FileInfo) Target() string {
+	return fi.e.target
+}
+
 // DirEntry implements https://pkg.go.dev/io/fs#DirEntry.
 type DirEntry struct {
 	fi *FileInfo

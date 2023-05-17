@@ -15,7 +15,6 @@ import (
 	"infra/build/siso/execute"
 	"infra/build/siso/o11y/clog"
 	"infra/build/siso/o11y/trace"
-	"infra/build/siso/reapi/merkletree"
 	"infra/build/siso/toolsupport/gccutil"
 	"infra/build/siso/toolsupport/makeutil"
 )
@@ -144,9 +143,8 @@ func (depsGCC) depsInputs(ctx context.Context, b *Builder, step *Step) ([]string
 			continue
 		}
 		inputs = append(inputs, inpath)
-		entry, ok := fi.Sys().(merkletree.Entry)
-		if ok && entry.Target != "" {
-			inputs = append(inputs, b.path.MustFromWD(filepath.Join(filepath.Dir(in), entry.Target)))
+		if target := fi.Target(); target != "" {
+			inputs = append(inputs, b.path.MustFromWD(filepath.Join(filepath.Dir(in), target)))
 		}
 	}
 	return inputs, nil

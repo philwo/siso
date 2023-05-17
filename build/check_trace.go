@@ -20,7 +20,6 @@ import (
 
 	"infra/build/siso/o11y/clog"
 	"infra/build/siso/o11y/trace"
-	"infra/build/siso/reapi/merkletree"
 )
 
 // TODO(b/276390237): Provide user friendly build dependency errors caught by file trace
@@ -238,9 +237,8 @@ func filesDiff(ctx context.Context, b *Builder, x, opts, y []string, ignorePatte
 		}
 		adds = append(adds, relname)
 		seen[relname] = stateUsed
-		entry, ok := fi.Sys().(merkletree.Entry)
-		if ok && entry.Target != "" {
-			target := filepath.Join(filepath.Dir(relname), entry.Target)
+		if target := fi.Target(); target != "" {
+			target := filepath.Join(filepath.Dir(relname), target)
 			s, ok := seen[target]
 			if ok {
 				if s == stateRequired {
