@@ -46,6 +46,13 @@ type Graph interface {
 	// if err is ErrDuplicateStep, a step that geneartes the target
 	// is already processed.
 	StepDef(context.Context, string, StepDef) (StepDef, []string, error)
+
+	// InputDeps returns input dependencies.
+	// input dependencies is a map from input path or label to
+	// other files or labels needed for the key.
+	// path is exec root relative and label contains ':'.
+	// it's "input_deps" in starlark config.
+	InputDeps(context.Context) map[string][]string
 }
 
 // plan maintains which step to execute next.

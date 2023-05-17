@@ -253,3 +253,8 @@ func (g *Graph) StepDef(ctx context.Context, target string, next build.StepDef) 
 func (g *Graph) RecordDepsLog(ctx context.Context, output string, mtime time.Time, deps []string) (bool, error) {
 	return g.globals.depsLog.Record(ctx, output, mtime, deps)
 }
+
+// InputDeps returns input deps.
+func (g *Graph) InputDeps(ctx context.Context) map[string][]string {
+	return g.globals.stepConfig.InputDeps
+}

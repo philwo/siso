@@ -149,6 +149,9 @@ type Builder struct {
 
 	preprocSema *semaphore.Semaphore
 
+	// for subtree: dir -> *subtree
+	trees sync.Map
+
 	localSema *semaphore.Semaphore
 	localExec localexec.LocalExec
 
