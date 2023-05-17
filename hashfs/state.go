@@ -41,9 +41,9 @@ func (o *Option) RegisterFlags(flagSet *flag.FlagSet) {
 	flagSet.StringVar(&o.StateFile, "fs_state", defaultStateFile, "fs state filename")
 }
 
-// DataSource is an interface to get digest data for digest and its name.
+// DataSource is an interface to get digest source for digest and its name.
 type DataSource interface {
-	DigestData(digest.Digest, string) digest.Data
+	Source(digest.Digest, string) digest.Source
 }
 
 type fileID struct {
@@ -212,7 +212,6 @@ func newStateEntry(ent EntryState, ftime time.Time, dataSource DataSource, m *io
 	lready := make(chan bool, 1)
 	readyq := make(chan struct{})
 	close(readyq)
-	var data digest.Data
 	entTime := time.Unix(0, ent.ID.ModTime)
 	var entType entryStateType
 	switch {
@@ -231,13 +230,14 @@ func newStateEntry(ent EntryState, ftime time.Time, dataSource DataSource, m *io
 		lready <- true
 	}
 	var dir *directory
+	var src digest.Source
 	if !ent.Digest.IsZero() {
 		if entType == entryEqLocal {
-			data = digest.NewData(digest.LocalFileSource{Fname: ent.Name, IOMetrics: m}, ent.Digest)
+			src = digest.LocalFileSource{Fname: ent.Name, IOMetrics: m}
 		} else {
 			// not the same as local, but digest is in state.
 			// probably, exists in RBE side, or local cache.
-			data = dataSource.DigestData(ent.Digest, ent.Name)
+			src = dataSource.Source(ent.Digest, ent.Name)
 		}
 	} else if ent.Target == "" {
 		dir = &directory{}
@@ -252,9 +252,9 @@ func newStateEntry(ent EntryState, ftime time.Time, dataSource DataSource, m *io
 		mtime:     entTime,
 		mode:      mode,
 		readyq:    readyq,
-		d:         ent.Digest,
 		target:    ent.Target,
-		data:      data,
+		src:       src,
+		d:         ent.Digest,
 		directory: dir,
 	}
 	e.ready.Store(true)

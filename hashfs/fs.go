@@ -245,10 +245,10 @@ func (hfs *HashFS) ReadFile(ctx context.Context, root, fname string) ([]byte, er
 	if err != nil {
 		return nil, err
 	}
-	if e.data.IsZero() {
+	if e.d.IsZero() {
 		return nil, fmt.Errorf("read file %s: no data", fname)
 	}
-	buf, err := digest.DataToBytes(ctx, e.data)
+	buf, err := digest.DataToBytes(ctx, digest.NewData(e.src, e.d))
 	if log.V(1) {
 		clog.Infof(ctx, "readfile %s: %v", fname, err)
 	}
@@ -281,8 +281,8 @@ func (hfs *HashFS) WriteFile(ctx context.Context, root, fname string, b []byte, 
 		mtime:   mtime,
 		mode:    mode,
 		readyq:  readyq,
+		src:     data,
 		d:       data.Digest(),
-		data:    data,
 		buf:     b,
 		cmdhash: cmdhash,
 	}
@@ -363,11 +363,11 @@ func (hfs *HashFS) Copy(ctx context.Context, root, src, dst string, mtime time.T
 		mode:    e.mode,
 		cmdhash: cmdhash,
 		readyq:  readyq,
-		d:       e.d,
 		target:  e.target,
 		// use the same data source as src if any.
-		data: e.data,
-		buf:  e.buf,
+		src: e.src,
+		d:   e.d,
+		buf: e.buf,
 	}
 	newEnt.ready.Store(true)
 	err = hfs.directory.store(ctx, dstfname, newEnt)
@@ -537,12 +537,12 @@ func (hfs *HashFS) Entries(ctx context.Context, root string, inputs []string) ([
 	var entries []merkletree.Entry
 	for i, fname := range inputs {
 		e := ents[i]
-		if err := e.getError(); err != nil || (e.data.IsZero() && e.target == "" && e.directory == nil) {
+		if err := e.getError(); err != nil || (e.d.IsZero() && e.target == "" && e.directory == nil) {
 			// TODO: hard fail instead?
-			clog.Warningf(ctx, "missing %s data:%v target:%q: %v", fname, e.data, e.target, err)
+			clog.Warningf(ctx, "missing %s data:%v target:%q: %v", fname, e.d, e.target, err)
 			continue
 		}
-		data := e.data
+		data := digest.NewData(e.src, e.d)
 		isExecutable := e.mode&0111 != 0
 		target := e.target
 		if target != "" {
@@ -590,7 +590,7 @@ func (hfs *HashFS) Entries(ctx context.Context, root string, inputs []string) ([
 			if e != elink {
 				clog.Infof(ctx, "resolve symlink %s to %s", fname, name)
 				target = elink.target
-				data = elink.data
+				data = digest.NewData(elink.src, elink.d)
 				isExecutable = elink.mode&0111 != 0
 			}
 		}
@@ -629,8 +629,8 @@ func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []merkle
 				cmdhash: cmdhash,
 				action:  action,
 				readyq:  readyq,
+				src:     ent.Data,
 				d:       ent.Data.Digest(),
-				data:    ent.Data,
 			}
 			e.ready.Store(true)
 			if err := hfs.directory.store(ctx, fname, e); err != nil {
@@ -694,8 +694,8 @@ func (ns noSource) String() string {
 
 type noDataSource struct{}
 
-func (noDataSource) DigestData(d digest.Digest, fname string) digest.Data {
-	return digest.NewData(noSource{fname}, d)
+func (noDataSource) Source(d digest.Digest, fname string) digest.Source {
+	return noSource{fname}
 }
 
 // Flush flushes cached information for files under execRoot to local disk.
@@ -784,11 +784,11 @@ type entry struct {
 	// true - ready. readyq was closed.
 	// false - not ready. need to wait on readyq.
 	ready  atomic.Bool
-	d      digest.Digest
 	target string // symlink.
 
-	data digest.Data // from local.
-	buf  []byte      // from WriteFile.
+	src digest.Source
+	d   digest.Digest
+	buf []byte // from WriteFile.
 
 	mu        sync.RWMutex
 	directory *directory
@@ -861,13 +861,16 @@ func (e *entry) init(ctx context.Context, fname string, m *iometrics.IOMetrics) 
 			e.mode |= 0111
 		}
 		// TODO(b/282885676) lazy digest calculation
-		e.data, err = localDigest(ctx, fname, m)
+		src := digest.LocalFileSource{Fname: fname, IOMetrics: m}
+		// TODO(b/271059955): add xattr support.
+		data, err := digest.FromLocalFile(ctx, src)
 		if err != nil {
 			clog.Errorf(ctx, "tree entry %s: file error: %v", fname, err)
 			e.setError(err)
 			return
 		}
-		e.d = e.data.Digest()
+		e.src = src
+		e.d = data.Digest()
 		if log.V(1) {
 			clog.Infof(ctx, "tree entry %s: file %s %s", fname, e.d, e.mode)
 		}
@@ -952,8 +955,8 @@ func (e *entry) setError(err error) {
 		e.err = err
 	}
 	if e.err != nil {
+		e.src = nil
 		e.d = digest.Digest{}
-		e.data = digest.Data{}
 		e.buf = nil
 		e.target = ""
 		e.directory = nil
@@ -1052,10 +1055,10 @@ func (e *entry) flush(ctx context.Context, fname string, m *iometrics.IOMetrics)
 	}
 	buf := e.buf
 	if len(buf) == 0 {
-		if e.data.IsZero() {
+		if e.d.IsZero() {
 			return fmt.Errorf("no data: retrieve %s: ", fname)
 		}
-		buf, err = digest.DataToBytes(ctx, e.data)
+		buf, err = digest.DataToBytes(ctx, digest.NewData(e.src, e.d))
 		clog.Infof(ctx, "flush %s %s from source: %v", fname, e.d, err)
 		if err != nil {
 			e.setError(err)
@@ -1286,7 +1289,7 @@ func (fi *FileInfo) IsDir() bool {
 func (fi *FileInfo) Sys() any {
 	return merkletree.Entry{
 		Name:         fi.fname,
-		Data:         fi.e.data,
+		Data:         digest.NewData(fi.e.src, fi.e.d),
 		IsExecutable: fi.e.mode&0111 != 0,
 		Target:       fi.e.target,
 	}

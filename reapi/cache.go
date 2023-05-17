@@ -65,13 +65,13 @@ func (c CacheStore) HasContent(ctx context.Context, d digest.Digest) bool {
 	return len(missing) != 1
 }
 
-// DigestData returns digest data for fname identified by the digest.
-func (c CacheStore) DigestData(d digest.Digest, fname string) digest.Data {
-	return digest.NewData(digestSource{
+// Source returns digest source for fname identified by the digest.
+func (c CacheStore) Source(d digest.Digest, fname string) digest.Source {
+	return digestSource{
 		c:     c.client,
 		d:     d,
 		fname: fname,
-	}, d)
+	}
 }
 
 type digestSourceReader struct {

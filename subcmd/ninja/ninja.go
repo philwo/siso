@@ -709,8 +709,8 @@ type source struct {
 
 func (s source) Open(ctx context.Context) (io.ReadCloser, error) {
 	if s.dataSource.cache != nil {
-		dd := s.dataSource.cache.DigestData(s.d, s.fname)
-		r, err := dd.Open(ctx)
+		src := s.dataSource.cache.Source(s.d, s.fname)
+		r, err := src.Open(ctx)
 		if err == nil {
 			return r, nil
 		}

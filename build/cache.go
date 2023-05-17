@@ -41,8 +41,8 @@ type CacheStore interface {
 	// HasContent checks whether content of the digest exists in the cache.
 	HasContent(context.Context, digest.Digest) bool
 
-	// DigestData returns digest data for the name identified by the digest.
-	DigestData(digest.Digest, string) digest.Data
+	// Source returns digest source for the name identified by the digest.
+	Source(digest.Digest, string) digest.Source
 }
 
 // Cache is a cache used in the builder.

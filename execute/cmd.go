@@ -579,9 +579,10 @@ func (c *Cmd) EntriesFromResult(ctx context.Context, ds hashfs.DataSource, resul
 			continue
 		}
 		fname := filepath.Join(c.Dir, f.Path)
+		d := digest.FromProto(f.Digest)
 		entries = append(entries, merkletree.Entry{
 			Name:         fname,
-			Data:         ds.DigestData(digest.FromProto(f.Digest), fname),
+			Data:         digest.NewData(ds.Source(d, fname), d),
 			IsExecutable: f.IsExecutable,
 		})
 	}
