@@ -271,15 +271,20 @@ func (hfs *HashFS) WriteFile(ctx context.Context, root, fname string, b []byte, 
 	readyq := make(chan struct{})
 	close(readyq)
 
+	mode := fs.FileMode(0644)
+	if isExecutable {
+		mode |= 0111
+	}
 	e := &entry{
-		lready:       lready,
-		mtime:        mtime,
-		readyq:       readyq,
-		d:            data.Digest(),
-		isExecutable: isExecutable,
-		data:         data,
-		buf:          b,
-		cmdhash:      cmdhash,
+		lready:  lready,
+		size:    data.Digest().SizeBytes,
+		mtime:   mtime,
+		mode:    mode,
+		readyq:  readyq,
+		d:       data.Digest(),
+		data:    data,
+		buf:     b,
+		cmdhash: cmdhash,
 	}
 	e.ready.Store(true)
 	err := hfs.directory.store(ctx, fname, e)
@@ -301,6 +306,7 @@ func (hfs *HashFS) Symlink(ctx context.Context, root, target, linkpath string, m
 	e := &entry{
 		lready:  lready,
 		mtime:   mtime,
+		mode:    0644 | fs.ModeSymlink,
 		cmdhash: cmdhash,
 		readyq:  readyq,
 		target:  target,
@@ -351,13 +357,14 @@ func (hfs *HashFS) Copy(ctx context.Context, root, src, dst string, mtime time.T
 	readyq := make(chan struct{})
 	close(readyq)
 	newEnt := &entry{
-		lready:       lready,
-		mtime:        mtime,
-		cmdhash:      cmdhash,
-		readyq:       readyq,
-		d:            e.d,
-		isExecutable: e.isExecutable,
-		target:       e.target,
+		lready:  lready,
+		size:    e.size,
+		mtime:   mtime,
+		mode:    e.mode,
+		cmdhash: cmdhash,
+		readyq:  readyq,
+		d:       e.d,
+		target:  e.target,
 		// use the same data source as src if any.
 		data: e.data,
 		buf:  e.buf,
@@ -391,6 +398,7 @@ func (hfs *HashFS) Mkdir(ctx context.Context, root, dirname string) error {
 	e := &entry{
 		lready:    lready,
 		mtime:     time.Now(),
+		mode:      0644 | fs.ModeDir,
 		readyq:    readyq,
 		directory: &directory{},
 	}
@@ -535,7 +543,7 @@ func (hfs *HashFS) Entries(ctx context.Context, root string, inputs []string) ([
 			continue
 		}
 		data := e.data
-		isExecutable := e.isExecutable
+		isExecutable := e.mode&0111 != 0
 		target := e.target
 		if target != "" {
 			// Linux imposes a limit of at most 40 symlinks in any one path lookup.
@@ -609,15 +617,20 @@ func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []merkle
 			lready <- true
 			readyq := make(chan struct{})
 			close(readyq)
+			mode := fs.FileMode(0644)
+			if ent.IsExecutable {
+				mode |= 0111
+			}
 			e := &entry{
-				lready:       lready,
-				mtime:        mtime,
-				cmdhash:      cmdhash,
-				action:       action,
-				readyq:       readyq,
-				d:            ent.Data.Digest(),
-				isExecutable: ent.IsExecutable,
-				data:         ent.Data,
+				lready:  lready,
+				size:    ent.Data.Digest().SizeBytes,
+				mtime:   mtime,
+				mode:    mode,
+				cmdhash: cmdhash,
+				action:  action,
+				readyq:  readyq,
+				d:       ent.Data.Digest(),
+				data:    ent.Data,
 			}
 			e.ready.Store(true)
 			if err := hfs.directory.store(ctx, fname, e); err != nil {
@@ -631,6 +644,7 @@ func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []merkle
 			e := &entry{
 				lready:  lready,
 				mtime:   mtime,
+				mode:    0644 | fs.ModeSymlink,
 				cmdhash: cmdhash,
 				action:  action,
 				readyq:  readyq,
@@ -648,6 +662,7 @@ func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []merkle
 			e := &entry{
 				lready:    lready,
 				mtime:     mtime,
+				mode:      0644 | fs.ModeDir,
 				readyq:    readyq,
 				directory: &directory{},
 			}
@@ -750,7 +765,9 @@ type entry struct {
 	// closed/false - file is already downloaded.
 	lready chan bool
 
+	size  int64
 	mtime time.Time
+	mode  fs.FileMode
 
 	// cmdhash is hash of command lines that generated this file.
 	// e.g. hash('touch output.stamp')
@@ -826,9 +843,11 @@ func (e *entry) init(ctx context.Context, fname string, m *iometrics.IOMetrics) 
 			clog.Infof(ctx, "tree entry %s: is dir", fname)
 		}
 		e.initDir()
+		e.mode = 0644 | fs.ModeDir
 		// don't update mtime, so updateDir scans local dir.
 		return
 	case fi.Mode().Type() == fs.ModeSymlink:
+		e.mode = 0644 | fs.ModeSymlink
 		e.target, err = os.Readlink(fname)
 		m.OpsDone(err)
 		if err != nil {
@@ -838,6 +857,11 @@ func (e *entry) init(ctx context.Context, fname string, m *iometrics.IOMetrics) 
 			clog.Infof(ctx, "tree entry %s: symlink to %s: %v", fname, e.target, e.err)
 		}
 	case fi.Mode().IsRegular():
+		e.mode = 0644
+		if isExecutable(fi, fname) {
+			e.mode |= 0111
+		}
+		// TODO(b/282885676) lazy digest calculation
 		e.data, err = localDigest(ctx, fname, m)
 		if err != nil {
 			clog.Errorf(ctx, "tree entry %s: file error: %v", fname, err)
@@ -845,7 +869,6 @@ func (e *entry) init(ctx context.Context, fname string, m *iometrics.IOMetrics) 
 			return
 		}
 		e.d = e.data.Digest()
-		e.isExecutable = isExecutable(fi, fname)
 		if log.V(1) {
 			clog.Infof(ctx, "tree entry %s: file %s x:%t", fname, e.d, e.isExecutable)
 		}
@@ -1042,11 +1065,7 @@ func (e *entry) flush(ctx context.Context, fname string, m *iometrics.IOMetrics)
 	} else {
 		clog.Infof(ctx, "flush %s from embedded buf", fname)
 	}
-	mode := os.FileMode(0644)
-	if e.isExecutable {
-		mode = os.FileMode(0755)
-	}
-	err = os.WriteFile(fname, buf, mode)
+	err = os.WriteFile(fname, buf, e.mode)
 	m.WriteDone(len(buf), err)
 	if err != nil {
 		e.setError(err)
@@ -1172,6 +1191,7 @@ func (d *directory) store(ctx context.Context, fname string, e *entry) error {
 		close(readyq)
 		newDent := &entry{
 			lready: lready,
+			mode:   0644 | fs.ModeDir,
 			// don't set mtime for intermediate dir.
 			// mtime will be updated by updateDir
 			// when all dirents have been loaded.
@@ -1245,24 +1265,12 @@ func (fi *FileInfo) Name() string {
 
 // Size is a size of the file.
 func (fi *FileInfo) Size() int64 {
-	if fi.e.d.IsZero() {
-		return 0
-	}
-	return fi.e.d.SizeBytes
+	return fi.e.size
 }
 
 // Mode is a file mode of the file.
 func (fi *FileInfo) Mode() fs.FileMode {
-	mode := fs.FileMode(0644)
-	if fi.e.d.IsZero() && fi.e.target == "" {
-		mode |= fs.ModeDir
-	} else if fi.e.d.IsZero() && fi.e.target != "" {
-		mode |= fs.ModeSymlink
-	}
-	if fi.e.isExecutable {
-		mode |= 0111
-	}
-	return mode
+	return fi.e.mode
 }
 
 // ModTime is a modification time of the file.
@@ -1272,8 +1280,7 @@ func (fi *FileInfo) ModTime() time.Time {
 
 // IsDir returns true if it is the directory.
 func (fi *FileInfo) IsDir() bool {
-	// TODO: e.directory != nil?
-	return fi.e.d.IsZero() && fi.e.target == ""
+	return fi.e.mode.IsDir()
 }
 
 // Sys returns merkletree Entry of the file.
@@ -1281,7 +1288,7 @@ func (fi *FileInfo) Sys() any {
 	return merkletree.Entry{
 		Name:         fi.fname,
 		Data:         fi.e.data,
-		IsExecutable: fi.e.isExecutable,
+		IsExecutable: fi.e.mode&0111 != 0,
 		Target:       fi.e.target,
 	}
 }
