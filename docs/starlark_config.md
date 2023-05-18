@@ -127,6 +127,8 @@ to register handlers and step configs.
        * key: input path, or label (label contains ':').
          If the key is a path, it will be included in the expanded inputs.
          If the key is a label, it won't be included in the expanded inputs.
+        `:headers` label would be used for c++ scandeps for include dirs
+         or sysroots.
        * values: other files or labels needed for the key.
      * `case_sensitive_inputs`
        * a list of filenames for case sensitive filesystem.

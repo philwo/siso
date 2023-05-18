@@ -96,6 +96,9 @@ func (st *subtree) init(ctx context.Context, b *Builder, dir string, files []str
 
 	files = files[:0]
 	for k := range v {
+		if strings.Contains(k, ":") {
+			continue
+		}
 		if !strings.HasPrefix(k, dir+"/") {
 			continue
 		}

@@ -24,10 +24,29 @@ type depsGCC struct{}
 func (gcc depsGCC) DepsFastCmd(ctx context.Context, b *Builder, cmd *execute.Cmd) (*execute.Cmd, error) {
 	newCmd := &execute.Cmd{}
 	*newCmd = *cmd
-	newCmd.Inputs = gcc.sysroot(ctx, b, newCmd)
-	gcc.fixArgsForDeps(ctx, newCmd)
-	gcc.fixForSplitDwarf(ctx, newCmd)
+	inputs, err := gcc.fixCmd(ctx, b, newCmd)
+	if err != nil {
+		return nil, err
+	}
+	newCmd.Inputs = inputs
 	return newCmd, nil
+}
+
+func (gcc depsGCC) fixCmd(ctx context.Context, b *Builder, cmd *execute.Cmd) ([]string, error) {
+	inputs := gcc.sysroot(ctx, b, cmd)
+	_, dirs, sysroots, _, err := gccutil.ScanDepsParams(ctx, cmd.Args, cmd.Env)
+	if err != nil {
+		return nil, err
+	}
+	for i := range dirs {
+		dirs[i] = b.path.MustFromWD(dirs[i])
+	}
+	for i := range sysroots {
+		sysroots[i] = b.path.MustFromWD(sysroots[i])
+	}
+	cmd.TreeInputs = append(cmd.TreeInputs, b.treeInputs(ctx, ":headers", sysroots, dirs)...)
+	gcc.fixForSplitDwarf(ctx, cmd)
+	return inputs, nil
 }
 
 // TODO: use handler?
@@ -50,16 +69,6 @@ func (depsGCC) sysroot(ctx context.Context, b *Builder, cmd *execute.Cmd) []stri
 		clog.Infof(ctx, "no sysroot")
 	}
 	return nil
-}
-
-func (depsGCC) fixArgsForDeps(ctx context.Context, cmd *execute.Cmd) {
-	// siso fast deps requires full dependency info,
-	// but -MMD only generates user dependency.
-	for i, arg := range cmd.Args {
-		if arg == "-MMD" {
-			cmd.Args[i] = "-MD"
-		}
-	}
 }
 
 // TODO: use handler?
@@ -111,9 +120,14 @@ func (depsGCC) DepsAfterRun(ctx context.Context, b *Builder, step *Step) ([]stri
 
 func (gcc depsGCC) DepsCmd(ctx context.Context, b *Builder, step *Step) ([]string, error) {
 	depsIns, err := gcc.depsInputs(ctx, b, step)
-	depsIns = append(depsIns, gcc.sysroot(ctx, b, step.cmd)...)
-	gcc.fixArgsForDeps(ctx, step.cmd)
-	gcc.fixForSplitDwarf(ctx, step.cmd)
+	if err != nil {
+		return nil, err
+	}
+	inputs, err := gcc.fixCmd(ctx, b, step.cmd)
+	if err != nil {
+		return nil, err
+	}
+	depsIns = append(depsIns, inputs...)
 	return depsIns, err
 }
 

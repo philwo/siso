@@ -422,7 +422,9 @@ func treeDigest(ctx context.Context, subtrees []merkletree.TreeEntry, entries []
 			// wrong config or deps uses files in subtree.
 			// assume subtree contains the file,
 			// so ignore ErrPrecomputedSubTree here.
-			clog.Warningf(ctx, "ignore entry in subtree %v: %v", ent, err)
+			if log.V(1) {
+				clog.Warningf(ctx, "ignore entry in subtree %v: %v", ent, err)
+			}
 			continue
 		}
 		if err != nil {
