@@ -1,4 +1,4 @@
-// Copyright 2023 The Chromium Authors. All rights reserved.
+// Copyright 2023 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,38 +14,60 @@ import (
 	"golang.org/x/term"
 )
 
-var (
-	// IsTerminal indicates the stdout is terminal or not.
-	IsTerminal = term.IsTerminal(int(os.Stdout.Fd()))
-	width      int
-)
+type ui interface {
+	// Init inits the UI.
+	Init()
+	// PrintLines prints message lines.
+	// If msgs starts with \n, it will print from the current line.
+	// Otherwise, it will replaces the last N lines, where N is len(msgs).
+	PrintLines(msgs ...string)
+	// StartSpinner starts the spinner with the specified formatted string.
+	StartSpinner(format string, args ...any)
+	// StopSpinner stops the spinner, outputting an error if provided.
+	StopSpinner(err error)
+}
+
+// CurrentUi holds the current UI interface. This is exposed to allow tests to change the UI.
+// Making changes to the current UI during operations is undefined behavior.
+// Implementations of UIs are not currently expected to safely handle being changed mid-operation.
+var CurrentUi ui
 
 func init() {
-	if !IsTerminal {
-		return
+	if term.IsTerminal(int(os.Stdout.Fd())) {
+		CurrentUi = &TermUi{}
+	} else {
+		CurrentUi = &LogUi{}
 	}
-	width, _, _ = term.GetSize(int(os.Stdout.Fd()))
+	CurrentUi.Init()
+}
+
+// IsTerminal returns whether currently using a terminal UI.
+func IsTerminal() bool {
+	_, ok := CurrentUi.(*TermUi)
+	return ok
 }
 
 // PrintLines prints message lines.
 // If msgs starts with \n, it will print from the current line.
 // Otherwise, it will replaces the last N lines, where N is len(msgs).
 func PrintLines(msgs ...string) {
-	if !IsTerminal {
-		os.Stdout.Write([]byte(strings.Join(msgs, "\t") + "\n"))
-		return
-	}
-	var buf bytes.Buffer
-	if len(msgs) > 0 && msgs[0] == "\n" {
-		msgs = msgs[1:]
-	} else {
-		// Clear the last N lines, where N is len(msgs).
-		for i := 0; i < len(msgs)-1; i++ {
-			fmt.Fprintf(&buf, "\r\033[K\033[A")
-		}
-		fmt.Fprintf(&buf, "\r\033[K")
+	CurrentUi.PrintLines(msgs...)
+}
 
-	}
+// Spinner is a legacy shim for spinner operations.
+type Spinner struct{}
+
+// Start starts the spinner.
+func (s *Spinner) Start(format string, args ...any) {
+	CurrentUi.StartSpinner(format, args...)
+}
+
+// Stop stops the spinner.
+func (s *Spinner) Stop(err error) {
+	CurrentUi.StopSpinner(err)
+}
+
+func writeLinesMaxWidth(buf *bytes.Buffer, msgs []string, width int) {
 	for i, msg := range msgs {
 		if msg == "" {
 			continue
@@ -59,9 +81,8 @@ func PrintLines(msgs ...string) {
 			msg = msg[:n] + "..." + msg[len(msg)-n:]
 		}
 		if i > 0 {
-			fmt.Fprintln(&buf)
+			fmt.Fprintln(buf)
 		}
-		fmt.Fprint(&buf, msg)
+		fmt.Fprint(buf, msg)
 	}
-	os.Stdout.Write(buf.Bytes())
 }

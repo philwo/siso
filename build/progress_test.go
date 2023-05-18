@@ -14,9 +14,9 @@ import (
 )
 
 func TestProgress_NotIsTerminal(t *testing.T) {
-	isTerminal := ui.IsTerminal
-	defer func() { ui.IsTerminal = isTerminal }()
-	ui.IsTerminal = false
+	currentUi := ui.CurrentUi
+	defer func() { ui.CurrentUi = currentUi }()
+	ui.CurrentUi = &ui.LogUi{}
 	var p progress
 	b := &Builder{
 		plan:  &plan{},

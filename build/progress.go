@@ -84,7 +84,7 @@ func (p *progress) update(ctx context.Context, b *Builder) {
 				}
 			}
 			p.mu.Unlock()
-			if ui.IsTerminal {
+			if ui.IsTerminal() {
 				continue
 			}
 			if si == nil || si.step == nil {
@@ -109,7 +109,7 @@ func (p *progress) report(format string, args ...any) {
 	p.mu.Lock()
 	t := p.ts
 	p.mu.Unlock()
-	if ui.IsTerminal && time.Since(t) < 500*time.Millisecond {
+	if ui.IsTerminal() && time.Since(t) < 500*time.Millisecond {
 		return
 	}
 	msg := fmt.Sprintf(format, args...)
@@ -136,13 +136,13 @@ func (p *progress) step(ctx context.Context, b *Builder, step *Step, s string) {
 		}
 	}
 	p.mu.Unlock()
-	if ui.IsTerminal && (time.Since(t) < 100*time.Millisecond || strings.HasPrefix(s, progressPrefixFinish)) {
+	if ui.IsTerminal() && (time.Since(t) < 100*time.Millisecond || strings.HasPrefix(s, progressPrefixFinish)) {
 		return
 	}
 	pstat := b.plan.stats()
 	stat := b.stats.stats()
 	var lines []string
-	if ui.IsTerminal {
+	if ui.IsTerminal() {
 		lines = append(lines, fmt.Sprintf("[%d+%d+(%d+%d)[%d+(%d+%d),(%d+%d)](%d,%d,%d,%d){%d,%d,%d}]",
 			pstat.npendings,
 			pstat.nready,
