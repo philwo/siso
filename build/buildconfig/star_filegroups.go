@@ -6,7 +6,9 @@ package buildconfig
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"strings"
 
 	"go.starlark.net/starlark"
@@ -119,6 +121,10 @@ func (cfg *Config) UpdateFilegroups(ctx context.Context, hashFS *hashfs.HashFS, 
 			files: filegroups.Filegroups[k],
 		}
 		v, err := g.Update(ctx, fsys, v)
+		if errors.Is(err, fs.ErrNotExist) {
+			// ignore the filegroup. b/283203079
+			continue
+		}
 		if err != nil {
 			return Filegroups{}, err
 		}
