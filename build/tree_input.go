@@ -78,34 +78,16 @@ type subtree struct {
 }
 
 func (st *subtree) init(ctx context.Context, b *Builder, dir string, files []string) {
-	m := b.graph.InputDeps(ctx)
-	v := make(map[string]bool)
-	// expand deps
-	for len(files) > 0 {
-		f := files[0]
-		files = files[1:]
-		if v[f] {
+	files = b.expandInputs(ctx, files)
+	var inputs []string
+	for _, f := range files {
+		if !strings.HasPrefix(f, dir+"/") {
 			continue
 		}
-		v[f] = true
-		deps, ok := m[f]
-		if ok {
-			files = append(files, deps...)
-		}
+		inputs = append(inputs, strings.TrimPrefix(f, dir+"/"))
 	}
-
-	files = files[:0]
-	for k := range v {
-		if strings.Contains(k, ":") {
-			continue
-		}
-		if !strings.HasPrefix(k, dir+"/") {
-			continue
-		}
-		files = append(files, strings.TrimPrefix(k, dir+"/"))
-	}
-	sort.Strings(files)
-	ents, err := b.hashFS.Entries(ctx, filepath.Join(b.path.ExecRoot, dir), files)
+	sort.Strings(inputs)
+	ents, err := b.hashFS.Entries(ctx, filepath.Join(b.path.ExecRoot, dir), inputs)
 	if err != nil {
 		clog.Warningf(ctx, "failed to get subtree entries %s: %v", dir, err)
 	}

@@ -10,8 +10,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	log "github.com/golang/glog"
-
 	"infra/build/siso/execute"
 	"infra/build/siso/o11y/clog"
 	"infra/build/siso/o11y/trace"
@@ -33,7 +31,6 @@ func (gcc depsGCC) DepsFastCmd(ctx context.Context, b *Builder, cmd *execute.Cmd
 }
 
 func (gcc depsGCC) fixCmd(ctx context.Context, b *Builder, cmd *execute.Cmd) ([]string, error) {
-	inputs := gcc.sysroot(ctx, b, cmd)
 	_, dirs, sysroots, _, err := gccutil.ScanDepsParams(ctx, cmd.Args, cmd.Env)
 	if err != nil {
 		return nil, err
@@ -44,31 +41,19 @@ func (gcc depsGCC) fixCmd(ctx context.Context, b *Builder, cmd *execute.Cmd) ([]
 	for i := range sysroots {
 		sysroots[i] = b.path.MustFromWD(sysroots[i])
 	}
-	cmd.TreeInputs = append(cmd.TreeInputs, b.treeInputs(ctx, ":headers", sysroots, dirs)...)
-	gcc.fixForSplitDwarf(ctx, cmd)
-	return inputs, nil
-}
-
-// TODO: use handler?
-func (depsGCC) sysroot(ctx context.Context, b *Builder, cmd *execute.Cmd) []string {
+	var inputs []string
+	// include directory must be included, even if no include files there.
+	// without the dir, it may fail for `#include "../config.h"`
+	inputs = append(inputs, dirs...)
 	// sysroot directory must be included, even if no include files there.
 	// or error with
 	// clang++: error: no such sysroot directory: ...
 	// [-Werror, -Wmissing-sysroot]
-	for i, arg := range cmd.Args[:len(cmd.Args)-1] {
-		switch arg {
-		case "--sysroot", "-isysroot":
-			sysroot := cmd.Args[i+1]
-			if log.V(1) {
-				clog.Infof(ctx, "sysroot=%q", sysroot)
-			}
-			return []string{b.path.MustFromWD(sysroot)}
-		}
-	}
-	if log.V(1) {
-		clog.Infof(ctx, "no sysroot")
-	}
-	return nil
+	inputs = append(inputs, sysroots...)
+	inputs = b.expandInputs(ctx, inputs)
+	cmd.TreeInputs = append(cmd.TreeInputs, b.treeInputs(ctx, ":headers", sysroots, dirs)...)
+	gcc.fixForSplitDwarf(ctx, cmd)
+	return inputs, nil
 }
 
 // TODO: use handler?
