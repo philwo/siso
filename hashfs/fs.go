@@ -17,7 +17,6 @@ import (
 	"runtime"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	log "github.com/golang/glog"
@@ -33,12 +32,6 @@ import (
 
 // FlushSemaphore is a semaphore to control concurrent flushes.
 var FlushSemaphore = semaphore.New("fs-flush", runtime.NumCPU()*2)
-
-func localDigest(ctx context.Context, fname string, m *iometrics.IOMetrics) (digest.Data, error) {
-	// TODO(b/271059955): add xattr support.
-	src := digest.LocalFileSource{Fname: fname, IOMetrics: m}
-	return digest.FromLocalFile(ctx, src)
-}
 
 func isExecutable(fi fs.FileInfo, fname string) bool {
 	if fi.Mode()&0111 != 0 {
@@ -60,6 +53,8 @@ type HashFS struct {
 
 	// IOMetrics stores the metrics of I/O operations on the HashFS.
 	IOMetrics *iometrics.IOMetrics
+
+	digester digester
 }
 
 // New creates a HashFS.
@@ -71,6 +66,12 @@ func New(ctx context.Context, opt Option) (*HashFS, error) {
 		opt:       opt,
 		directory: &directory{},
 		IOMetrics: iometrics.New("fs"),
+
+		digester: digester{
+			q:    make(chan digestReq, 1000),
+			quit: make(chan struct{}),
+			done: make(chan struct{}),
+		},
 	}
 	if opt.StateFile != "" {
 		fstate, err := Load(ctx, opt.StateFile)
@@ -83,6 +84,7 @@ func New(ctx context.Context, opt Option) (*HashFS, error) {
 			}
 		}
 	}
+	go fsys.digester.start()
 	return fsys, nil
 }
 
@@ -90,6 +92,7 @@ func New(ctx context.Context, opt Option) (*HashFS, error) {
 // Persists current state in opt.StateFile.
 func (hfs *HashFS) Close(ctx context.Context) error {
 	clog.Infof(ctx, "fs close")
+	hfs.digester.stop()
 	if hfs.opt.StateFile == "" {
 		return nil
 	}
@@ -125,35 +128,31 @@ func (hfs *HashFS) Stat(ctx context.Context, root, fname string) (*FileInfo, err
 	fname = filepath.ToSlash(fname)
 	e, dir, ok := hfs.directory.lookup(ctx, fname)
 	if ok {
-		err := e.waitReady(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("stat interrupted %s %s: %w", root, fname, err)
-		}
-		err = e.getError()
-		if err != nil {
-			return nil, err
+		if e.err != nil {
+			return nil, e.err
 		}
 		return &FileInfo{fname: fname, e: e}, nil
 	}
 	e = newLocalEntry()
+	e.init(ctx, fname, hfs.IOMetrics)
+	clog.Infof(ctx, "stat new entry %s %s", fname, e)
 	if log.V(9) {
 		clog.Infof(ctx, "store %s %s in %s", fname, e, dir)
 	}
 	var err error
 	if dir != nil {
-		err = dir.store(ctx, filepath.Base(fname), e)
+		e, err = dir.store(ctx, filepath.Base(fname), e)
 	} else {
-		err = hfs.directory.store(ctx, fname, e)
+		e, err = hfs.directory.store(ctx, fname, e)
 	}
 	if err != nil {
 		clog.Warningf(ctx, "failed to store %s %s in %s: %v", fname, e, dir, err)
 		return nil, err
 	}
-	e.init(ctx, fname, hfs.IOMetrics)
-	clog.Infof(ctx, "stat new entry %s %s", fname, e)
-	if err := e.getError(); err != nil {
-		return nil, err
+	if e.err != nil {
+		return nil, e.err
 	}
+	hfs.digester.lazyCompute(ctx, fname, e)
 	return &FileInfo{fname: fname, e: e}, nil
 }
 
@@ -172,18 +171,20 @@ func (hfs *HashFS) ReadDir(ctx context.Context, root, name string) (dents []DirE
 	e, _, ok := hfs.directory.lookup(ctx, dname)
 	if !ok {
 		e = newLocalEntry()
-		err := hfs.directory.store(ctx, dname, e)
+		e.init(ctx, dname, hfs.IOMetrics)
+		var err error
+		e, err = hfs.directory.store(ctx, dname, e)
 		if err != nil {
 			clog.Warningf(ctx, "failed to store %s %s: %v", dname, e, err)
 			return nil, err
 		}
-		e.init(ctx, dname, hfs.IOMetrics)
 		clog.Infof(ctx, "stat new dir entry %s %s", dname, e)
 	}
-	err = e.getError()
+	err = e.err
 	if err != nil {
 		return nil, fmt.Errorf("read dir %s: %w", dname, err)
 	}
+	// TODO(ukai): fix race in updateDir -> store.
 	names := e.updateDir(ctx, dirname)
 	if e.directory == nil {
 		return nil, fmt.Errorf("read dir %s: not dir: %w", dname, os.ErrPermission)
@@ -202,6 +203,9 @@ func (hfs *HashFS) ReadDir(ctx context.Context, root, name string) (dents []DirE
 	e.directory.m.Range(func(k, v any) bool {
 		name := k.(string)
 		ee := v.(*entry)
+		if ee.err != nil {
+			return true
+		}
 		ents = append(ents, DirEntry{
 			fi: &FileInfo{
 				fname: filepath.Join(root, dirname, name),
@@ -226,25 +230,23 @@ func (hfs *HashFS) ReadFile(ctx context.Context, root, fname string) ([]byte, er
 	e, _, ok := hfs.directory.lookup(ctx, fname)
 	if !ok {
 		e = newLocalEntry()
-		err := hfs.directory.store(ctx, fname, e)
+		e.init(ctx, fname, hfs.IOMetrics)
+		var err error
+		e, err = hfs.directory.store(ctx, fname, e)
 		if err != nil {
 			clog.Warningf(ctx, "failed to store %s %s: %v", fname, e, err)
 			return nil, err
 		}
-		e.init(ctx, fname, hfs.IOMetrics)
 		clog.Infof(ctx, "stat new entry %s %s", fname, e)
 	}
-	err := e.getError()
+	err := e.err
 	if err != nil {
 		return nil, fmt.Errorf("read file %s: %w", fname, err)
 	}
 	if len(e.buf) > 0 {
 		return e.buf, nil
 	}
-	err = e.waitReady(ctx)
-	if err != nil {
-		return nil, err
-	}
+	hfs.digester.compute(ctx, fname, e)
 	if e.d.IsZero() {
 		return nil, fmt.Errorf("read file %s: no data", fname)
 	}
@@ -268,9 +270,6 @@ func (hfs *HashFS) WriteFile(ctx context.Context, root, fname string, b []byte, 
 	span.SetAttr("fname", fname)
 	lready := make(chan bool, 1)
 	lready <- true
-	readyq := make(chan struct{})
-	close(readyq)
-
 	mode := fs.FileMode(0644)
 	if isExecutable {
 		mode |= 0111
@@ -280,14 +279,12 @@ func (hfs *HashFS) WriteFile(ctx context.Context, root, fname string, b []byte, 
 		size:    data.Digest().SizeBytes,
 		mtime:   mtime,
 		mode:    mode,
-		readyq:  readyq,
 		src:     data,
 		d:       data.Digest(),
 		buf:     b,
 		cmdhash: cmdhash,
 	}
-	e.ready.Store(true)
-	err := hfs.directory.store(ctx, fname, e)
+	_, err := hfs.directory.store(ctx, fname, e)
 	clog.Infof(ctx, "writefile %s x:%t mtime:%s: %v", fname, isExecutable, mtime, err)
 	return err
 }
@@ -301,18 +298,14 @@ func (hfs *HashFS) Symlink(ctx context.Context, root, target, linkpath string, m
 	linkfname = filepath.ToSlash(linkfname)
 	lready := make(chan bool, 1)
 	lready <- true
-	readyq := make(chan struct{})
-	close(readyq)
 	e := &entry{
 		lready:  lready,
 		mtime:   mtime,
 		mode:    0644 | fs.ModeSymlink,
 		cmdhash: cmdhash,
-		readyq:  readyq,
 		target:  target,
 	}
-	e.ready.Store(true)
-	err := hfs.directory.store(ctx, linkfname, e)
+	_, err := hfs.directory.store(ctx, linkfname, e)
 	clog.Infof(ctx, "symlink @%s %s -> %s: %v", root, linkpath, target, err)
 	return err
 }
@@ -333,19 +326,16 @@ func (hfs *HashFS) Copy(ctx context.Context, root, src, dst string, mtime time.T
 		if log.V(9) {
 			clog.Infof(ctx, "new entry for copy src %s", srcfname)
 		}
-		err := hfs.directory.store(ctx, srcfname, e)
+		e.init(ctx, srcfname, hfs.IOMetrics)
+		var err error
+		e, err := hfs.directory.store(ctx, srcfname, e)
 		if err != nil {
 			clog.Warningf(ctx, "failed to store copy src %s: %v", srcfname, err)
 			return err
 		}
-		e.init(ctx, srcfname, hfs.IOMetrics)
 		clog.Infof(ctx, "copy src new entry %s %s", srcfname, e)
-		if err := e.getError(); err != nil {
-			return err
-		}
 	}
-	err := e.waitReady(ctx)
-	if err != nil {
+	if err := e.err; err != nil {
 		return err
 	}
 	subdir := e.getDir()
@@ -354,23 +344,19 @@ func (hfs *HashFS) Copy(ctx context.Context, root, src, dst string, mtime time.T
 	}
 	lready := make(chan bool, 1)
 	lready <- true
-	readyq := make(chan struct{})
-	close(readyq)
 	newEnt := &entry{
 		lready:  lready,
 		size:    e.size,
 		mtime:   mtime,
 		mode:    e.mode,
 		cmdhash: cmdhash,
-		readyq:  readyq,
 		target:  e.target,
 		// use the same data source as src if any.
 		src: e.src,
 		d:   e.d,
 		buf: e.buf,
 	}
-	newEnt.ready.Store(true)
-	err = hfs.directory.store(ctx, dstfname, newEnt)
+	_, err := hfs.directory.store(ctx, dstfname, newEnt)
 	if err != nil {
 		return err
 	}
@@ -392,18 +378,14 @@ func (hfs *HashFS) Mkdir(ctx context.Context, root, dirname string) error {
 	}
 	lready := make(chan bool, 1)
 	lready <- true
-	readyq := make(chan struct{})
-	close(readyq)
 
 	e := &entry{
 		lready:    lready,
 		mtime:     time.Now(),
 		mode:      0644 | fs.ModeDir,
-		readyq:    readyq,
 		directory: &directory{},
 	}
-	e.ready.Store(true)
-	err = hfs.directory.store(ctx, dirname, e)
+	_, err = hfs.directory.store(ctx, dirname, e)
 	clog.Infof(ctx, "mkdir %s: %v", dirname, err)
 	return err
 }
@@ -415,16 +397,15 @@ func (hfs *HashFS) Remove(ctx context.Context, root, fname string) error {
 	}
 	fname = filepath.Join(root, fname)
 	fname = filepath.ToSlash(fname)
-	e, _, ok := hfs.directory.lookup(ctx, fname)
-	if !ok {
-		e = newLocalEntry()
-		e.setError(os.ErrNotExist)
-		err := hfs.directory.store(ctx, fname, e)
-		clog.Infof(ctx, "remove %s: %v", fname, err)
+	lready := make(chan bool, 1)
+	lready <- true
+	e := &entry{
+		lready: lready,
+		err:    fs.ErrNotExist,
 	}
-	e.setError(os.ErrNotExist)
-	clog.Infof(ctx, "remove %s: %v", fname, nil)
-	return nil
+	_, err := hfs.directory.store(ctx, fname, e)
+	clog.Infof(ctx, "remove %s: %v", fname, err)
+	return err
 }
 
 // Forget forgets cached entry for inputs under root.
@@ -504,22 +485,26 @@ func (hfs *HashFS) Entries(ctx context.Context, root string, inputs []string) ([
 				clog.Infof(ctx, "tree cache hit %s", fname)
 			}
 			ents = append(ents, e)
-			if !e.ready.Load() {
-				wg.Add(1)
-				nwait++
-				go func() {
-					defer wg.Done()
-					select {
-					case <-e.readyq:
-					case <-ctx.Done():
-					}
-				}()
+			if e.mode.IsRegular() {
+				e.mu.Lock()
+				ready := !e.d.IsZero()
+				e.mu.Unlock()
+				if !ready {
+					wg.Add(1)
+					nwait++
+					go func() {
+						defer wg.Done()
+						hfs.digester.compute(ctx, fname, e)
+					}()
+				}
 			}
 			continue
 		}
 		e = newLocalEntry()
+		e.init(ctx, fname, hfs.IOMetrics)
 		clog.Infof(ctx, "tree new entry %s", fname)
-		if err := hfs.directory.store(ctx, fname, e); err != nil {
+		e, err := hfs.directory.store(ctx, fname, e)
+		if err != nil {
 			return nil, err
 		}
 		ents = append(ents, e)
@@ -527,9 +512,10 @@ func (hfs *HashFS) Entries(ctx context.Context, root string, inputs []string) ([
 		nwait++
 		go func() {
 			defer wg.Done()
-			e.init(ctx, fname, hfs.IOMetrics)
+			hfs.digester.compute(ctx, fname, e)
 		}()
 	}
+	// wait ensures all entries have computed the digests.
 	_, wspan := trace.NewSpan(ctx, "fs-entries-wait")
 	wg.Wait()
 	wspan.SetAttr("waits", nwait)
@@ -537,12 +523,13 @@ func (hfs *HashFS) Entries(ctx context.Context, root string, inputs []string) ([
 	var entries []merkletree.Entry
 	for i, fname := range inputs {
 		e := ents[i]
-		if err := e.getError(); err != nil || (e.d.IsZero() && e.target == "" && e.directory == nil) {
+		d := e.digest()
+		if e.err != nil || (d.IsZero() && e.target == "" && e.directory == nil) {
 			// TODO: hard fail instead?
-			clog.Warningf(ctx, "missing %s data:%v target:%q: %v", fname, e.d, e.target, err)
+			clog.Warningf(ctx, "missing %s data:%v target:%q: %v", fname, e.d, e.target, e.err)
 			continue
 		}
-		data := digest.NewData(e.src, e.d)
+		data := digest.NewData(e.src, d)
 		isExecutable := e.mode&0111 != 0
 		target := e.target
 		if target != "" {
@@ -572,25 +559,25 @@ func (hfs *HashFS) Entries(ctx context.Context, root string, inputs []string) ([
 					}
 				} else {
 					elink = newLocalEntry()
+					elink.init(ctx, name, hfs.IOMetrics)
 					clog.Infof(ctx, "tree new entry %s", name)
-					if err := hfs.directory.store(ctx, name, elink); err != nil {
+					var err error
+					elink, err = hfs.directory.store(ctx, name, elink)
+					if err != nil {
 						return nil, err
 					}
-					elink.init(ctx, name, hfs.IOMetrics)
+					hfs.digester.lazyCompute(ctx, name, elink)
 				}
-				select {
-				case <-elink.readyq:
-				case <-ctx.Done():
-					return nil, ctx.Err()
-				}
-				if elink.target == "" {
+				if elink.err != nil || elink.target == "" {
 					break
 				}
 			}
 			if e != elink {
 				clog.Infof(ctx, "resolve symlink %s to %s", fname, name)
 				target = elink.target
-				data = digest.NewData(elink.src, elink.d)
+				hfs.digester.compute(ctx, name, elink)
+				d := e.digest()
+				data = digest.NewData(elink.src, d)
 				isExecutable = elink.mode&0111 != 0
 			}
 		}
@@ -615,8 +602,6 @@ func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []merkle
 		case !ent.Data.IsZero():
 			lready := make(chan bool, 1)
 			lready <- true
-			readyq := make(chan struct{})
-			close(readyq)
 			mode := fs.FileMode(0644)
 			if ent.IsExecutable {
 				mode |= 0111
@@ -628,49 +613,42 @@ func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []merkle
 				mode:    mode,
 				cmdhash: cmdhash,
 				action:  action,
-				readyq:  readyq,
 				src:     ent.Data,
 				d:       ent.Data.Digest(),
 			}
-			e.ready.Store(true)
-			if err := hfs.directory.store(ctx, fname, e); err != nil {
+			_, err := hfs.directory.store(ctx, fname, e)
+			if err != nil {
 				return err
 			}
 		case ent.Target != "":
 			lready := make(chan bool, 1)
 			lready <- true
-			readyq := make(chan struct{})
-			close(readyq)
 			e := &entry{
 				lready:  lready,
 				mtime:   mtime,
 				mode:    0644 | fs.ModeSymlink,
 				cmdhash: cmdhash,
 				action:  action,
-				readyq:  readyq,
 				target:  ent.Target,
 			}
-			e.ready.Store(true)
-			if err := hfs.directory.store(ctx, fname, e); err != nil {
+			_, err := hfs.directory.store(ctx, fname, e)
+			if err != nil {
 				return err
 			}
 		default: // directory
 			lready := make(chan bool, 1)
 			lready <- true
-			readyq := make(chan struct{})
-			close(readyq)
 			e := &entry{
 				lready:    lready,
 				mtime:     mtime,
 				mode:      0644 | fs.ModeDir,
-				readyq:    readyq,
 				directory: &directory{},
 			}
-			e.ready.Store(true)
-			if err := hfs.directory.store(ctx, fname, e); err != nil {
+			_, err := hfs.directory.store(ctx, fname, e)
+			if err != nil {
 				return err
 			}
-			err := os.Chtimes(fname, time.Now(), mtime)
+			err = os.Chtimes(fname, time.Now(), mtime)
 			hfs.IOMetrics.OpsDone(err)
 			if err != nil {
 				clog.Warningf(ctx, "failed to update dir mtime %s: %v", fname, err)
@@ -719,7 +697,7 @@ func (hfs *HashFS) Flush(ctx context.Context, execRoot string, files []string) e
 				if log.V(1) {
 					clog.Infof(ctx, "flush %s local ready", fname)
 				}
-				err := e.getError()
+				err := e.err
 				if errors.Is(err, fs.ErrNotExist) {
 					clog.Warningf(ctx, "flush %s local-ready: %v", fname, err)
 					continue
@@ -733,12 +711,7 @@ func (hfs *HashFS) Flush(ctx context.Context, execRoot string, files []string) e
 			return fmt.Errorf("flush %s: %w", fname, ctx.Err())
 		}
 
-		if !e.ready.Load() {
-			// digest etc is not yet ready,
-			// which means it is calculating digest from local disk
-			// so we can assume local disk is ready.
-			continue
-		}
+		hfs.digester.compute(ctx, fname, e)
 		ctx, done, err := FlushSemaphore.WaitAcquire(ctx)
 		if err != nil {
 			return fmt.Errorf("flush %s: %w", fname, err)
@@ -765,9 +738,9 @@ type entry struct {
 	// closed/false - file is already downloaded.
 	lready chan bool
 
-	size  int64
-	mtime time.Time
-	mode  fs.FileMode
+	err  error
+	size int64
+	mode fs.FileMode
 
 	// cmdhash is hash of command lines that generated this file.
 	// e.g. hash('touch output.stamp')
@@ -776,64 +749,40 @@ type entry struct {
 	// digest of action that generated this file.
 	action digest.Digest
 
-	// readyq represents whether it is ready to use file metadatas below.
-	// block - calculate in progress.
-	// closed - already available. readyq has been closed.
-	readyq chan struct{}
-	// atomic flag for readiness of metadata.
-	// true - ready. readyq was closed.
-	// false - not ready. need to wait on readyq.
-	ready  atomic.Bool
 	target string // symlink.
 
 	src digest.Source
-	d   digest.Digest
 	buf []byte // from WriteFile.
 
 	mu        sync.RWMutex
+	mtime     time.Time
+	d         digest.Digest
 	directory *directory
-	err       error
 }
 
 func newLocalEntry() *entry {
 	lready := make(chan bool)
 	close(lready)
-	readyq := make(chan struct{})
 	return &entry{
 		lready: lready,
-		readyq: readyq,
 	}
 }
 
 func (e *entry) String() string {
-	if e.ready.Load() {
-		switch {
-		case e.getDir() != nil:
-			return "<directory>"
-		case e.target != "":
-			return "<symlink>"
-		default:
-			return "<file>"
-		}
-	}
-	return "<not ready>"
+	return fmt.Sprintf("size:%d mode:%s mtime:%s", e.size, e.mode, e.getMtime())
 }
 
 func (e *entry) init(ctx context.Context, fname string, m *iometrics.IOMetrics) {
-	defer func() {
-		close(e.readyq)
-		e.ready.Store(true)
-	}()
 	fi, err := os.Lstat(fname)
 	m.OpsDone(err)
 	if errors.Is(err, fs.ErrNotExist) {
 		clog.Infof(ctx, "not exist %s", fname)
-		e.setError(err)
+		e.err = err
 		return
 	}
 	if err != nil {
 		clog.Warningf(ctx, "failed to lstat %s: %v", fname, err)
-		e.setError(err)
+		e.err = err
 		return
 	}
 	switch {
@@ -841,7 +790,7 @@ func (e *entry) init(ctx context.Context, fname string, m *iometrics.IOMetrics) 
 		if log.V(1) {
 			clog.Infof(ctx, "tree entry %s: is dir", fname)
 		}
-		e.initDir()
+		e.directory = &directory{}
 		e.mode = 0644 | fs.ModeDir
 		// don't update mtime, so updateDir scans local dir.
 		return
@@ -850,7 +799,7 @@ func (e *entry) init(ctx context.Context, fname string, m *iometrics.IOMetrics) 
 		e.target, err = os.Readlink(fname)
 		m.OpsDone(err)
 		if err != nil {
-			e.setError(err)
+			e.err = err
 		}
 		if log.V(1) {
 			clog.Infof(ctx, "tree entry %s: symlink to %s: %v", fname, e.target, e.err)
@@ -860,22 +809,9 @@ func (e *entry) init(ctx context.Context, fname string, m *iometrics.IOMetrics) 
 		if isExecutable(fi, fname) {
 			e.mode |= 0111
 		}
-		// TODO(b/282885676) lazy digest calculation
-		src := digest.LocalFileSource{Fname: fname, IOMetrics: m}
-		// TODO(b/271059955): add xattr support.
-		data, err := digest.FromLocalFile(ctx, src)
-		if err != nil {
-			clog.Errorf(ctx, "tree entry %s: file error: %v", fname, err)
-			e.setError(err)
-			return
-		}
-		e.src = src
-		e.d = data.Digest()
-		if log.V(1) {
-			clog.Infof(ctx, "tree entry %s: file %s %s", fname, e.d, e.mode)
-		}
+		e.src = digest.LocalFileSource{Fname: fname, IOMetrics: m}
 	default:
-		e.setError(fmt.Errorf("unexpected filetype not regular %s: %s", fi.Mode(), fname))
+		e.err = fmt.Errorf("unexpected filetype not regular %s: %s", fi.Mode(), fname)
 		clog.Errorf(ctx, "tree entry %s: unknown filetype %s", fname, fi.Mode())
 		return
 	}
@@ -884,26 +820,38 @@ func (e *entry) init(ctx context.Context, fname string, m *iometrics.IOMetrics) 
 	}
 }
 
-func (e *entry) waitReady(ctx context.Context) error {
-	if !e.ready.Load() {
-		select {
-		case <-e.readyq:
-		case <-ctx.Done():
-			return ctx.Err()
-		}
+func (e *entry) compute(ctx context.Context, fname string) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.err != nil {
+		return e.err
 	}
+	if !e.d.IsZero() {
+		return nil
+	}
+	// TODO(b/271059955): add xattr support.
+	src, ok := e.src.(digest.LocalFileSource)
+	if !ok {
+		return nil
+	}
+	data, err := digest.FromLocalFile(ctx, src)
+	if err != nil {
+		return err
+	}
+	e.d = data.Digest()
 	return nil
 }
 
-func (e *entry) initDir() {
+func (e *entry) digest() digest.Digest {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	if e.directory == nil {
-		e.directory = &directory{}
-	}
-	// reset mtime so updateDir will lookup local dir.
-	e.mtime = time.Time{}
-	e.err = nil
+	return e.d
+}
+
+func (e *entry) getMtime() time.Time {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.mtime
 }
 
 func (e *entry) updateDir(ctx context.Context, dname string) []string {
@@ -948,45 +896,25 @@ func (e *entry) getDir() *directory {
 	return e.directory
 }
 
-func (e *entry) setError(err error) {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	if e.err == nil {
-		e.err = err
-	}
-	if e.err != nil {
-		e.src = nil
-		e.d = digest.Digest{}
-		e.buf = nil
-		e.target = ""
-		e.directory = nil
-	}
-}
-
-func (e *entry) getError() error {
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-	return e.err
-}
-
 func (e *entry) flush(ctx context.Context, fname string, m *iometrics.IOMetrics) error {
 	defer close(e.lready)
 
-	if errors.Is(e.getError(), fs.ErrNotExist) {
+	if errors.Is(e.err, fs.ErrNotExist) {
 		err := os.RemoveAll(fname)
 		m.OpsDone(err)
 		clog.Infof(ctx, "flush remove %s: %v", fname, err)
 		return nil
 	}
+	d := e.digest()
+	mtime := e.getMtime()
 	switch {
 	case e.directory != nil:
 		// directory
 		err := os.MkdirAll(fname, 0755)
 		m.OpsDone(err)
 		clog.Infof(ctx, "flush dir %s: %v", fname, err)
-		e.setError(err)
 		return err
-	case e.d.IsZero() && e.target != "":
+	case d.IsZero() && e.target != "":
 		err := os.Symlink(e.target, fname)
 		m.OpsDone(err)
 		if errors.Is(err, fs.ErrExist) {
@@ -996,7 +924,6 @@ func (e *entry) flush(ctx context.Context, fname string, m *iometrics.IOMetrics)
 			m.OpsDone(err)
 		}
 		clog.Infof(ctx, "flush symlink %s -> %s: %v", fname, e.target, err)
-		e.setError(err)
 		// don't change mtimes. it fails if target doesn't exist.
 		return err
 	default:
@@ -1004,25 +931,25 @@ func (e *entry) flush(ctx context.Context, fname string, m *iometrics.IOMetrics)
 	fi, err := os.Lstat(fname)
 	m.OpsDone(err)
 	if err == nil {
-		if fi.Size() == e.d.SizeBytes && fi.ModTime().Equal(e.mtime) {
+		if fi.Size() == d.SizeBytes && fi.ModTime().Equal(mtime) {
 			// TODO: check hash, mode?
 			clog.Infof(ctx, "flush %s: already exist", fname)
 			return nil
 		}
 		var fileDigest digest.Digest
-		d, err := localDigest(ctx, fname, m)
+		ld, err := localDigest(ctx, fname, m)
 		if err == nil {
-			fileDigest = d.Digest()
-			if fileDigest == e.d {
+			fileDigest = ld.Digest()
+			if fileDigest == d {
 				clog.Infof(ctx, "flush %s: already exist - hash match", fname)
-				if !fi.ModTime().Equal(e.mtime) {
-					err = os.Chtimes(fname, time.Now(), e.mtime)
+				if !fi.ModTime().Equal(mtime) {
+					err = os.Chtimes(fname, time.Now(), mtime)
 					m.OpsDone(err)
 				}
 				return err
 			}
 		}
-		clog.Warningf(ctx, "flush %s: exists but mismatch size:%d!=%d mtime:%s!=%s d:%v!=%v", fname, fi.Size(), e.d.SizeBytes, fi.ModTime(), e.mtime, fileDigest, e.d)
+		clog.Warningf(ctx, "flush %s: exists but mismatch size:%d!=%d mtime:%s!=%s d:%v!=%v", fname, fi.Size(), d.SizeBytes, fi.ModTime(), mtime, fileDigest, d)
 		if fi.Mode()&0200 == 0 {
 			// need to be writable. otherwise os.WriteFile fails with permission denied.
 			err = os.Chmod(fname, fi.Mode()|0200)
@@ -1037,18 +964,16 @@ func (e *entry) flush(ctx context.Context, fname string, m *iometrics.IOMetrics)
 		clog.Warningf(ctx, "flush %s: mkdir: %v", fname, err)
 		return fmt.Errorf("failed to create directory for %s: %w", fname, err)
 	}
-	if e.d.SizeBytes == 0 {
+	if d.SizeBytes == 0 {
 		clog.Infof(ctx, "flush %s: empty file", fname)
 		err := os.WriteFile(fname, nil, 0644)
 		m.WriteDone(0, err)
 		if err != nil {
-			e.setError(err)
 			return err
 		}
-		err = os.Chtimes(fname, time.Now(), e.mtime)
+		err = os.Chtimes(fname, time.Now(), mtime)
 		m.OpsDone(err)
 		if err != nil {
-			e.setError(err)
 			return err
 		}
 		return nil
@@ -1058,11 +983,10 @@ func (e *entry) flush(ctx context.Context, fname string, m *iometrics.IOMetrics)
 		if e.d.IsZero() {
 			return fmt.Errorf("no data: retrieve %s: ", fname)
 		}
-		buf, err = digest.DataToBytes(ctx, digest.NewData(e.src, e.d))
-		clog.Infof(ctx, "flush %s %s from source: %v", fname, e.d, err)
+		buf, err = digest.DataToBytes(ctx, digest.NewData(e.src, d))
+		clog.Infof(ctx, "flush %s %s from source: %v", fname, d, err)
 		if err != nil {
-			e.setError(err)
-			return fmt.Errorf("flush %s size=%d: %w", fname, e.d.SizeBytes, err)
+			return fmt.Errorf("flush %s size=%d: %w", fname, d.SizeBytes, err)
 		}
 	} else {
 		clog.Infof(ctx, "flush %s from embedded buf", fname)
@@ -1070,13 +994,11 @@ func (e *entry) flush(ctx context.Context, fname string, m *iometrics.IOMetrics)
 	err = os.WriteFile(fname, buf, e.mode)
 	m.WriteDone(len(buf), err)
 	if err != nil {
-		e.setError(err)
 		return err
 	}
-	err = os.Chtimes(fname, time.Now(), e.mtime)
+	err = os.Chtimes(fname, time.Now(), mtime)
 	m.OpsDone(err)
 	if err != nil {
-		e.setError(err)
 		return err
 	}
 	return nil
@@ -1115,14 +1037,6 @@ func (d *directory) lookup(ctx context.Context, fname string) (*entry, *director
 		if ok {
 			e := v.(*entry)
 			subdir = e.getDir()
-			if subdir == nil {
-				err := e.waitReady(ctx)
-				if err != nil {
-					clog.Warningf(ctx, "lookup %s wait failed %v", origFname, err)
-				} else {
-					subdir = e.getDir()
-				}
-			}
 		}
 		if subdir == nil {
 			log.V(1).Infof("lookup %s subdir %s %s -> %s", origFname, elem, fname, subdir)
@@ -1134,7 +1048,7 @@ func (d *directory) lookup(ctx context.Context, fname string) (*entry, *director
 	return nil, nil, false
 }
 
-func (d *directory) store(ctx context.Context, fname string, e *entry) error {
+func (d *directory) store(ctx context.Context, fname string, e *entry) (*entry, error) {
 	origFname := fname
 	if log.V(8) {
 		clog.Infof(ctx, "store %s %v", origFname, e)
@@ -1148,88 +1062,68 @@ func (d *directory) store(ctx context.Context, fname string, e *entry) error {
 			if ok {
 				ee = v.(*entry)
 			}
-			if ok && e.directory != nil {
-				ee.initDir()
-			} else {
-				if ok && ee != nil {
-					cmdchanged := !bytes.Equal(ee.cmdhash, e.cmdhash)
-					if e.target != "" && ee.target != e.target {
-						clog.Infof(ctx, "store %s: cmdchagne:%t s:%q to %q", origFname, cmdchanged, ee.target, e.target)
-					} else if !e.d.IsZero() && ee.d != e.d && ee.d.SizeBytes != 0 && e.d.SizeBytes != 0 {
-						// don't log nil to digest of empty file (size=0)
-						clog.Infof(ctx, "store %s: cmdchange:%t d:%v to %v", origFname, cmdchanged, ee.d, e.d)
-					}
+			if ee != nil {
+				eed := ee.digest()
+				cmdchanged := !bytes.Equal(ee.cmdhash, e.cmdhash)
+				if e.target != "" && ee.target != e.target {
+					clog.Infof(ctx, "store %s: cmdchagne:%t s:%q to %q", origFname, cmdchanged, ee.target, e.target)
+				} else if !e.d.IsZero() && eed != e.d && eed.SizeBytes != 0 && e.d.SizeBytes != 0 {
+					// don't log nil to digest of empty file (size=0)
+					clog.Infof(ctx, "store %s: cmdchange:%t d:%v to %v", origFname, cmdchanged, eed, e.d)
+				} else if ee.target == e.target && eed == e.d && ee.mode == e.mode {
+					// no change?
+					ee.mu.Lock()
+					ee.mtime = e.mtime
+					ee.mu.Unlock()
+					return ee, nil
 				}
-				d.m.Store(fname, e)
 			}
+			d.m.Store(fname, e)
 			if log.V(8) {
 				clog.Infof(ctx, "store %s -> %s %s", origFname, d, fname)
 			}
-			return nil
+			return e, nil
 		}
 		fname = rest
 		v, ok := d.m.Load(elem)
 		if ok {
 			dent := v.(*entry)
-			err := dent.waitReady(ctx)
-			if err != nil {
-				return fmt.Errorf("store interrupted %s: %w", origFname, err)
+			d = dent.getDir()
+			if log.V(9) {
+				clog.Infof(ctx, "store %s subdir0 %s %s -> %s (%v)", origFname, elem, fname, d, dent)
 			}
-			if dent.getError() == nil {
-				d = dent.getDir()
-				if log.V(9) {
-					clog.Infof(ctx, "store %s subdir0 %s %s -> %s (%v)", origFname, elem, fname, d, dent)
-				}
-				if d == nil {
-					return fmt.Errorf("failed to set entry: %s not dir %#v", elem, dent)
-				}
-				continue
+			if d == nil {
+				return nil, fmt.Errorf("failed to set entry: %s not dir %#v", elem, dent)
 			}
+			continue
 		}
 		// create intermediate dir of elem.
 		lready := make(chan bool, 1)
 		lready <- true
-		readyq := make(chan struct{})
-		close(readyq)
 		newDent := &entry{
 			lready: lready,
 			mode:   0644 | fs.ModeDir,
 			// don't set mtime for intermediate dir.
 			// mtime will be updated by updateDir
 			// when all dirents have been loaded.
-			readyq:    readyq,
 			directory: &directory{},
 		}
-		newDent.ready.Store(true)
 		dent := newDent
 		v, ok = d.m.LoadOrStore(elem, dent)
 		if ok {
 			dent = v.(*entry)
 		}
 		subdir := dent.getDir()
-		err := dent.waitReady(ctx)
-		if err != nil {
-			return fmt.Errorf("store interrupted %s: %w", origFname, err)
-		}
-		err = dent.getError()
-		if err != nil {
-			// local was known to not exist. replace it with new dent.
-			if log.V(9) {
-				clog.Infof(ctx, "store %s subdir-update %s %s -> %s (%v)", origFname, elem, fname, subdir, dent)
-			}
-			dent.initDir()
-			subdir = dent.getDir()
-		}
 		if log.V(9) {
 			clog.Infof(ctx, "store %s subdir1 %s %s -> %s (%v)", origFname, elem, fname, subdir, dent)
 		}
 		d = subdir
 		if d == nil {
-			return fmt.Errorf("failed to set entry: %s not dir %#v", elem, dent)
+			return nil, fmt.Errorf("failed to set entry: %s not dir %#v", elem, dent)
 		}
 
 	}
-	return fmt.Errorf("bad fname? %q", origFname)
+	return nil, fmt.Errorf("bad fname? %q", origFname)
 }
 
 func (d *directory) delete(ctx context.Context, fname string) {
@@ -1277,7 +1171,7 @@ func (fi *FileInfo) Mode() fs.FileMode {
 
 // ModTime is a modification time of the file.
 func (fi *FileInfo) ModTime() time.Time {
-	return fi.e.mtime
+	return fi.e.getMtime()
 }
 
 // IsDir returns true if it is the directory.
@@ -1286,10 +1180,13 @@ func (fi *FileInfo) IsDir() bool {
 }
 
 // Sys returns merkletree Entry of the file.
+// For local file, digest may not be calculated yet.
+// Use Entries to get correct merkletree.Entry.
 func (fi *FileInfo) Sys() any {
+	d := fi.e.digest()
 	return merkletree.Entry{
 		Name:         fi.fname,
-		Data:         digest.NewData(fi.e.src, fi.e.d),
+		Data:         digest.NewData(fi.e.src, d),
 		IsExecutable: fi.e.mode&0111 != 0,
 		Target:       fi.e.target,
 	}

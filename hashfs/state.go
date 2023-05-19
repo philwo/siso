@@ -153,7 +153,8 @@ func (hfs *HashFS) SetState(ctx context.Context, state *State) error {
 			e, _ := newStateEntry(ent, time.Time{}, hfs.opt.DataSource, hfs.IOMetrics)
 			e.cmdhash = h
 			e.action = ent.Action
-			if err := hfs.directory.store(ctx, filepath.ToSlash(ent.Name), e); err != nil {
+			_, err = hfs.directory.store(ctx, filepath.ToSlash(ent.Name), e)
+			if err != nil {
 				return err
 			}
 			continue
@@ -200,7 +201,8 @@ func (hfs *HashFS) SetState(ctx context.Context, state *State) error {
 		if log.V(1) {
 			clog.Infof(ctx, "set state %s: d:%s %s s:%s m:%s cmdhash:%s action:%s", ent.Name, e.d, e.mode, e.target, e.mtime, hex.EncodeToString(e.cmdhash), e.action)
 		}
-		if err := hfs.directory.store(ctx, filepath.ToSlash(ent.Name), e); err != nil {
+		_, err = hfs.directory.store(ctx, filepath.ToSlash(ent.Name), e)
+		if err != nil {
 			return err
 		}
 	}
@@ -210,8 +212,6 @@ func (hfs *HashFS) SetState(ctx context.Context, state *State) error {
 
 func newStateEntry(ent EntryState, ftime time.Time, dataSource DataSource, m *iometrics.IOMetrics) (*entry, entryStateType) {
 	lready := make(chan bool, 1)
-	readyq := make(chan struct{})
-	close(readyq)
 	entTime := time.Unix(0, ent.ID.ModTime)
 	var entType entryStateType
 	switch {
@@ -251,13 +251,11 @@ func newStateEntry(ent EntryState, ftime time.Time, dataSource DataSource, m *io
 		size:      ent.Digest.SizeBytes,
 		mtime:     entTime,
 		mode:      mode,
-		readyq:    readyq,
 		target:    ent.Target,
 		src:       src,
 		d:         ent.Digest,
 		directory: dir,
 	}
-	e.ready.Store(true)
 	return e, entType
 }
 
@@ -334,9 +332,9 @@ func (hfs *HashFS) State(ctx context.Context) *State {
 				continue
 			}
 			e := v.(*entry)
-			if err := e.getError(); err != nil {
+			if e.err != nil {
 				if log.V(1) {
-					clog.Infof(ctx, "ignore %s: err:%v", name, err)
+					clog.Infof(ctx, "ignore %s: err:%v", name, e.err)
 				}
 				continue
 			}
