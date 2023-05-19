@@ -334,12 +334,6 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 	if err != nil {
 		return err
 	}
-	defer func() {
-		err := hashFS.Close(ctx)
-		if err != nil {
-			clog.Errorf(ctx, "close hashfs: %v", err)
-		}
-	}()
 	var localexecLogWriter io.Writer
 	if c.localexecLogFile != "" {
 		f, err := os.Create(c.localexecLogFile)
@@ -509,6 +503,7 @@ func doBuild(ctx context.Context, graph *ninjabuild.Graph, bopts build.Options, 
 	}
 	err = mfb.Build(ctx, "rebuild manifest", graph.Filename())
 	if err != nil {
+		mfb.Close(ctx)
 		return err
 	}
 	// TODO(b/266518906): upload manifest
@@ -517,6 +512,7 @@ func doBuild(ctx context.Context, graph *ninjabuild.Graph, bopts build.Options, 
 	if err != nil {
 		return err
 	}
+	defer b.Close(ctx)
 	// prof := newCPUProfiler(ctx, "build")
 	err = b.Build(ctx, "build", args...)
 	// prof.stop(ctx)

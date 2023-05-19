@@ -322,6 +322,14 @@ func limitForREWrapper(ctx context.Context, numCPU int) int {
 	return limit
 }
 
+// Close closes the builder.
+func (b *Builder) Close(ctx context.Context) error {
+	if b.dryRun {
+		return nil
+	}
+	return b.hashFS.Close(ctx)
+}
+
 // Stats returns stats of the builder.
 func (b *Builder) Stats() Stats {
 	return b.stats.stats()
