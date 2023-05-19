@@ -402,7 +402,7 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 	if stat.Total == 0 {
 		return fmt.Errorf("nothing to build for %q", args)
 	}
-	ui.PrintLines("\n", fmt.Sprintf("%s %d\n", name, stat.Total), "")
+	ui.Default.PrintLines("\n", fmt.Sprintf("%s %d\n", name, stat.Total), "")
 	var mftime time.Time
 	if b.rebuildManifest != "" {
 		fi, err := b.hashFS.Stat(ctx, b.path.ExecRoot, filepath.Join(b.path.Dir, b.rebuildManifest))
@@ -421,7 +421,7 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 			}
 			clog.Infof(ctx, "rebuild manifest %#v %s: %s->%s: %s", stat, b.rebuildManifest, mftime, fi.ModTime(), time.Since(started))
 			if fi.ModTime().After(mftime) || stat.Done != stat.Skipped {
-				ui.PrintLines(fmt.Sprintf("updated %s\n", time.Since(started)))
+				ui.Default.PrintLines(fmt.Sprintf("updated %s\n", time.Since(started)))
 				err = ErrManifestModified
 				return
 			}
@@ -429,7 +429,7 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 		}
 		clog.Infof(ctx, "build %s: %v", time.Since(started), err)
 		restat := b.reapiclient.IOMetrics().Stats()
-		ui.PrintLines(
+		ui.Default.PrintLines(
 			fmt.Sprintf("run:%d+%d pure:%d fastDeps:%d+%d cache:%d fallback:%d skip:%d\n",
 				stat.Local, stat.Remote, stat.Pure, stat.FastDepsSuccess, stat.FastDepsFailed, stat.CacheHit, stat.LocalFallback, stat.Skipped) +
 				fmt.Sprintf("reapi: ops: %d(err:%d) / r:%d(err:%d) %s / w:%d(err:%d) %s\n",
@@ -905,7 +905,7 @@ func (b *Builder) failedToRun(ctx context.Context, cmd *execute.Cmd, err error) 
 	if rsp != "" {
 		msgs = append(msgs, fmt.Sprintf(" %s=%q\n", rsp, cmd.RSPFileContent))
 	}
-	ui.PrintLines(msgs...)
+	ui.Default.PrintLines(msgs...)
 	os.Stdout.Write(cmd.Stdout())
 	os.Stderr.Write(append(cmd.Stderr(), '\n'))
 }

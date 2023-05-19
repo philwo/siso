@@ -225,7 +225,7 @@ func (s *scheduler) marked(target string) bool {
 
 func (s *scheduler) progressReport(format string, args ...any) {
 	msg := fmt.Sprintf(format, args...)
-	ui.PrintLines(msg)
+	ui.Default.PrintLines(msg)
 }
 
 // finish finishes the scheduling.

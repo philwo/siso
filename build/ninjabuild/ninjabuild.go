@@ -129,9 +129,9 @@ func updateFilegroups(ctx context.Context, config *buildconfig.Config, hashFS *h
 		}
 	}
 	started := time.Now()
-	ui.PrintLines("update filegroups...")
+	ui.Default.PrintLines("update filegroups...")
 	defer func() {
-		ui.PrintLines(fmt.Sprintf("update filegroups... %s\n", time.Since(started)))
+		ui.Default.PrintLines(fmt.Sprintf("update filegroups... %s\n", time.Since(started)))
 	}()
 	fg, err = config.UpdateFilegroups(ctx, hashFS, buildPath, fg)
 	if err != nil {
@@ -156,7 +156,7 @@ func (g *Graph) load(ctx context.Context) error {
 	g.nstate.AddBinding("exec_root", g.globals.path.ExecRoot)
 	g.nstate.AddBinding("working_directory", g.globals.path.Dir)
 	p := ninjautil.NewManifestParser(g.nstate)
-	var spin ui.Spinner
+	spin := ui.Default.NewSpinner()
 	spin.Start("loading %s...", g.fname)
 	err := p.Load(ctx, g.fname)
 	spin.Stop(err)

@@ -14,57 +14,42 @@ import (
 	"golang.org/x/term"
 )
 
-type ui interface {
-	// Init inits the UI.
-	Init()
+type spinner interface {
+	// Start starts the spinner with the specified formatted string.
+	Start(format string, args ...any)
+	// Stop stops the spinner, outputting an error if provided.
+	Stop(err error)
+}
+
+// UI is a user interface.
+type UI interface {
 	// PrintLines prints message lines.
 	// If msgs starts with \n, it will print from the current line.
 	// Otherwise, it will replaces the last N lines, where N is len(msgs).
 	PrintLines(msgs ...string)
-	// StartSpinner starts the spinner with the specified formatted string.
-	StartSpinner(format string, args ...any)
-	// StopSpinner stops the spinner, outputting an error if provided.
-	StopSpinner(err error)
+	// NewSpinner returns a new spinner.
+	NewSpinner() spinner
 }
 
-// CurrentUi holds the current UI interface. This is exposed to allow tests to change the UI.
-// Making changes to the current UI during operations is undefined behavior.
-// Implementations of UIs are not currently expected to safely handle being changed mid-operation.
-var CurrentUi ui
+// Default holds the default UI interface.
+// Making changes to this variable after init is undefined behavior.
+// UI implementations are currently not expected to handle being changed.
+var Default UI
 
 func init() {
 	if term.IsTerminal(int(os.Stdout.Fd())) {
-		CurrentUi = &TermUi{}
+		termUI := &TermUI{}
+		termUI.init()
+		Default = termUI
 	} else {
-		CurrentUi = &LogUi{}
+		Default = &LogUI{}
 	}
-	CurrentUi.Init()
 }
 
 // IsTerminal returns whether currently using a terminal UI.
 func IsTerminal() bool {
-	_, ok := CurrentUi.(*TermUi)
+	_, ok := Default.(*TermUI)
 	return ok
-}
-
-// PrintLines prints message lines.
-// If msgs starts with \n, it will print from the current line.
-// Otherwise, it will replaces the last N lines, where N is len(msgs).
-func PrintLines(msgs ...string) {
-	CurrentUi.PrintLines(msgs...)
-}
-
-// Spinner is a legacy shim for spinner operations.
-type Spinner struct{}
-
-// Start starts the spinner.
-func (s *Spinner) Start(format string, args ...any) {
-	CurrentUi.StartSpinner(format, args...)
-}
-
-// Stop stops the spinner.
-func (s *Spinner) Stop(err error) {
-	CurrentUi.StopSpinner(err)
 }
 
 func writeLinesMaxWidth(buf *bytes.Buffer, msgs []string, width int) {

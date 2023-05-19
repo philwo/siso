@@ -158,7 +158,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 	if c.enableCloudLogging {
 		log.Infof("enable cloud logging project=%s id=%s", projectID, buildID)
 
-		var spin ui.Spinner
+		spin := ui.Default.NewSpinner()
 		spin.Start("init cloud logging to %s...", projectID)
 		// log_id: "siso.log" and "siso.step"
 		// use generic_task resource
@@ -279,7 +279,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 	}
 	config.Metadata.KV["args.gn"] = string(gnargs)
 
-	var spin ui.Spinner
+	spin := ui.Default.NewSpinner()
 	// depsLogBucket
 
 	var localDepsLog *ninjautil.DepsLog
@@ -310,7 +310,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 	}
 	var client *reapi.Client
 	if c.reopt.IsValid() {
-		ui.PrintLines(fmt.Sprintf("reapi instance: %s\n", c.reopt.Instance))
+		ui.Default.PrintLines(fmt.Sprintf("reapi instance: %s\n", c.reopt.Instance))
 		client, err = reapi.New(ctx, credential, *c.reopt)
 		if err != nil {
 			return err

@@ -113,7 +113,7 @@ func (p *progress) report(format string, args ...any) {
 		return
 	}
 	msg := fmt.Sprintf(format, args...)
-	ui.PrintLines(msg)
+	ui.Default.PrintLines(msg)
 	p.mu.Lock()
 	p.ts = time.Now()
 	p.mu.Unlock()
@@ -169,7 +169,7 @@ func (p *progress) step(ctx context.Context, b *Builder, step *Step, s string) {
 			s)
 	}
 	lines = append(lines, msg)
-	ui.PrintLines(lines...)
+	ui.Default.PrintLines(lines...)
 	p.mu.Lock()
 	p.ts = time.Now()
 	p.mu.Unlock()

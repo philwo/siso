@@ -11,26 +11,37 @@ import (
 	"time"
 )
 
-// LogUi is a log-based UI.
-type LogUi struct {
-	spinnerStarted time.Time
+type logSpinner struct {
+	started time.Time
 }
 
-func (l *LogUi) Init() {}
-
-func (l *LogUi) PrintLines(msgs ...string) {
-	os.Stdout.Write([]byte(strings.Join(msgs, "\t") + "\n"))
-}
-
-func (l *LogUi) StartSpinner(format string, args ...any) {
-	l.spinnerStarted = time.Now()
+// Start implements the ui.spinner interface.
+// Because a log-based UI cannot support an animated spinner, this is used only to report spinner completion.
+func (l *logSpinner) Start(format string, args ...any) {
+	l.started = time.Now()
 	fmt.Printf(format, args...)
 }
 
-func (l *LogUi) StopSpinner(err error) {
+// Stop implements the ui.spinner interface.
+// Because a log-based UI cannot support an animated spinner, this is used to report how long the spinner operation took to complete.
+func (l *logSpinner) Stop(err error) {
 	if err != nil {
-		fmt.Printf("\bfailed %s %v\n", time.Since(l.spinnerStarted), err)
+		fmt.Printf("\bfailed %s %v\n", time.Since(l.started), err)
 		return
 	}
-	fmt.Printf("\bdone %s\n", time.Since(l.spinnerStarted))
+	fmt.Printf("\bdone %s\n", time.Since(l.started))
+}
+
+// LogUI is a log-based UI.
+type LogUI struct{}
+
+// PrintLines implements the ui.ui interface.
+// Because a log-based UI cannot support erasing previous lines, msgs will be printed as-is.
+func (LogUI) PrintLines(msgs ...string) {
+	os.Stdout.Write([]byte(strings.Join(msgs, "\t") + "\n"))
+}
+
+// NewSpinner returns an implementation of ui.spinner.
+func (LogUI) NewSpinner() spinner {
+	return &logSpinner{}
 }

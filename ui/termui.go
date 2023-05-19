@@ -13,15 +13,14 @@ import (
 	"golang.org/x/term"
 )
 
-// spinner manages a spinner for long operation.
-type spinner struct {
+type termSpinner struct {
 	quit, done chan struct{}
 	started    time.Time
 	n          int
 }
 
 // Start starts the spinner.
-func (s *spinner) Start(format string, args ...any) {
+func (s *termSpinner) Start(format string, args ...any) {
 	s.started = time.Now()
 	fmt.Printf(format, args...)
 	s.quit = make(chan struct{})
@@ -46,7 +45,7 @@ func (s *spinner) Start(format string, args ...any) {
 }
 
 // Stop stops the spinner.
-func (s *spinner) Stop(err error) {
+func (s *termSpinner) Stop(err error) {
 	close(s.quit)
 	<-s.done
 	if err != nil {
@@ -56,17 +55,19 @@ func (s *spinner) Stop(err error) {
 	fmt.Printf("\bdone %s\n", time.Since(s.started))
 }
 
-// TermUi is a terminal-based UI.
-type TermUi struct {
-	width   int
-	spinner spinner
+// TermUI is a terminal-based UI.
+type TermUI struct {
+	width int
 }
 
-func (t *TermUi) Init() {
+func (t *TermUI) init() {
 	t.width, _, _ = term.GetSize(int(os.Stdout.Fd()))
 }
 
-func (t *TermUi) PrintLines(msgs ...string) {
+// PrintLines implements the ui.ui interface.
+// If msgs starts with \n, it will print from the current line.
+// Otherwise, it will replace the last N lines, where N is len(msgs).
+func (t *TermUI) PrintLines(msgs ...string) {
 	var buf bytes.Buffer
 	if len(msgs) > 0 && msgs[0] == "\n" {
 		msgs = msgs[1:]
@@ -82,10 +83,7 @@ func (t *TermUi) PrintLines(msgs ...string) {
 	os.Stdout.Write(buf.Bytes())
 }
 
-func (t *TermUi) StartSpinner(format string, args ...any) {
-	t.spinner.Start(format, args...)
-}
-
-func (t *TermUi) StopSpinner(err error) {
-	t.spinner.Stop(err)
+// NewSpinner returns a terminal-based spinner.
+func (TermUI) NewSpinner() spinner {
+	return &termSpinner{}
 }
