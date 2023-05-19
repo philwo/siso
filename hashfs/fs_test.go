@@ -154,3 +154,37 @@ func TestReadDir(t *testing.T) {
 		t.Errorf("names; -want +got:\n%s", diff)
 	}
 }
+
+func TestMkdir(t *testing.T) {
+	dir := t.TempDir()
+	setupFiles(t, dir, map[string]string{
+		"out/siso/gen/v8/stamp": "",
+	})
+
+	ctx := context.Background()
+	hashFS, err := hashfs.New(ctx, hashfs.Option{})
+	if err != nil {
+		t.Fatalf("hashfs.New(...)=_, %v; want nil err", err)
+	}
+	defer hashFS.Close(ctx)
+	t.Logf("check out/siso/gen/v8/include")
+	_, err = hashFS.Stat(ctx, dir, "out/siso/gen/v8/include")
+	if err == nil {
+		t.Fatalf("hashfs.Stat(ctx, %q, %q)=_, nil; want err", dir, "out/siso/gen/v8/include")
+	}
+
+	err = hashFS.Mkdir(ctx, dir, "out/siso/gen/v8/include/inspector")
+	if err != nil {
+		t.Errorf("hashfs.Mkdir(ctx, %q, %q)=%v; want nil err", dir, "out/siso/gen/v8/include/inspector", err)
+	}
+
+	fi, err := hashFS.Stat(ctx, dir, "out/siso/gen/v8/include")
+	if err != nil || !fi.IsDir() {
+		t.Errorf("hashfs.Stat(ctx, %q, %q)=%v, %v; want dir, nil err", dir, "out/siso/gen/v8/include", fi, err)
+	}
+
+	fi, err = hashFS.Stat(ctx, dir, "out/siso/gen/v8/include/inspector")
+	if err != nil || !fi.IsDir() {
+		t.Errorf("hashfs.Stat(ctx, %q, %q)=%v, %v; want dir, nil err", dir, "out/siso/gen/v8/include/inspector", fi, err)
+	}
+}
