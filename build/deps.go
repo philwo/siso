@@ -59,7 +59,7 @@ func depsFastStep(ctx context.Context, b *Builder, step *Step) (*Step, error) {
 
 	// Inputs may contains unnecessary inputs.
 	// just needs ToolInputs.
-	stepInputs := step.cmd.ToolInputs
+	stepInputs := newCmd.ToolInputs
 	if step.cmd.Platform["OSFamily"] != "Windows" {
 		depsIns = step.def.ExpandCaseSensitives(ctx, depsIns)
 	}

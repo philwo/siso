@@ -26,7 +26,9 @@ func (gcc depsGCC) DepsFastCmd(ctx context.Context, b *Builder, cmd *execute.Cmd
 	if err != nil {
 		return nil, err
 	}
-	newCmd.Inputs = inputs
+	// sets include dirs + sysroots to ToolInputs.
+	// Inputs will be overridden by deps log data.
+	newCmd.ToolInputs = append(newCmd.ToolInputs, inputs...)
 	return newCmd, nil
 }
 
