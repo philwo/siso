@@ -184,20 +184,13 @@ func (hfs *HashFS) ReadDir(ctx context.Context, root, name string) (dents []DirE
 	if err != nil {
 		return nil, fmt.Errorf("read dir %s: %w", dname, err)
 	}
-	// TODO(ukai): fix race in updateDir -> store.
-	names := e.updateDir(ctx, dirname)
 	if e.directory == nil {
 		return nil, fmt.Errorf("read dir %s: not dir: %w", dname, os.ErrPermission)
 	}
+	// TODO(ukai): fix race in updateDir -> store.
+	names := e.updateDir(ctx, hfs, dirname)
 	if log.V(1) {
 		clog.Infof(ctx, "update-dir %s -> %d", dirname, len(names))
-	}
-	if len(names) > 0 {
-		// update from local dir entries.
-		_, err = hfs.Entries(ctx, dirname, names)
-		if err != nil {
-			clog.Warningf(ctx, "readdir entries %s: %v", dirname, err)
-		}
 	}
 	var ents []DirEntry
 	e.directory.m.Range(func(k, v any) bool {
@@ -854,7 +847,7 @@ func (e *entry) getMtime() time.Time {
 	return e.mtime
 }
 
-func (e *entry) updateDir(ctx context.Context, dname string) []string {
+func (e *entry) updateDir(ctx context.Context, hfs *HashFS, dname string) []string {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	d, err := os.Open(dname)
@@ -884,6 +877,10 @@ func (e *entry) updateDir(ctx context.Context, dname string) []string {
 		return nil
 	}
 	clog.Infof(ctx, "updateDir mtime %s %d %s", dname, len(names), e.mtime)
+	for _, name := range names {
+		// update entry in e.directory.
+		_, err = hfs.Stat(ctx, dname, name)
+	}
 	e.mtime = fi.ModTime()
 	return names
 }

@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"golang.org/x/sync/errgroup"
 
 	"infra/build/siso/hashfs"
 	"infra/build/siso/reapi/digest"
@@ -130,6 +131,12 @@ func TestReadDir(t *testing.T) {
 		}
 	}
 
+	t.Logf("check base/base.h")
+	fi, err := hashFS.Stat(ctx, dir, "base/base.h")
+	if err != nil {
+		t.Errorf("hashfs.Stat(ctx, %q, %q)=%v, %v; want, nil err", dir, "base/base.h", fi, err)
+	}
+
 	t.Logf("base")
 	dents, err = hashFS.ReadDir(ctx, dir, "base")
 	if err != nil {
@@ -152,6 +159,44 @@ func TestReadDir(t *testing.T) {
 	sort.Strings(want)
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("names; -want +got:\n%s", diff)
+	}
+
+	t.Logf("create gen/base/*.h")
+	err = os.MkdirAll(filepath.Join(dir, "out/siso/gen/base"), 0755)
+	if err != nil {
+		t.Errorf("mkdir %s/out/siso/gen/base: %v", dir, err)
+	}
+	for i := 0; i < 100; i++ {
+		err = os.WriteFile(filepath.Join(dir, "out/siso/gen/base", fmt.Sprintf("buildflag-%d.h", i)), nil, 0644)
+		if err != nil {
+			t.Errorf("writefile %s/out/siso/gen/base/buildflag-%d.h: %v", dir, i, err)
+		}
+	}
+	// concurrent access
+	var eg errgroup.Group
+	var names [2][]string
+	eg.Go(func() error {
+		dents, err := hashFS.ReadDir(ctx, dir, "out/siso/gen/base")
+		for _, dent := range dents {
+			names[0] = append(names[0], dent.Name())
+		}
+		sort.Strings(names[0])
+		return err
+	})
+	eg.Go(func() error {
+		dents, err := hashFS.ReadDir(ctx, dir, "out/siso/gen/base")
+		for _, dent := range dents {
+			names[1] = append(names[1], dent.Name())
+		}
+		sort.Strings(names[1])
+		return err
+	})
+	err = eg.Wait()
+	if err != nil {
+		t.Errorf("hashfs.ReadDir(ctx, %q, %q) %v; want nil err", dir, "out/siso/gen/base", err)
+	}
+	if diff := cmp.Diff(names[0], names[1]); diff != "" {
+		t.Errorf("readdir diff -first +second:\n%s", diff)
 	}
 }
 
