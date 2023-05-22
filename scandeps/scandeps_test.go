@@ -17,7 +17,6 @@ import (
 )
 
 func TestScanDeps(t *testing.T) {
-	t.Skip("TODO(b/282888305) enable this")
 	ctx := context.Background()
 	dir := t.TempDir()
 

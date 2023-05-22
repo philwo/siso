@@ -76,6 +76,8 @@ func (fsys *filesystem) scanner(ctx context.Context, execRoot string, inputDeps 
 			execRoot:  execRoot,
 			inputDeps: inputDeps,
 			sysroots:  sysroots,
+			files:     make(map[string]*scanResult),
+			visited:   make(map[string]bool),
 			// TODO(b/282888305) implement this
 		},
 		macros:       make(map[string][]string),
