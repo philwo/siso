@@ -124,10 +124,10 @@ func createRequest(cmd *execute.Cmd) (*ppb.RunRequest, error) {
 		},
 		ExecRoot: cmd.ExecRoot,
 		Input: &cpb.InputSpec{
-			Inputs: cmd.Inputs,
+			Inputs: cmd.AllInputs(),
 		},
 		Output: &cpb.OutputSpec{
-			OutputFiles: cmd.Outputs,
+			OutputFiles: cmd.AllOutputs(),
 		},
 		Args:             cmd.Args,
 		ExecutionTimeout: int32(cmd.Timeout.Seconds()),
