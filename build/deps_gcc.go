@@ -28,17 +28,18 @@ type depsGCC struct{}
 func (gcc depsGCC) DepsFastCmd(ctx context.Context, b *Builder, cmd *execute.Cmd) (*execute.Cmd, error) {
 	newCmd := &execute.Cmd{}
 	*newCmd = *cmd
-	inputs, err := gcc.fixCmd(ctx, b, newCmd)
+	inputs, err := gcc.fixCmdInputs(ctx, b, newCmd)
 	if err != nil {
 		return nil, err
 	}
 	// sets include dirs + sysroots to ToolInputs.
 	// Inputs will be overridden by deps log data.
 	newCmd.ToolInputs = append(newCmd.ToolInputs, inputs...)
+	gcc.fixForSplitDwarf(ctx, newCmd)
 	return newCmd, nil
 }
 
-func (gcc depsGCC) fixCmd(ctx context.Context, b *Builder, cmd *execute.Cmd) ([]string, error) {
+func (gcc depsGCC) fixCmdInputs(ctx context.Context, b *Builder, cmd *execute.Cmd) ([]string, error) {
 	_, dirs, sysroots, _, err := gccutil.ScanDepsParams(ctx, cmd.Args, cmd.Env)
 	if err != nil {
 		return nil, err
@@ -60,7 +61,6 @@ func (gcc depsGCC) fixCmd(ctx context.Context, b *Builder, cmd *execute.Cmd) ([]
 	inputs = append(inputs, sysroots...)
 	inputs = b.expandInputs(ctx, inputs)
 	cmd.TreeInputs = append(cmd.TreeInputs, b.treeInputs(ctx, ":headers", sysroots, dirs)...)
-	gcc.fixForSplitDwarf(ctx, cmd)
 	return inputs, nil
 }
 
@@ -116,11 +116,16 @@ func (gcc depsGCC) DepsCmd(ctx context.Context, b *Builder, step *Step) ([]strin
 	if err != nil {
 		return nil, err
 	}
-	inputs, err := gcc.fixCmd(ctx, b, step.cmd)
-	if err != nil {
-		return nil, err
+	if step.def.Binding("use_remote_exec_wrapper") == "" {
+		// no need to fix inputs when using remote exec wrapper
+		// b/283867642
+		inputs, err := gcc.fixCmdInputs(ctx, b, step.cmd)
+		if err != nil {
+			return nil, err
+		}
+		depsIns = append(depsIns, inputs...)
 	}
-	depsIns = append(depsIns, inputs...)
+	gcc.fixForSplitDwarf(ctx, step.cmd)
 	return depsIns, err
 }
 
