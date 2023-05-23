@@ -495,7 +495,9 @@ func (hfs *HashFS) Entries(ctx context.Context, root string, inputs []string) ([
 		}
 		e = newLocalEntry()
 		e.init(ctx, fname, hfs.IOMetrics)
-		clog.Infof(ctx, "tree new entry %s", fname)
+		if log.V(1) {
+			clog.Infof(ctx, "tree new entry %s", fname)
+		}
 		e, err := hfs.directory.store(ctx, fname, e)
 		if err != nil {
 			return nil, err
@@ -553,7 +555,9 @@ func (hfs *HashFS) Entries(ctx context.Context, root string, inputs []string) ([
 				} else {
 					elink = newLocalEntry()
 					elink.init(ctx, name, hfs.IOMetrics)
-					clog.Infof(ctx, "tree new entry %s", name)
+					if log.V(1) {
+						clog.Infof(ctx, "tree new entry %s", name)
+					}
 					var err error
 					elink, err = hfs.directory.store(ctx, name, elink)
 					if err != nil {
@@ -769,7 +773,9 @@ func (e *entry) init(ctx context.Context, fname string, m *iometrics.IOMetrics) 
 	fi, err := os.Lstat(fname)
 	m.OpsDone(err)
 	if errors.Is(err, fs.ErrNotExist) {
-		clog.Infof(ctx, "not exist %s", fname)
+		if log.V(1) {
+			clog.Infof(ctx, "not exist %s", fname)
+		}
 		e.err = err
 		return
 	}

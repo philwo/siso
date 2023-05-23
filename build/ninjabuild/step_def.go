@@ -656,7 +656,9 @@ func (s *StepDef) ExpandedInputs(ctx context.Context) []string {
 		inputs = make([]string, len(newInputs))
 		copy(inputs, newInputs)
 	}
-	clog.Infof(ctx, "expanded inputs -> %d", len(inputs))
+	if s.rule.Debug {
+		clog.Infof(ctx, "expanded inputs -> %d", len(inputs))
+	}
 	return inputs
 }
 

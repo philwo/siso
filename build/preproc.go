@@ -9,6 +9,8 @@ import (
 	"sort"
 	"strings"
 
+	log "github.com/golang/glog"
+
 	"infra/build/siso/o11y/clog"
 	"infra/build/siso/o11y/trace"
 )
@@ -18,7 +20,9 @@ func fastDepsCmd(ctx context.Context, b *Builder, step *Step) (*Step, bool) {
 	defer span.Close(nil)
 	fastStep, err := depsFastStep(ctx, b, step)
 	if err != nil {
-		clog.Infof(ctx, "no fast-deps %s: %v", step.cmd.Deps, err)
+		if log.V(1) {
+			clog.Infof(ctx, "no fast-deps %s: %v", step.cmd.Deps, err)
+		}
 		return nil, false
 	}
 	return fastStep, true

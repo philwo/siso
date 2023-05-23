@@ -156,7 +156,9 @@ func needOutputUpdate(ctx context.Context, cmd *execute.Cmd, action digest.Diges
 	for _, out := range cmd.AllOutputs() {
 		fi, err := cmd.HashFS.Stat(ctx, cmd.ExecRoot, out)
 		if err != nil {
-			clog.Warningf(ctx, "missing output %s: %v", out, err)
+			if log.V(1) {
+				clog.Infof(ctx, "missing output %s: %v", out, err)
+			}
 			return true
 		}
 		if fi.Action() != action {
