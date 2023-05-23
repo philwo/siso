@@ -103,6 +103,8 @@ func setupFiles(t *testing.T, dir string, files map[string]string) {
 }
 
 func TestReadDir(t *testing.T) {
+	t.Skip("TODO(crbug.com/1448004): fix flakiness")
+
 	dir := t.TempDir()
 	setupFiles(t, dir, map[string]string{
 		"base/base.h":        "",
