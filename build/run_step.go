@@ -35,8 +35,8 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 			const size = 64 << 10
 			buf := make([]byte, size)
 			buf = buf[:runtime.Stack(buf, false)]
-			clog.Errorf(ctx, "runStep panic %v\nstep.cmd: %p\n%s", r, step.cmd, buf)
-			err = fmt.Errorf("panic: %v", r)
+			clog.Errorf(ctx, "runStep panic: %v\nstep.cmd: %p\n%s", r, step.cmd, buf)
+			err = fmt.Errorf("panic: %v: %s", r, panicLocation(buf))
 		}
 	}()
 
