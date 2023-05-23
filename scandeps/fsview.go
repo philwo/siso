@@ -160,14 +160,16 @@ func (fv *fsview) scanResult(ctx context.Context, fname string) (*scanResult, er
 }
 
 func (fv *fsview) getFile(fname string) (*scanResult, bool) {
-	// TODO(b/282888305) use shared *scanResult in *filesystem
 	sr, ok := fv.files[fname]
+	if !ok {
+		sr, ok = fv.fs.getFile(fv.execRoot, fname)
+	}
 	return sr, ok
 }
 
 func (fv *fsview) setFile(fname string, sr *scanResult) {
 	fv.files[fname] = sr
-	// TODO(b/282888305) share in *filesystem
+	fv.fs.setFile(fv.execRoot, fname, sr)
 }
 
 func (fv *fsview) results() []string {

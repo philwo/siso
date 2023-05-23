@@ -12,6 +12,8 @@ import (
 	"sync"
 
 	log "github.com/golang/glog"
+
+	"infra/build/siso/ui"
 )
 
 // experiment id -> hint for the experiment (to check more details).
@@ -25,6 +27,7 @@ var knownExperiments = map[string]string{
 	"gvisor":                      "",
 	"ignore-missing-local-inputs": "",
 	"use-reproxy":                 "",
+	"scandeps":                    "",
 }
 
 type experimentFeature struct {
@@ -92,7 +95,7 @@ func (e *Experiments) Enabled(k, format string, args ...any) bool {
 		return false
 	}
 	ex.once.Do(func() {
-		log.Errorf(format+" %s\n", append(args, e.Hint(k))...)
+		ui.Default.PrintLines(fmt.Sprintf(format+" %s\n", append(args, e.Hint(k))...))
 	})
 	return true
 }

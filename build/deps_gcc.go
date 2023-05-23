@@ -6,13 +6,19 @@ package build
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
+	"time"
+
+	log "github.com/golang/glog"
 
 	"infra/build/siso/execute"
 	"infra/build/siso/o11y/clog"
 	"infra/build/siso/o11y/trace"
+	"infra/build/siso/scandeps"
 	"infra/build/siso/toolsupport/gccutil"
 	"infra/build/siso/toolsupport/makeutil"
 )
@@ -118,7 +124,17 @@ func (gcc depsGCC) DepsCmd(ctx context.Context, b *Builder, step *Step) ([]strin
 	return depsIns, err
 }
 
-func (depsGCC) depsInputs(ctx context.Context, b *Builder, step *Step) ([]string, error) {
+func (gcc depsGCC) depsInputs(ctx context.Context, b *Builder, step *Step) ([]string, error) {
+	if b.scanDeps != nil {
+		ins, err := gcc.scandeps(ctx, b, step)
+		if err == nil {
+			return ins, nil
+		}
+		if errors.Is(err, context.Canceled) {
+			return nil, err
+		}
+		clog.Warningf(ctx, "scandeps failed. fallback to gcc deps: %v", err)
+	}
 	cwd := b.path.AbsFromWD(".")
 	err := b.prepareLocalInputs(ctx, step)
 	if err != nil {
@@ -149,4 +165,48 @@ func (depsGCC) depsInputs(ctx context.Context, b *Builder, step *Step) ([]string
 		}
 	}
 	return inputs, nil
+}
+
+func (depsGCC) scandeps(ctx context.Context, b *Builder, step *Step) ([]string, error) {
+	var ins []string
+	err := b.scanDepsSema.Do(ctx, func(ctx context.Context) error {
+		var err error
+		// need to use DepsArgs?
+		files, dirs, sysroots, defines, err := gccutil.ScanDepsParams(ctx, step.cmd.Args, step.cmd.Env)
+		if err != nil {
+			return err
+		}
+		for i := range files {
+			files[i] = b.path.MustFromWD(files[i])
+		}
+		for i := range dirs {
+			dirs[i] = b.path.MustFromWD(dirs[i])
+		}
+		for i := range sysroots {
+			sysroots[i] = b.path.MustFromWD(sysroots[i])
+		}
+		req := scandeps.Request{
+			Defines:  defines,
+			Sources:  files,
+			Dirs:     dirs,
+			Sysroots: sysroots,
+		}
+		started := time.Now()
+		ins, err = b.scanDeps.Scan(ctx, b.path.ExecRoot, req)
+		if log.V(1) {
+			clog.Infof(ctx, "scandeps %d %s: %v", len(ins), time.Since(started), err)
+		}
+		if err != nil {
+			buf, berr := json.Marshal(req)
+			clog.Warningf(ctx, "scandeps failed Request %s %v: %v", buf, berr, err)
+		}
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	for i := range ins {
+		ins[i] = b.path.Intern(ins[i])
+	}
+	return ins, nil
 }

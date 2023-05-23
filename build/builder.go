@@ -39,6 +39,7 @@ import (
 	"infra/build/siso/o11y/pprof"
 	"infra/build/siso/o11y/trace"
 	"infra/build/siso/reapi"
+	"infra/build/siso/scandeps"
 	"infra/build/siso/sync/semaphore"
 	"infra/build/siso/toolsupport/gccutil"
 	"infra/build/siso/toolsupport/msvcutil"
@@ -55,6 +56,10 @@ const (
 	// limit # of concurrent steps at most 1024 times of num cpus
 	// to protect from out of memory, or too many threads.
 	stepLimitFactor = 1024
+
+	// limit # of concurrent scandeps steps at most 4 times of num cpus
+	// to protect from out of memory, reduce contention
+	scanDepsLimitFactor = 4
 
 	// limit # of concurrent steps at most 40 times of num cpus
 	// to protect from out of memory, or DDoS to RE API.
@@ -152,6 +157,9 @@ type Builder struct {
 	// for subtree: dir -> *subtree
 	trees sync.Map
 
+	scanDepsSema *semaphore.Semaphore
+	scanDeps     *scandeps.ScanDeps
+
 	localSema *semaphore.Semaphore
 	localExec localexec.LocalExec
 
@@ -229,6 +237,7 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 	experiments.ShowOnce()
 	numCPU := runtime.NumCPU()
 	stepLimit := stepLimitFactor * numCPU
+	scanDepsLimit := scanDepsLimitFactor * numCPU
 	localLimit := numCPU
 	rewrapLimit := limitForREWrapper(ctx, numCPU)
 	remoteLimit := remoteLimitFactor * numCPU
@@ -244,6 +253,11 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 		numCPU, maxThreads, stepLimit, localLimit, rewrapLimit, remoteLimit)
 	logger.Infof("tool_invocation_id: %s", opts.ID)
 
+	var scanDeps *scandeps.ScanDeps
+	if experiments.Enabled("scandeps", "enable scandeps") {
+		scanDeps = scandeps.New(opts.HashFS, graph.InputDeps(ctx))
+	}
+
 	return &Builder{
 		id:        opts.ID,
 		projectID: opts.ProjectID,
@@ -254,6 +268,8 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 		graph:             graph,
 		stepSema:          semaphore.New("step", stepLimit),
 		preprocSema:       semaphore.New("preproc", stepLimit),
+		scanDepsSema:      semaphore.New("scandeps", scanDepsLimit),
+		scanDeps:          scanDeps,
 		localSema:         semaphore.New("localexec", localLimit),
 		localExec:         le,
 		rewrapSema:        semaphore.New("rewrap", rewrapLimit),

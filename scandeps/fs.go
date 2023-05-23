@@ -7,6 +7,8 @@ package scandeps
 import (
 	"context"
 	"io/fs"
+	"path/filepath"
+	"sync"
 
 	"infra/build/siso/hashfs"
 )
@@ -18,10 +20,24 @@ import (
 type filesystem struct {
 	hashfs *hashfs.HashFS
 
+	files sync.Map // filename -> *scanResult
 	// TODO(b/282888305) implement this
 }
 
 func (fsys *filesystem) ReadDir(ctx context.Context, execRoot, dname string) (map[string]bool, error) {
 	// TODO(b/282888305) implement this
 	return nil, fs.ErrNotExist
+}
+
+func (fsys *filesystem) getFile(execRoot, fname string) (*scanResult, bool) {
+	v, ok := fsys.files.Load(filepath.Join(execRoot, fname))
+	if !ok {
+		return nil, false
+	}
+	sr, ok := v.(*scanResult)
+	return sr, ok
+}
+
+func (fsys *filesystem) setFile(execRoot, fname string, sr *scanResult) {
+	fsys.files.Store(filepath.Join(execRoot, fname), sr)
 }
