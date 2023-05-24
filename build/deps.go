@@ -37,8 +37,8 @@ var depsProcessors = map[string]depsProcessor{
 }
 
 func depsFastStep(ctx context.Context, b *Builder, step *Step) (*Step, error) {
-	if step.def.Binding("use_remote_exec_wrapper") != "" || experiments.Enabled("use-reproxy", "") {
-		return nil, fmt.Errorf("no fast-deps (use_remote_exec_wrapper)")
+	if step.skipDepsProcess() {
+		return nil, fmt.Errorf("no fast-deps (use reclient)")
 	}
 	ds, found := depsProcessors[step.cmd.Deps]
 	if !found {
@@ -134,9 +134,8 @@ func depsFixCmd(ctx context.Context, b *Builder, step *Step, deps []string) {
 }
 
 func depsCmd(ctx context.Context, b *Builder, step *Step) error {
-	// TODO(b/273407069): native integration instead of spwaning gomacc/rewrapper?
-	if step.def.Binding("use_remote_exec_wrapper") != "" || experiments.Enabled("use-reproxy", "") {
-		// no need to run `clang -M`.
+	if step.skipDepsProcess() {
+		// no need to scan deps.
 		return nil
 	}
 	ds, found := depsProcessors[step.cmd.Deps]
@@ -179,8 +178,8 @@ func depsAfterRun(ctx context.Context, b *Builder, step *Step) ([]string, error)
 	if err != nil {
 		return nil, err
 	}
-	if step.def.Binding("use_remote_exec_wrapper") != "" || experiments.Enabled("use-reproxy", "") {
-		// when remote_exec_wrapper is used,
+	if step.skipDepsProcess() {
+		// when remote_exec_wrapper or reproxy is used,
 		// deps is managed by goma/reclient
 		// so no need to check it in siso.
 		// b/278661991

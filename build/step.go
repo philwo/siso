@@ -277,6 +277,11 @@ func stepBacktraces(step *Step) []string {
 	return locs
 }
 
+func (s *Step) skipDepsProcess() bool {
+	// A step with rewrapper or reproxy doesn't need to collect dependencies on Siso side.
+	return s.def.Binding("use_remote_exec_wrapper") != "" || experiments.Enabled("use-reproxy", "")
+}
+
 func (s *Step) init(ctx context.Context, b *Builder) {
 	ctx, span := trace.NewSpan(ctx, "step-init")
 	defer span.Close(nil)
