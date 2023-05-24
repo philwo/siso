@@ -155,16 +155,16 @@ func (hfs *HashFS) dirLookup(ctx context.Context, root, fname string) (*entry, *
 }
 
 // Stat returns a FileInfo at root/fname.
-func (hfs *HashFS) Stat(ctx context.Context, root, fname string) (*FileInfo, error) {
+func (hfs *HashFS) Stat(ctx context.Context, root, fname string) (FileInfo, error) {
 	if log.V(1) {
 		clog.Infof(ctx, "stat @%s %s", root, fname)
 	}
 	e, dir, ok := hfs.dirLookup(ctx, root, fname)
 	if ok {
 		if e.err != nil {
-			return nil, e.err
+			return FileInfo{}, e.err
 		}
-		return &FileInfo{root: root, fname: fname, e: e}, nil
+		return FileInfo{root: root, fname: fname, e: e}, nil
 	}
 	fname = filepath.Join(root, fname)
 	fname = filepath.ToSlash(fname)
@@ -182,13 +182,13 @@ func (hfs *HashFS) Stat(ctx context.Context, root, fname string) (*FileInfo, err
 	}
 	if err != nil {
 		clog.Warningf(ctx, "failed to store %s %s in %s: %v", fname, e, dir, err)
-		return nil, err
+		return FileInfo{}, err
 	}
 	if e.err != nil {
-		return nil, e.err
+		return FileInfo{}, e.err
 	}
 	hfs.digester.lazyCompute(ctx, fname, e)
-	return &FileInfo{root: root, fname: fname, e: e}, nil
+	return FileInfo{root: root, fname: fname, e: e}, nil
 }
 
 // ReadDir returns directory entries of root/name.
@@ -235,7 +235,7 @@ func (hfs *HashFS) ReadDir(ctx context.Context, root, name string) (dents []DirE
 			return true
 		}
 		ents = append(ents, DirEntry{
-			fi: &FileInfo{
+			fi: FileInfo{
 				root:  root,
 				fname: filepath.ToSlash(filepath.Join(dirname, name)),
 				e:     ee,
@@ -1266,34 +1266,34 @@ type FileInfo struct {
 }
 
 // Name is a base name of the file.
-func (fi *FileInfo) Name() string {
+func (fi FileInfo) Name() string {
 	return filepath.Base(fi.fname)
 }
 
 // Size is a size of the file.
-func (fi *FileInfo) Size() int64 {
+func (fi FileInfo) Size() int64 {
 	return fi.e.size
 }
 
 // Mode is a file mode of the file.
-func (fi *FileInfo) Mode() fs.FileMode {
+func (fi FileInfo) Mode() fs.FileMode {
 	return fi.e.mode
 }
 
 // ModTime is a modification time of the file.
-func (fi *FileInfo) ModTime() time.Time {
+func (fi FileInfo) ModTime() time.Time {
 	return fi.e.getMtime()
 }
 
 // IsDir returns true if it is the directory.
-func (fi *FileInfo) IsDir() bool {
+func (fi FileInfo) IsDir() bool {
 	return fi.e.mode.IsDir()
 }
 
 // Sys returns merkletree Entry of the file.
 // For local file, digest may not be calculated yet.
 // Use Entries to get correct merkletree.Entry.
-func (fi *FileInfo) Sys() any {
+func (fi FileInfo) Sys() any {
 	d := fi.e.digest()
 	return merkletree.Entry{
 		Name:         filepath.ToSlash(filepath.Join(fi.root, fi.fname)),
@@ -1304,23 +1304,23 @@ func (fi *FileInfo) Sys() any {
 }
 
 // CmdHash returns a cmdhash that created the file.
-func (fi *FileInfo) CmdHash() []byte {
+func (fi FileInfo) CmdHash() []byte {
 	return fi.e.cmdhash
 }
 
 // Action returns a digest of action that created the file.
-func (fi *FileInfo) Action() digest.Digest {
+func (fi FileInfo) Action() digest.Digest {
 	return fi.e.action
 }
 
 // Target returns a symlink target of the file, or empty if it is not symlink.
-func (fi *FileInfo) Target() string {
+func (fi FileInfo) Target() string {
 	return fi.e.target
 }
 
 // DirEntry implements https://pkg.go.dev/io/fs#DirEntry.
 type DirEntry struct {
-	fi *FileInfo
+	fi FileInfo
 }
 
 // Name is a base name in the directory.

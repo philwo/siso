@@ -882,7 +882,7 @@ func (b *Builder) done(ctx context.Context, step *Step) error {
 				return fmt.Errorf("output %s for %s: %w", out, step, err)
 			}
 		}
-		if fi != nil {
+		if !fi.ModTime().IsZero() {
 			mtime = fi.ModTime()
 		}
 		if log.V(1) {

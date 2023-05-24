@@ -373,8 +373,8 @@ func TestStatAllocs(t *testing.T) {
 				t.Fatalf("hfs.Stat(ctx,%q,%q)=%v; want nil", dir, fname, err)
 			}
 		})
-		if avg > allocBase+1 {
-			t.Errorf("alloc=%f; want <= %f", avg, allocBase+1)
+		if avg > allocBase+0 {
+			t.Errorf("alloc=%f; want <= %f", avg, allocBase+0)
 		}
 	})
 }

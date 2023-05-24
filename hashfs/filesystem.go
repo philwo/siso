@@ -16,7 +16,7 @@ import (
 // This is an in-memory representation of the file.
 type File struct {
 	buf []byte
-	fi  *FileInfo
+	fi  FileInfo
 }
 
 // Stat returns a FileInfo describing the file.
@@ -42,7 +42,7 @@ func (f *File) Close() error {
 // Dir implements https://pkg.go.dev/io/fs#ReadDirFile.
 type Dir struct {
 	ents []DirEntry
-	fi   *FileInfo
+	fi   FileInfo
 }
 
 // Stat returns a FileInfo describing the directory.
