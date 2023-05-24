@@ -882,11 +882,14 @@ func (e *entry) updateDir(ctx context.Context, hfs *HashFS, dname string) []stri
 		clog.Warningf(ctx, "updateDir %s: readdirnames %v", dname, err)
 		return nil
 	}
-	clog.Infof(ctx, "updateDir mtime %s %d %s", dname, len(names), e.mtime)
 	for _, name := range names {
 		// update entry in e.directory.
 		_, err = hfs.Stat(ctx, dname, name)
+		if err != nil {
+			clog.Warningf(ctx, "updateDir stat %s: %v", name, err)
+		}
 	}
+	clog.Infof(ctx, "updateDir mtime %s %d %s -> %s", dname, len(names), e.mtime, fi.ModTime())
 	e.mtime = fi.ModTime()
 	return names
 }
@@ -1070,47 +1073,57 @@ func (d *directory) store(ctx context.Context, fname string, e *entry) (*entry, 
 		fname = strings.TrimPrefix(fname, "/")
 		elem, rest, ok := strings.Cut(fname, "/")
 		if !ok {
-			v, ok := d.m.Load(fname)
-			var ee *entry
-			if ok {
-				ee = v.(*entry)
+			v, loaded := d.m.LoadOrStore(fname, e)
+			if !loaded {
+				if log.V(8) {
+					lv := struct {
+						origFname string
+						d         *directory
+						fname     string
+					}{origFname, d, fname}
+					clog.Infof(ctx, "store %s -> %p %s", lv.origFname, lv.d, lv.fname)
+				}
+				return e, nil
 			}
-			if ee != nil {
-				eed := ee.digest()
-				cmdchanged := !bytes.Equal(ee.cmdhash, e.cmdhash)
-				if e.target != "" && ee.target != e.target {
-					lv := struct {
-						origFname         string
-						cmdchanged        bool
-						eetarget, etarget string
-					}{origFname, cmdchanged, ee.target, e.target}
-					clog.Infof(ctx, "store %s: cmdchagne:%t s:%q to %q", lv.origFname, lv.cmdchanged, lv.eetarget, lv.etarget)
-				} else if !e.d.IsZero() && eed != e.d && eed.SizeBytes != 0 && e.d.SizeBytes != 0 {
-					// don't log nil to digest of empty file (size=0)
-					lv := struct {
-						origFname  string
-						cmdchanged bool
-						eed, ed    digest.Digest
-					}{origFname, cmdchanged, ee.d, e.d}
-					clog.Infof(ctx, "store %s: cmdchange:%t d:%v to %v", lv.origFname, lv.cmdchanged, lv.eed, lv.ed)
-				} else if ee.target == e.target && eed == e.d && ee.mode == e.mode {
-					// no change?
+			// check whether there is an update from previous entry.
+			ee := v.(*entry)
+			eed := ee.digest()
+			cmdchanged := !bytes.Equal(ee.cmdhash, e.cmdhash)
+			if e.target != "" && ee.target != e.target {
+				lv := struct {
+					origFname         string
+					cmdchanged        bool
+					eetarget, etarget string
+				}{origFname, cmdchanged, ee.target, e.target}
+				clog.Infof(ctx, "store %s: cmdchagne:%t s:%q to %q", lv.origFname, lv.cmdchanged, lv.eetarget, lv.etarget)
+			} else if !e.d.IsZero() && eed != e.d && eed.SizeBytes != 0 && e.d.SizeBytes != 0 {
+				// don't log nil to digest of empty file (size=0)
+				lv := struct {
+					origFname  string
+					cmdchanged bool
+					eed, ed    digest.Digest
+				}{origFname, cmdchanged, eed, e.d}
+				clog.Infof(ctx, "store %s: cmdchange:%t d:%v to %v", lv.origFname, lv.cmdchanged, lv.eed, lv.ed)
+			} else if ee.target == e.target && eed == e.d && ee.mode == e.mode {
+				// no change?
+				// update mtime other than dir.
+				if !e.mode.IsDir() {
 					ee.mu.Lock()
 					ee.mtime = e.mtime
 					ee.mu.Unlock()
-					return ee, nil
 				}
+				return ee, nil
 			}
-			d.m.Store(fname, e)
-			if log.V(8) {
-				lv := struct {
-					origFname string
-					d         *directory
-					fname     string
-				}{origFname, d, fname}
-				clog.Infof(ctx, "store %s -> %s %s", lv.origFname, lv.d, lv.fname)
+			// e should be new value for fname.
+			swapped := d.m.CompareAndSwap(fname, ee, e)
+			if !swapped {
+				// store race?
+				v, ok := d.m.Load(fname)
+				return nil, fmt.Errorf("store race %s: %p -> %p -> %p %t", fname, ee, e, v, ok)
 			}
+			// e is stored for fname
 			return e, nil
+
 		}
 		fname = rest
 		v, ok := d.m.Load(elem)
@@ -1136,12 +1149,13 @@ func (d *directory) store(ctx context.Context, fname string, e *entry) (*entry, 
 				d = subdir
 				continue
 			}
-			d.m.Delete(elem)
+			deleted := d.m.CompareAndDelete(elem, dent)
 			if log.V(9) {
 				lv := struct {
 					origFname, elem string
-				}{origFname, elem}
-				clog.Infof(ctx, "store %s delete missing %s to create dir", lv.origFname, lv.elem)
+					deleted         bool
+				}{origFname, elem, deleted}
+				clog.Infof(ctx, "store %s delete missing %s to create dir deleted:%t", lv.origFname, lv.elem, lv.deleted)
 			}
 		}
 		// create intermediate dir of elem.
