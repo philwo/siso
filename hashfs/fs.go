@@ -1095,7 +1095,7 @@ func (d *directory) store(ctx context.Context, fname string, e *entry) (*entry, 
 					cmdchanged        bool
 					eetarget, etarget string
 				}{origFname, cmdchanged, ee.target, e.target}
-				clog.Infof(ctx, "store %s: cmdchagne:%t s:%q to %q", lv.origFname, lv.cmdchanged, lv.eetarget, lv.etarget)
+				clog.Infof(ctx, "store %s: cmdchange:%t s:%q to %q", lv.origFname, lv.cmdchanged, lv.eetarget, lv.etarget)
 			} else if !e.d.IsZero() && eed != e.d && eed.SizeBytes != 0 && e.d.SizeBytes != 0 {
 				// don't log nil to digest of empty file (size=0)
 				lv := struct {
@@ -1104,8 +1104,12 @@ func (d *directory) store(ctx context.Context, fname string, e *entry) (*entry, 
 					eed, ed    digest.Digest
 				}{origFname, cmdchanged, eed, e.d}
 				clog.Infof(ctx, "store %s: cmdchange:%t d:%v to %v", lv.origFname, lv.cmdchanged, lv.eed, lv.ed)
-			} else if ee.target == e.target && eed == e.d && ee.mode == e.mode {
+			} else if ee.target == e.target && ee.size == e.size && ee.mode == e.mode && (e.d.IsZero() || eed == e.d) {
 				// no change?
+
+				// if e.d is zero, it may be new local entry
+				// and ee.d has been calculated
+
 				// update mtime other than dir.
 				if !e.mode.IsDir() {
 					ee.mu.Lock()

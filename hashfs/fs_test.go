@@ -10,7 +10,9 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -231,5 +233,51 @@ func TestMkdir(t *testing.T) {
 	fi, err = hashFS.Stat(ctx, dir, "out/siso/gen/v8/include/inspector")
 	if err != nil || !fi.IsDir() {
 		t.Errorf("hashfs.Stat(ctx, %q, %q)=%v, %v; want dir, nil err", dir, "out/siso/gen/v8/include/inspector", fi, err)
+	}
+}
+
+func TestStat_Race(t *testing.T) {
+	dir := t.TempDir()
+	fname := "third_party/breakpad/breakpad/src/google_breakpad/common/minidump_format.h"
+	setupFiles(t, dir, map[string]string{
+		fname: "",
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	hashFS, err := hashfs.New(ctx, hashfs.Option{})
+	if err != nil {
+		t.Fatalf("hashfs.New(...)=_, %v; want nil err", err)
+	}
+	defer hashFS.Close(ctx)
+	var eg errgroup.Group
+	// keep most cpus busy
+	var count atomic.Int64
+	const n = 1000
+	for i := 0; i < runtime.NumCPU()-1; i++ {
+		eg.Go(func() error {
+			for {
+				if count.Load() == n {
+					break
+				}
+			}
+			return nil
+		})
+	}
+	for i := 0; i < n; i++ {
+		eg.Go(func() error {
+			defer count.Add(1)
+			fi, err := hashFS.Stat(ctx, dir, fname)
+			if err != nil {
+				return err
+			}
+			if !fi.Mode().IsRegular() {
+				return fmt.Errorf("mode is not regular")
+			}
+			return nil
+		})
+	}
+	err = eg.Wait()
+	if err != nil {
+		t.Errorf("hashFS.Stat(ctx, %q, %q): %v; want nil", dir, fname, err)
 	}
 }
