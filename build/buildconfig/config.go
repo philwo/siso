@@ -29,9 +29,6 @@ const configEntryPoint = "init"
 
 // Config is a build config.
 type Config struct {
-	// ID is an id of the build process (toolchain invocation ID).
-	ID string
-
 	// Metadata is a metadata of the build.
 	Metadata build.Metadata
 
