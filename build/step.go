@@ -277,8 +277,9 @@ func stepBacktraces(step *Step) []string {
 	return locs
 }
 
-func (s *Step) skipDepsProcess() bool {
-	// A step with rewrapper or reproxy doesn't need to collect dependencies on Siso side.
+// useReclient returns true if the step uses Reclient via rewrapper or reproxy.
+// A step with reclient doesn't need to collect dependencies and check action result caches on Siso side.
+func (s *Step) useReclient() bool {
 	return s.def.Binding("use_remote_exec_wrapper") != "" || experiments.Enabled("use-reproxy", "")
 }
 

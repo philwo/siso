@@ -37,7 +37,7 @@ var depsProcessors = map[string]depsProcessor{
 }
 
 func depsFastStep(ctx context.Context, b *Builder, step *Step) (*Step, error) {
-	if step.skipDepsProcess() {
+	if step.useReclient() {
 		return nil, fmt.Errorf("no fast-deps (use reclient)")
 	}
 	ds, found := depsProcessors[step.cmd.Deps]
@@ -134,7 +134,7 @@ func depsFixCmd(ctx context.Context, b *Builder, step *Step, deps []string) {
 }
 
 func depsCmd(ctx context.Context, b *Builder, step *Step) error {
-	if step.skipDepsProcess() {
+	if step.useReclient() {
 		// no need to scan deps.
 		return nil
 	}
@@ -178,7 +178,7 @@ func depsAfterRun(ctx context.Context, b *Builder, step *Step) ([]string, error)
 	if err != nil {
 		return nil, err
 	}
-	if step.skipDepsProcess() {
+	if step.useReclient() {
 		// when remote_exec_wrapper or reproxy is used,
 		// deps is managed by goma/reclient
 		// so no need to check it in siso.
