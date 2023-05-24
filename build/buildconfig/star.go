@@ -34,7 +34,7 @@ const (
 	cmdFieldOutputs = "outputs"
 )
 
-// packCmd packs cmd into starlark struct.
+// packCmd packs cmd into Starlark struct.
 func packCmd(ctx context.Context, cmd *execute.Cmd) (*starlarkstruct.Struct, error) {
 	envs, err := packEnvmap(cmd.Env)
 	if err != nil {

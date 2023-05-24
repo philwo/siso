@@ -51,7 +51,7 @@ type Graph interface {
 	// input dependencies is a map from input path or label to
 	// other files or labels needed for the key.
 	// path is exec root relative and label contains ':'.
-	// it's "input_deps" in starlark config.
+	// it's "input_deps" in Starlark config.
 	InputDeps(context.Context) map[string][]string
 }
 

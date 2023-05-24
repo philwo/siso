@@ -31,14 +31,14 @@ func (emptyFS) Open(name string) (fs.File, error) {
 	return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrNotExist}
 }
 
-// repoLoader is a starlark repository loader.
+// repoLoader is a Starlark repository loader.
 type repoLoader struct {
 	ctx         context.Context
 	repos       map[string]fs.FS
 	predeclared starlark.StringDict
 }
 
-// Load loads a starlark module.
+// Load loads a Starlark module.
 // A module may be `@<repo>//` prefix to select repository.
 func (r *repoLoader) Load(thread *starlark.Thread, module string) (starlark.StringDict, error) {
 	curname := thread.Local("modulename").(string)

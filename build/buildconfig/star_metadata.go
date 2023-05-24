@@ -24,7 +24,7 @@ func (starMDReceiver) Freeze()               {}
 func (starMDReceiver) Truth() starlark.Bool  { return starlark.True }
 func (starMDReceiver) Hash() (uint32, error) { return 0, errors.New("metadata is not hashable") }
 
-// starlark value to access metadata.
+// Starlark value to access metadata.
 func starMetadata(kv map[string]string) starlark.Value {
 	dict := starlark.NewDict(len(kv))
 	for k, v := range kv {
@@ -33,7 +33,7 @@ func starMetadata(kv map[string]string) starlark.Value {
 	return dict
 }
 
-// starlark value to access flags.
+// Starlark value to access flags.
 func starFlags(flags map[string]string) starlark.Value {
 	dict := starlark.NewDict(len(flags))
 	for k, v := range flags {
@@ -42,7 +42,7 @@ func starFlags(flags map[string]string) starlark.Value {
 	return dict
 }
 
-// starlark function `metadata(key, value)` to set key=value in metadata.
+// Starlark function `metadata(key, value)` to set key=value in metadata.
 func starActionsMetadata(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	c, ok := fn.Receiver().(starMDReceiver)
 	if !ok {

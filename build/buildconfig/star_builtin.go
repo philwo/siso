@@ -21,7 +21,7 @@ import (
 	"infra/build/siso/o11y/clog"
 )
 
-// embeds these starlark files for @builtin.
+// embeds these Starlark files for @builtin.
 //
 //go:embed checkout.star encoding.star path.star runtime.star struct.star lib/gn.star
 var builtinStar embed.FS

@@ -60,7 +60,7 @@ func (starCmdValue) Freeze()               {}
 func (starCmdValue) Truth() starlark.Bool  { return starlark.True }
 func (starCmdValue) Hash() (uint32, error) { return 0, errors.New("execute.Cmd is not hashable") }
 
-// starlark function `actions.fix(inputs, tool_inputs, outputs, deps_args)`
+// Starlark function `actions.fix(inputs, tool_inputs, outputs, deps_args)`
 // to fix the command's inputs/outputs/deps_args in the context.
 func starActionsFix(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	log.V(1).Infof("actions.fix args=%s kwargs=%s", args, kwargs)
@@ -119,7 +119,7 @@ func starActionsFix(thread *starlark.Thread, fn *starlark.Builtin, args starlark
 	return starlark.None, nil
 }
 
-// starlark function `actions.write(fname, content, is_executable)` to write the content a file in hashfs.
+// Starlark function `actions.write(fname, content, is_executable)` to write the content a file in hashfs.
 func starActionsWrite(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	log.V(1).Infof("actions.write args=%s kwargs=%s", args, kwargs)
 	c, ok := fn.Receiver().(starCmdValue)
@@ -137,7 +137,7 @@ func starActionsWrite(thread *starlark.Thread, fn *starlark.Builtin, args starla
 	return starlark.None, err
 }
 
-// starlark function `actions.copy(src, dst, recursive)` to copy a file, or a dir, in hashfs.
+// Starlark function `actions.copy(src, dst, recursive)` to copy a file, or a dir, in hashfs.
 func starActionsCopy(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	log.V(1).Infof("actions.copy args=%s kwargs=%s", args, kwargs)
 	c, ok := fn.Receiver().(starCmdValue)
@@ -185,7 +185,7 @@ func actionsCopyRecursively(ctx context.Context, cmd *execute.Cmd, src, dst stri
 	return cmd.HashFS.Copy(ctx, cmd.ExecRoot, src, dst, t, cmd.CmdHash)
 }
 
-// starlark function `actions.symlink(target, linkpath)` to create a symlink in hashfs.
+// Starlark function `actions.symlink(target, linkpath)` to create a symlink in hashfs.
 func starActionsSymlink(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	log.V(1).Infof("actions.symlink args=%s kwargs=%s", args, kwargs)
 	c, ok := fn.Receiver().(starCmdValue)
@@ -201,7 +201,7 @@ func starActionsSymlink(thread *starlark.Thread, fn *starlark.Builtin, args star
 	return starlark.None, err
 }
 
-// starlark function `actions.exit(exit_status, stdout, stderr)` to finish the execution of the command.
+// Starlark function `actions.exit(exit_status, stdout, stderr)` to finish the execution of the command.
 // can be used when no actual command invocation is needed, such as stamp, copy.
 func starActionsExit(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	log.V(1).Infof("actions.exit args=%s kwargs=%s", args, kwargs)

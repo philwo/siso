@@ -34,7 +34,7 @@ func starPath() starlark.Value {
 	return pathModule
 }
 
-// starlark function `path.base(fname)` to return base name of fname.
+// Starlark function `path.base(fname)` to return base name of fname.
 func starPathBase(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var fname string
 	err := starlark.UnpackArgs("base", args, kwargs, "fname", &fname)
@@ -44,7 +44,7 @@ func starPathBase(thread *starlark.Thread, fn *starlark.Builtin, args starlark.T
 	return starlark.String(filepath.Base(fname)), nil
 }
 
-// starlark function `path.dir(fname)` to return dir name of fname.
+// Starlark function `path.dir(fname)` to return dir name of fname.
 func starPathDir(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var fname string
 	err := starlark.UnpackArgs("dir", args, kwargs, "fname", &fname)
@@ -54,7 +54,7 @@ func starPathDir(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tu
 	return starlark.String(filepath.ToSlash(filepath.Dir(fname))), nil
 }
 
-// starlark function `path.join(...)` to return joined path name.
+// Starlark function `path.join(...)` to return joined path name.
 func starPathJoin(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var elems []string
 	for _, v := range args {
@@ -67,7 +67,7 @@ func starPathJoin(thread *starlark.Thread, fn *starlark.Builtin, args starlark.T
 	return starlark.String(filepath.ToSlash(filepath.Join(elems...))), nil
 }
 
-// starlark function `path.rel(basepath, targetpath)` to return relative path of targetpath from basepath.
+// Starlark function `path.rel(basepath, targetpath)` to return relative path of targetpath from basepath.
 func starPathRel(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var basepath, targetpath string
 	err := starlark.UnpackArgs("rel", args, kwargs, "basepath", &basepath, "targetpath", &targetpath)
@@ -81,7 +81,7 @@ func starPathRel(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tu
 	return starlark.String(filepath.ToSlash(rel)), nil
 }
 
-// starlark function `path.isabs(fname)` to return true if fname is absolute path.
+// Starlark function `path.isabs(fname)` to return true if fname is absolute path.
 func starPathIsAbs(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var fname string
 	err := starlark.UnpackArgs("isabs", args, kwargs, "fname", &fname)

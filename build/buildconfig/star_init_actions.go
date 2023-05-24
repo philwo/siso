@@ -11,7 +11,7 @@ import (
 
 // starInitActions returns actions, which contains:
 //
-//	metadata(key, value): sets key=value in metadata by starlark config.
+//	metadata(key, value): sets key=value in metadata by Starlark config.
 func starInitActions(kv map[string]string) starlark.Value {
 	receiver := starMDReceiver{KV: kv}
 	return starlarkstruct.FromStringDict(starlark.String("actions"), map[string]starlark.Value{

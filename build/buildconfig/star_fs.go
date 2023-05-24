@@ -59,7 +59,7 @@ func (starFSReceiver) Freeze()               {}
 func (starFSReceiver) Truth() starlark.Bool  { return starlark.True }
 func (starFSReceiver) Hash() (uint32, error) { return 0, errors.New("fs is not hashable") }
 
-// starlark function `fs.read(fname)` to return contents of fname.
+// Starlark function `fs.read(fname)` to return contents of fname.
 func starFSRead(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	c, ok := fn.Receiver().(starFSReceiver)
 	if !ok {
@@ -77,7 +77,7 @@ func starFSRead(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tup
 	return starlark.Bytes(string(buf)), nil
 }
 
-// starlark function `fs.is_dir(fname)` to check fname is a dir.
+// Starlark function `fs.is_dir(fname)` to check fname is a dir.
 func starFSIsDir(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	c, ok := fn.Receiver().(starFSReceiver)
 	if !ok {
@@ -98,7 +98,7 @@ func starFSIsDir(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tu
 	return starlark.False, nil
 }
 
-// starlark function `fs.exists(fname)` to check fname exists.
+// Starlark function `fs.exists(fname)` to check fname exists.
 func starFSExists(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	c, ok := fn.Receiver().(starFSReceiver)
 	if !ok {
@@ -116,7 +116,7 @@ func starFSExists(thread *starlark.Thread, fn *starlark.Builtin, args starlark.T
 	return starlark.True, nil
 }
 
-// starlark function `fs.canonpath(fname)` to canonicalize path from working directory relative path.
+// Starlark function `fs.canonpath(fname)` to canonicalize path from working directory relative path.
 func starFSCanonPath(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	log.V(1).Infof("fs.canonpath args=%s kwargs=%s", args, kwargs)
 	r, ok := fn.Receiver().(starFSReceiver)
