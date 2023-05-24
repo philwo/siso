@@ -37,3 +37,38 @@ func BenchmarkDirectoryLookup(b *testing.B) {
 		}
 	})
 }
+
+// test to make sure keep allocations under
+// allocations that was measured by the above benchmark.
+// fs_test.go is eternal test, but this is internal test.
+func TestDirectoryLookup(t *testing.T) {
+	ctx := context.Background()
+	root := &directory{}
+	fname := "/b/s/w/ir/cache/builder/src/out/siso/gen"
+
+	t.Run("miss", func(t *testing.T) {
+		avg := testing.AllocsPerRun(1000, func() {
+			_, _, ok := root.lookup(ctx, fname)
+			if ok {
+				t.Fatalf("lookup(ctx, %q)=_, _, %t; want false", fname, ok)
+			}
+		})
+		if avg != 0 {
+			t.Errorf("alloc=%f; want 0", avg)
+		}
+	})
+
+	e := &entry{err: fs.ErrNotExist}
+	root.store(ctx, fname, e)
+	t.Run("ok", func(t *testing.T) {
+		avg := testing.AllocsPerRun(1000, func() {
+			_, _, ok := root.lookup(ctx, fname)
+			if !ok {
+				t.Fatalf("lookup(ctx, %q)=_, _, %t; want true", fname, ok)
+			}
+		})
+		if avg != 0 {
+			t.Errorf("alloc=%f; want 0", avg)
+		}
+	})
+}
