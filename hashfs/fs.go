@@ -1042,19 +1042,29 @@ func (d *directory) lookup(ctx context.Context, fname string) (*entry, *director
 			subdir = e.getDir()
 		}
 		if subdir == nil {
-			log.V(1).Infof("lookup %s subdir %s %s -> %s", origFname, elem, fname, subdir)
+			if log.V(1) {
+				lv := struct {
+					origFname, elem, fname string
+					subdir                 *directory
+				}{origFname, elem, fname, subdir}
+				clog.Infof(ctx, "lookup %s subdir %s %s -> %s", lv.origFname, lv.elem, lv.fname, lv.subdir)
+			}
 			return nil, nil, false
 		}
 		d = subdir
 	}
-	log.V(1).Infof("lookup %s fname empty", origFname)
+	if log.V(1) {
+		logOrigFname := origFname
+		clog.Infof(ctx, "lookup %s fname empty", logOrigFname)
+	}
 	return nil, nil, false
 }
 
 func (d *directory) store(ctx context.Context, fname string, e *entry) (*entry, error) {
 	origFname := fname
 	if log.V(8) {
-		clog.Infof(ctx, "store %s %v", origFname, e)
+		logOrigFname := origFname
+		clog.Infof(ctx, "store %s %v", logOrigFname, e)
 	}
 	for fname != "" {
 		fname = strings.TrimPrefix(fname, "/")
@@ -1069,10 +1079,20 @@ func (d *directory) store(ctx context.Context, fname string, e *entry) (*entry, 
 				eed := ee.digest()
 				cmdchanged := !bytes.Equal(ee.cmdhash, e.cmdhash)
 				if e.target != "" && ee.target != e.target {
-					clog.Infof(ctx, "store %s: cmdchagne:%t s:%q to %q", origFname, cmdchanged, ee.target, e.target)
+					lv := struct {
+						origFname         string
+						cmdchanged        bool
+						eetarget, etarget string
+					}{origFname, cmdchanged, ee.target, e.target}
+					clog.Infof(ctx, "store %s: cmdchagne:%t s:%q to %q", lv.origFname, lv.cmdchanged, lv.eetarget, lv.etarget)
 				} else if !e.d.IsZero() && eed != e.d && eed.SizeBytes != 0 && e.d.SizeBytes != 0 {
 					// don't log nil to digest of empty file (size=0)
-					clog.Infof(ctx, "store %s: cmdchange:%t d:%v to %v", origFname, cmdchanged, eed, e.d)
+					lv := struct {
+						origFname  string
+						cmdchanged bool
+						eed, ed    digest.Digest
+					}{origFname, cmdchanged, ee.d, e.d}
+					clog.Infof(ctx, "store %s: cmdchange:%t d:%v to %v", lv.origFname, lv.cmdchanged, lv.eed, lv.ed)
 				} else if ee.target == e.target && eed == e.d && ee.mode == e.mode {
 					// no change?
 					ee.mu.Lock()
@@ -1083,7 +1103,12 @@ func (d *directory) store(ctx context.Context, fname string, e *entry) (*entry, 
 			}
 			d.m.Store(fname, e)
 			if log.V(8) {
-				clog.Infof(ctx, "store %s -> %s %s", origFname, d, fname)
+				lv := struct {
+					origFname string
+					d         *directory
+					fname     string
+				}{origFname, d, fname}
+				clog.Infof(ctx, "store %s -> %s %s", lv.origFname, lv.d, lv.fname)
 			}
 			return e, nil
 		}
@@ -1094,17 +1119,29 @@ func (d *directory) store(ctx context.Context, fname string, e *entry) (*entry, 
 			if dent != nil && dent.err == nil {
 				subdir := dent.getDir()
 				if log.V(9) {
-					clog.Infof(ctx, "store %s subdir0 %s %s -> %s (%v)", origFname, elem, fname, d, dent)
+					lv := struct {
+						origFname, elem, fname string
+						d                      *directory
+						dent                   *entry
+					}{origFname, elem, fname, d, dent}
+					clog.Infof(ctx, "store %s subdir0 %s %s -> %s (%v)", lv.origFname, lv.elem, lv.fname, lv.d, lv.dent)
 				}
 				if subdir == nil {
-					return nil, fmt.Errorf("failed to set entry: %s not dir %#v", elem, dent)
+					ev := struct {
+						elem string
+						dent *entry
+					}{elem, dent}
+					return nil, fmt.Errorf("failed to set entry: %s not dir %#v", ev.elem, ev.dent)
 				}
 				d = subdir
 				continue
 			}
 			d.m.Delete(elem)
 			if log.V(9) {
-				clog.Infof(ctx, "store %s delete missing %s to create dir", origFname, elem)
+				lv := struct {
+					origFname, elem string
+				}{origFname, elem}
+				clog.Infof(ctx, "store %s delete missing %s to create dir", lv.origFname, lv.elem)
 			}
 		}
 		// create intermediate dir of elem.
@@ -1125,15 +1162,25 @@ func (d *directory) store(ctx context.Context, fname string, e *entry) (*entry, 
 		}
 		subdir := dent.getDir()
 		if log.V(9) {
-			clog.Infof(ctx, "store %s subdir1 %s %s -> %s (%v)", origFname, elem, fname, subdir, dent)
+			lv := struct {
+				origFname, elem, fname string
+				subdir                 *directory
+				dent                   *entry
+			}{origFname, elem, fname, subdir, dent}
+			clog.Infof(ctx, "store %s subdir1 %s %s -> %s (%v)", lv.origFname, lv.elem, lv.fname, lv.subdir, lv.dent)
 		}
 		d = subdir
 		if d == nil {
-			return nil, fmt.Errorf("failed to set entry: %s not dir %#v", elem, dent)
+			ev := struct {
+				elem string
+				dent *entry
+			}{elem, dent}
+			return nil, fmt.Errorf("failed to set entry: %s not dir %#v", ev.elem, ev.dent)
 		}
 
 	}
-	return nil, fmt.Errorf("bad fname? %q", origFname)
+	errOrigFname := origFname
+	return nil, fmt.Errorf("bad fname? %q", errOrigFname)
 }
 
 func (d *directory) delete(ctx context.Context, fname string) {
