@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"infra/build/siso/ui"
@@ -22,6 +23,7 @@ type progress struct {
 	actives       activeSteps
 	done          chan struct{}
 	updateStopped chan struct{}
+	count         atomic.Int64
 }
 
 type stepInfo struct {
@@ -56,13 +58,16 @@ func (p *progress) update(ctx context.Context, b *Builder) {
 	lastUpdate := time.Now()
 	lastStepUpdate := time.Now()
 	defer close(p.updateStopped)
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
 	for {
 		select {
 		case <-p.done:
 			return
 		case <-ctx.Done():
 			return
-		case <-time.After(100 * time.Millisecond):
+		case <-ticker.C:
+			p.count.Add(1)
 			p.mu.Lock()
 			var si *stepInfo
 			for len(p.actives) > 0 {

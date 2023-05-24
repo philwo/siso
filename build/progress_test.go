@@ -34,7 +34,16 @@ func TestProgress_NotIsTerminal(t *testing.T) {
 	}
 	step.setPhase(stepStart)
 	p.step(ctx, b, step, progressPrefixStart)
-	time.Sleep(200 * time.Millisecond)
+	started := time.Now()
+	var count int64
+	for count == 0 && time.Since(started) < 1*time.Second {
+		time.Sleep(200 * time.Millisecond)
+		count = p.count.Load()
+		t.Logf("count=%d", count)
+	}
+	if count == 0 {
+		t.Errorf("progress count=%d; want >0", count)
+	}
 	step.setPhase(stepDone)
 	p.step(ctx, b, step, progressPrefixFinish)
 	p.stop(ctx)
