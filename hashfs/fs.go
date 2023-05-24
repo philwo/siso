@@ -119,20 +119,55 @@ func (hfs *HashFS) DataSource() DataSource {
 	return hfs.opt.DataSource
 }
 
+func needPathClean(names ...string) bool {
+	for _, name := range names {
+		// even on windows, we use /-path in hashfs.
+		if strings.Contains(name, `\`) {
+			return true
+		}
+		if strings.Contains(name, "//") {
+			return true
+		}
+		i := strings.IndexByte(name, '.')
+		if i < 0 {
+			continue
+		}
+		name = name[i:]
+		if strings.HasPrefix(name, "./") || strings.HasPrefix(name, "../") {
+			return true
+		}
+	}
+	return false
+}
+
+func (hfs *HashFS) dirLookup(ctx context.Context, root, fname string) (*entry, *directory, bool) {
+	if needPathClean(root, fname) {
+		return hfs.directory.lookup(ctx, filepath.ToSlash(filepath.Join(root, fname)))
+	}
+	e, _, ok := hfs.directory.lookup(ctx, root)
+	if !ok {
+		return nil, nil, false
+	}
+	if e.directory == nil {
+		return nil, nil, false
+	}
+	return e.directory.lookup(ctx, fname)
+}
+
 // Stat returns a FileInfo at root/fname.
 func (hfs *HashFS) Stat(ctx context.Context, root, fname string) (*FileInfo, error) {
 	if log.V(1) {
 		clog.Infof(ctx, "stat @%s %s", root, fname)
 	}
-	fname = filepath.Join(root, fname)
-	fname = filepath.ToSlash(fname)
-	e, dir, ok := hfs.directory.lookup(ctx, fname)
+	e, dir, ok := hfs.dirLookup(ctx, root, fname)
 	if ok {
 		if e.err != nil {
 			return nil, e.err
 		}
-		return &FileInfo{fname: fname, e: e}, nil
+		return &FileInfo{root: root, fname: fname, e: e}, nil
 	}
+	fname = filepath.Join(root, fname)
+	fname = filepath.ToSlash(fname)
 	e = newLocalEntry()
 	e.init(ctx, fname, hfs.IOMetrics)
 	clog.Infof(ctx, "stat new entry %s %s", fname, e)
@@ -153,7 +188,7 @@ func (hfs *HashFS) Stat(ctx context.Context, root, fname string) (*FileInfo, err
 		return nil, e.err
 	}
 	hfs.digester.lazyCompute(ctx, fname, e)
-	return &FileInfo{fname: fname, e: e}, nil
+	return &FileInfo{root: root, fname: fname, e: e}, nil
 }
 
 // ReadDir returns directory entries of root/name.
@@ -201,7 +236,8 @@ func (hfs *HashFS) ReadDir(ctx context.Context, root, name string) (dents []DirE
 		}
 		ents = append(ents, DirEntry{
 			fi: &FileInfo{
-				fname: filepath.Join(root, dirname, name),
+				root:  root,
+				fname: filepath.ToSlash(filepath.Join(dirname, name)),
 				e:     ee,
 			},
 		})
@@ -1224,7 +1260,7 @@ func (d *directory) delete(ctx context.Context, fname string) {
 
 // FileInfo implements https://pkg.go.dev/io/fs#FileInfo.
 type FileInfo struct {
-	// fname is full path of file.
+	root  string
 	fname string
 	e     *entry
 }
@@ -1260,7 +1296,7 @@ func (fi *FileInfo) IsDir() bool {
 func (fi *FileInfo) Sys() any {
 	d := fi.e.digest()
 	return merkletree.Entry{
-		Name:         fi.fname,
+		Name:         filepath.ToSlash(filepath.Join(fi.root, fi.fname)),
 		Data:         digest.NewData(fi.e.src, d),
 		IsExecutable: fi.e.mode&0111 != 0,
 		Target:       fi.e.target,

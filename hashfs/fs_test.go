@@ -6,6 +6,7 @@ package hashfs_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -41,7 +42,7 @@ func TestStamp(t *testing.T) {
 	}()
 	// `go test -count=1000` would easily catch the race.
 	for i := 0; i < 100; i++ {
-		fname := filepath.Join("obj/components", fmt.Sprintf("%d.stamp", i))
+		fname := filepath.ToSlash(filepath.Join("obj/components", fmt.Sprintf("%d.stamp", i)))
 		t.Run(fname, func(t *testing.T) {
 			t.Parallel()
 			var cmdhash []byte
@@ -89,18 +90,19 @@ func TestStamp(t *testing.T) {
 	}
 }
 
-func setupFiles(t *testing.T, dir string, files map[string]string) {
-	t.Helper()
+func setupFiles(tb testing.TB, dir string, files map[string]string) {
+	tb.Helper()
 	for k, v := range files {
 		fname := filepath.Join(dir, k)
 		err := os.MkdirAll(filepath.Dir(fname), 0755)
 		if err != nil {
-			t.Fatal(err)
+			tb.Fatal(err)
 		}
 		err = os.WriteFile(fname, []byte(v), 0644)
 		if err != nil {
-			t.Fatal(err)
+			tb.Fatal(err)
 		}
+		tb.Logf("writefile(%q, %q)", fname, v)
 	}
 }
 
@@ -280,4 +282,99 @@ func TestStat_Race(t *testing.T) {
 	if err != nil {
 		t.Errorf("hashFS.Stat(ctx, %q, %q): %v; want nil", dir, fname, err)
 	}
+}
+
+func BenchmarkStat(b *testing.B) {
+	ctx := context.Background()
+	dir := b.TempDir()
+	opt := hashfs.Option{}
+	hfs, err := hashfs.New(ctx, opt)
+	if err != nil {
+		b.Fatalf("New=%v", err)
+	}
+	defer func() {
+		err := hfs.Close(ctx)
+		if err != nil {
+			b.Fatalf("hfs.Close=%v", err)
+		}
+	}()
+	fname := "out/siso/gen/base/base/base.o.d"
+	b.Run("not_exist", func(b *testing.B) {
+		b.ReportAllocs()
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			_, err := hfs.Stat(ctx, dir, fname)
+			if !errors.Is(err, fs.ErrNotExist) {
+				b.Fatalf("hfs.Stat(ctx,%q,%q)=%v; want %v", dir, fname, err, fs.ErrNotExist)
+			}
+		}
+	})
+
+	setupFiles(b, dir, map[string]string{
+		fname: "",
+	})
+	hfs.Forget(ctx, dir, []string{fname})
+
+	b.Run("emptyfile", func(b *testing.B) {
+		b.ReportAllocs()
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			_, err := hfs.Stat(ctx, dir, fname)
+			if err != nil {
+				b.Fatalf("hfs.Stat(ctx,%q,%q)=%v; want nil", dir, fname, err)
+			}
+		}
+	})
+
+}
+
+func TestStatAllocs(t *testing.T) {
+	allocBase := 0.0
+	if runtime.GOOS == "windows" {
+		// TODO(ukai): why it has allocations on windows only?
+		allocBase = 6.0
+	}
+
+	ctx := context.Background()
+	dir := t.TempDir()
+	opt := hashfs.Option{}
+	hfs, err := hashfs.New(ctx, opt)
+	if err != nil {
+		t.Fatalf("New=%v", err)
+	}
+	defer func() {
+		err := hfs.Close(ctx)
+		if err != nil {
+			t.Fatalf("hfs.Close=%v", err)
+		}
+	}()
+	fname := "out/siso/gen/base/base/base.o.d"
+	t.Run("not_exist", func(t *testing.T) {
+		avg := testing.AllocsPerRun(1000, func() {
+			_, err := hfs.Stat(ctx, dir, fname)
+			if !errors.Is(err, fs.ErrNotExist) {
+				t.Fatalf("hfs.Stat(ctx,%q,%q)=%v; want %v", dir, fname, err, fs.ErrNotExist)
+			}
+		})
+		if avg != allocBase+0 {
+			t.Errorf("alloc=%f; want %f", avg, allocBase+0)
+		}
+	})
+
+	setupFiles(t, dir, map[string]string{
+		fname: "",
+	})
+	hfs.Forget(ctx, dir, []string{fname})
+
+	t.Run("emptyfile", func(t *testing.T) {
+		avg := testing.AllocsPerRun(1000, func() {
+			_, err := hfs.Stat(ctx, dir, fname)
+			if err != nil {
+				t.Fatalf("hfs.Stat(ctx,%q,%q)=%v; want nil", dir, fname, err)
+			}
+		})
+		if avg > allocBase+1 {
+			t.Errorf("alloc=%f; want <= %f", avg, allocBase+1)
+		}
+	})
 }
