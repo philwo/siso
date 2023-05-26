@@ -827,3 +827,8 @@ func uniqueFiles(files []string) []string {
 	}
 	return ret
 }
+
+// REProxyConfig returns configuration options for using reproxy.
+func (s *StepDef) REProxyConfig() execute.REProxyConfig {
+	return s.rule.REProxyConfig
+}

@@ -8,6 +8,7 @@ package reproxyexec
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"strings"
 	"time"
@@ -116,8 +117,9 @@ func runCommand(ctx context.Context, proxy Proxy, cmd *execute.Cmd) (*ppb.RunRes
 }
 
 func createRequest(cmd *execute.Cmd) (*ppb.RunRequest, error) {
-	// TODO(b/273407069): not everything is a tool. use the current label for input from rewrapper cfg or elsewhere.
-	labels := map[string]string{"type": "tool"}
+	if len(cmd.REProxyConfig.Labels) == 0 {
+		return nil, fmt.Errorf("REProxy config has no labels")
+	}
 	c := &cpb.Command{
 		Identifiers: &cpb.Identifiers{
 			CommandId: cmd.ID,
@@ -145,7 +147,7 @@ func createRequest(cmd *execute.Cmd) (*ppb.RunRequest, error) {
 	md.Environment = os.Environ()
 	return &ppb.RunRequest{
 		Command: c,
-		Labels:  labels,
+		Labels:  cmd.REProxyConfig.Labels,
 		ExecutionOptions: &ppb.ProxyExecutionOptions{
 			ExecutionStrategy: strategy,
 			CompareWithLocal:  false,

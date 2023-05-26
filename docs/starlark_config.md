@@ -173,6 +173,8 @@ to register handlers and step configs.
              as it assumes those are platform container image.
           * `use_remote_exec_wrapper`: true if gomacc/rewrapper is used,
              so it runs locally without using deps/file trace.
+          * `reproxy_config`: config if reproxy is used. this expects a dict with the following values:
+             * `labels`: required. specifies command labels e.g. `{"type": "compile", "lang": "cpp", "compiler": "clang"}`
           * `timeout`: duration of the step remote execution.
           * `handler`: handler name to use for the step
           * `deps`: deps overrides

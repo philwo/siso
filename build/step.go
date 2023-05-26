@@ -71,6 +71,9 @@ type StepDef interface {
 	// path in remote action -> local path
 	RemoteInputs() map[string]string
 
+	// REProxyConfig returns configuration options for using reproxy.
+	REProxyConfig() execute.REProxyConfig
+
 	// Handle runs a handler for the cmd.
 	Handle(context.Context, *execute.Cmd) error
 
@@ -321,6 +324,7 @@ func newCmd(ctx context.Context, b *Builder, stepDef StepDef) *execute.Cmd {
 		RemoteWrapper:   stepDef.Binding("remote_wrapper"),
 		RemoteCommand:   stepDef.Binding("remote_command"),
 		RemoteInputs:    stepDef.RemoteInputs(),
+		REProxyConfig:   stepDef.REProxyConfig(),
 		CanonicalizeDir: stepDef.Binding("canonicalize_dir") != "",
 
 		// TODO(b/266518906): enable DoNotCache for read-only client

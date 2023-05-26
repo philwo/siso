@@ -40,6 +40,11 @@ type FileTrace struct {
 	Outputs []string
 }
 
+// REProxyConfig specifies configuration options for using reproxy.
+type REProxyConfig struct {
+	Labels map[string]string `json:"labels,omitempty"`
+}
+
 // Cmd includes all the information required to run a build command.
 type Cmd struct {
 	// ID is used as a unique identifier for this action in logs and tracing.
@@ -145,6 +150,9 @@ type Cmd struct {
 	// The value is the filename on local disk.
 	// The file names are relative to ExecRoot.
 	RemoteInputs map[string]string
+
+	// REProxyConfig specifies configuration options for using reproxy.
+	REProxyConfig REProxyConfig
 
 	// CanonicalizeDir specifies whether remote execution will canonicalize
 	// working directory or not.

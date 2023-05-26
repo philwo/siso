@@ -17,6 +17,7 @@ import (
 	log "github.com/golang/glog"
 
 	"infra/build/siso/build"
+	"infra/build/siso/execute"
 	"infra/build/siso/hashfs"
 	"infra/build/siso/o11y/clog"
 	"infra/build/siso/toolsupport/ninjautil"
@@ -187,6 +188,8 @@ type StepRule struct {
 	// - run locally but more parallelism
 	// - no file access trace
 	UseRemoteExecWrapper bool `json:"use_remote_exec_wrapper,omitempty"`
+	// REProxyConfig specifies configuration options for using reproxy.
+	REProxyConfig execute.REProxyConfig `json:"reproxy_config,omitempty"`
 
 	// Timeout specifies time duration for the step.
 	Timeout string `json:"timeout,omitempty"` // duration format
