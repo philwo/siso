@@ -212,6 +212,7 @@ All inputs should be ready to use (via `ctx.fs`).
       * `inputs`: input pathnames
       * `tool_inputs`: input pathnames (not modified by deps)
       * `outputs`: output pathnames
+      * `args`: args for the step
       * `deps_args`: args to get deps
     * `write`: write file
       * `fname`: filename
