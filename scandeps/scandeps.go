@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"hash/maphash"
 	"time"
 
 	log "github.com/golang/glog"
@@ -29,11 +30,11 @@ func New(hashfs *hashfs.HashFS, inputDeps map[string][]string) *ScanDeps {
 	s := &ScanDeps{
 		fs: &filesystem{
 			hashfs: hashfs,
-			// TODO(b/282888305): implement this
+			seed:   maphash.MakeSeed(),
 		},
 		inputDeps: inputDeps,
 	}
-	// TODO(b/282888305): hashfs.Notify(s.fs.update)
+	hashfs.Notify(s.fs.update)
 	return s
 }
 

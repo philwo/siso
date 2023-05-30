@@ -76,9 +76,10 @@ func (fsys *filesystem) scanner(ctx context.Context, execRoot string, inputDeps 
 			execRoot:  execRoot,
 			inputDeps: inputDeps,
 			sysroots:  sysroots,
-			files:     make(map[string]*scanResult),
 			visited:   make(map[string]bool),
-			// TODO(b/282888305) implement this
+			dirs:      make(map[string]bool),
+			files:     make(map[string]*scanResult),
+			topEnts:   make(map[string]*sync.Map),
 		},
 		macros:       make(map[string][]string),
 		included:     make(map[string]map[string]bool),
@@ -217,6 +218,7 @@ func (s *scanner) find(ctx context.Context, name string) (string, error) {
 		clog.Infof(ctx, "find %q dirs:%d", name, len(ds))
 		clog.Infof(ctx, "dirs %d %d %q", qi, mi, ds)
 	}
+	s.ds = ds
 	for i, dir := range ds {
 		if included[dir] {
 			continue

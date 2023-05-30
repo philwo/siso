@@ -46,10 +46,15 @@ func isExecutable(fi fs.FileInfo, fname string) bool {
 	return err == nil
 }
 
+// NotifyFunc is the type of the function to notify the filesystem changes.
+type NotifyFunc func(context.Context, *FileInfo)
+
 // HashFS is a filesystem for digest hash.
 type HashFS struct {
 	opt       Option
 	directory *directory
+
+	notifies []NotifyFunc
 
 	// IOMetrics stores the metrics of I/O operations on the HashFS.
 	IOMetrics *iometrics.IOMetrics
@@ -86,6 +91,11 @@ func New(ctx context.Context, opt Option) (*HashFS, error) {
 	}
 	go fsys.digester.start()
 	return fsys, nil
+}
+
+// Notify causes the hashfs to relay filesystem motification to f.
+func (hfs *HashFS) Notify(f NotifyFunc) {
+	hfs.notifies = append(hfs.notifies, f)
 }
 
 // Close closes the HashFS.
@@ -152,6 +162,17 @@ func (hfs *HashFS) dirLookup(ctx context.Context, root, fname string) (*entry, *
 		return nil, nil, false
 	}
 	return e.directory.lookup(ctx, fname)
+}
+
+func (hfs *HashFS) dirStoreAndNotify(ctx context.Context, fullname string, e *entry) error {
+	_, err := hfs.directory.store(ctx, fullname, e)
+	if err != nil {
+		return err
+	}
+	for _, f := range hfs.notifies {
+		f(ctx, &FileInfo{fname: fullname, e: e})
+	}
+	return nil
 }
 
 // Stat returns a FileInfo at root/fname.
@@ -313,7 +334,7 @@ func (hfs *HashFS) WriteFile(ctx context.Context, root, fname string, b []byte, 
 		buf:     b,
 		cmdhash: cmdhash,
 	}
-	_, err := hfs.directory.store(ctx, fname, e)
+	err := hfs.dirStoreAndNotify(ctx, fname, e)
 	clog.Infof(ctx, "writefile %s x:%t mtime:%s: %v", fname, isExecutable, mtime, err)
 	return err
 }
@@ -334,7 +355,7 @@ func (hfs *HashFS) Symlink(ctx context.Context, root, target, linkpath string, m
 		cmdhash: cmdhash,
 		target:  target,
 	}
-	_, err := hfs.directory.store(ctx, linkfname, e)
+	err := hfs.dirStoreAndNotify(ctx, linkfname, e)
 	clog.Infof(ctx, "symlink @%s %s -> %s: %v", root, linkpath, target, err)
 	return err
 }
@@ -385,7 +406,7 @@ func (hfs *HashFS) Copy(ctx context.Context, root, src, dst string, mtime time.T
 		d:   e.d,
 		buf: e.buf,
 	}
-	_, err := hfs.directory.store(ctx, dstfname, newEnt)
+	err := hfs.dirStoreAndNotify(ctx, dstfname, newEnt)
 	if err != nil {
 		return err
 	}
@@ -414,7 +435,7 @@ func (hfs *HashFS) Mkdir(ctx context.Context, root, dirname string) error {
 		mode:      0644 | fs.ModeDir,
 		directory: &directory{},
 	}
-	_, err = hfs.directory.store(ctx, dirname, e)
+	err = hfs.dirStoreAndNotify(ctx, dirname, e)
 	clog.Infof(ctx, "mkdir %s: %v", dirname, err)
 	return err
 }
@@ -649,7 +670,7 @@ func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []merkle
 				src:     ent.Data,
 				d:       ent.Data.Digest(),
 			}
-			_, err := hfs.directory.store(ctx, fname, e)
+			err := hfs.dirStoreAndNotify(ctx, fname, e)
 			if err != nil {
 				return err
 			}
@@ -664,7 +685,7 @@ func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []merkle
 				action:  action,
 				target:  ent.Target,
 			}
-			_, err := hfs.directory.store(ctx, fname, e)
+			err := hfs.dirStoreAndNotify(ctx, fname, e)
 			if err != nil {
 				return err
 			}
@@ -677,7 +698,7 @@ func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []merkle
 				mode:      0644 | fs.ModeDir,
 				directory: &directory{},
 			}
-			_, err := hfs.directory.store(ctx, fname, e)
+			err := hfs.dirStoreAndNotify(ctx, fname, e)
 			if err != nil {
 				return err
 			}
@@ -894,7 +915,9 @@ func (e *entry) updateDir(ctx context.Context, hfs *HashFS, dname string) []stri
 	defer e.mu.Unlock()
 	d, err := os.Open(dname)
 	if err != nil {
-		clog.Warningf(ctx, "updateDir %s: open %v", dname, err)
+		if !errors.Is(err, fs.ErrNotExist) {
+			clog.Warningf(ctx, "updateDir %s: open %v", dname, err)
+		}
 		return nil
 	}
 	defer d.Close()
@@ -1265,6 +1288,10 @@ type FileInfo struct {
 	e     *entry
 }
 
+func (fi *FileInfo) Path() string {
+	return filepath.ToSlash(filepath.Join(fi.root, fi.fname))
+}
+
 // Name is a base name of the file.
 func (fi FileInfo) Name() string {
 	return filepath.Base(fi.fname)
@@ -1296,7 +1323,7 @@ func (fi FileInfo) IsDir() bool {
 func (fi FileInfo) Sys() any {
 	d := fi.e.digest()
 	return merkletree.Entry{
-		Name:         filepath.ToSlash(filepath.Join(fi.root, fi.fname)),
+		Name:         fi.Path(),
 		Data:         digest.NewData(fi.e.src, d),
 		IsExecutable: fi.e.mode&0111 != 0,
 		Target:       fi.e.target,
