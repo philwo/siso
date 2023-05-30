@@ -69,7 +69,7 @@ func (e *Experiments) ShowOnce() {
 	e.once.Do(func() {
 		s := e.String()
 		if s != "" {
-			fmt.Printf("\r\033[K%s", s)
+			ui.Default.PrintLines(s)
 		}
 	})
 }
