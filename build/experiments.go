@@ -18,16 +18,16 @@ import (
 
 // experiment id -> hint for the experiment (to check more details).
 var knownExperiments = map[string]string{
-	"keep-going-impure":           "check siso_localexec",
-	"keep-going-handle-error":     "",
-	"file-access-trace":           "",
-	"no-fallback":                 "",
-	"no-fast-deps-fallback":       "",
 	"fail-on-stdouterr":           "",
+	"file-access-trace":           "",
 	"gvisor":                      "",
 	"ignore-missing-local-inputs": "",
+	"keep-going-handle-error":     "",
+	"keep-going-impure":           "check siso_localexec",
+	"no-fallback":                 "",
+	"no-fast-deps-fallback":       "",
+	"no-scandeps":                 "",
 	"use-reproxy":                 "",
-	"scandeps":                    "",
 }
 
 type experimentFeature struct {

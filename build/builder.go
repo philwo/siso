@@ -254,7 +254,7 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 	logger.Infof("tool_invocation_id: %s", opts.ID)
 
 	var scanDeps *scandeps.ScanDeps
-	if experiments.Enabled("scandeps", "enable scandeps") {
+	if !experiments.Enabled("no-scandeps", "disable scandeps - use `clang -M` only") {
 		scanDeps = scandeps.New(opts.HashFS, graph.InputDeps(ctx))
 	}
 
