@@ -59,7 +59,7 @@ func (fsys *filesystem) update(ctx context.Context, fi *hashfs.FileInfo) {
 		dname = filepath.ToSlash(fi.Path())
 	}
 	// fix dircache
-	for dname := dname; dname != "/"; {
+	for dname := dname; !strings.HasSuffix(dname, "/"); {
 		v, ok := fsys.dircache.Load(dname)
 		if !ok {
 			base = filepath.Base(dname)
@@ -90,7 +90,7 @@ func (fsys *filesystem) update(ctx context.Context, fi *hashfs.FileInfo) {
 		base = filepath.Base(dname)
 		dname = filepath.ToSlash(filepath.Dir(dname))
 	}
-	for dname != "/" {
+	for !strings.HasSuffix(dname, "/") {
 		if fsys.markDirExists(dname) {
 			return
 		}
