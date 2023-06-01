@@ -214,6 +214,7 @@ All inputs should be ready to use (via `ctx.fs`).
       * `outputs`: output pathnames
       * `args`: args for the step
       * `deps_args`: args to get deps
+      * `reproxy_config`: [`REProxyConfig`](../execute/cmd.go) in json-encoded format.
     * `write`: write file
       * `fname`: filename
       * `content`: content

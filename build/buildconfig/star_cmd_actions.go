@@ -6,6 +6,7 @@ package buildconfig
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -60,7 +61,7 @@ func (starCmdValue) Freeze()               {}
 func (starCmdValue) Truth() starlark.Bool  { return starlark.True }
 func (starCmdValue) Hash() (uint32, error) { return 0, errors.New("execute.Cmd is not hashable") }
 
-// Starlark function `actions.fix(inputs, tool_inputs, outputs, args, deps_args)`
+// Starlark function `actions.fix(inputs, tool_inputs, outputs, args, deps_args, reproxy_config)`
 // to fix the command's inputs/outputs/args/deps_args in the context.
 func starActionsFix(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	log.V(1).Infof("actions.fix args=%s kwargs=%s", args, kwargs)
@@ -70,12 +71,14 @@ func starActionsFix(thread *starlark.Thread, fn *starlark.Builtin, args starlark
 	}
 	var inputsValue, toolInputsValue, outputsValue starlark.Value
 	var cmdArgsValue, depsArgsValue starlark.Value
+	var reproxyConfigValue starlark.Value
 	err := starlark.UnpackArgs("fix", args, kwargs,
 		"inputs?", &inputsValue,
 		"tool_inputs?", &toolInputsValue,
 		"outputs?", &outputsValue,
 		"args?", &cmdArgsValue,
-		"deps_args?", &depsArgsValue)
+		"deps_args?", &depsArgsValue,
+		"reproxy_config?", &reproxyConfigValue)
 	if err != nil {
 		return starlark.None, err
 	}
@@ -111,6 +114,13 @@ func starActionsFix(thread *starlark.Thread, fn *starlark.Builtin, args starlark
 			return starlark.None, err
 		}
 	}
+	var reproxyConfigJSON string
+	if reproxyConfigValue != nil && reproxyConfigValue != starlark.None {
+		reproxyConfigJSON, ok = starlark.AsString(reproxyConfigValue)
+		if !ok {
+			return starlark.None, fmt.Errorf("reproxy_config is not a string")
+		}
+	}
 	if inputsValue != nil {
 		c.cmd.Inputs = uniqueList(inputs)
 	}
@@ -125,6 +135,12 @@ func starActionsFix(thread *starlark.Thread, fn *starlark.Builtin, args starlark
 	}
 	if depsArgsValue != nil {
 		c.cmd.DepsArgs = depsArgs
+	}
+	if reproxyConfigValue != nil {
+		err := json.Unmarshal([]byte(reproxyConfigJSON), &c.cmd.REProxyConfig)
+		if err != nil {
+			return starlark.None, fmt.Errorf("failed to parse reproxy_config: %w", err)
+		}
 	}
 	return starlark.None, nil
 }
