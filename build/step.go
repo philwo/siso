@@ -329,10 +329,9 @@ func newCmd(ctx context.Context, b *Builder, stepDef StepDef) *execute.Cmd {
 
 		// TODO(b/266518906): enable DoNotCache for read-only client
 		// DoNotCache: !b.reCacheEnableWrite,
-		// TODO(b/266518906): enable SkipCacheLookup
-		// SkipCacheLookup: !b.reCacheEnableRead,
-		Timeout:    stepTimeout(ctx, stepDef.Binding("timeout")),
-		ActionSalt: b.actionSalt,
+		SkipCacheLookup: !b.reCacheEnableRead,
+		Timeout:         stepTimeout(ctx, stepDef.Binding("timeout")),
+		ActionSalt:      b.actionSalt,
 	}
 	if experiments.Enabled("gvisor", "Force gVisor") {
 		if len(cmd.Platform) == 0 {
