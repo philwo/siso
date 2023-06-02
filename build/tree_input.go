@@ -43,6 +43,9 @@ func (b *Builder) treeInputs(ctx context.Context, labelSuffix string, sysroots, 
 }
 
 func (b *Builder) treeInput(ctx context.Context, dir, labelSuffix string) (merkletree.TreeEntry, error) {
+	if b.reapiclient == nil {
+		return merkletree.TreeEntry{}, errors.New("reapi is not configured")
+	}
 	m := b.graph.InputDeps(ctx)
 	files, ok := m[dir+labelSuffix]
 	if !ok {

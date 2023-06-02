@@ -6,6 +6,7 @@ package build
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"time"
@@ -37,6 +38,9 @@ var depsProcessors = map[string]depsProcessor{
 }
 
 func depsFastStep(ctx context.Context, b *Builder, step *Step) (*Step, error) {
+	if b.reapiclient == nil {
+		return nil, errors.New("no fast-deps (reapi is not configured)")
+	}
 	if step.useReclient() {
 		return nil, fmt.Errorf("no fast-deps (use reclient)")
 	}
