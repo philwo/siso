@@ -89,7 +89,7 @@ func (p *progress) update(ctx context.Context, b *Builder) {
 				}
 			}
 			p.mu.Unlock()
-			if ui.IsTerminal() {
+			if !ui.IsTerminal() {
 				continue
 			}
 			if si == nil || si.step == nil {
