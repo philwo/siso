@@ -61,9 +61,9 @@ const (
 	// to protect from out of memory, reduce contention
 	scanDepsLimitFactor = 4
 
-	// limit # of concurrent steps at most 40 times of num cpus
+	// limit # of concurrent steps at most 80 times of num cpus
 	// to protect from out of memory, or DDoS to RE API.
-	remoteLimitFactor = 40
+	remoteLimitFactor = 80
 )
 
 // OutputLocalFunc is a function to determine the file should be downloaded or not.
@@ -301,7 +301,7 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 func limitForREWrapper(ctx context.Context, numCPU int) int {
 	// same logic in depot_tools/autoninja.py
 	// https://chromium.googlesource.com/chromium/tools/depot_tools.git/+/54762c22175e17dce4f4eab18c5942c06e82478f/autoninja.py#166
-	const defaultCoreMultiplier = 80
+	const defaultCoreMultiplier = remoteLimitFactor
 	coreMultiplier := defaultCoreMultiplier
 	if v := os.Getenv("NINJA_CORE_MULTIPLIER"); v != "" {
 		p, err := strconv.Atoi(v)
