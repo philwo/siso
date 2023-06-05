@@ -47,11 +47,18 @@ func ParseDeps(b []byte) []string {
 	}
 	// collect inputs
 	var inputs []string
+	seen := make(map[string]bool)
 	for s := b[i+1:]; len(s) > 0; {
 		token, s = nextToken(s)
-		if token != "" {
-			inputs = append(inputs, token)
+		token = strings.TrimSuffix(token, ":")
+		if token == "" {
+			continue
 		}
+		if seen[token] {
+			continue
+		}
+		seen[token] = true
+		inputs = append(inputs, token)
 	}
 	return inputs
 }

@@ -49,6 +49,18 @@ func TestParseDeps(t *testing.T) {
 				`quux\corge`,
 			},
 		},
+		{
+			name: "rust-multi",
+			depsfile: []byte(`clang_x64_for_rust_host_build_tools/obj/third_party/rust/unicode_ident/v1/lib/libunicode_ident-unicode_ident-1.rlib: ../../third_party/rust/unicode_ident/v1/crate/src/lib.rs ../../third_party/rust/unicode_ident/v1/crate/src/tables.rs
+
+../../third_party/rust/unicode_ident/v1/crate/src/lib.rs:
+../../third_party/rust/unicode_ident/v1/crate/src/tables.rs:
+`),
+			want: []string{
+				"../../third_party/rust/unicode_ident/v1/crate/src/lib.rs",
+				"../../third_party/rust/unicode_ident/v1/crate/src/tables.rs",
+			},
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got := ParseDeps(tc.depsfile)
