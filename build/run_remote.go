@@ -31,9 +31,14 @@ func (b *Builder) runRemote(ctx context.Context, step *Step) error {
 		step.setPhase(stepRemoteRun)
 		err := b.remoteExec.Run(ctx, step.cmd)
 		step.setPhase(stepOutput)
-		b.stats.remoteDone(ctx, err)
 		if err == nil {
 			step.metrics.IsRemote = true
+		}
+		_, cached := step.cmd.ActionResult()
+		if cached {
+			b.stats.cacheHit(ctx)
+		} else {
+			b.stats.remoteDone(ctx, err)
 		}
 		step.metrics.RunTime = IntervalMetric(time.Since(started))
 		step.metrics.done(ctx, step)

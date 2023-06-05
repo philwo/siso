@@ -224,7 +224,7 @@ func (re *ReproxyExec) processResponse(ctx context.Context, cmd *execute.Cmd, re
 		return err
 	}
 
-	cmd.SetActionResult(result)
+	cmd.SetActionResult(result, cached)
 	return nil
 }
 

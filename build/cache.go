@@ -109,7 +109,7 @@ func (c *Cache) GetActionResult(ctx context.Context, cmd *execute.Cmd) error {
 	}
 
 	// copy the action result into cmd.
-	cmd.SetActionResult(result)
+	cmd.SetActionResult(result, true)
 	c.setActionResultStdout(ctx, cmd, result)
 	c.setActionResultStderr(ctx, cmd, result)
 	err = cmd.HashFS.Update(ctx, cmd.ExecRoot, cmd.EntriesFromResult(ctx, c.store, result), now, cmd.CmdHash, d)

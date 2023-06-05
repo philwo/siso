@@ -73,7 +73,7 @@ func (re *RemoteExec) Run(ctx context.Context, cmd *execute.Cmd) error {
 		SkipCacheLookup: cmd.SkipCacheLookup,
 	})
 	cspan.Close(nil)
-	clog.Infof(ctx, "digest: %s, opName: %s", actionDigest, opName)
+	clog.Infof(ctx, "digest: %s, skipCacheLookup:%t opName: %s", actionDigest, cmd.SkipCacheLookup, opName)
 	if log.V(1) {
 		clog.Infof(ctx, "response: %s", resp)
 	}
@@ -196,7 +196,7 @@ func (re *RemoteExec) processResult(ctx context.Context, action digest.Digest, c
 	if err != nil {
 		return err
 	}
-	cmd.SetActionResult(result)
+	cmd.SetActionResult(result, cached)
 	return nil
 }
 

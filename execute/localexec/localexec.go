@@ -48,7 +48,7 @@ func (LocalExec) Run(ctx context.Context, cmd *execute.Cmd) (err error) {
 	}
 	cmd.StdoutWriter().Write(res.StdoutRaw)
 	cmd.StderrWriter().Write(res.StderrRaw)
-	cmd.SetActionResult(res)
+	cmd.SetActionResult(res, false)
 
 	clog.Infof(ctx, "exit=%d stdout=%d stderr=%d metadata=%s", res.ExitCode, len(res.StdoutRaw), len(res.StderrRaw), res.ExecutionMetadata)
 

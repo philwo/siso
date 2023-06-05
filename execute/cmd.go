@@ -174,7 +174,10 @@ type Cmd struct {
 	stdoutBuffer, stderrBuffer *bytes.Buffer
 
 	actionDigest digest.Digest
+
 	actionResult *rpb.ActionResult
+	// actionResult is cached result if cachedResult is true.
+	cachedResult bool
 }
 
 // String returns an ID of the cmd.
@@ -572,13 +575,14 @@ func (c *Cmd) commandDigest(ctx context.Context, ds *digest.Store) (digest.Diges
 }
 
 // SetActionResult sets action result to the cmd.
-func (c *Cmd) SetActionResult(result *rpb.ActionResult) {
+func (c *Cmd) SetActionResult(result *rpb.ActionResult, cached bool) {
 	c.actionResult = result
+	c.cachedResult = cached
 }
 
 // ActionResult returns the action result of the cmd.
-func (c *Cmd) ActionResult() *rpb.ActionResult {
-	return c.actionResult
+func (c *Cmd) ActionResult() (*rpb.ActionResult, bool) {
+	return c.actionResult, c.cachedResult
 }
 
 // EntriesFromResult returns output file entries for the cmd and result.

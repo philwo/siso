@@ -255,6 +255,6 @@ func starActionsExit(thread *starlark.Thread, fn *starlark.Builtin, args starlar
 		return starlark.None, err
 	}
 	execute.ResultFromEntries(result, entries)
-	c.cmd.SetActionResult(result)
+	c.cmd.SetActionResult(result, false)
 	return starlark.None, nil
 }

@@ -106,7 +106,9 @@ func (m *StepMetric) done(ctx context.Context, step *Step) {
 	m.CmdHash = hex.EncodeToString(step.cmd.CmdHash)
 	m.Digest = step.cmd.ActionDigest().String()
 
-	md := step.cmd.ActionResult().GetExecutionMetadata()
+	result, cached := step.cmd.ActionResult()
+	m.Cached = cached
+	md := result.GetExecutionMetadata()
 	if !m.Cached {
 		m.QueueTime = IntervalMetric(md.GetWorkerStartTimestamp().AsTime().Sub(md.GetQueuedTimestamp().AsTime()))
 	}

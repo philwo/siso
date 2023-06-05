@@ -77,15 +77,18 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 			b.failedToRun(ctx, step.cmd, err)
 			return fmt.Errorf("failed to run handler for %s: %w", step, err)
 		}
-	} else if step.cmd.ActionResult() != nil {
-		// store handler generated outputs to local disk.
-		// better to upload to CAS, or store in fs_state?
-		clog.Infof(ctx, "outputs[handler] %d", len(step.cmd.Outputs))
-		err = b.hashFS.Flush(ctx, step.cmd.ExecRoot, step.cmd.Outputs)
-		if err == nil {
-			return b.done(ctx, step)
+	} else {
+		result, _ := step.cmd.ActionResult()
+		if result != nil {
+			// store handler generated outputs to local disk.
+			// better to upload to CAS, or store in fs_state?
+			clog.Infof(ctx, "outputs[handler] %d", len(step.cmd.Outputs))
+			err = b.hashFS.Flush(ctx, step.cmd.ExecRoot, step.cmd.Outputs)
+			if err == nil {
+				return b.done(ctx, step)
+			}
+			clog.Warningf(ctx, "handle step failure: %v", err)
 		}
-		clog.Warningf(ctx, "handle step failure: %v", err)
 	}
 
 	err = b.setupRSP(ctx, step)

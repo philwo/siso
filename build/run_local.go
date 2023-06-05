@@ -75,13 +75,18 @@ func (b *Builder) runLocal(ctx context.Context, step *Step) error {
 		err := b.localExec.Run(ctx, step.cmd)
 		dur = time.Since(started)
 		step.setPhase(stepOutput)
-		b.stats.localDone(ctx, err)
-		if step.cmd.ActionResult() != nil {
-			if step.cmd.ActionResult().ExecutionMetadata == nil {
-				step.cmd.ActionResult().ExecutionMetadata = &rpb.ExecutedActionMetadata{}
+		result, cached := step.cmd.ActionResult()
+		if cached {
+			b.stats.cacheHit(ctx)
+		} else {
+			b.stats.localDone(ctx, err)
+		}
+		if result != nil {
+			if result.ExecutionMetadata == nil {
+				result.ExecutionMetadata = &rpb.ExecutedActionMetadata{}
 			}
-			step.cmd.ActionResult().ExecutionMetadata.QueuedTimestamp = timestamppb.New(queueTime)
-			step.cmd.ActionResult().ExecutionMetadata.WorkerStartTimestamp = timestamppb.New(started)
+			result.ExecutionMetadata.QueuedTimestamp = timestamppb.New(queueTime)
+			result.ExecutionMetadata.WorkerStartTimestamp = timestamppb.New(started)
 		}
 		step.metrics.RunTime = IntervalMetric(time.Since(started))
 		step.metrics.done(ctx, step)
@@ -153,7 +158,7 @@ func (b *Builder) captureLocalOutputs(ctx context.Context, step *Step) error {
 	ctx, span := trace.NewSpan(ctx, "capture-local-outputs")
 	defer span.Close(nil)
 	span.SetAttr("outputs", len(step.cmd.Outputs))
-	result := step.cmd.ActionResult()
+	result, _ := step.cmd.ActionResult()
 	if result.GetExitCode() != 0 {
 		return nil
 	}
