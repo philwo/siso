@@ -7,12 +7,15 @@ package retry
 
 import (
 	"context"
+	"time"
 
 	"go.chromium.org/luci/common/errors"
 	"go.chromium.org/luci/common/retry"
 	"go.chromium.org/luci/common/retry/transient"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+
+	"infra/build/siso/o11y/clog"
 )
 
 func retriableError(err error, called int) bool {
@@ -49,5 +52,7 @@ func Do(ctx context.Context, f func() error) error {
 			return errors.Annotate(err, "retriable error").Tag(transient.Tag).Err()
 		}
 		return err
-	}, nil)
+	}, func(err error, backoff time.Duration) {
+		clog.Warningf(ctx, "retry backoff:%s: %v", backoff, err)
+	})
 }

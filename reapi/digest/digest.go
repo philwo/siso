@@ -16,14 +16,12 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"time"
 
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
-	"go.chromium.org/luci/common/retry"
 	"google.golang.org/protobuf/proto"
 
-	"infra/build/siso/o11y/clog"
 	"infra/build/siso/o11y/iometrics"
+	"infra/build/siso/reapi/retry"
 )
 
 // Empty is a digest of empty content.
@@ -140,7 +138,7 @@ func (d Data) String() string {
 // Note that it reads all content. It should not be used for large blob.
 func DataToBytes(ctx context.Context, d Data) ([]byte, error) {
 	var buf []byte
-	err := retry.Retry(ctx, retry.Default, func() error {
+	err := retry.Do(ctx, func() error {
 		f, err := d.Open(ctx)
 		if err != nil {
 			return err
@@ -148,8 +146,6 @@ func DataToBytes(ctx context.Context, d Data) ([]byte, error) {
 		defer f.Close()
 		buf, err = io.ReadAll(f)
 		return err
-	}, func(err error, backoff time.Duration) {
-		clog.Warningf(ctx, "retry loading %s for %s: %v", d.Digest(), backoff, err)
 	})
 	return buf, err
 
