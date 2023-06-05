@@ -759,6 +759,10 @@ func (hfs *HashFS) Flush(ctx context.Context, execRoot string, files []string) e
 				if err != nil {
 					return fmt.Errorf("flush %s local-ready: %w", fname, err)
 				}
+				err = os.Chtimes(fname, time.Now(), e.getMtime())
+				if err != nil {
+					return fmt.Errorf("flush %s chtimes %s: %w", fname, e.getMtime(), err)
+				}
 				continue
 			}
 		case <-ctx.Done():

@@ -68,13 +68,8 @@ func (LocalExec) Run(ctx context.Context, cmd *execute.Cmd) (err error) {
 	if err != nil {
 		return err
 	}
-
-	if cmd.Depfile != "" {
-		// The HashFS needs to forget about the file because Siso doesn't upload it to CAS after local execution.
-		// Otherwise, Siso might try to fetch it in the next incremental builds, which would cause an error.
-		cmd.HashFS.Forget(ctx, cmd.ExecRoot, []string{cmd.Depfile})
-	}
-	return nil
+	// and flush to update mtime
+	return cmd.HashFS.Flush(ctx, cmd.ExecRoot, cmd.AllOutputs())
 }
 
 // fix for http://b/278658064 windows: fork/exec: Not enough memory resources are available to process this command.
