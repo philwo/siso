@@ -228,11 +228,7 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 		logger.Infof("disable remote exec")
 	}
 	if experiments.Enabled("use-reproxy", "enable use-reproxy") {
-		proxyAddr := os.Getenv("RBE_server_address")
-		if proxyAddr == "" {
-			return nil, fmt.Errorf("RBE_server_address env var must be set")
-		}
-		pe = reproxyexec.New(ctx, proxyAddr)
+		pe = reproxyexec.New(ctx)
 	}
 	experiments.ShowOnce()
 	numCPU := runtime.NumCPU()

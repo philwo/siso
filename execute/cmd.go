@@ -42,7 +42,13 @@ type FileTrace struct {
 
 // REProxyConfig specifies configuration options for using reproxy.
 type REProxyConfig struct {
-	Labels map[string]string `json:"labels,omitempty"`
+	CanonicalizeWorkingDir bool              `json:"canonicalize_working_dir,omitempty"`
+	DownloadOutputs        bool              `json:"download_outputs,omitempty"`
+	ExecStrategy           string            `json:"exec_strategy,omitempty"`
+	Inputs                 []string          `json:"inputs,omitempty"`
+	Labels                 map[string]string `json:"labels,omitempty"`
+	Platform               map[string]string `json:"platform,omitempty"`
+	ServerAddress          string            `json:"server_address,omitempty"`
 }
 
 // Cmd includes all the information required to run a build command.
@@ -152,6 +158,7 @@ type Cmd struct {
 	RemoteInputs map[string]string
 
 	// REProxyConfig specifies configuration options for using reproxy.
+	// If using reproxy, this config takes precedence over options in this struct.
 	REProxyConfig REProxyConfig
 
 	// CanonicalizeDir specifies whether remote execution will canonicalize

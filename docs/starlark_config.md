@@ -118,7 +118,7 @@ to register handlers and step configs.
    * `handlers` dict
      * key: handler name
      * value: handler function used in [per-step config](#per_step-config).
-   * `step_config` string
+   * `step_config` json string
      [`StepConfig`](../build/ninjabuild/step_config.go). It will be stored in `.siso_config` in working directory.
      * `platforms`
        * key: platform reference name. "default" is used by default.
@@ -173,8 +173,7 @@ to register handlers and step configs.
              as it assumes those are platform container image.
           * `use_remote_exec_wrapper`: true if gomacc/rewrapper is used,
              so it runs locally without using deps/file trace.
-          * `reproxy_config`: config if reproxy is used. this expects a dict with the following values:
-             * `labels`: required. specifies command labels e.g. `{"type": "compile", "lang": "cpp", "compiler": "clang"}`
+          * `reproxy_config`: [`REProxyConfig`](../execute/cmd.go) if reproxy is used.
           * `timeout`: duration of the step remote execution.
           * `handler`: handler name to use for the step
           * `deps`: deps overrides

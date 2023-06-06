@@ -59,15 +59,11 @@ var (
 )
 
 // ReproxyExec is executor with reproxy.
-type ReproxyExec struct {
-	serverAddr string
-}
+type ReproxyExec struct{}
 
 // New creates new remote executor.
-func New(ctx context.Context, serverAddr string) *ReproxyExec {
-	return &ReproxyExec{
-		serverAddr: serverAddr,
-	}
+func New(ctx context.Context) *ReproxyExec {
+	return &ReproxyExec{}
 }
 
 // Run runs a cmd.
@@ -75,14 +71,24 @@ func (re *ReproxyExec) Run(ctx context.Context, cmd *execute.Cmd) error {
 	ctx, span := trace.NewSpan(ctx, "reproxy-exec")
 	defer span.Close(nil)
 
+	if len(cmd.REProxyConfig.Labels) == 0 {
+		return fmt.Errorf("REProxy config has no labels")
+	}
+	if len(cmd.REProxyConfig.Platform) == 0 {
+		return fmt.Errorf("REProxy config has no platform")
+	}
+	if cmd.REProxyConfig.ServerAddress == "" {
+		return fmt.Errorf("REProxy config has no server address")
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, dialTimeout)
 	defer cancel()
 
 	// Create gRPC connection with the provided address.
 	// TODO(b/273407069): this will be problematic on windows, reuse connections instead.
-	conn, err := DialContext(ctx, re.serverAddr)
+	conn, err := DialContext(ctx, cmd.REProxyConfig.ServerAddress)
 	if err != nil {
-		log.Fatalf("Fail to dial %s: %v", re.serverAddr, err)
+		log.Fatalf("Fail to dial %s: %v", cmd.REProxyConfig.ServerAddress, err)
 	}
 	defer conn.Close()
 
@@ -117,16 +123,13 @@ func runCommand(ctx context.Context, proxy Proxy, cmd *execute.Cmd) (*ppb.RunRes
 }
 
 func createRequest(cmd *execute.Cmd) (*ppb.RunRequest, error) {
-	if len(cmd.REProxyConfig.Labels) == 0 {
-		return nil, fmt.Errorf("REProxy config has no labels")
-	}
 	c := &cpb.Command{
 		Identifiers: &cpb.Identifiers{
 			CommandId: cmd.ID,
 		},
 		ExecRoot: cmd.ExecRoot,
 		Input: &cpb.InputSpec{
-			Inputs: cmd.AllInputs(),
+			Inputs: append(cmd.REProxyConfig.Inputs, cmd.AllInputs()...),
 		},
 		Output: &cpb.OutputSpec{
 			OutputFiles: cmd.AllOutputs(),
@@ -134,17 +137,22 @@ func createRequest(cmd *execute.Cmd) (*ppb.RunRequest, error) {
 		Args:             cmd.Args,
 		ExecutionTimeout: int32(cmd.Timeout.Seconds()),
 		WorkingDirectory: cmd.Dir,
-		Platform:         cmd.Platform,
+		Platform:         cmd.REProxyConfig.Platform,
 	}
+
+	// Use exec strategy if found, otherwise fallback to unspecified.
 	strategy := ppb.ExecutionStrategy_UNSPECIFIED
-	// TODO(b/273407069): temporarily hardcoded to remote. instead get execution strategy from rewrapper cfg or elsewhere.
-	if res, ok := ppb.ExecutionStrategy_Value_value[strings.ToUpper("remote")]; ok {
+	if res, ok := ppb.ExecutionStrategy_Value_value[strings.ToUpper(cmd.REProxyConfig.ExecStrategy)]; ok {
 		strategy = ppb.ExecutionStrategy_Value(res)
+	} else {
+		return nil, fmt.Errorf("invalid execution strategy %s", cmd.REProxyConfig.ExecStrategy)
 	}
+
 	md := &ppb.Metadata{EventTimes: map[string]*cpb.TimeInterval{
 		wrapperOverheadKey: {From: command.TimeToProto(time.Now())},
 	}}
 	md.Environment = os.Environ()
+
 	return &ppb.RunRequest{
 		Command: c,
 		Labels:  cmd.REProxyConfig.Labels,
@@ -157,9 +165,9 @@ func createRequest(cmd *execute.Cmd) (*ppb.RunRequest, error) {
 				AcceptCached: !cmd.SkipCacheLookup,
 				DoNotCache:   cmd.DoNotCache,
 				// TODO(b/273407069): make this configurable, use siso download strategy config?
-				DownloadOutputs:              true,
+				DownloadOutputs:              cmd.REProxyConfig.DownloadOutputs,
 				Wrapper:                      cmd.RemoteWrapper,
-				CanonicalizeWorkingDir:       cmd.CanonicalizeDir,
+				CanonicalizeWorkingDir:       cmd.REProxyConfig.CanonicalizeWorkingDir,
 				PreserveUnchangedOutputMtime: false,
 			},
 			LogEnvironment: false,
