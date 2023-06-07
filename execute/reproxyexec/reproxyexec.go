@@ -216,9 +216,8 @@ func (re *ReproxyExec) processResponse(ctx context.Context, cmd *execute.Cmd, re
 	if err != nil {
 		return err
 	}
-	if cmd.Depfile != "" {
-		cmd.HashFS.Forget(ctx, cmd.ExecRoot, []string{cmd.Depfile})
-	}
+	// and flush to update mtime
+	err = cmd.HashFS.Flush(ctx, cmd.ExecRoot, cmd.AllOutputs())
 
 	// any stdout/stderr is unexpected, write this out and stop if received.
 	if len(response.Stdout) > 0 {
