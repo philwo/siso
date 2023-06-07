@@ -8,6 +8,7 @@ package ninja
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -271,7 +272,10 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 		}
 		flags[name] = f.Value.String()
 	})
-	flags["targets"] = strings.Join(c.Flags.Args(), " ")
+	targets := c.Flags.Args()
+	flags["targets"] = strings.Join(targets, " ")
+	lastTargetsFile := ".siso_last_targets"
+	sameTargets := checkTargets(ctx, lastTargetsFile, targets)
 
 	config, err := buildconfig.New(ctx, c.configFilename, flags, cfgrepos)
 	if err != nil {
@@ -335,11 +339,27 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 		return err
 	}
 	defer func() {
+		if err != nil {
+			return
+		}
+		clog.Infof(ctx, "save targets to %s...", lastTargetsFile)
+		err = saveLastTargets(ctx, lastTargetsFile, targets)
+	}()
+	defer func() {
 		err := hashFS.Close(ctx)
 		if err != nil {
 			clog.Errorf(ctx, "close hashfs: %v", err)
 		}
 	}()
+
+	clog.Infof(ctx, "sameTargets:%t hashfs clean:%t", sameTargets, hashFS.IsClean())
+	if !c.clobber && sameTargets && hashFS.IsClean() {
+		// TODO: better to check digest of .siso_fs_state?
+		ui.Default.PrintLines("Everything is up-to-date. Nothing to do.\n")
+		return nil
+	}
+	os.Remove(lastTargetsFile)
+
 	var localexecLogWriter io.Writer
 	if c.localexecLogFile != "" {
 		f, err := os.Create(c.localexecLogFile)
@@ -749,4 +769,48 @@ func rotateFiles(ctx context.Context, fname string) {
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		clog.Warningf(ctx, "rotate %s ->0 failed: %v", fname, err)
 	}
+}
+
+type lastTargets struct {
+	Targets []string `json:"targets,omitempty"`
+}
+
+func checkTargets(ctx context.Context, lastTargetsFile string, targets []string) bool {
+	buf, err := os.ReadFile(lastTargetsFile)
+	if err != nil {
+		clog.Warningf(ctx, "checkTargets: %v", err)
+		return false
+	}
+	var last lastTargets
+	err = json.Unmarshal(buf, &last)
+	if err != nil {
+		clog.Warningf(ctx, "checkTargets %s parse error: %v", lastTargetsFile, err)
+		return false
+	}
+	if len(targets) != len(last.Targets) {
+		return false
+	}
+	sort.Strings(targets)
+	sort.Strings(last.Targets)
+	for i := range targets {
+		if targets[i] != last.Targets[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func saveLastTargets(ctx context.Context, lastTargetsFile string, targets []string) error {
+	v := lastTargets{
+		Targets: targets,
+	}
+	buf, err := json.Marshal(v)
+	if err != nil {
+		return fmt.Errorf("marshal last targets: %w", err)
+	}
+	err = os.WriteFile(lastTargetsFile, buf, 0644)
+	if err != nil {
+		return fmt.Errorf("save last targets: %w", err)
+	}
+	return nil
 }

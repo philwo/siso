@@ -208,7 +208,8 @@ func (hfs *HashFS) SetState(ctx context.Context, state *State) error {
 			return err
 		}
 	}
-	clog.Infof(ctx, "set state done: eq:%d new:%d not-exist:%d fail:%d invalidate:%d: %s", neq, nnew, nnotexist, nfail, ninvalidate, time.Since(start))
+	hfs.clean = nnew == 0 && nnotexist == 0 && nfail == 0 && ninvalidate == 0
+	clog.Infof(ctx, "set state done: clean:%t eq:%d new:%d not-exist:%d fail:%d invalidate:%d: %s", hfs.clean, neq, nnew, nnotexist, nfail, ninvalidate, time.Since(start))
 	return nil
 }
 

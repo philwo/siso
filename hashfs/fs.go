@@ -60,6 +60,7 @@ type HashFS struct {
 	IOMetrics *iometrics.IOMetrics
 
 	digester digester
+	clean    bool
 }
 
 // New creates a HashFS.
@@ -106,6 +107,9 @@ func (hfs *HashFS) Close(ctx context.Context) error {
 	if hfs.opt.StateFile == "" {
 		return nil
 	}
+	if hfs.clean {
+		return nil
+	}
 	err := Save(ctx, hfs.opt.StateFile, hfs.State(ctx))
 	if err != nil {
 		clog.Errorf(ctx, "Failed to save fs state in %s: %v", hfs.opt.StateFile, err)
@@ -113,6 +117,11 @@ func (hfs *HashFS) Close(ctx context.Context) error {
 	}
 	clog.Infof(ctx, "Saved fs state in %s", hfs.opt.StateFile)
 	return nil
+}
+
+// IsClean returns whether hashfs is clean (i.e. sync with local disk).
+func (hfs *HashFS) IsClean() bool {
+	return hfs.clean
 }
 
 // FileSystem returns FileSystem interface at dir.
@@ -314,6 +323,7 @@ func (hfs *HashFS) WriteFile(ctx context.Context, root, fname string, b []byte, 
 	if log.V(1) {
 		clog.Infof(ctx, "writefile @%s %s x:%t mtime:%s", root, fname, isExecutable, mtime)
 	}
+	hfs.clean = false
 	data := digest.FromBytes(fname, b)
 	fname = filepath.Join(root, fname)
 	fname = filepath.ToSlash(fname)
@@ -344,6 +354,7 @@ func (hfs *HashFS) Symlink(ctx context.Context, root, target, linkpath string, m
 	if log.V(1) {
 		clog.Infof(ctx, "symlink @%s %s -> %s", root, linkpath, target)
 	}
+	hfs.clean = false
 	linkfname := filepath.Join(root, linkpath)
 	linkfname = filepath.ToSlash(linkfname)
 	lready := make(chan bool, 1)
@@ -366,6 +377,7 @@ func (hfs *HashFS) Copy(ctx context.Context, root, src, dst string, mtime time.T
 	if log.V(1) {
 		clog.Infof(ctx, "copy @%s %s to %s", root, src, dst)
 	}
+	hfs.clean = false
 	srcname := filepath.Join(root, src)
 	srcfname := filepath.ToSlash(srcname)
 	dstfname := filepath.Join(root, dst)
@@ -419,6 +431,7 @@ func (hfs *HashFS) Mkdir(ctx context.Context, root, dirname string) error {
 	if log.V(1) {
 		clog.Infof(ctx, "mkdir @%s %s", root, dirname)
 	}
+	hfs.clean = false
 	dirname = filepath.Join(root, dirname)
 	dirname = filepath.ToSlash(dirname)
 	fi, err := os.Lstat(dirname)
@@ -458,6 +471,7 @@ func (hfs *HashFS) Remove(ctx context.Context, root, fname string) error {
 	if log.V(1) {
 		clog.Infof(ctx, "remove @%s %s", root, fname)
 	}
+	hfs.clean = false
 	fname = filepath.Join(root, fname)
 	fname = filepath.ToSlash(fname)
 	lready := make(chan bool, 1)
@@ -662,6 +676,7 @@ func (hfs *HashFS) Entries(ctx context.Context, root string, inputs []string) ([
 func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []merkletree.Entry, mtime time.Time, cmdhash []byte, action digest.Digest) error {
 	ctx, span := trace.NewSpan(ctx, "fs-update")
 	defer span.Close(nil)
+	hfs.clean = false
 	for _, ent := range entries {
 		fname := filepath.Join(execRoot, ent.Name)
 		fname = filepath.ToSlash(fname)
