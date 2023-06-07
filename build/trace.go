@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -40,6 +41,8 @@ type traceEvents struct {
 	// signals to terminate trace writer.
 	quit, done chan struct{}
 
+	// memstats record of siso.
+	memstats runtime.MemStats
 	// resource usage record of siso.
 	rusage usageRecord
 
@@ -79,6 +82,7 @@ func (te *traceEvents) Start(ctx context.Context, semas []*semaphore.Semaphore, 
 func (te *traceEvents) loop(ctx context.Context) {
 	clog.Infof(ctx, "trace loop start")
 	defer close(te.done)
+	runtime.ReadMemStats(&te.memstats)
 	te.rusage.get()
 	tmpname := te.fname + ".tmp"
 	f, err := os.Create(te.fname + ".tmp")
@@ -232,6 +236,9 @@ type traceEventObject struct {
 }
 
 func (te *traceEvents) sample(ctx context.Context, w io.Writer, t time.Time) {
+	for _, o := range te.traceMemStats(ctx, t) {
+		te.write(ctx, w, o)
+	}
 	for _, o := range te.rusage.sample(ctx, t) {
 		te.write(ctx, w, o)
 	}
@@ -252,6 +259,27 @@ func (te *traceEvents) sample(ctx context.Context, w io.Writer, t time.Time) {
 			te.write(ctx, w, o)
 		}
 	}
+}
+
+func (te *traceEvents) traceMemStats(ctx context.Context, t time.Time) []traceEventObject {
+	ret := []traceEventObject{
+		{
+			Name: "memstats",
+			Ph:   "C",
+			T:    t.Sub(te.start).Microseconds(),
+			Pid:  sisoPid,
+			Tid:  sisoTid,
+			Args: map[string]any{
+				"alloc":       te.memstats.Alloc,
+				"total_alloc": te.memstats.TotalAlloc,
+				"sys":         te.memstats.Sys,
+				"pause":       te.memstats.PauseTotalNs,
+				"gc":          te.memstats.NumGC,
+			},
+		},
+	}
+	runtime.ReadMemStats(&te.memstats)
+	return ret
 }
 
 func (te *traceEvents) traceSemaphore(ctx context.Context, t time.Time, sema *semaphore.Semaphore, reqs *int) []traceEventObject {
