@@ -446,6 +446,7 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 	semas := []*semaphore.Semaphore{
 		b.stepSema,
 		b.localSema,
+		b.rewrapSema,
 		b.remoteSema,
 		b.cacheSema,
 		b.cache.sema,
