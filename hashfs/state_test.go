@@ -6,7 +6,10 @@ package hashfs_test
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
+	"fmt"
 	"io/fs"
 	"path/filepath"
 	"sort"
@@ -16,6 +19,8 @@ import (
 	"github.com/google/go-cmp/cmp"
 
 	"infra/build/siso/hashfs"
+	"infra/build/siso/reapi/digest"
+	"infra/build/siso/reapi/merkletree"
 )
 
 func TestLoadSave(t *testing.T) {
@@ -73,5 +78,49 @@ func TestState(t *testing.T) {
 		}
 		sort.Strings(names)
 		t.Errorf("stamp entry not exists? %q", names)
+	}
+}
+
+func TestState_Dir(t *testing.T) {
+	ctx := context.Background()
+
+	hashFS, err := hashfs.New(ctx, hashfs.Option{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer hashFS.Close(ctx)
+
+	dir := t.TempDir()
+
+	mtime := time.Now()
+	h := sha256.New()
+	fmt.Fprint(h, "step command")
+	cmdhash := h.Sum(nil)
+	cmdhashStr := hex.EncodeToString(cmdhash)
+	d := digest.FromBytes("action digest", []byte("action proto")).Digest()
+	t.Logf("record gen/generate_all dir. mtime=%s cmdhash=%s d=%s", mtime, cmdhashStr, d)
+	err = hashFS.Update(ctx, dir, []merkletree.Entry{
+		{
+			Name: "gen/generate_all",
+		},
+	}, mtime, cmdhash, d)
+	if err != nil {
+		t.Fatalf("Update %v; want nil err", err)
+	}
+
+	st := hashFS.State(ctx)
+	m := st.Map()
+	ent, ok := m[filepath.Join(dir, "gen/generate_all")]
+	if !ok {
+		t.Errorf("gen/generate_all entry not exists?")
+	}
+	if ent.ID.ModTime != mtime.UnixNano() {
+		t.Errorf("mtime=%d want=%d", ent.ID.ModTime, mtime.UnixNano())
+	}
+	if ent.CmdHash != cmdhashStr {
+		t.Errorf("cmdhash=%s want=%s", ent.CmdHash, cmdhashStr)
+	}
+	if ent.Action != d {
+		t.Errorf("action=%s want=%s", ent.Action, d)
 	}
 }

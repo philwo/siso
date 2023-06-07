@@ -231,10 +231,42 @@ func TestMkdir(t *testing.T) {
 	if err != nil || !fi.IsDir() {
 		t.Errorf("hashfs.Stat(ctx, %q, %q)=%v, %v; want dir, nil err", dir, "out/siso/gen/v8/include", fi, err)
 	}
+	mtimeInclude := fi.ModTime()
+	if mtimeInclude.IsZero() {
+		t.Errorf("out/siso/gen/v8/include mtime: %s", mtimeInclude)
+	}
+	t.Logf("out/siso/gen/v8/include mtime:%s", mtimeInclude)
 
 	fi, err = hashFS.Stat(ctx, dir, "out/siso/gen/v8/include/inspector")
 	if err != nil || !fi.IsDir() {
 		t.Errorf("hashfs.Stat(ctx, %q, %q)=%v, %v; want dir, nil err", dir, "out/siso/gen/v8/include/inspector", fi, err)
+	}
+	mtimeInspector := fi.ModTime()
+	if mtimeInspector.IsZero() {
+		t.Errorf("out/siso/gen/v8/include/inspector mtime: %s", mtimeInspector)
+	}
+	t.Logf("out/siso/gen/v8/include/inspector mtime:%s", mtimeInspector)
+
+	t.Logf("mkdir again. mtime preserved %s", time.Now())
+	err = hashFS.Mkdir(ctx, dir, "out/siso/gen/v8/include/inspector")
+	if err != nil {
+		t.Errorf("hashfs.Mkdir(ctx, %q, %q)=%v; want nil err", dir, "out/siso/gen/v8/include/inspector", err)
+	}
+
+	fi, err = hashFS.Stat(ctx, dir, "out/siso/gen/v8/include")
+	if err != nil || !fi.IsDir() {
+		t.Errorf("hashfs.Stat(ctx, %q, %q)=%v, %v; want dir, nil err", dir, "out/siso/gen/v8/include", fi, err)
+	}
+	if !fi.ModTime().Equal(mtimeInclude) {
+		t.Errorf("%q mtime: %s -> %s", "out/siso/gen/v8/include", mtimeInclude, fi.ModTime())
+	}
+
+	fi, err = hashFS.Stat(ctx, dir, "out/siso/gen/v8/include/inspector")
+	if err != nil || !fi.IsDir() {
+		t.Errorf("hashfs.Stat(ctx, %q, %q)=%v, %v; want dir, nil err", dir, "out/siso/gen/v8/include/inspector", fi, err)
+	}
+	if !fi.ModTime().Equal(mtimeInspector) {
+		t.Errorf("%q mtime: %s -> %s", "out/siso/gen/v8/include/inspector", mtimeInspector, fi.ModTime())
 	}
 }
 

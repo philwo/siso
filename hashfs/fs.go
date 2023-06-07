@@ -421,22 +421,35 @@ func (hfs *HashFS) Mkdir(ctx context.Context, root, dirname string) error {
 	}
 	dirname = filepath.Join(root, dirname)
 	dirname = filepath.ToSlash(dirname)
-	err := os.MkdirAll(dirname, 0755)
+	fi, err := os.Lstat(dirname)
 	hfs.IOMetrics.OpsDone(err)
-	if err != nil {
-		return err
+	var mtime time.Time
+	if err == nil && fi.IsDir() {
+		// already exists
+		mtime = fi.ModTime()
+	} else {
+		err := os.MkdirAll(dirname, 0755)
+		hfs.IOMetrics.OpsDone(err)
+		if err != nil {
+			return err
+		}
+		fi, err := os.Lstat(dirname)
+		if err != nil {
+			return err
+		}
+		mtime = fi.ModTime()
 	}
 	lready := make(chan bool, 1)
 	lready <- true
 
 	e := &entry{
 		lready:    lready,
-		mtime:     time.Now(),
+		mtime:     mtime,
 		mode:      0644 | fs.ModeDir,
 		directory: &directory{},
 	}
 	err = hfs.dirStoreAndNotify(ctx, dirname, e)
-	clog.Infof(ctx, "mkdir %s: %v", dirname, err)
+	clog.Infof(ctx, "mkdir %s %s: %v", dirname, mtime, err)
 	return err
 }
 
@@ -696,6 +709,8 @@ func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []merkle
 				lready:    lready,
 				mtime:     mtime,
 				mode:      0644 | fs.ModeDir,
+				cmdhash:   cmdhash,
+				action:    action,
 				directory: &directory{},
 			}
 			err := hfs.dirStoreAndNotify(ctx, fname, e)
@@ -812,7 +827,8 @@ type entry struct {
 	src digest.Source
 	buf []byte // from WriteFile.
 
-	mu        sync.RWMutex
+	mu sync.RWMutex
+	// mtime of entry in hashfs.
 	mtime     time.Time
 	d         digest.Digest
 	directory *directory
@@ -852,8 +868,6 @@ func (e *entry) init(ctx context.Context, fname string, m *iometrics.IOMetrics) 
 		}
 		e.directory = &directory{}
 		e.mode = 0644 | fs.ModeDir
-		// don't update mtime, so updateDir scans local dir.
-		return
 	case fi.Mode().Type() == fs.ModeSymlink:
 		e.mode = 0644 | fs.ModeSymlink
 		e.target, err = os.Readlink(fname)
@@ -934,7 +948,7 @@ func (e *entry) updateDir(ctx context.Context, hfs *HashFS, dname string) []stri
 		clog.Warningf(ctx, "updateDir %s: is not dir?", dname)
 		return nil
 	}
-	if fi.ModTime().Equal(e.mtime) {
+	if fi.ModTime().Equal(e.directory.mtime) {
 		if log.V(1) {
 			clog.Infof(ctx, "updateDir %s: up-to-date %s", dname, e.mtime)
 		}
@@ -953,7 +967,11 @@ func (e *entry) updateDir(ctx context.Context, hfs *HashFS, dname string) []stri
 		}
 	}
 	clog.Infof(ctx, "updateDir mtime %s %d %s -> %s", dname, len(names), e.mtime, fi.ModTime())
-	e.mtime = fi.ModTime()
+	e.directory.mtime = fi.ModTime()
+	// if local dir is updated after hashfs update, update hashfs mtime.
+	if e.mtime.Before(e.directory.mtime) {
+		e.mtime = e.directory.mtime
+	}
 	return names
 }
 
@@ -979,7 +997,13 @@ func (e *entry) flush(ctx context.Context, fname string, m *iometrics.IOMetrics)
 	switch {
 	case e.directory != nil:
 		// directory
-		err := os.MkdirAll(fname, 0755)
+		fi, err := os.Lstat(fname)
+		m.OpsDone(err)
+		if err == nil && fi.IsDir() && fi.ModTime().Equal(mtime) {
+			clog.Infof(ctx, "flush dir %s: already exist", fname)
+			return nil
+		}
+		err = os.MkdirAll(fname, 0755)
 		m.OpsDone(err)
 		clog.Infof(ctx, "flush dir %s: %v", fname, err)
 		return err
@@ -1076,6 +1100,8 @@ func (e *entry) flush(ctx context.Context, fname string, m *iometrics.IOMetrics)
 // directory is per-directory entry map to reduce mutex contention.
 // TODO: use generics as DirMap<K,V>?
 type directory struct {
+	// mtime on the local disk when it reads the dir.
+	mtime time.Time
 	// m is a map of file in a directory's basename to *entry.
 	m sync.Map
 }
@@ -1128,9 +1154,13 @@ func (d *directory) lookup(ctx context.Context, fname string) (*entry, *director
 
 func (d *directory) store(ctx context.Context, fname string, e *entry) (*entry, error) {
 	origFname := fname
+	elems := make([]string, 0, strings.Count(fname, "/")+1)
 	if log.V(8) {
 		logOrigFname := origFname
 		clog.Infof(ctx, "store %s %v", logOrigFname, e)
+	}
+	if strings.HasPrefix(fname, "/") {
+		elems = append(elems, "/")
 	}
 	for fname != "" {
 		fname = strings.TrimPrefix(fname, "/")
@@ -1152,6 +1182,7 @@ func (d *directory) store(ctx context.Context, fname string, e *entry) (*entry, 
 			ee := v.(*entry)
 			eed := ee.digest()
 			cmdchanged := !bytes.Equal(ee.cmdhash, e.cmdhash)
+			actionchanged := ee.action != e.action
 			if e.target != "" && ee.target != e.target {
 				lv := struct {
 					origFname         string
@@ -1167,18 +1198,23 @@ func (d *directory) store(ctx context.Context, fname string, e *entry) (*entry, 
 					eed, ed    digest.Digest
 				}{origFname, cmdchanged, eed, e.d}
 				clog.Infof(ctx, "store %s: cmdchange:%t d:%v to %v", lv.origFname, lv.cmdchanged, lv.eed, lv.ed)
+			} else if cmdchanged || actionchanged {
+				lv := struct {
+					origFname     string
+					cmdchanged    bool
+					actionchanged bool
+				}{origFname, cmdchanged, actionchanged}
+				clog.Infof(ctx, "store %s: cmdchange:%t actionchange:%t", lv.origFname, lv.cmdchanged, lv.actionchanged)
 			} else if ee.target == e.target && ee.size == e.size && ee.mode == e.mode && (e.d.IsZero() || eed == e.d) {
 				// no change?
 
 				// if e.d is zero, it may be new local entry
 				// and ee.d has been calculated
 
-				// update mtime other than dir.
-				if !e.mode.IsDir() {
-					ee.mu.Lock()
-					ee.mtime = e.mtime
-					ee.mu.Unlock()
-				}
+				// update mtime.
+				ee.mu.Lock()
+				ee.mtime = e.mtime
+				ee.mu.Unlock()
 				return ee, nil
 			}
 			// e should be new value for fname.
@@ -1192,6 +1228,7 @@ func (d *directory) store(ctx context.Context, fname string, e *entry) (*entry, 
 			return e, nil
 
 		}
+		elems = append(elems, elem)
 		fname = rest
 		v, ok := d.m.Load(elem)
 		if ok {
@@ -1226,12 +1263,18 @@ func (d *directory) store(ctx context.Context, fname string, e *entry) (*entry, 
 			}
 		}
 		// create intermediate dir of elem.
+		mtime := time.Now()
+		dfi, err := os.Stat(filepath.Join(elems...))
+		if err == nil {
+			mtime = dfi.ModTime()
+		}
 		lready := make(chan bool, 1)
 		lready <- true
 		newDent := &entry{
 			lready: lready,
 			mode:   0644 | fs.ModeDir,
-			// don't set mtime for intermediate dir.
+			mtime:  mtime,
+			// don't set directory.mtime for intermediate dir.
 			// mtime will be updated by updateDir
 			// when all dirents have been loaded.
 			directory: &directory{},

@@ -170,8 +170,10 @@ func (hfs *HashFS) SetState(ctx context.Context, state *State) error {
 		ftype := "file"
 		if e.d.IsZero() && e.target == "" {
 			ftype = "dir"
-			clog.Infof(ctx, "ignore %s %s", ftype, ent.Name)
-			continue
+			if len(e.cmdhash) == 0 {
+				clog.Infof(ctx, "ignore %s %s", ftype, ent.Name)
+				continue
+			}
 		} else if e.d.IsZero() && e.target != "" {
 			ftype = "symlink"
 		}
@@ -229,6 +231,10 @@ func newStateEntry(ent EntryState, ftime time.Time, dataSource DataSource, m *io
 		entType = entryAfterLocal
 		lready <- true
 	}
+	mode := fs.FileMode(0644)
+	if ent.IsExecutable {
+		mode |= 0111
+	}
 	var dir *directory
 	var src digest.Source
 	if !ent.Digest.IsZero() {
@@ -239,12 +245,11 @@ func newStateEntry(ent EntryState, ftime time.Time, dataSource DataSource, m *io
 			// probably, exists in RBE side, or local cache.
 			src = dataSource.Source(ent.Digest, ent.Name)
 		}
-	} else if ent.Target == "" {
+	} else if ent.Target != "" {
+		mode |= fs.ModeSymlink
+	} else {
 		dir = &directory{}
-	}
-	mode := fs.FileMode(0644)
-	if ent.IsExecutable {
-		mode |= 0111
+		mode |= fs.ModeDir
 	}
 	e := &entry{
 		lready:    lready,
@@ -349,8 +354,6 @@ func (hfs *HashFS) State(ctx context.Context) *State {
 					clog.Infof(ctx, "ignore %s: no mtime", name)
 				}
 			} else {
-				// ignore directory
-				// TODO(b/253541407): record mtime for directory?
 				if !e.d.IsZero() || e.target != "" {
 					state.Entries = append(state.Entries, EntryState{
 						ID: fileID{
@@ -366,6 +369,18 @@ func (hfs *HashFS) State(ctx context.Context) *State {
 				}
 			}
 			if e.directory != nil {
+				if len(e.cmdhash) > 0 {
+					// preserve dir for cmdhash
+					state.Entries = append(state.Entries, EntryState{
+						ID: fileID{
+							ModTime: e.mtime.UnixNano(),
+						},
+						Name:    name,
+						CmdHash: hex.EncodeToString(e.cmdhash),
+						Action:  e.action,
+					})
+				}
+				// TODO(b/253541407): record mtime for other directory?
 				dirs = append(dirs, d{name: name, dir: e.directory})
 			}
 		}
