@@ -296,6 +296,26 @@ func (s *Step) init(ctx context.Context, b *Builder) {
 func newCmd(ctx context.Context, b *Builder, stepDef StepDef) *execute.Cmd {
 	cmdline := stepDef.Binding("command")
 	rspfileContent := stepDef.Binding("rspfile_content")
+
+	outputs := stepDef.Outputs()
+	// add build.ninja as outputs of gn step.
+	// gn uses
+	//
+	//  build build.ninja.stamp: gn
+	//    generator = 1
+	//    depfile = build.ninja.d
+	//  build build.ninja: phony build.ninja.stamp
+	//    generator = 1
+	//
+	// so, step "gn" has build.ninja.stamp as output, but
+	// not build.ninja. but it generates build.ninja
+	// so add it as output to make timestamp of build.ninja
+	// correctly managed by Siso.
+	// This workaround is needed to make second build as null build.
+	if stepDef.ActionName() == "gn" && len(outputs) == 1 && filepath.Base(outputs[0]) == "build.ninja.stamp" {
+		outputs = append(outputs, b.path.MustFromWD("build.ninja"))
+	}
+
 	cmd := &execute.Cmd{
 		ID:         stepDef.String(),
 		Desc:       stepDescription(stepDef),
@@ -309,7 +329,7 @@ func newCmd(ctx context.Context, b *Builder, stepDef StepDef) *execute.Cmd {
 		Dir:            b.path.Dir,
 		Inputs:         stepInputs(ctx, b, stepDef),
 		ToolInputs:     stepDef.ToolInputs(ctx),
-		Outputs:        stepDef.Outputs(),
+		Outputs:        outputs,
 		// TODO(b/266518906): enable UseSystemInput
 		// UseSystemInput: stepDef.Binding("use_system_input") != "",
 		Deps:    stepDef.Binding("deps"),
