@@ -57,16 +57,16 @@ var (
 	}
 )
 
-// ReproxyExec is executor with reproxy.
-type ReproxyExec struct{}
+// REProxyExec is executor with reproxy.
+type REProxyExec struct{}
 
 // New creates new remote executor.
-func New(ctx context.Context) *ReproxyExec {
-	return &ReproxyExec{}
+func New(ctx context.Context) *REProxyExec {
+	return &REProxyExec{}
 }
 
 // Run runs a cmd.
-func (re *ReproxyExec) Run(ctx context.Context, cmd *execute.Cmd) error {
+func (re *REProxyExec) Run(ctx context.Context, cmd *execute.Cmd) error {
 	ctx, span := trace.NewSpan(ctx, "reproxy-exec")
 	defer span.Close(nil)
 
@@ -178,7 +178,7 @@ func createRequest(cmd *execute.Cmd) (*ppb.RunRequest, error) {
 	}, nil
 }
 
-func (re *ReproxyExec) processResponse(ctx context.Context, cmd *execute.Cmd, response *ppb.RunResponse, err error) error {
+func (re *REProxyExec) processResponse(ctx context.Context, cmd *execute.Cmd, response *ppb.RunResponse, err error) error {
 	if response == nil {
 		return errors.New("no response")
 	}
