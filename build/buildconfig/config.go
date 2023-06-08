@@ -83,7 +83,7 @@ func New(ctx context.Context, fname string, flags map[string]string, repos map[s
 		Load: loader.Load,
 	}
 	thread.SetLocal("modulename", fname)
-	sdict, err := loader.Load(thread, fname)
+	globals, err := loader.Load(thread, fname)
 	if err != nil {
 		clog.Warningf(ctx, "thread:%s failed to exec file %s: %v", thread.Name, fname, err)
 		var eerr *starlark.EvalError
@@ -92,8 +92,8 @@ func New(ctx context.Context, fname string, flags map[string]string, repos map[s
 		}
 		return nil, err
 	}
-	clog.Infof(ctx, "config: %s", sdict)
-	v, ok := sdict[configEntryPoint]
+	clog.Infof(ctx, "config: %s", globals)
+	v, ok := globals[configEntryPoint]
 	if !ok {
 		return nil, fmt.Errorf("%s is not defined in %s", configEntryPoint, fname)
 	}
@@ -103,7 +103,7 @@ func New(ctx context.Context, fname string, flags map[string]string, repos map[s
 	return &Config{
 		Metadata: metadata,
 		flags:    flags,
-		globals:  sdict,
+		globals:  globals,
 		fscache: &fscache{
 			m: make(map[string][]byte),
 		},

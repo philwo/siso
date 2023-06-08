@@ -19,9 +19,9 @@ import (
 
 // Cred holds credentials and derived values.
 type Cred struct {
-	authenticator *auth.Authenticator
-	rpcCreds      credentials.PerRPCCredentials
-	tokenSource   oauth2.TokenSource
+	authenticator  *auth.Authenticator
+	rpcCredentials credentials.PerRPCCredentials
+	tokenSource    oauth2.TokenSource
 }
 
 // AuthOpts returns the LUCI auth options that Siso uses.
@@ -37,35 +37,35 @@ func AuthOpts() auth.Options {
 // New creates a Cred using LUCI auth's default options.
 // It ensures that the user is logged in and returns an error otherwise.
 func New(ctx context.Context, authOpts auth.Options) (Cred, error) {
-	au := auth.NewAuthenticator(ctx, auth.SilentLogin, authOpts)
-	if err := au.CheckLoginRequired(); err != nil {
+	authenticator := auth.NewAuthenticator(ctx, auth.SilentLogin, authOpts)
+	if err := authenticator.CheckLoginRequired(); err != nil {
 		return Cred{}, err
 	}
 
-	ts, err := au.TokenSource()
+	tokenSource, err := authenticator.TokenSource()
 	if err != nil {
 		return Cred{}, err
 	}
 
-	rc, err := au.PerRPCCredentials()
+	rpcCredentials, err := authenticator.PerRPCCredentials()
 	if err != nil {
 		return Cred{}, err
 	}
 
 	return Cred{
-		authenticator: au,
-		rpcCreds:      rc,
-		tokenSource:   ts,
+		authenticator:  authenticator,
+		rpcCredentials: rpcCredentials,
+		tokenSource:    tokenSource,
 	}, nil
 }
 
 // GRPCDialOptions returns grpc's dial options to use the credential.
 func (c Cred) GRPCDialOptions() []grpc.DialOption {
-	if c.rpcCreds == nil {
+	if c.rpcCredentials == nil {
 		return nil
 	}
 	return []grpc.DialOption{
-		grpc.WithPerRPCCredentials(c.rpcCreds),
+		grpc.WithPerRPCCredentials(c.rpcCredentials),
 		grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{})),
 	}
 }
