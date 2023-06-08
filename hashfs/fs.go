@@ -713,6 +713,10 @@ func (hfs *HashFS) UpdateFromLocal(ctx context.Context, root string, inputs []st
 			e.mu.Unlock()
 			err = os.Chtimes(fullname, time.Now(), mtime)
 			hfs.IOMetrics.OpsDone(err)
+			if errors.Is(err, fs.ErrNotExist) {
+				clog.Warningf(ctx, "failed to update mtime of %s: %v", fullname, err)
+				continue
+			}
 			if err != nil {
 				return fmt.Errorf("failed to update mtime of %s: %w", fullname, err)
 			}
