@@ -92,7 +92,7 @@ func (c *versionRun) Run(a subcommands.Application, args []string, env subcomman
 		fmt.Fprintf(os.Stderr, "failed to get git_repository and git_revision in %s: %v\n", cipdURL, err)
 		return 1
 	}
-	fmt.Printf("%s@%s\n", repo, rev)
+	fmt.Printf("%s/+/%s\n", repo, rev)
 	switch repo {
 	case "https://chromium.googlesource.com/infra/infra_superproject":
 		rev, err = parseInfraSuperprojectDEPS(ctx, rev)
@@ -100,7 +100,7 @@ func (c *versionRun) Run(a subcommands.Application, args []string, env subcomman
 			fmt.Fprintf(os.Stderr, "failed to get infra revision in infra_superproject.git@%s/DEPS: %v\n", rev, err)
 			return 1
 		}
-		fmt.Printf("infra/infra.git@%s\n", rev)
+		fmt.Printf("https://chromium.googlesource.com/infra/infra/+/%s\n", rev)
 	case "https://chromium.googlesource.com/infra/infra":
 	default:
 		fmt.Fprintf(os.Stderr, "unknown git_repository: %s\n", repo)
