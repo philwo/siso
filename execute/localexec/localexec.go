@@ -22,7 +22,6 @@ import (
 
 	"infra/build/siso/execute"
 	"infra/build/siso/o11y/clog"
-	"infra/build/siso/reapi/digest"
 	"infra/build/siso/sync/semaphore"
 	"infra/build/siso/toolsupport/straceutil"
 )
@@ -58,18 +57,8 @@ func (LocalExec) Run(ctx context.Context, cmd *execute.Cmd) (err error) {
 	if cmd.HashFS == nil {
 		return nil
 	}
-	entries, err := cmd.HashFS.LocalEntries(ctx, cmd.ExecRoot, cmd.AllOutputs())
-	if err != nil {
-		return err
-	}
-	clog.Infof(ctx, "output entries %d", len(entries))
 	// TODO(b/254158307): calculate action digest if cmd is pure?
-	err = cmd.HashFS.Update(ctx, cmd.ExecRoot, entries, time.Now(), cmd.CmdHash, digest.Digest{})
-	if err != nil {
-		return err
-	}
-	// and flush to update mtime
-	return cmd.HashFS.Flush(ctx, cmd.ExecRoot, cmd.AllOutputs())
+	return cmd.HashFS.UpdateFromLocal(ctx, cmd.ExecRoot, cmd.AllOutputs(), time.Now(), cmd.CmdHash)
 }
 
 // fix for http://b/278658064 windows: fork/exec: Not enough memory resources are available to process this command.

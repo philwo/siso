@@ -494,58 +494,6 @@ func (hfs *HashFS) Forget(ctx context.Context, root string, inputs []string) {
 	}
 }
 
-// LocalEntries gets merkletree entries for inputs at root from local disk,
-// ignoring cached entries.
-func (hfs *HashFS) LocalEntries(ctx context.Context, root string, inputs []string) ([]merkletree.Entry, error) {
-	ctx, span := trace.NewSpan(ctx, "fs-local-entries")
-	defer span.Close(nil)
-	var entries []merkletree.Entry
-	for _, fname := range inputs {
-		fullname := filepath.Join(root, fname)
-		fullname = filepath.ToSlash(fullname)
-		fi, err := os.Lstat(fullname)
-		hfs.IOMetrics.OpsDone(err)
-		if err != nil {
-			clog.Warningf(ctx, "failed to stat local-entry %s: %v", fullname, err)
-			continue
-		}
-		switch {
-		case fi.IsDir():
-			entries = append(entries, merkletree.Entry{
-				Name: fname,
-			})
-			continue
-		case fi.Mode().Type() == fs.ModeSymlink:
-			target, err := os.Readlink(fullname)
-			hfs.IOMetrics.OpsDone(err)
-			if err != nil {
-				clog.Warningf(ctx, "failed to readlink %s: %v", fullname, err)
-				continue
-			}
-			entries = append(entries, merkletree.Entry{
-				Name:   fname,
-				Target: target,
-			})
-			continue
-		case fi.Mode().IsRegular():
-			data, err := localDigest(ctx, fullname, hfs.IOMetrics)
-			if err != nil {
-				clog.Warningf(ctx, "failed to get diget %s: %v", fullname, err)
-				continue
-			}
-			entries = append(entries, merkletree.Entry{
-				Name:         fname,
-				Data:         data,
-				IsExecutable: isExecutable(fi, fullname),
-			})
-		default:
-			clog.Warningf(ctx, "unexpected filetype %s: %s", fullname, fi.Mode())
-			continue
-		}
-	}
-	return entries, nil
-}
-
 // Entries gets merkletree entries for inputs at root.
 func (hfs *HashFS) Entries(ctx context.Context, root string, inputs []string) ([]merkletree.Entry, error) {
 	ctx, span := trace.NewSpan(ctx, "fs-entries")
@@ -742,6 +690,37 @@ func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []merkle
 	return nil
 }
 
+// UpdateFromLocal updates cache information for inputs under execRoot with cmdhash from local disk.
+func (hfs *HashFS) UpdateFromLocal(ctx context.Context, root string, inputs []string, mtime time.Time, cmdhash []byte) error {
+	ctx, span := trace.NewSpan(ctx, "fs-update-local")
+	defer span.Close(nil)
+	hfs.Forget(ctx, root, inputs)
+	for _, fname := range inputs {
+		fullname := filepath.Join(root, fname)
+		fullname = filepath.ToSlash(fullname)
+		e := newLocalEntry()
+		e.init(ctx, fullname, hfs.IOMetrics)
+		e.cmdhash = cmdhash
+		clog.Infof(ctx, "stat new entry(local outputs): %s %s", fullname, e)
+		err := hfs.dirStoreAndNotify(ctx, fullname, e)
+		if err != nil {
+			return err
+		}
+		hfs.digester.compute(ctx, fullname, e)
+		if !mtime.Equal(e.getMtime()) {
+			e.mu.Lock()
+			e.mtime = mtime
+			e.mu.Unlock()
+			err = os.Chtimes(fullname, time.Now(), mtime)
+			hfs.IOMetrics.OpsDone(err)
+			if err != nil {
+				return fmt.Errorf("failed to update mtime of %s: %w", fullname, err)
+			}
+		}
+	}
+	return nil
+}
+
 type noSource struct {
 	filename string
 }
@@ -788,10 +767,6 @@ func (hfs *HashFS) Flush(ctx context.Context, execRoot string, files []string) e
 				}
 				if err != nil {
 					return fmt.Errorf("flush %s local-ready: %w", fname, err)
-				}
-				err = os.Chtimes(fname, time.Now(), e.getMtime())
-				if err != nil {
-					return fmt.Errorf("flush %s chtimes %s: %w", fname, e.getMtime(), err)
 				}
 				continue
 			}

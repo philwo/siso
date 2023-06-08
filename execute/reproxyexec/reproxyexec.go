@@ -25,7 +25,6 @@ import (
 	"infra/build/siso/execute"
 	"infra/build/siso/o11y/clog"
 	"infra/build/siso/o11y/trace"
-	"infra/build/siso/reapi/digest"
 	ppb "infra/third_party/reclient/api/proxy"
 )
 
@@ -208,17 +207,10 @@ func (re *ReproxyExec) processResponse(ctx context.Context, cmd *execute.Cmd, re
 	if cmd.HashFS == nil {
 		return nil
 	}
-	entries, err := cmd.HashFS.LocalEntries(ctx, cmd.ExecRoot, cmd.AllOutputs())
+	err = cmd.HashFS.UpdateFromLocal(ctx, cmd.ExecRoot, cmd.AllOutputs(), time.Now(), cmd.CmdHash)
 	if err != nil {
 		return err
 	}
-	err = cmd.HashFS.Update(ctx, cmd.ExecRoot, entries, time.Now(), cmd.CmdHash, digest.Digest{})
-	if err != nil {
-		return err
-	}
-	// and flush to update mtime
-	err = cmd.HashFS.Flush(ctx, cmd.ExecRoot, cmd.AllOutputs())
-
 	// any stdout/stderr is unexpected, write this out and stop if received.
 	if len(response.Stdout) > 0 {
 		cmd.StdoutWriter().Write(response.Stdout)

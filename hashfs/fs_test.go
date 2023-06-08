@@ -6,6 +6,8 @@ package hashfs_test
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -409,4 +411,81 @@ func TestStatAllocs(t *testing.T) {
 			t.Errorf("alloc=%f; want <= %f", avg, allocBase+0)
 		}
 	})
+}
+
+func TestUpdateFromLocal(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	opt := hashfs.Option{}
+	hfs, err := hashfs.New(ctx, opt)
+	if err != nil {
+		t.Fatalf("New=%v", err)
+	}
+	defer func() {
+		if hfs == nil {
+			return
+		}
+		err := hfs.Close(ctx)
+		if err != nil {
+			t.Fatalf("hfs.Close=%v", err)
+		}
+	}()
+
+	fname := "out/siso/gen/foo.stamp"
+	fullname := filepath.Join(dir, fname)
+	_, err = hfs.Stat(ctx, dir, fname)
+	if !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("Stat(ctx, %q,%q)=%v; want %v", dir, fname, err, fs.ErrNotExist)
+	}
+	setupFiles(t, dir, map[string]string{
+		fname: "",
+	})
+	lfi, err := os.Lstat(fullname)
+	if err != nil {
+		t.Fatalf("lstat(%q)=%v; want nil", fullname, err)
+	}
+	time.Sleep(1 * time.Microsecond)
+	now := time.Now()
+	if now.Equal(lfi.ModTime()) {
+		t.Fatalf("lfi.ModTime:%v should not be equal to now:%v", lfi.ModTime(), now)
+	}
+	h := sha256.New()
+	h.Write([]byte("command line"))
+	cmdhash := h.Sum(nil)
+	err = hfs.UpdateFromLocal(ctx, dir, []string{fname}, now, cmdhash)
+	if err != nil {
+		t.Errorf("UpdateFromLocal(ctx, %q, {%q}, %v, cmdhash)=%v; want nil err", dir, fname, now, err)
+	}
+	fi, err := hfs.Stat(ctx, dir, fname)
+	if err != nil {
+		t.Fatalf("Stat(ctx, %q, %q)=_, %v; want nil err", dir, fname, err)
+	}
+	if !now.Equal(fi.ModTime()) {
+		t.Errorf("fi.ModTime:%v should equal to now:%v", fi.ModTime(), now)
+	}
+	m := hfs.State(ctx).Map()
+	hfs = nil
+	e, ok := m[fullname]
+	if !ok {
+		var keys []string
+		for k := range m {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		t.Fatalf("entry for %s not found: %q", fullname, keys)
+	}
+	if e.ID.ModTime != now.UnixNano() {
+		t.Errorf("entry modtime=%d want=%d", e.ID.ModTime, now.UnixNano())
+	}
+	cmdhashStr := hex.EncodeToString(cmdhash)
+	if e.CmdHash != cmdhashStr {
+		t.Errorf("entry cmdhash=%q want=%q", e.CmdHash, cmdhashStr)
+	}
+	lfi, err = os.Lstat(fullname)
+	if err != nil {
+		t.Fatalf("lstat(%q)=%v; want nil", fullname, err)
+	}
+	if e.ID.ModTime != lfi.ModTime().UnixNano() {
+		t.Errorf("entry modtime=%d lfi=%d", e.ID.ModTime, lfi.ModTime().UnixNano())
+	}
 }
