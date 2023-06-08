@@ -1,4 +1,4 @@
-// Copyright 2023 The Chromium Authors. All rights reserved.
+// Copyright 2023 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -19,12 +19,12 @@ import (
 	log "github.com/golang/glog"
 	"github.com/maruel/subcommands"
 	"go.chromium.org/luci/auth/client/authcli"
-	"go.chromium.org/luci/client/versioncli"
 	"go.chromium.org/luci/common/cli"
 	"go.chromium.org/luci/common/system/signals"
 
 	"infra/build/siso/auth/cred"
 	"infra/build/siso/subcmd/ninja"
+	"infra/build/siso/subcmd/version"
 	"infra/build/siso/ui"
 )
 
@@ -37,7 +37,7 @@ var (
 	traceFile     string
 )
 
-const version = "siso v0.0.1"
+const versionStr = "siso v0.0.1"
 
 func getApplication() *cli.Application {
 	authOpts := cred.AuthOpts()
@@ -53,7 +53,7 @@ func getApplication() *cli.Application {
 			authcli.SubcommandInfo(authOpts, "whoami", false),
 			authcli.SubcommandLogin(authOpts, "login", false),
 			authcli.SubcommandLogout(authOpts, "logout", false),
-			versioncli.CmdVersion(version),
+			version.Cmd(versionStr),
 		},
 		EnvVars: map[string]subcommands.EnvVarDefinition{
 			"SISO_PROJECT": {
