@@ -6,7 +6,6 @@ package build
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -18,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"infra/build/siso/build/metadata"
 	"infra/build/siso/o11y/clog"
 	"infra/build/siso/o11y/iometrics"
 	"infra/build/siso/o11y/trace"
@@ -26,7 +26,7 @@ import (
 
 type traceEvents struct {
 	// metadata of the build.
-	metadata Metadata
+	metadata metadata.Metadata
 
 	// filename of trace json file.
 	fname string
@@ -60,7 +60,7 @@ type traceEvents struct {
 	rbeWorkers map[string]int
 }
 
-func newTraceEvents(fname string, metadata Metadata) *traceEvents {
+func newTraceEvents(fname string, metadata metadata.Metadata) *traceEvents {
 	return &traceEvents{
 		metadata:   metadata,
 		fname:      fname,
@@ -505,32 +505,25 @@ func (te *traceEvents) Close(ctx context.Context) {
 		clog.Warningf(ctx, "Failed to read %s: %v", tmpname, err)
 		return
 	}
-	var b bytes.Buffer
-	fmt.Fprintf(&b, `{
- "traceEvents": %s,
- "displayTimeUnit": "ms",
-`,
-		buf)
-	var keys []string
-	for key := range te.metadata.KV {
-		keys = append(keys, key)
+	defer os.Remove(tmpname)
+
+	traceData := map[string]string{
+		"traceEvents":     string(buf),
+		"displayTimeUnit": "ms",
 	}
-	sort.Strings(keys)
-	for _, key := range keys {
-		fmt.Fprintf(&b, " %q: %q,\n", key, te.metadata.KV[key])
+	for _, key := range te.metadata.Keys() {
+		traceData[key] = te.metadata.Get(key)
 	}
-	fmt.Fprintf(&b, ` "numCPUs": %d,
- "goos": %q,
- "goarch": %q
-}`,
-		te.metadata.NumCPU,
-		te.metadata.GOOS,
-		te.metadata.GOARCH)
-	err = os.WriteFile(te.fname, b.Bytes(), 0644)
+	traceDataJson, err := json.Marshal(traceData)
+	if err != nil {
+		clog.Warningf(ctx, "Failed to marshal trace data: %v", err)
+		return
+	}
+
+	err = os.WriteFile(te.fname, traceDataJson, 0644)
 	if err != nil {
 		clog.Warningf(ctx, "Failed to write %s: %v", te.fname, err)
 	}
-	os.Remove(tmpname)
 }
 
 type traceStats struct {

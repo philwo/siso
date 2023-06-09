@@ -10,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"runtime"
 	"time"
 
 	log "github.com/golang/glog"
@@ -19,6 +18,7 @@ import (
 	"go.starlark.net/starlarkstruct"
 
 	"infra/build/siso/build"
+	"infra/build/siso/build/metadata"
 	"infra/build/siso/execute"
 	"infra/build/siso/hashfs"
 	"infra/build/siso/o11y/clog"
@@ -29,8 +29,8 @@ const configEntryPoint = "init"
 
 // Config is a build config.
 type Config struct {
-	// Metadata is a metadata of the build.
-	Metadata build.Metadata
+	// Metadata contains key-value metadata for the build.
+	Metadata metadata.Metadata
 
 	// flags used to run the build.
 	flags map[string]string
@@ -50,12 +50,7 @@ type Config struct {
 
 // New returns new build config.
 func New(ctx context.Context, fname string, flags map[string]string, repos map[string]fs.FS) (*Config, error) {
-	metadata := build.Metadata{
-		KV:     make(map[string]string),
-		NumCPU: runtime.NumCPU(),
-		GOOS:   runtime.GOOS,
-		GOARCH: runtime.GOARCH,
-	}
+	metadata := metadata.New()
 	if repos == nil {
 		repos = map[string]fs.FS{}
 	}
@@ -127,8 +122,8 @@ func (cfg *Config) Init(ctx context.Context, hashFS *hashfs.HashFS, buildPath *b
 	}
 
 	hctx := starlarkstruct.FromStringDict(starlark.String("ctx"), map[string]starlark.Value{
-		"actions":  starInitActions(cfg.Metadata.KV),
-		"metadata": starMetadata(cfg.Metadata.KV),
+		"actions":  starInitActions(cfg.Metadata),
+		"metadata": starMetadata(cfg.Metadata),
 		"flags":    starFlags(cfg.flags),
 		// want "envs" ?
 		"fs": starFS(ctx, hashFS.FileSystem(ctx, buildPath.ExecRoot), buildPath, cfg.fscache),

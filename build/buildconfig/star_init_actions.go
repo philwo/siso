@@ -7,13 +7,15 @@ package buildconfig
 import (
 	"go.starlark.net/starlark"
 	"go.starlark.net/starlarkstruct"
+
+	"infra/build/siso/build/metadata"
 )
 
 // starInitActions returns actions, which contains:
 //
 //	metadata(key, value): sets key=value in metadata by Starlark config.
-func starInitActions(kv map[string]string) starlark.Value {
-	receiver := starMDReceiver{KV: kv}
+func starInitActions(metadata metadata.Metadata) starlark.Value {
+	receiver := starMDReceiver{Metadata: metadata}
 	return starlarkstruct.FromStringDict(starlark.String("actions"), map[string]starlark.Value{
 		"metadata": starlark.NewBuiltin("metadata", starActionsMetadata).BindReceiver(receiver),
 	})

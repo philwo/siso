@@ -9,10 +9,12 @@ import (
 	"fmt"
 
 	"go.starlark.net/starlark"
+
+	"infra/build/siso/build/metadata"
 )
 
 type starMDReceiver struct {
-	KV map[string]string
+	Metadata metadata.Metadata
 }
 
 func (r starMDReceiver) String() string {
@@ -25,10 +27,12 @@ func (starMDReceiver) Truth() starlark.Bool  { return starlark.True }
 func (starMDReceiver) Hash() (uint32, error) { return 0, errors.New("metadata is not hashable") }
 
 // Starlark value to access metadata.
-func starMetadata(kv map[string]string) starlark.Value {
-	dict := starlark.NewDict(len(kv))
-	for k, v := range kv {
-		dict.SetKey(starlark.String(k), starlark.String(v))
+func starMetadata(metadata metadata.Metadata) starlark.Value {
+	dict := starlark.NewDict(metadata.Size())
+	// Starlark dictionaries preserve insertion order, so we iterate over the
+	// sorted keys to ensure a deterministic order.
+	for _, k := range metadata.SortedKeys() {
+		dict.SetKey(starlark.String(k), starlark.String(metadata.Get(k)))
 	}
 	return dict
 }
@@ -53,6 +57,6 @@ func starActionsMetadata(thread *starlark.Thread, fn *starlark.Builtin, args sta
 	if err != nil {
 		return starlark.None, err
 	}
-	c.KV[key] = value
+	c.Metadata.Set(key, value)
 	return starlark.None, nil
 }

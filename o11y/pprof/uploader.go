@@ -14,6 +14,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/durationpb"
 
+	"infra/build/siso/build/metadata"
 	"infra/build/siso/o11y/clog"
 )
 
@@ -46,13 +47,13 @@ func NewUploader(ctx context.Context, opts Options) (*Uploader, error) {
 var validLabelRE = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 
 // SetMetadata sets metadata to the uploader.
-func (u *Uploader) SetMetadata(ctx context.Context, kv map[string]string) {
+func (u *Uploader) SetMetadata(ctx context.Context, metadata metadata.Metadata) {
 	if u == nil {
 		return
 	}
-	for k, v := range kv {
+	for _, k := range metadata.Keys() {
 		if k == "product" {
-			u.target = fmt.Sprintf("siso-build.%s", v)
+			u.target = fmt.Sprintf("siso-build.%s", metadata.Get(k))
 			clog.Infof(ctx, "pprof target=%q", u.target)
 			continue
 		}
@@ -60,8 +61,8 @@ func (u *Uploader) SetMetadata(ctx context.Context, kv map[string]string) {
 			clog.Warningf(ctx, "invalid label for pprof: %q", k)
 			continue
 		}
-		u.labels[k] = v
-		clog.Infof(ctx, "pprof label %q=%q", k, v)
+		u.labels[k] = metadata.Get(k)
+		clog.Infof(ctx, "pprof label %q=%q", k, metadata.Get(k))
 	}
 }
 

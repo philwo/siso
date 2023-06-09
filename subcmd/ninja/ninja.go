@@ -260,10 +260,6 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 	if c.configFilename == "" {
 		return err
 	}
-	gnargs, err := os.ReadFile("args.gn")
-	if err != nil {
-		clog.Warningf(ctx, "no args.gn: %v", err)
-	}
 	flags := make(map[string]string)
 	c.Flags.Visit(func(f *flag.Flag) {
 		name := f.Name
@@ -281,7 +277,12 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 	if err != nil {
 		return err
 	}
-	config.Metadata.KV["args.gn"] = string(gnargs)
+
+	if gnArgs, err := os.ReadFile("args.gn"); err == nil {
+		config.Metadata.Set("args.gn", string(gnArgs))
+	} else {
+		clog.Warningf(ctx, "no args.gn: %v", err)
+	}
 
 	spin := ui.Default.NewSpinner()
 	// depsLogBucket

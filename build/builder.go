@@ -29,6 +29,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"infra/build/siso/build/metadata"
 	"infra/build/siso/execute"
 	"infra/build/siso/execute/localexec"
 	"infra/build/siso/execute/remoteexec"
@@ -72,7 +73,7 @@ type OutputLocalFunc func(context.Context, string) bool
 // Options is builder options.
 type Options struct {
 	ID                string
-	Metadata          Metadata
+	Metadata          metadata.Metadata
 	ProjectID         string
 	Path              *Path
 	HashFS            *hashfs.HashFS
@@ -106,34 +107,12 @@ type Options struct {
 
 var experiments Experiments
 
-// Metadata is a metadata of the build process.
-type Metadata struct {
-	// KV is an arbitrary key-value pair in the metadata.
-	KV     map[string]string
-	NumCPU int
-	GOOS   string
-	GOARCH string
-	// want to include hostname?
-}
-
-// Get returns a map of the metadata.
-func (md Metadata) Get() map[string]string {
-	m := make(map[string]string)
-	for k, v := range md.KV {
-		m[k] = v
-	}
-	m["numcpu"] = fmt.Sprintf("%d", md.NumCPU)
-	m["goos"] = md.GOOS
-	m["goarch"] = md.GOARCH
-	return m
-}
-
 // Builder is a builder.
 type Builder struct {
 	// build session id, tool invocation id.
 	id        string
 	projectID string
-	metadata  Metadata
+	metadata  metadata.Metadata
 
 	w        io.Writer
 	progress progress
@@ -462,7 +441,7 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 	})
 	defer b.traceEvents.Close(ctx)
 	b.tracePprof.SetMetadata(b.metadata)
-	b.pprofUploader.SetMetadata(ctx, b.metadata.Get())
+	b.pprofUploader.SetMetadata(ctx, b.metadata)
 	defer func(ctx context.Context) {
 		perr := b.tracePprof.Close(ctx)
 		if perr != nil {

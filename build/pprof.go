@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 
+	"infra/build/siso/build/metadata"
 	"infra/build/siso/o11y/clog"
 	"infra/build/siso/o11y/pprof"
 	"infra/build/siso/o11y/trace"
@@ -79,14 +80,11 @@ func (tp *tracePprof) Add(ctx context.Context, tc *trace.Context) {
 	}
 }
 
-func (tp *tracePprof) SetMetadata(metadata Metadata) {
+func (tp *tracePprof) SetMetadata(metadata metadata.Metadata) {
 	if tp.fname == "" {
 		return
 	}
-	for k, v := range metadata.KV {
-		tp.p.AddComment(fmt.Sprintf("%s=%q", k, v))
+	for _, k := range metadata.SortedKeys() {
+		tp.p.AddComment(fmt.Sprintf("%s=%q", k, metadata.Get(k)))
 	}
-	tp.p.AddComment(fmt.Sprintf("num_cpu=%d", metadata.NumCPU))
-	tp.p.AddComment(fmt.Sprintf("goos=%s", metadata.GOOS))
-	tp.p.AddComment(fmt.Sprintf("goarch=%s", metadata.GOARCH))
 }
