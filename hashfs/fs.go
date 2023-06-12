@@ -80,11 +80,12 @@ func New(ctx context.Context, opt Option) (*HashFS, error) {
 		},
 	}
 	if opt.StateFile != "" {
+		start := time.Now()
 		fstate, err := Load(ctx, opt.StateFile)
 		if err != nil {
 			clog.Warningf(ctx, "Failed to load fs state from %s: %v", opt.StateFile, err)
 		} else {
-			clog.Infof(ctx, "Load fs state from %s", opt.StateFile)
+			clog.Infof(ctx, "Load fs state from %s: %s", opt.StateFile, time.Since(start))
 			if err := fsys.SetState(ctx, fstate); err != nil {
 				return nil, err
 			}

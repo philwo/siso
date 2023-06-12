@@ -19,9 +19,11 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	log "github.com/golang/glog"
+	"golang.org/x/sync/errgroup"
 
 	"infra/build/siso/o11y/clog"
 	"infra/build/siso/o11y/iometrics"
@@ -116,100 +118,107 @@ const (
 // SetState sets states to the HashFS.
 func (hfs *HashFS) SetState(ctx context.Context, state *State) error {
 	start := time.Now()
-	var neq, nnew, nnotexist, nfail, ninvalidate int
+	var neq, nnew, nnotexist, nfail, ninvalidate atomic.Int64
+	eg, gctx := errgroup.WithContext(ctx)
+	eg.SetLimit(runtime.NumCPU())
 	for i, ent := range state.Entries {
-		if i%1000 == 0 {
-			select {
-			case <-ctx.Done():
-				clog.Errorf(ctx, "interrupted in fs.SetState: %v", ctx.Err())
-				return ctx.Err()
-			default:
+		i, ent := i, ent
+		eg.Go(func() error {
+			if i%1000 == 0 {
+				select {
+				case <-gctx.Done():
+					clog.Errorf(gctx, "interrupted in fs.SetState: %v", gctx.Err())
+					return gctx.Err()
+				default:
+				}
 			}
-		}
-		// If cmdhash is not set, the file is a source input, not a generated output file.
-		// In that case, we leave `h` empty, so we can skip this file in case it is missing
-		// on disk.
-		var h []byte
-		if ent.CmdHash != "" {
-			var err error
-			h, err = hex.DecodeString(ent.CmdHash)
+			// If cmdhash is not set, the file is a source input, not a generated output file.
+			// In that case, we leave `h` empty, so we can skip this file in case it is missing
+			// on disk.
+			var h []byte
+			if ent.CmdHash != "" {
+				var err error
+				h, err = hex.DecodeString(ent.CmdHash)
+				if err != nil {
+					clog.Warningf(gctx, "Failed to decode %s cmdhash=%q: %v", ent.Name, ent.CmdHash, err)
+				}
+			}
+			if runtime.GOOS == "windows" {
+				ent.Name = strings.TrimPrefix(ent.Name, `\`)
+			}
+			fi, err := os.Lstat(ent.Name)
+			if errors.Is(err, os.ErrNotExist) {
+				if log.V(1) {
+					clog.Infof(gctx, "not exist %s", ent.Name)
+				}
+				nnotexist.Add(1)
+				if len(h) == 0 {
+					clog.Infof(gctx, "not exist with no cmdhash: %s", ent.Name)
+					return nil
+				}
+				e, _ := newStateEntry(ent, time.Time{}, hfs.opt.DataSource, hfs.IOMetrics)
+				e.cmdhash = h
+				e.action = ent.Action
+				_, err = hfs.directory.store(gctx, filepath.ToSlash(ent.Name), e)
+				if err != nil {
+					return err
+				}
+				return nil
+			}
 			if err != nil {
-				clog.Warningf(ctx, "Failed to decode %s cmdhash=%q: %v", ent.Name, ent.CmdHash, err)
+				clog.Warningf(gctx, "Failed to stat %s: %v", ent.Name, err)
+				nfail.Add(1)
+				return nil
 			}
-		}
-		if runtime.GOOS == "windows" {
-			ent.Name = strings.TrimPrefix(ent.Name, `\`)
-		}
-		fi, err := os.Lstat(ent.Name)
-		if errors.Is(err, os.ErrNotExist) {
-			if log.V(1) {
-				clog.Infof(ctx, "not exist %s", ent.Name)
-			}
-			nnotexist++
-			if len(h) == 0 {
-				clog.Infof(ctx, "not exist with no cmdhash: %s", ent.Name)
-				continue
-			}
-			e, _ := newStateEntry(ent, time.Time{}, hfs.opt.DataSource, hfs.IOMetrics)
+			e, et := newStateEntry(ent, fi.ModTime(), hfs.opt.DataSource, hfs.IOMetrics)
 			e.cmdhash = h
 			e.action = ent.Action
-			_, err = hfs.directory.store(ctx, filepath.ToSlash(ent.Name), e)
-			if err != nil {
-				return err
+			ftype := "file"
+			if e.d.IsZero() && e.target == "" {
+				ftype = "dir"
+				if len(e.cmdhash) == 0 {
+					clog.Infof(gctx, "ignore %s %s", ftype, ent.Name)
+					return nil
+				}
+			} else if e.d.IsZero() && e.target != "" {
+				ftype = "symlink"
 			}
-			continue
-		}
-		if err != nil {
-			clog.Warningf(ctx, "Failed to stat %s: %v", ent.Name, err)
-			nfail++
-			continue
-		}
-		e, et := newStateEntry(ent, fi.ModTime(), hfs.opt.DataSource, hfs.IOMetrics)
-		e.cmdhash = h
-		e.action = ent.Action
-		ftype := "file"
-		if e.d.IsZero() && e.target == "" {
-			ftype = "dir"
-			if len(e.cmdhash) == 0 {
-				clog.Infof(ctx, "ignore %s %s", ftype, ent.Name)
-				continue
+			switch et {
+			case entryNoLocal: // never?
+				nnotexist.Add(1)
+				if len(h) == 0 {
+					return nil
+				}
+				clog.Infof(gctx, "not exist %s %s cmdhash:%s", ftype, ent.Name, hex.EncodeToString(e.cmdhash))
+			case entryBeforeLocal:
+				ninvalidate.Add(1)
+				clog.Warningf(gctx, "invalidate %s %s: state:%s disk:%s", ftype, ent.Name, e.mtime, fi.ModTime())
+				return nil
+			case entryEqLocal:
+				neq.Add(1)
+				if log.V(1) {
+					clog.Infof(gctx, "equal local %s %s: %s", ftype, ent.Name, e.mtime)
+				}
+			case entryAfterLocal:
+				nnew.Add(1)
+				if len(h) == 0 {
+					return nil
+				}
+				clog.Infof(gctx, "old local %s %s: state:%s disk:%s cmdhash:%s", ftype, ent.Name, e.mtime, fi.ModTime(), hex.EncodeToString(e.cmdhash))
 			}
-		} else if e.d.IsZero() && e.target != "" {
-			ftype = "symlink"
-		}
-		switch et {
-		case entryNoLocal: // never?
-			nnotexist++
-			if len(h) == 0 {
-				continue
-			}
-			clog.Infof(ctx, "not exist %s %s cmdhash:%s", ftype, ent.Name, hex.EncodeToString(e.cmdhash))
-		case entryBeforeLocal:
-			ninvalidate++
-			clog.Warningf(ctx, "invalidate %s %s: state:%s disk:%s", ftype, ent.Name, e.mtime, fi.ModTime())
-			continue
-		case entryEqLocal:
-			neq++
 			if log.V(1) {
-				clog.Infof(ctx, "equal local %s %s: %s", ftype, ent.Name, e.mtime)
+				clog.Infof(gctx, "set state %s: d:%s %s s:%s m:%s cmdhash:%s action:%s", ent.Name, e.d, e.mode, e.target, e.mtime, hex.EncodeToString(e.cmdhash), e.action)
 			}
-		case entryAfterLocal:
-			nnew++
-			if len(h) == 0 {
-				continue
-			}
-			clog.Infof(ctx, "old local %s %s: state:%s disk:%s cmdhash:%s", ftype, ent.Name, e.mtime, fi.ModTime(), hex.EncodeToString(e.cmdhash))
-		}
-		if log.V(1) {
-			clog.Infof(ctx, "set state %s: d:%s %s s:%s m:%s cmdhash:%s action:%s", ent.Name, e.d, e.mode, e.target, e.mtime, hex.EncodeToString(e.cmdhash), e.action)
-		}
-		_, err = hfs.directory.store(ctx, filepath.ToSlash(ent.Name), e)
-		if err != nil {
+			_, err = hfs.directory.store(gctx, filepath.ToSlash(ent.Name), e)
 			return err
-		}
+		})
 	}
-	hfs.clean = nnew == 0 && nnotexist == 0 && nfail == 0 && ninvalidate == 0
-	clog.Infof(ctx, "set state done: clean:%t eq:%d new:%d not-exist:%d fail:%d invalidate:%d: %s", hfs.clean, neq, nnew, nnotexist, nfail, ninvalidate, time.Since(start))
+	err := eg.Wait()
+	if err != nil {
+		return err
+	}
+	hfs.clean = nnew.Load() == 0 && nnotexist.Load() == 0 && nfail.Load() == 0 && ninvalidate.Load() == 0
+	clog.Infof(ctx, "set state done: clean:%t eq:%d new:%d not-exist:%d fail:%d invalidate:%d: %s", hfs.clean, neq.Load(), nnew.Load(), nnotexist.Load(), nfail.Load(), ninvalidate.Load(), time.Since(start))
 	return nil
 }
 

@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"sort"
 	"testing"
@@ -122,5 +123,45 @@ func TestState_Dir(t *testing.T) {
 	}
 	if ent.Action != d {
 		t.Errorf("action=%s want=%s", ent.Action, d)
+	}
+}
+
+func BenchmarkSetState(b *testing.B) {
+	dir := b.TempDir()
+	for i := 0; i < 60000; i++ {
+		err := os.WriteFile(filepath.Join(dir, fmt.Sprintf("%d.txt", i)), nil, 0644)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+	ctx := context.Background()
+	hashFS, err := hashfs.New(ctx, hashfs.Option{})
+	if err != nil {
+		b.Fatal(err)
+	}
+	fsys := hashFS.FileSystem(ctx, dir)
+	err = fs.WalkDir(fsys, ".", func(path string, d fs.DirEntry, err error) error {
+		return err
+	})
+	if err != nil {
+		hashFS.Close(ctx)
+		b.Fatal(err)
+	}
+	st := hashFS.State(ctx)
+	hashFS.Close(ctx)
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		hashFS, err := hashfs.New(ctx, hashfs.Option{})
+		if err != nil {
+			b.Fatal(err)
+		}
+		err = hashFS.SetState(ctx, st)
+		if err != nil {
+			hashFS.Close(ctx)
+			b.Fatal(err)
+		}
+		hashFS.Close(ctx)
 	}
 }
