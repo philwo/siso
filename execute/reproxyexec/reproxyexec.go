@@ -103,16 +103,22 @@ func (re *REProxyExec) Run(ctx context.Context, cmd *execute.Cmd) error {
 	}
 	defer conn.Close()
 
-	// Create reproxy client over this connection.
-	execCtx, cancel := context.WithTimeout(ctx, execTimeout)
-	defer cancel()
+	// Create REProxy client and send the request with backoff configuration above.
+	// (No timeout applied due to use of backoff with maximum attempts allowed.)
 	proxy := ppb.NewCommandsClient(conn)
-	resp, err := runCommand(execCtx, proxy, cmd)
+	req, err := createRequest(cmd, execTimeout)
+	if err != nil {
+		return err
+	}
+	var resp *ppb.RunResponse
+	err = retry.WithPolicy(ctx, shouldRetry, backoff, func() error {
+		resp, err = proxy.RunCommand(ctx, req)
+		return err
+	})
 
-	// Process response without timeout.
 	err = re.processResponse(ctx, cmd, resp, err)
 	if err != nil {
-		log.Errorf("Command failed for cmd \"%s\": %v", cmd.Desc, err)
+		log.Errorf("Command failed for cmd %q: %v", cmd.Desc, err)
 	}
 	return err
 }
@@ -122,21 +128,7 @@ type Proxy interface {
 	RunCommand(context.Context, *ppb.RunRequest, ...grpc.CallOption) (*ppb.RunResponse, error)
 }
 
-// runCommand runs a command through the RE proxy.
-func runCommand(ctx context.Context, proxy Proxy, cmd *execute.Cmd) (*ppb.RunResponse, error) {
-	req, err := createRequest(cmd)
-	if err != nil {
-		return nil, err
-	}
-	var resp *ppb.RunResponse
-	err = retry.WithPolicy(ctx, shouldRetry, backoff, func() error {
-		resp, err = proxy.RunCommand(ctx, req)
-		return err
-	})
-	return resp, err
-}
-
-func createRequest(cmd *execute.Cmd) (*ppb.RunRequest, error) {
+func createRequest(cmd *execute.Cmd, execTimeout time.Duration) (*ppb.RunRequest, error) {
 	c := &cpb.Command{
 		Identifiers: &cpb.Identifiers{
 			CommandId: cmd.ID,
@@ -149,7 +141,7 @@ func createRequest(cmd *execute.Cmd) (*ppb.RunRequest, error) {
 			OutputFiles: cmd.AllOutputs(),
 		},
 		Args:             cmd.Args,
-		ExecutionTimeout: int32(cmd.Timeout.Seconds()),
+		ExecutionTimeout: int32(execTimeout.Seconds()),
 		WorkingDirectory: cmd.Dir,
 		Platform:         cmd.REProxyConfig.Platform,
 	}
@@ -175,10 +167,10 @@ func createRequest(cmd *execute.Cmd) (*ppb.RunRequest, error) {
 			CompareWithLocal:  false,
 			NumLocalReruns:    0,
 			NumRemoteReruns:   0,
+			// TODO(b/273407069): need to support ReclientTimeout?
 			RemoteExecutionOptions: &ppb.RemoteExecutionOptions{
-				AcceptCached: !cmd.SkipCacheLookup,
-				DoNotCache:   cmd.DoNotCache,
-				// TODO(b/273407069): make this configurable, use siso download strategy config?
+				AcceptCached:                 !cmd.SkipCacheLookup,
+				DoNotCache:                   cmd.DoNotCache,
 				DownloadOutputs:              cmd.REProxyConfig.DownloadOutputs,
 				Wrapper:                      cmd.RemoteWrapper,
 				CanonicalizeWorkingDir:       cmd.REProxyConfig.CanonicalizeWorkingDir,
@@ -216,16 +208,6 @@ func (re *REProxyExec) processResponse(ctx context.Context, cmd *execute.Cmd, re
 		},
 	}
 
-	// for now, update hashfs as if this was local exec.
-	// https://source.chromium.org/chromium/infra/infra/+/main:go/src/infra/build/siso/execute/localexec/localexec.go;l=58-76;drc=f9a8d895ee9b5d51a5d5da0131de75c021b4a212
-	// TODO(b/273407069): use the hashes returned by reproxy.
-	if cmd.HashFS == nil {
-		return nil
-	}
-	err = cmd.HashFS.UpdateFromLocal(ctx, cmd.ExecRoot, cmd.AllOutputs(), time.Now(), cmd.CmdHash)
-	if err != nil {
-		return err
-	}
 	// any stdout/stderr is unexpected, write this out and stop if received.
 	if len(response.Stdout) > 0 {
 		cmd.StdoutWriter().Write(response.Stdout)
@@ -233,13 +215,19 @@ func (re *REProxyExec) processResponse(ctx context.Context, cmd *execute.Cmd, re
 	if len(response.Stderr) > 0 {
 		cmd.StderrWriter().Write(response.Stderr)
 	}
+	cmd.SetActionResult(result, cached)
 	err = resultErr(response)
 	if err != nil {
 		return err
 	}
 
-	cmd.SetActionResult(result, cached)
-	return nil
+	// for now, update hashfs as if this was local exec.
+	// https://source.chromium.org/chromium/infra/infra/+/main:go/src/infra/build/siso/execute/localexec/localexec.go;l=58-76;drc=f9a8d895ee9b5d51a5d5da0131de75c021b4a212
+	// TODO(b/273407069): use the hashes returned by reproxy.
+	if cmd.HashFS == nil {
+		return nil
+	}
+	return cmd.HashFS.UpdateFromLocal(ctx, cmd.ExecRoot, cmd.AllOutputs(), time.Now(), cmd.CmdHash)
 }
 
 func resultErr(response *ppb.RunResponse) error {
