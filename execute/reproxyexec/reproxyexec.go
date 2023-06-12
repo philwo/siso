@@ -31,6 +31,8 @@ import (
 const (
 	// dialTimeout defines the timeout we'd like to use to dial reproxy.
 	dialTimeout = 3 * time.Minute
+	// defaultExecTimeout defines the default timeout to use for executions.
+	defaultExecTimeout = time.Hour
 	// grpcMaxMsgSize is the max value of gRPC response that can be received by the client (in bytes).
 	grpcMaxMsgSize = 1024 * 1024 * 32 // 32MB (default is 4MB)
 	// wrapperOverheadKey is the key for the wrapper overhead metric passed to the proxy.
@@ -79,22 +81,35 @@ func (re *REProxyExec) Run(ctx context.Context, cmd *execute.Cmd) error {
 	if cmd.REProxyConfig.ServerAddress == "" {
 		return fmt.Errorf("REProxy config has no server address")
 	}
-
-	ctx, cancel := context.WithTimeout(ctx, dialTimeout)
-	defer cancel()
+	execTimeout := defaultExecTimeout
+	if cmd.REProxyConfig.ExecTimeout != "" {
+		parsed, err := time.ParseDuration(cmd.REProxyConfig.ExecTimeout)
+		if err != nil {
+			return fmt.Errorf("failed to parse timeout %q: %w", cmd.REProxyConfig.ExecTimeout, err)
+		}
+		if parsed == 0 {
+			return fmt.Errorf("0 is not a valid REProxy timeout")
+		}
+		execTimeout = parsed
+	}
 
 	// Create gRPC connection with the provided address.
 	// TODO(b/273407069): this will be problematic on windows, reuse connections instead.
-	conn, err := DialContext(ctx, cmd.REProxyConfig.ServerAddress)
+	dialCtx, cancel := context.WithTimeout(ctx, dialTimeout)
+	defer cancel()
+	conn, err := DialContext(dialCtx, cmd.REProxyConfig.ServerAddress)
 	if err != nil {
 		log.Fatalf("Fail to dial %s: %v", cmd.REProxyConfig.ServerAddress, err)
 	}
 	defer conn.Close()
 
 	// Create reproxy client over this connection.
+	execCtx, cancel := context.WithTimeout(ctx, execTimeout)
+	defer cancel()
 	proxy := ppb.NewCommandsClient(conn)
+	resp, err := runCommand(execCtx, proxy, cmd)
 
-	resp, err := runCommand(ctx, proxy, cmd)
+	// Process response without timeout.
 	err = re.processResponse(ctx, cmd, resp, err)
 	if err != nil {
 		log.Errorf("Command failed for cmd \"%s\": %v", cmd.Desc, err)
