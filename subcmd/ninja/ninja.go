@@ -141,7 +141,14 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 			return err
 		}
 	}
+	// don't use $PWD for current directory
+	// to avoid symlink issue. b/286779149
+	pwd := os.Getenv("PWD")
+	os.Unsetenv("PWD")
 	execRoot, err := os.Getwd()
+	if pwd != "" {
+		os.Setenv("PWD", pwd)
+	}
 	if err != nil {
 		return err
 	}
