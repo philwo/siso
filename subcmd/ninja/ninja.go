@@ -377,7 +377,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 		defer func() {
 			clog.Infof(ctx, "close localexec log")
 			cerr := f.Close()
-			if cerr != nil {
+			if err == nil {
 				err = cerr
 			}
 		}()
@@ -393,7 +393,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 		defer func() {
 			clog.Infof(ctx, "close metrics json")
 			cerr := f.Close()
-			if cerr != nil {
+			if err == nil {
 				err = cerr
 			}
 		}()
