@@ -86,6 +86,7 @@ type Options struct {
 	// SharedDepsLog      SharedDepsLog
 	OutputLocal        OutputLocalFunc
 	Cache              *Cache
+	OutputLogWriter    io.Writer
 	LocalexecLogWriter io.Writer
 	MetricsJSONWriter  io.Writer
 	TraceJSON          string
@@ -163,6 +164,7 @@ type Builder struct {
 	cacheSema *semaphore.Semaphore
 	cache     *Cache
 
+	outputLogWriter    io.Writer
 	localexecLogWriter io.Writer
 	metricsJSONWriter  io.Writer
 	traceExporter      *trace.Exporter
@@ -260,6 +262,7 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 		outputLocal:        opts.OutputLocal,
 		cacheSema:          semaphore.New("cache", stepLimit),
 		cache:              opts.Cache,
+		outputLogWriter:    opts.OutputLogWriter,
 		localexecLogWriter: lelw,
 		metricsJSONWriter:  mw,
 		traceExporter:      opts.TraceExporter,
@@ -869,29 +872,6 @@ func (b *Builder) done(ctx context.Context, step *Step) error {
 	b.stats.done(step.cmd.Pure)
 	b.plan.done(ctx, step, outputs)
 	return nil
-}
-
-func (b *Builder) failedToRun(ctx context.Context, cmd *execute.Cmd, err error) {
-	clog.Warningf(ctx, "Failed to exec: %v", err)
-	if errors.Is(err, context.Canceled) || ctx.Err() != nil {
-		return
-	}
-	var output string
-	if len(cmd.Outputs) > 0 {
-		output = cmd.Outputs[0]
-		if strings.HasPrefix(output, cmd.Dir+"/") {
-			output = "./" + strings.TrimPrefix(output, cmd.Dir+"/")
-		}
-	}
-	var msgs []string
-	msgs = append(msgs, "\n", fmt.Sprintf("\nFAILED: %s %s\n%q %q\n%q\n", cmd, cmd.Desc, cmd.ActionName, output, cmd.Command()))
-	rsp := cmd.RSPFile
-	if rsp != "" {
-		msgs = append(msgs, fmt.Sprintf(" %s=%q\n", rsp, cmd.RSPFileContent))
-	}
-	ui.Default.PrintLines(msgs...)
-	os.Stdout.Write(cmd.Stdout())
-	os.Stderr.Write(append(cmd.Stderr(), '\n'))
 }
 
 func (b *Builder) finalizeTrace(ctx context.Context, tc *trace.Context) {

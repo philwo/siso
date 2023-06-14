@@ -93,6 +93,7 @@ type ninjaCmdRun struct {
 	depsLogFile string
 	// depsLogBucket
 
+	outputLogFile    string
 	localexecLogFile string
 	metricsJSON      string
 	traceJSON        string
@@ -368,6 +369,21 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 	}
 	os.Remove(lastTargetsFile)
 
+	var outputLogWriter io.Writer
+	if c.outputLogFile != "" {
+		f, err := os.Create(c.outputLogFile)
+		if err != nil {
+			return err
+		}
+		defer func() {
+			clog.Infof(ctx, "close output log")
+			cerr := f.Close()
+			if err == nil {
+				err = cerr
+			}
+		}()
+		outputLogWriter = f
+	}
 	var localexecLogWriter io.Writer
 	if c.localexecLogFile != "" {
 		f, err := os.Create(c.localexecLogFile)
@@ -441,6 +457,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 		ActionSalt:         actionSaltBytes,
 		OutputLocal:        outputLocal,
 		Cache:              cache,
+		OutputLogWriter:    outputLogWriter,
 		LocalexecLogWriter: localexecLogWriter,
 		MetricsJSONWriter:  metricsJSONWriter,
 		TraceExporter:      traceExporter,
@@ -491,6 +508,7 @@ func (c *ninjaCmdRun) init() {
 	c.Flags.StringVar(&c.configFilename, "load", "@config//main.star", "config filename (@config// is --config_repo_dir)")
 	c.Flags.StringVar(&c.outputLocalStrategy, "output_local_strategy", "full", `strategy for output_local. "full": download all outputs. "greedy": downloads most outputs except intermediate objs. "minimum": downloads as few as possible`)
 	c.Flags.StringVar(&c.depsLogFile, "deps_log", ".siso_deps", "deps log filename (relative to -C)")
+	c.Flags.StringVar(&c.outputLogFile, "output_log", "siso_output", "output log filename (relative to -C")
 	c.Flags.StringVar(&c.localexecLogFile, "localexec_log", "siso_localexec", "localexec log filename (relative to -C")
 	c.Flags.StringVar(&c.metricsJSON, "metrics_json", "siso_metrics.json", "metrics JSON filename (relative to -C)")
 	c.Flags.StringVar(&c.traceJSON, "trace_json", "siso_trace.json", "trace JSON filename (relative to -C)")

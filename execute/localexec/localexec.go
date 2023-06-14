@@ -118,9 +118,6 @@ func run(ctx context.Context, cmd *execute.Cmd) (*rpb.ActionResult, error) {
 			ExecutionCompletedTimestamp: timestamppb.New(e),
 		},
 	}
-	if result.ExitCode != 0 {
-		result.StderrRaw = append(result.StderrRaw, []byte(fmt.Sprintf("\ncmd: %q env: %q dir: %q error: %v", cmd.Args, cmd.Env, cmd.Dir, err))...)
-	}
 
 	// TODO(b/273423470): track resource usage.
 

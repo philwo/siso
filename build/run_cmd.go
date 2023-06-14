@@ -89,6 +89,8 @@ func (b *Builder) runCmd(ctx context.Context, step *Step, allowLocalFallback boo
 			// need to check remote outptus matches cmd.Outputs?
 			return nil
 		}
+		msgs := cmdOutput(ctx, "FAILED[remote]:", step.cmd, err)
+		b.logOutput(ctx, msgs)
 		if errors.Is(err, context.Canceled) {
 			return err
 		}

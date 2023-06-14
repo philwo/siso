@@ -8,14 +8,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"runtime"
+	"strings"
 
 	log "github.com/golang/glog"
 
+	"infra/build/siso/execute"
 	"infra/build/siso/o11y/clog"
 	"infra/build/siso/o11y/trace"
 	"infra/build/siso/reapi"
+	"infra/build/siso/ui"
 )
 
 // runStep runs a step.
@@ -74,7 +76,9 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 	err = b.handleStep(ctx, step)
 	if err != nil {
 		if !experiments.Enabled("keep-going-handle-error", "handle %s failed: %v", step, err) {
-			b.failedToRun(ctx, step.cmd, err)
+			msgs := cmdOutput(ctx, "FAILED[handle]:", step.cmd, err)
+			clog.Warningf(ctx, "Failed to exec(handle): %v", err)
+			ui.Default.PrintLines(msgs...)
 			return fmt.Errorf("failed to run handler for %s: %w", step, err)
 		}
 	} else {
@@ -93,7 +97,8 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 
 	err = b.setupRSP(ctx, step)
 	if err != nil {
-		b.failedToRun(ctx, step.cmd, err)
+		msgs := cmdOutput(ctx, "FAILED[rsp]:", step.cmd, err)
+		ui.Default.PrintLines(msgs...)
 		return fmt.Errorf("failed to setup rsp: %s: %w", step, err)
 	}
 	defer func() {
@@ -118,18 +123,24 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 		return nil
 	})
 	err = b.runCmdWithCache(ctx, step, true)
-	stdout := step.cmd.Stdout()
-	stderr := step.cmd.Stderr()
 	clog.Infof(ctx, "done err=%v", err)
 	if err != nil {
 		if !errors.Is(err, context.Canceled) {
-			b.failedToRun(ctx, step.cmd, err)
+			msgs := cmdOutput(ctx, "FAILED:", step.cmd, err)
+			if b.outputLogWriter != nil {
+				fmt.Fprint(b.outputLogWriter, strings.Join(msgs, "")+"\f\n")
+			}
+			ui.Default.PrintLines(msgs...)
 		}
 		return err
 	}
-	if (len(stdout) > 0 || len(stderr) > 0) && experiments.Enabled("fail-on-stdouterr", "step %s emit stdout=%d stderr=%d", step, len(stdout), len(stderr)) {
-		b.failedToRun(ctx, step.cmd, err)
-		return fmt.Errorf("%s emit stdout/stderr", step)
+
+	msgs := cmdOutput(ctx, "SUCCESS:", step.cmd, nil)
+	if len(msgs) > 0 {
+		b.logOutput(ctx, msgs)
+		if experiments.Enabled("fail-on-stdouterr", "step %s emit stdout/stderr", step) {
+			return fmt.Errorf("%s emit stdout/stderr", step)
+		}
 	}
 	return b.done(ctx, step)
 }
@@ -151,15 +162,14 @@ func (b *Builder) tryFastStep(ctx context.Context, step, fastStep *Step) (bool, 
 		b.stats.fastDepsSuccess(ctx)
 		step.metrics = fastStep.metrics
 		step.metrics.DepsLog = true
-		stdout := fastStep.cmd.Stdout()
-		stderr := fastStep.cmd.Stderr()
+		msgs := cmdOutput(ctx, "SUCCESS:", fastStep.cmd, nil)
 		clog.Infof(ctx, "fast done err=%v", err)
-		if (len(stdout) > 0 || len(stderr) > 0) && experiments.Enabled("fail-on-stdouterr", "step %s emit stdout=%d stderr=%d", step, len(stdout), len(stderr)) {
-			b.failedToRun(ctx, step.cmd, err)
-			return true, fmt.Errorf("%s emit stdout/stderr", step)
+		if len(msgs) > 0 {
+			b.logOutput(ctx, msgs)
+			if experiments.Enabled("fail-on-stdouterr", "step %s emit stdout/stderr", step) {
+				return true, fmt.Errorf("%s emit stdout/stderr", step)
+			}
 		}
-		os.Stdout.Write(stdout)
-		os.Stderr.Write(stderr)
 		return true, b.done(ctx, fastStep)
 	}
 	if errors.Is(err, context.Canceled) {
@@ -169,7 +179,8 @@ func (b *Builder) tryFastStep(ctx context.Context, step, fastStep *Step) (bool, 
 		// RBE returns permission denied when
 		// platform container image are not available
 		// on RBE worker.
-		b.failedToRun(ctx, step.cmd, err)
+		msgs := cmdOutput(ctx, "FAILED[badContainer]:", fastStep.cmd, err)
+		b.logOutput(ctx, msgs)
 		return true, err
 	}
 	b.stats.fastDepsFailed(ctx, err)
@@ -177,4 +188,59 @@ func (b *Builder) tryFastStep(ctx context.Context, step, fastStep *Step) (bool, 
 		return true, fmt.Errorf("fast-deps failed: %w", err)
 	}
 	return false, nil
+}
+
+// cmdOutput returns cmd ouptut log (result, id, desc, err, action, output, args, stdout, stderr).
+// it will return nil if ctx is canceled or success with no stdout/stderr.
+func cmdOutput(ctx context.Context, result string, cmd *execute.Cmd, err error) []string {
+	if ctx.Err() != nil {
+		return nil
+	}
+	stdout := cmd.Stdout()
+	stderr := cmd.Stderr()
+	if err == nil && len(stdout) == 0 && len(stderr) == 0 {
+		return nil
+	}
+	var output string
+	if len(cmd.Outputs) > 0 {
+		output = cmd.Outputs[0]
+		if strings.HasPrefix(output, cmd.Dir+"/") {
+			output = "./" + strings.TrimPrefix(output, cmd.Dir+"/")
+		}
+	}
+	var msgs []string
+	msgs = append(msgs, fmt.Sprintf("%s %s %s\n", result, cmd, cmd.Desc))
+	msgs = append(msgs, fmt.Sprintf("err: %v\n%q %q\n%q\n", err, cmd.ActionName, output, cmd.Command()))
+	rsp := cmd.RSPFile
+	if rsp != "" {
+		msgs = append(msgs, fmt.Sprintf(" %s=%q\n", rsp, cmd.RSPFileContent))
+	}
+	if len(stdout) > 0 {
+		msgs = append(msgs, fmt.Sprintf("stdout:\n%s", string(stdout)))
+	}
+	if len(stderr) > 0 {
+		msgs = append(msgs, fmt.Sprintf("stderr:\n%s", string(stderr)))
+	}
+	return msgs
+
+}
+
+func (b *Builder) logOutput(ctx context.Context, msgs []string) {
+	if len(msgs) == 0 {
+		return
+	}
+	if b.outputLogWriter != nil {
+		fmt.Fprint(b.outputLogWriter, strings.Join(msgs, "")+"\f\n")
+		var sb strings.Builder
+		fmt.Fprint(&sb, msgs[0])
+		for _, msg := range msgs {
+			switch {
+			case strings.HasPrefix(msg, "stdout:") || strings.HasPrefix(msg, "stderr:"):
+				fmt.Fprint(&sb, msg)
+			}
+		}
+		ui.Default.PrintLines(sb.String())
+		return
+	}
+	ui.Default.PrintLines(append([]string{"\n", "\n"}, msgs...)...)
 }
