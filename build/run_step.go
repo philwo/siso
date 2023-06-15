@@ -77,8 +77,8 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 	if err != nil {
 		if !experiments.Enabled("keep-going-handle-error", "handle %s failed: %v", step, err) {
 			msgs := cmdOutput(ctx, "FAILED[handle]:", step.cmd, err)
+			b.logOutput(ctx, msgs)
 			clog.Warningf(ctx, "Failed to exec(handle): %v", err)
-			ui.Default.PrintLines(msgs...)
 			return fmt.Errorf("failed to run handler for %s: %w", step, err)
 		}
 	} else {
@@ -98,7 +98,7 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 	err = b.setupRSP(ctx, step)
 	if err != nil {
 		msgs := cmdOutput(ctx, "FAILED[rsp]:", step.cmd, err)
-		ui.Default.PrintLines(msgs...)
+		b.logOutput(ctx, msgs)
 		return fmt.Errorf("failed to setup rsp: %s: %w", step, err)
 	}
 	defer func() {
@@ -127,10 +127,7 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 	if err != nil {
 		if !errors.Is(err, context.Canceled) {
 			msgs := cmdOutput(ctx, "FAILED:", step.cmd, err)
-			if b.outputLogWriter != nil {
-				fmt.Fprint(b.outputLogWriter, strings.Join(msgs, "")+"\f\n")
-			}
-			ui.Default.PrintLines(msgs...)
+			b.logOutput(ctx, msgs)
 		}
 		return err
 	}
