@@ -52,3 +52,39 @@ func TestProgress_NotIsTerminal(t *testing.T) {
 		t.Errorf("weighted_duration=0; want non-zero")
 	}
 }
+
+func TestProgressFormatDuration(t *testing.T) {
+	for _, tc := range []struct {
+		dur  time.Duration
+		want string
+	}{
+		{
+			want: "0.00s",
+		},
+		{
+			dur:  1 * time.Millisecond,
+			want: "0.00s",
+		},
+		{
+			dur:  10 * time.Millisecond,
+			want: "0.01s",
+		},
+		{
+			dur:  1 * time.Second,
+			want: "1.00s",
+		},
+		{
+			dur:  1 * time.Minute,
+			want: "1m00.00s",
+		},
+		{
+			dur:  1*time.Minute + 1*time.Second + 100*time.Millisecond,
+			want: "1m01.10s",
+		},
+	} {
+		got := formatDuration(tc.dur)
+		if got != tc.want {
+			t.Errorf("formatDuration(%v)=%q; want=%q", tc.dur, got, tc.want)
+		}
+	}
+}

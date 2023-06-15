@@ -101,7 +101,7 @@ func (p *progress) update(ctx context.Context, b *Builder) {
 			}
 			lastStepUpdate = time.Now()
 			dur := time.Since(si.step.startTime).Round(d)
-			p.step(ctx, b, si.step, fmt.Sprintf("%s[%s]: %s", dur.String(), si.step.phase(), si.desc))
+			p.step(ctx, b, si.step, fmt.Sprintf("%s[%s]: %s", formatDuration(dur), si.step.phase(), si.desc))
 		}
 	}
 }
@@ -171,7 +171,7 @@ func (p *progress) step(ctx context.Context, b *Builder, step *Step, s string) {
 	if step != nil {
 		msg = fmt.Sprintf("%.2f%% %s %s",
 			float64(stat.Done)*100/float64(stat.Total),
-			time.Since(b.start).Round(10*time.Millisecond),
+			formatDuration(time.Since(b.start)),
 			s)
 	}
 	lines = append(lines, msg)
@@ -179,4 +179,21 @@ func (p *progress) step(ctx context.Context, b *Builder, step *Step, s string) {
 	p.mu.Lock()
 	p.ts = time.Now()
 	p.mu.Unlock()
+}
+
+func formatDuration(d time.Duration) string {
+	d = d.Round(10 * time.Millisecond)
+	var sb strings.Builder
+	sb.Grow(32)
+
+	mins := d.Truncate(1 * time.Minute)
+	d = d - mins
+	if mins > 0 {
+		fmt.Fprintf(&sb, "%s", strings.TrimSuffix(mins.String(), "0s"))
+		if d < 10*time.Second {
+			fmt.Fprint(&sb, "0")
+		}
+	}
+	fmt.Fprintf(&sb, "%02.02fs", d.Seconds())
+	return sb.String()
 }
