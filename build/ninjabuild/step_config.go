@@ -286,6 +286,9 @@ type StepConfig struct {
 func (sc StepConfig) Init(ctx context.Context) error {
 	seen := make(map[string]bool)
 	for _, rule := range sc.Rules {
+		if rule == nil {
+			return fmt.Errorf("encountered nil rule")
+		}
 		if rule.Name == "" {
 			buf, err := json.Marshal(rule)
 			return fmt.Errorf("no name in rule: %s: %v", buf, err)
