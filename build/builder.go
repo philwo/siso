@@ -5,6 +5,7 @@
 package build
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
 	"encoding/json"
@@ -84,15 +85,16 @@ type Options struct {
 	ActionSalt []byte
 	// TODO(b/266518906): enable shared deps log
 	// SharedDepsLog      SharedDepsLog
-	OutputLocal        OutputLocalFunc
-	Cache              *Cache
-	OutputLogWriter    io.Writer
-	LocalexecLogWriter io.Writer
-	MetricsJSONWriter  io.Writer
-	TraceJSON          string
-	Pprof              string
-	TraceExporter      *trace.Exporter
-	PprofUploader      *pprof.Uploader
+	OutputLocal          OutputLocalFunc
+	Cache                *Cache
+	FailureSummaryWriter io.Writer
+	OutputLogWriter      io.Writer
+	LocalexecLogWriter   io.Writer
+	MetricsJSONWriter    io.Writer
+	TraceJSON            string
+	Pprof                string
+	TraceExporter        *trace.Exporter
+	PprofUploader        *pprof.Uploader
 
 	// Clobber forces to rebuild ignoring existing generated files.
 	Clobber bool
@@ -164,14 +166,15 @@ type Builder struct {
 	cacheSema *semaphore.Semaphore
 	cache     *Cache
 
-	outputLogWriter    io.Writer
-	localexecLogWriter io.Writer
-	metricsJSONWriter  io.Writer
-	traceExporter      *trace.Exporter
-	traceEvents        *traceEvents
-	traceStats         *traceStats
-	tracePprof         *tracePprof
-	pprofUploader      *pprof.Uploader
+	failureSummaryWriter io.Writer
+	outputLogWriter      io.Writer
+	localexecLogWriter   io.Writer
+	metricsJSONWriter    io.Writer
+	traceExporter        *trace.Exporter
+	traceEvents          *traceEvents
+	traceStats           *traceStats
+	tracePprof           *tracePprof
+	pprofUploader        *pprof.Uploader
 
 	clobber         bool
 	dryRun          bool
@@ -259,20 +262,21 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 		actionSalt:  opts.ActionSalt,
 		reapiclient: opts.REAPIClient,
 		// sharedDepsLog:      opts.SharedDepsLog,
-		outputLocal:        opts.OutputLocal,
-		cacheSema:          semaphore.New("cache", stepLimit),
-		cache:              opts.Cache,
-		outputLogWriter:    opts.OutputLogWriter,
-		localexecLogWriter: lelw,
-		metricsJSONWriter:  mw,
-		traceExporter:      opts.TraceExporter,
-		traceEvents:        newTraceEvents(opts.TraceJSON, opts.Metadata),
-		traceStats:         newTraceStats(),
-		tracePprof:         newTracePprof(opts.Pprof),
-		pprofUploader:      opts.PprofUploader,
-		clobber:            opts.Clobber,
-		dryRun:             opts.DryRun,
-		rebuildManifest:    opts.RebuildManifest,
+		outputLocal:          opts.OutputLocal,
+		cacheSema:            semaphore.New("cache", stepLimit),
+		cache:                opts.Cache,
+		failureSummaryWriter: opts.FailureSummaryWriter,
+		outputLogWriter:      opts.OutputLogWriter,
+		localexecLogWriter:   lelw,
+		metricsJSONWriter:    mw,
+		traceExporter:        opts.TraceExporter,
+		traceEvents:          newTraceEvents(opts.TraceJSON, opts.Metadata),
+		traceStats:           newTraceStats(),
+		tracePprof:           newTracePprof(opts.Pprof),
+		pprofUploader:        opts.PprofUploader,
+		clobber:              opts.Clobber,
+		dryRun:               opts.DryRun,
+		rebuildManifest:      opts.RebuildManifest,
 	}, nil
 }
 
@@ -584,6 +588,21 @@ loop:
 			default:
 			}
 			b.finalizeTrace(ctx, tc)
+			if err != nil && b.failureSummaryWriter != nil {
+				var buf bytes.Buffer
+				fmt.Fprintf(&buf, "%s\n", step.cmd.Desc)
+				stderr := step.cmd.Stderr()
+				if len(stderr) > 0 {
+					buf.Write(stderr)
+				}
+				stdout := step.cmd.Stdout()
+				if len(stdout) > 0 {
+					buf.Write(stdout)
+				}
+				fmt.Fprintf(&buf, "%v\n", err)
+				b.failureSummaryWriter.Write(buf.Bytes())
+			}
+
 			// unref for GC to reclaim memory.
 			tc = nil
 			step.cmd = nil

@@ -93,11 +93,12 @@ type ninjaCmdRun struct {
 	depsLogFile string
 	// depsLogBucket
 
-	outputLogFile    string
-	localexecLogFile string
-	metricsJSON      string
-	traceJSON        string
-	buildPprof       string
+	failureSummaryFile string
+	outputLogFile      string
+	localexecLogFile   string
+	metricsJSON        string
+	traceJSON          string
+	buildPprof         string
 	// uploadBuildPprof bool
 
 	fsopt             *hashfs.Option
@@ -369,6 +370,22 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 	}
 	os.Remove(lastTargetsFile)
 
+	var failureSummaryWriter io.Writer
+	if c.failureSummaryFile != "" {
+		f, err := os.Create(c.failureSummaryFile)
+		if err != nil {
+			return err
+		}
+		defer func() {
+			clog.Infof(ctx, "close failure summary")
+			cerr := f.Close()
+			if err == nil {
+				err = cerr
+			}
+		}()
+		failureSummaryWriter = f
+	}
+
 	var outputLogWriter io.Writer
 	if c.outputLogFile != "" {
 		f, err := os.Create(c.outputLogFile)
@@ -447,24 +464,25 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 		defer localDepsLog.Close()
 	}
 	bopts := build.Options{
-		ID:                 buildID,
-		ProjectID:          projectID,
-		Metadata:           config.Metadata,
-		Path:               buildPath,
-		HashFS:             hashFS,
-		REAPIClient:        client,
-		RECacheEnableRead:  c.reCacheEnableRead,
-		ActionSalt:         actionSaltBytes,
-		OutputLocal:        outputLocal,
-		Cache:              cache,
-		OutputLogWriter:    outputLogWriter,
-		LocalexecLogWriter: localexecLogWriter,
-		MetricsJSONWriter:  metricsJSONWriter,
-		TraceExporter:      traceExporter,
-		TraceJSON:          c.traceJSON,
-		Pprof:              c.buildPprof,
-		Clobber:            c.clobber,
-		DryRun:             c.dryRun,
+		ID:                   buildID,
+		ProjectID:            projectID,
+		Metadata:             config.Metadata,
+		Path:                 buildPath,
+		HashFS:               hashFS,
+		REAPIClient:          client,
+		RECacheEnableRead:    c.reCacheEnableRead,
+		ActionSalt:           actionSaltBytes,
+		OutputLocal:          outputLocal,
+		Cache:                cache,
+		FailureSummaryWriter: failureSummaryWriter,
+		OutputLogWriter:      outputLogWriter,
+		LocalexecLogWriter:   localexecLogWriter,
+		MetricsJSONWriter:    metricsJSONWriter,
+		TraceExporter:        traceExporter,
+		TraceJSON:            c.traceJSON,
+		Pprof:                c.buildPprof,
+		Clobber:              c.clobber,
+		DryRun:               c.dryRun,
 	}
 	for {
 		clog.Infof(ctx, "build starts")
@@ -508,6 +526,7 @@ func (c *ninjaCmdRun) init() {
 	c.Flags.StringVar(&c.configFilename, "load", "@config//main.star", "config filename (@config// is --config_repo_dir)")
 	c.Flags.StringVar(&c.outputLocalStrategy, "output_local_strategy", "full", `strategy for output_local. "full": download all outputs. "greedy": downloads most outputs except intermediate objs. "minimum": downloads as few as possible`)
 	c.Flags.StringVar(&c.depsLogFile, "deps_log", ".siso_deps", "deps log filename (relative to -C)")
+	c.Flags.StringVar(&c.failureSummaryFile, "failure_summary", "", "filename for failure summary (relative to -C)")
 	c.Flags.StringVar(&c.outputLogFile, "output_log", "siso_output", "output log filename (relative to -C")
 	c.Flags.StringVar(&c.localexecLogFile, "localexec_log", "siso_localexec", "localexec log filename (relative to -C")
 	c.Flags.StringVar(&c.metricsJSON, "metrics_json", "siso_metrics.json", "metrics JSON filename (relative to -C)")
