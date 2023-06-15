@@ -91,8 +91,8 @@ type scheduler struct {
 
 // schedule schedules build plans for args from graph into sched.
 func schedule(ctx context.Context, sched *scheduler, graph Graph, args ...string) error {
-	started := time.Now()
 	targets, err := graph.Targets(ctx, args...)
+	started := time.Now()
 	clog.Infof(ctx, "schedule targets: %q: %v", targets, err)
 	if err != nil {
 		return err
