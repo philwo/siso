@@ -95,11 +95,12 @@ func (p *progress) update(ctx context.Context, b *Builder) {
 			if si == nil || si.step == nil {
 				continue
 			}
-			if time.Since(lastStepUpdate) < 1*time.Second {
+			const d = 100 * time.Millisecond
+			if time.Since(lastStepUpdate) < d {
 				continue
 			}
 			lastStepUpdate = time.Now()
-			dur := time.Since(si.step.startTime).Round(1 * time.Second)
+			dur := time.Since(si.step.startTime).Round(d)
 			p.step(ctx, b, si.step, fmt.Sprintf("%s[%s]: %s", dur.String(), si.step.phase(), si.desc))
 		}
 	}
@@ -141,7 +142,7 @@ func (p *progress) step(ctx context.Context, b *Builder, step *Step, s string) {
 		}
 	}
 	p.mu.Unlock()
-	if ui.IsTerminal() && (time.Since(t) < 100*time.Millisecond || strings.HasPrefix(s, progressPrefixFinish)) {
+	if ui.IsTerminal() && (time.Since(t) < 30*time.Millisecond || strings.HasPrefix(s, progressPrefixFinish)) {
 		return
 	}
 	pstat := b.plan.stats()
