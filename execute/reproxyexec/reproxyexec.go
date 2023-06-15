@@ -106,7 +106,7 @@ func (re *REProxyExec) Run(ctx context.Context, cmd *execute.Cmd) error {
 	// Create REProxy client and send the request with backoff configuration above.
 	// (No timeout applied due to use of backoff with maximum attempts allowed.)
 	proxy := ppb.NewCommandsClient(conn)
-	req, err := createRequest(cmd, execTimeout)
+	req, err := createRequest(ctx, cmd, execTimeout)
 	if err != nil {
 		return err
 	}
@@ -128,7 +128,7 @@ type Proxy interface {
 	RunCommand(context.Context, *ppb.RunRequest, ...grpc.CallOption) (*ppb.RunResponse, error)
 }
 
-func createRequest(cmd *execute.Cmd, execTimeout time.Duration) (*ppb.RunRequest, error) {
+func createRequest(ctx context.Context, cmd *execute.Cmd, execTimeout time.Duration) (*ppb.RunRequest, error) {
 	c := &cpb.Command{
 		Identifiers: &cpb.Identifiers{
 			CommandId: cmd.ID,
@@ -152,6 +152,15 @@ func createRequest(cmd *execute.Cmd, execTimeout time.Duration) (*ppb.RunRequest
 		strategy = ppb.ExecutionStrategy_Value(res)
 	} else {
 		return nil, fmt.Errorf("invalid execution strategy %s", cmd.REProxyConfig.ExecStrategy)
+	}
+
+	// Manually override remote_local_fallback to remote.
+	// Local fallback should always use our logic, not rewrapper.
+	if strategy == ppb.ExecutionStrategy_REMOTE_LOCAL_FALLBACK {
+		if log.V(1) {
+			clog.Infof(ctx, "overriding reproxy REMOTE_LOCAL_FALLBACK to REMOTE")
+		}
+		strategy = ppb.ExecutionStrategy_REMOTE
 	}
 
 	md := &ppb.Metadata{EventTimes: map[string]*cpb.TimeInterval{
