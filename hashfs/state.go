@@ -9,7 +9,6 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"flag"
 	"io"
@@ -24,7 +23,9 @@ import (
 
 	log "github.com/golang/glog"
 	"golang.org/x/sync/errgroup"
+	"google.golang.org/protobuf/proto"
 
+	pb "infra/build/siso/hashfs/proto"
 	"infra/build/siso/o11y/clog"
 	"infra/build/siso/o11y/iometrics"
 	"infra/build/siso/reapi/digest"
@@ -48,30 +49,6 @@ type DataSource interface {
 	Source(digest.Digest, string) digest.Source
 }
 
-type fileID struct {
-	ModTime int64 `json:"mtime"`
-}
-
-// State is a state of HashFS.
-type State struct {
-	Entries []EntryState
-}
-
-// EntryState is a state of a file entry in HashFS.
-type EntryState struct {
-	ID fileID `json:"id"`
-	// Name is absolute filepath.
-	Name         string        `json:"name"`
-	Digest       digest.Digest `json:"digest,omitempty"`
-	IsExecutable bool          `json:"x,omitempty"`
-	// Target is symlink target.
-	Target string `json:"s,omitempty"`
-
-	// action, cmd that generated this file.
-	CmdHash string        `json:"h,omitempty"`
-	Action  digest.Digest `json:"action,omitempty"`
-}
-
 func loadFile(ctx context.Context, fname string) ([]byte, error) {
 	b, err := os.ReadFile(fname)
 	if err != nil {
@@ -93,13 +70,13 @@ func loadFile(ctx context.Context, fname string) ([]byte, error) {
 }
 
 // Load loads a HashFS's state.
-func Load(ctx context.Context, fname string) (*State, error) {
+func Load(ctx context.Context, fname string) (*pb.State, error) {
 	b, err := loadFile(ctx, fname)
 	if err != nil {
 		return nil, err
 	}
-	state := &State{}
-	err = json.Unmarshal(b, state)
+	state := &pb.State{}
+	err = proto.Unmarshal(b, state)
 	if err != nil {
 		return nil, err
 	}
@@ -115,8 +92,28 @@ const (
 	entryAfterLocal
 )
 
+func toDigest(d *pb.Digest) digest.Digest {
+	if d == nil {
+		return digest.Digest{}
+	}
+	return digest.Digest{
+		Hash:      d.Hash,
+		SizeBytes: d.SizeBytes,
+	}
+}
+
+func fromDigest(d digest.Digest) *pb.Digest {
+	if d.IsZero() {
+		return nil
+	}
+	return &pb.Digest{
+		Hash:      d.Hash,
+		SizeBytes: d.SizeBytes,
+	}
+}
+
 // SetState sets states to the HashFS.
-func (hfs *HashFS) SetState(ctx context.Context, state *State) error {
+func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 	start := time.Now()
 	var neq, nnew, nnotexist, nfail, ninvalidate atomic.Int64
 	eg, gctx := errgroup.WithContext(ctx)
@@ -135,14 +132,7 @@ func (hfs *HashFS) SetState(ctx context.Context, state *State) error {
 			// If cmdhash is not set, the file is a source input, not a generated output file.
 			// In that case, we leave `h` empty, so we can skip this file in case it is missing
 			// on disk.
-			var h []byte
-			if ent.CmdHash != "" {
-				var err error
-				h, err = hex.DecodeString(ent.CmdHash)
-				if err != nil {
-					clog.Warningf(gctx, "Failed to decode %s cmdhash=%q: %v", ent.Name, ent.CmdHash, err)
-				}
-			}
+			h := ent.CmdHash
 			if runtime.GOOS == "windows" {
 				ent.Name = strings.TrimPrefix(ent.Name, `\`)
 			}
@@ -158,7 +148,7 @@ func (hfs *HashFS) SetState(ctx context.Context, state *State) error {
 				}
 				e, _ := newStateEntry(ent, time.Time{}, hfs.opt.DataSource, hfs.IOMetrics)
 				e.cmdhash = h
-				e.action = ent.Action
+				e.action = toDigest(ent.Action)
 				_, err = hfs.directory.store(gctx, filepath.ToSlash(ent.Name), e)
 				if err != nil {
 					return err
@@ -172,7 +162,7 @@ func (hfs *HashFS) SetState(ctx context.Context, state *State) error {
 			}
 			e, et := newStateEntry(ent, fi.ModTime(), hfs.opt.DataSource, hfs.IOMetrics)
 			e.cmdhash = h
-			e.action = ent.Action
+			e.action = toDigest(ent.Action)
 			ftype := "file"
 			if e.d.IsZero() && e.target == "" {
 				ftype = "dir"
@@ -222,9 +212,9 @@ func (hfs *HashFS) SetState(ctx context.Context, state *State) error {
 	return nil
 }
 
-func newStateEntry(ent EntryState, ftime time.Time, dataSource DataSource, m *iometrics.IOMetrics) (*entry, entryStateType) {
+func newStateEntry(ent *pb.Entry, ftime time.Time, dataSource DataSource, m *iometrics.IOMetrics) (*entry, entryStateType) {
 	lready := make(chan bool, 1)
-	entTime := time.Unix(0, ent.ID.ModTime)
+	entTime := time.Unix(0, ent.Id.ModTime)
 	var entType entryStateType
 	switch {
 	case ftime.IsZero():
@@ -247,13 +237,14 @@ func newStateEntry(ent EntryState, ftime time.Time, dataSource DataSource, m *io
 	}
 	var dir *directory
 	var src digest.Source
-	if !ent.Digest.IsZero() {
+	entDigest := toDigest(ent.Digest)
+	if !entDigest.IsZero() {
 		if entType == entryEqLocal {
 			src = digest.LocalFileSource{Fname: ent.Name, IOMetrics: m}
 		} else {
 			// not the same as local, but digest is in state.
 			// probably, exists in RBE side, or local cache.
-			src = dataSource.Source(ent.Digest, ent.Name)
+			src = dataSource.Source(entDigest, ent.Name)
 		}
 	} else if ent.Target != "" {
 		mode |= fs.ModeSymlink
@@ -263,12 +254,12 @@ func newStateEntry(ent EntryState, ftime time.Time, dataSource DataSource, m *io
 	}
 	e := &entry{
 		lready:    lready,
-		size:      ent.Digest.SizeBytes,
+		size:      entDigest.SizeBytes,
 		mtime:     entTime,
 		mode:      mode,
 		target:    ent.Target,
 		src:       src,
-		d:         ent.Digest,
+		d:         entDigest,
 		directory: dir,
 	}
 	return e, entType
@@ -306,8 +297,8 @@ func saveFile(ctx context.Context, fname string, data []byte) error {
 }
 
 // Save persists state in fname.
-func Save(ctx context.Context, fname string, state *State) error {
-	b, err := json.Marshal(state)
+func Save(ctx context.Context, fname string, state *pb.State) error {
+	b, err := proto.Marshal(state)
 	if err != nil {
 		return err
 	}
@@ -315,8 +306,8 @@ func Save(ctx context.Context, fname string, state *State) error {
 }
 
 // State returns a State of the HashFS.
-func (hfs *HashFS) State(ctx context.Context) *State {
-	state := &State{}
+func (hfs *HashFS) State(ctx context.Context) *pb.State {
+	state := &pb.State{}
 	type d struct {
 		name string
 		dir  *directory
@@ -365,29 +356,29 @@ func (hfs *HashFS) State(ctx context.Context) *State {
 				}
 			} else {
 				if !e.d.IsZero() || e.target != "" {
-					state.Entries = append(state.Entries, EntryState{
-						ID: fileID{
+					state.Entries = append(state.Entries, &pb.Entry{
+						Id: &pb.FileID{
 							ModTime: e.mtime.UnixNano(),
 						},
 						Name:         name,
-						Digest:       e.d,
+						Digest:       fromDigest(e.d),
 						IsExecutable: e.mode&0111 != 0,
 						Target:       e.target,
-						CmdHash:      hex.EncodeToString(e.cmdhash),
-						Action:       e.action,
+						CmdHash:      e.cmdhash,
+						Action:       fromDigest(e.action),
 					})
 				}
 			}
 			if e.directory != nil {
 				if len(e.cmdhash) > 0 {
 					// preserve dir for cmdhash
-					state.Entries = append(state.Entries, EntryState{
-						ID: fileID{
+					state.Entries = append(state.Entries, &pb.Entry{
+						Id: &pb.FileID{
 							ModTime: e.mtime.UnixNano(),
 						},
 						Name:    name,
-						CmdHash: hex.EncodeToString(e.cmdhash),
-						Action:  e.action,
+						CmdHash: e.cmdhash,
+						Action:  fromDigest(e.action),
 					})
 				}
 				// TODO(b/253541407): record mtime for other directory?
@@ -398,9 +389,8 @@ func (hfs *HashFS) State(ctx context.Context) *State {
 	return state
 }
 
-// Map returns a map of EntryState of each file.
-func (s *State) Map() map[string]EntryState {
-	m := make(map[string]EntryState)
+func StateMap(s *pb.State) map[string]*pb.Entry {
+	m := make(map[string]*pb.Entry)
 	for _, e := range s.Entries {
 		m[e.Name] = e
 	}

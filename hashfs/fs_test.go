@@ -5,6 +5,7 @@
 package hashfs_test
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -463,7 +464,7 @@ func TestUpdateFromLocal(t *testing.T) {
 	if !now.Equal(fi.ModTime()) {
 		t.Errorf("fi.ModTime:%v should equal to now:%v", fi.ModTime(), now)
 	}
-	m := hfs.State(ctx).Map()
+	m := hashfs.StateMap(hfs.State(ctx))
 	hfs = nil
 	e, ok := m[fullname]
 	if !ok {
@@ -474,18 +475,17 @@ func TestUpdateFromLocal(t *testing.T) {
 		sort.Strings(keys)
 		t.Fatalf("entry for %s not found: %q", fullname, keys)
 	}
-	if e.ID.ModTime != now.UnixNano() {
-		t.Errorf("entry modtime=%d want=%d", e.ID.ModTime, now.UnixNano())
+	if e.Id.ModTime != now.UnixNano() {
+		t.Errorf("entry modtime=%d want=%d", e.Id.ModTime, now.UnixNano())
 	}
-	cmdhashStr := hex.EncodeToString(cmdhash)
-	if e.CmdHash != cmdhashStr {
-		t.Errorf("entry cmdhash=%q want=%q", e.CmdHash, cmdhashStr)
+	if !bytes.Equal(e.CmdHash, cmdhash) {
+		t.Errorf("entry cmdhash=%q want=%q", hex.EncodeToString(e.CmdHash), hex.EncodeToString(cmdhash))
 	}
 	lfi, err = os.Lstat(fullname)
 	if err != nil {
 		t.Fatalf("lstat(%q)=%v; want nil", fullname, err)
 	}
-	if e.ID.ModTime != lfi.ModTime().UnixNano() {
-		t.Errorf("entry modtime=%d lfi=%d", e.ID.ModTime, lfi.ModTime().UnixNano())
+	if e.Id.ModTime != lfi.ModTime().UnixNano() {
+		t.Errorf("entry modtime=%d lfi=%d", e.Id.ModTime, lfi.ModTime().UnixNano())
 	}
 }

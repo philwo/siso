@@ -1,0 +1,36 @@
+// Copyright 2023 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+syntax = "proto3";
+
+package siso.hashfs;
+
+option go_package = "infra/build/siso/hashfs/proto";
+
+message FileID {
+  int64 mod_time = 1;  // unix nano sec.
+}
+
+message Digest {
+  string hash = 1;
+  int64 size_bytes = 2;
+}
+
+message Entry {
+  FileID id = 1;
+  string name = 2;
+  Digest digest = 3;
+  bool is_executable = 4;
+
+  // target is symlink target.
+  string target = 5;
+
+  // action, cmd that generated this file.
+  bytes cmd_hash = 6;
+  Digest action = 7;
+}
+
+message State {
+  repeated Entry entries = 1;
+}

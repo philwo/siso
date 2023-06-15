@@ -5,6 +5,7 @@
 package hashfs_test
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -18,8 +19,10 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"google.golang.org/protobuf/testing/protocmp"
 
 	"infra/build/siso/hashfs"
+	pb "infra/build/siso/hashfs/proto"
 	"infra/build/siso/reapi/digest"
 	"infra/build/siso/reapi/merkletree"
 )
@@ -36,7 +39,7 @@ func TestLoadSave(t *testing.T) {
 	}
 
 	t.Logf("initial save")
-	state = &hashfs.State{}
+	state = &pb.State{}
 	err = hashfs.Save(ctx, fname, state)
 	if err != nil {
 		t.Errorf("Save(...)=%v; want nil", err)
@@ -47,8 +50,8 @@ func TestLoadSave(t *testing.T) {
 	if err != nil {
 		t.Errorf("Load(...)=%v, %v; want nil err", state, err)
 	}
-	want := &hashfs.State{}
-	if diff := cmp.Diff(want, state); diff != "" {
+	want := &pb.State{}
+	if diff := cmp.Diff(want, state, protocmp.Transform()); diff != "" {
 		t.Errorf("Load(...) diff -want +got:\n%s", diff)
 	}
 
@@ -70,7 +73,7 @@ func TestState(t *testing.T) {
 	}
 
 	st := hashFS.State(ctx)
-	m := st.Map()
+	m := hashfs.StateMap(st)
 	_, ok := m[filepath.Join(dir, "stamp")]
 	if !ok {
 		names := make([]string, 0, len(m))
@@ -110,45 +113,50 @@ func TestState_Dir(t *testing.T) {
 	}
 
 	st := hashFS.State(ctx)
-	m := st.Map()
+	m := hashfs.StateMap(st)
 	ent, ok := m[filepath.Join(dir, "gen/generate_all")]
 	if !ok {
 		t.Errorf("gen/generate_all entry not exists?")
 	}
-	if ent.ID.ModTime != mtime.UnixNano() {
-		t.Errorf("mtime=%d want=%d", ent.ID.ModTime, mtime.UnixNano())
+	if ent.Id.ModTime != mtime.UnixNano() {
+		t.Errorf("mtime=%d want=%d", ent.Id.ModTime, mtime.UnixNano())
 	}
-	if ent.CmdHash != cmdhashStr {
-		t.Errorf("cmdhash=%s want=%s", ent.CmdHash, cmdhashStr)
+	if !bytes.Equal(ent.CmdHash, cmdhash) {
+		t.Errorf("cmdhash=%s want=%s", hex.EncodeToString(ent.CmdHash), cmdhashStr)
 	}
-	if ent.Action != d {
+	if ent.Action.Hash != d.Hash || ent.Action.SizeBytes != d.SizeBytes {
 		t.Errorf("action=%s want=%s", ent.Action, d)
 	}
 }
 
-func BenchmarkSetState(b *testing.B) {
-	dir := b.TempDir()
+func createBenchmarkState(tb testing.TB, dir string) *pb.State {
 	for i := 0; i < 60000; i++ {
 		err := os.WriteFile(filepath.Join(dir, fmt.Sprintf("%d.txt", i)), nil, 0644)
 		if err != nil {
-			b.Fatal(err)
+			tb.Fatal(err)
 		}
 	}
 	ctx := context.Background()
 	hashFS, err := hashfs.New(ctx, hashfs.Option{})
 	if err != nil {
-		b.Fatal(err)
+		tb.Fatal(err)
 	}
+	defer hashFS.Close(ctx)
 	fsys := hashFS.FileSystem(ctx, dir)
 	err = fs.WalkDir(fsys, ".", func(path string, d fs.DirEntry, err error) error {
 		return err
 	})
 	if err != nil {
-		hashFS.Close(ctx)
-		b.Fatal(err)
+		tb.Fatal(err)
 	}
 	st := hashFS.State(ctx)
-	hashFS.Close(ctx)
+	return st
+}
+
+func BenchmarkSetState(b *testing.B) {
+	dir := b.TempDir()
+	st := createBenchmarkState(b, dir)
+	ctx := context.Background()
 
 	b.ReportAllocs()
 	b.ResetTimer()
@@ -163,5 +171,29 @@ func BenchmarkSetState(b *testing.B) {
 			b.Fatal(err)
 		}
 		hashFS.Close(ctx)
+	}
+}
+
+func BenchmarkLoadState(b *testing.B) {
+	dir := b.TempDir()
+	ctx := context.Background()
+	st := createBenchmarkState(b, dir)
+
+	fname := filepath.Join(dir, ".siso_fs_state")
+	err := hashfs.Save(ctx, fname, st)
+	if err != nil {
+		b.Fatal(err)
+	}
+	origState := st
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		st, err := hashfs.Load(ctx, fname)
+		if err != nil {
+			b.Fatal(err)
+		}
+		if len(st.Entries) != len(origState.Entries) {
+			b.Fatalf("mismatch entries got=%d want=%d", len(st.Entries), len(origState.Entries))
+		}
 	}
 }
