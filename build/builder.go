@@ -539,6 +539,7 @@ loop:
 			logger.Log(logEntry)
 			step.metrics.BuildID = b.id
 			step.metrics.StepID = step.def.String()
+			step.metrics.Rule = step.def.RuleName()
 			step.metrics.Action = step.def.ActionName()
 			step.metrics.Output = step.def.Outputs()[0]
 			step.metrics.PrevStepID = step.prevStepID

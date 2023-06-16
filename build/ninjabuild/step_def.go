@@ -166,6 +166,11 @@ func (s *StepDef) Next() build.StepDef {
 	return s.next
 }
 
+// RuleName returns rule name of the step.
+func (s *StepDef) RuleName() string {
+	return s.rule.Name
+}
+
 // ActionName returns action name of the step.
 func (s *StepDef) ActionName() string {
 	return s.edge.Rule().Name()

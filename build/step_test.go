@@ -21,6 +21,7 @@ type fakeStepDef struct {
 
 func (f fakeStepDef) String() string     { return fmt.Sprintf("%#v", f) }
 func (f fakeStepDef) Next() StepDef      { return nil }
+func (f fakeStepDef) RuleName() string   { return "" }
 func (f fakeStepDef) ActionName() string { return f.actionName }
 func (f fakeStepDef) Args(context.Context) []string {
 	return strings.Split(f.command, " ")

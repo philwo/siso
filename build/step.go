@@ -28,6 +28,9 @@ type StepDef interface {
 	// Next returns next step's def.
 	Next() StepDef
 
+	// RuleName returns rule name of the step. empty for no rule.
+	RuleName() string
+
 	// ActionName returns action name of the step.
 	ActionName() string
 
