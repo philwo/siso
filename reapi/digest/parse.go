@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strconv"
 
+	"github.com/bazelbuild/remote-apis-sdks/go/pkg/digest"
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
 	"google.golang.org/protobuf/encoding/prototext"
 )
@@ -23,13 +24,13 @@ var digestPattern = regexp.MustCompile(`^([0-9a-fA-F]{64})/([0-9]+)$`)
 //   - proto text representation of digest.
 //
 // TODO(b/266518906): move this utility to somewhere else for subcmd/{recall, fetch, cache}.
-func Parse(s string) (Digest, error) {
-	var d Digest
+func Parse(s string) (digest.Digest, error) {
+	var d digest.Digest
 	m := digestPattern.FindStringSubmatch(s)
 	if len(m) == 3 {
 		d.Hash = m[1]
 		var err error
-		d.SizeBytes, err = strconv.ParseInt(m[2], 10, 64)
+		d.Size, err = strconv.ParseInt(m[2], 10, 64)
 		if err == nil {
 			return d, nil
 		}

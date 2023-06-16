@@ -178,7 +178,7 @@ func (b *Builder) captureLocalOutputs(ctx context.Context, step *Step) error {
 		default:
 			result.OutputFiles = append(result.OutputFiles, &rpb.OutputFile{
 				Path:         entry.Name,
-				Digest:       entry.Data.Digest().Proto(),
+				Digest:       entry.Data.Digest().ToProto(),
 				IsExecutable: entry.IsExecutable,
 			})
 		}

@@ -203,7 +203,7 @@ func (c *Client) GetActionResult(ctx context.Context, d digest.Digest) (*rpb.Act
 	client := rpb.NewActionCacheClient(c.conn)
 	result, err := client.GetActionResult(ctx, &rpb.GetActionResultRequest{
 		InstanceName: c.opt.Instance,
-		ActionDigest: d.Proto(),
+		ActionDigest: d.ToProto(),
 	})
 	c.m.OpsDone(err)
 	return result, err

@@ -124,7 +124,7 @@ func (c *Cache) setActionResultStdout(ctx context.Context, cmd *execute.Cmd, res
 		return
 	}
 	d := digest.FromProto(result.GetStdoutDigest())
-	if d.SizeBytes == 0 {
+	if d.Size == 0 {
 		return
 	}
 	buf, err := c.store.GetContent(ctx, d, "stdout")
@@ -141,7 +141,7 @@ func (c *Cache) setActionResultStderr(ctx context.Context, cmd *execute.Cmd, res
 		return
 	}
 	d := digest.FromProto(result.GetStderrDigest())
-	if d.SizeBytes == 0 {
+	if d.Size == 0 {
 		return
 	}
 	buf, err := c.store.GetContent(ctx, d, "stderr")

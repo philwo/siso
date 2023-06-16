@@ -318,8 +318,8 @@ func (c *Cmd) Digest(ctx context.Context, ds *digest.Store) (digest.Digest, erro
 	}
 
 	action, err := digest.FromProtoMessage(&rpb.Action{
-		CommandDigest:   commandDigest.Proto(),
-		InputRootDigest: inputRootDigest.Proto(),
+		CommandDigest:   commandDigest.ToProto(),
+		InputRootDigest: inputRootDigest.ToProto(),
 		Timeout:         timeout,
 		DoNotCache:      c.DoNotCache,
 		Salt:            c.ActionSalt,
@@ -641,12 +641,12 @@ func ResultFromEntries(result *rpb.ActionResult, entries []merkletree.Entry) {
 			result.OutputDirectories = append(result.OutputDirectories, &rpb.OutputDirectory{
 				Path: ent.Name,
 				// TODO(b/275448031): calculate tree digest from the entry.
-				TreeDigest: digest.Empty.Proto(),
+				TreeDigest: digest.Empty.ToProto(),
 			})
 		default:
 			result.OutputFiles = append(result.OutputFiles, &rpb.OutputFile{
 				Path:         ent.Name,
-				Digest:       ent.Data.Digest().Proto(),
+				Digest:       ent.Data.Digest().ToProto(),
 				IsExecutable: ent.IsExecutable,
 			})
 		}

@@ -169,7 +169,7 @@ func (m *MerkleTree) Set(entry Entry) error {
 			}
 			cur.dir.Files = append(cur.dir.Files, &rpb.FileNode{
 				Name:         name,
-				Digest:       entry.Data.Digest().Proto(),
+				Digest:       entry.Data.Digest().ToProto(),
 				IsExecutable: entry.IsExecutable,
 			})
 			return nil
@@ -248,7 +248,7 @@ type TreeEntry struct {
 // It may return ErrAbsPath/ErrBadPath/ErrBadTree as error.
 func (m *MerkleTree) SetTree(tentry TreeEntry) error {
 	dname := tentry.Name
-	if tentry.Digest.IsZero() {
+	if tentry.Digest.Hash == "" {
 		return fmt.Errorf("setTree %s: %w", dname, ErrBadTree)
 	}
 	if filepath.IsAbs(dname) || strings.HasPrefix(dname, "/") || strings.HasPrefix(dname, `\`) {
@@ -261,7 +261,7 @@ func (m *MerkleTree) SetTree(tentry TreeEntry) error {
 	}
 	elems := splitElem(dname)
 	if len(elems) == 0 {
-		if !tentry.Digest.IsZero() {
+		if tentry.Digest.Hash != "" {
 			return fmt.Errorf("setTree %s: %w", dname, ErrBadPath)
 		}
 		return nil
@@ -311,7 +311,7 @@ func (m *MerkleTree) setTree(cur dirstate, name string, d digest.Digest, store *
 	dirname := pathJoin(cur.name, name)
 	dirnode := &rpb.DirectoryNode{
 		Name:   name,
-		Digest: d.Proto(),
+		Digest: d.ToProto(),
 	}
 	cur.dir.Directories = append(cur.dir.Directories, dirnode)
 	_, exists := m.m[dirname]
@@ -425,7 +425,7 @@ func (m *MerkleTree) buildTree(ctx context.Context, curdir *rpb.Directory, dirna
 	if m.store != nil {
 		m.store.Set(data)
 	}
-	return data.Digest().Proto(), nil
+	return data.Digest().ToProto(), nil
 }
 
 // Directories returns directories in the merkle tree.

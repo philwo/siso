@@ -124,7 +124,7 @@ func TestState_Dir(t *testing.T) {
 	if !bytes.Equal(ent.CmdHash, cmdhash) {
 		t.Errorf("cmdhash=%s want=%s", hex.EncodeToString(ent.CmdHash), cmdhashStr)
 	}
-	if ent.Action.Hash != d.Hash || ent.Action.SizeBytes != d.SizeBytes {
+	if ent.Action.Hash != d.Hash || ent.Action.SizeBytes != d.Size {
 		t.Errorf("action=%s want=%s", ent.Action, d)
 	}
 }

@@ -17,6 +17,7 @@ import (
 	"io"
 	"os"
 
+	"github.com/bazelbuild/remote-apis-sdks/go/pkg/digest"
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
 	"google.golang.org/protobuf/proto"
 
@@ -27,64 +28,37 @@ import (
 // Empty is a digest of empty content.
 var Empty = ofBytes([]byte{})
 
-// Digest is a digest.
-type Digest struct {
-	Hash      string `json:"hash,omitempty"`
-	SizeBytes int64  `json:"size_bytes,omitempty"`
-}
+// TODO: remove this.
+type Digest = digest.Digest
 
 // ofBytes creates a Digest from bytes.
-func ofBytes(b []byte) Digest {
+func ofBytes(b []byte) digest.Digest {
 	d, _ := fromReader(bytes.NewReader(b))
 	return d
 }
 
-// fromReader creates a Digest from io.Reader.
-func fromReader(r io.Reader) (Digest, error) {
+// fromReader creates a digest.Digest from io.Reader.
+func fromReader(r io.Reader) (digest.Digest, error) {
 	h := sha256.New()
 	n, err := io.Copy(h, r)
 	if err != nil {
-		return Digest{}, err
+		return digest.Digest{}, err
 	}
-	return Digest{
-		Hash:      hex.EncodeToString(h.Sum(nil)),
-		SizeBytes: n,
+	return digest.Digest{
+		Hash: hex.EncodeToString(h.Sum(nil)),
+		Size: n,
 	}, nil
 }
 
 // FromProto converts from digest proto.
-func FromProto(d *rpb.Digest) Digest {
+func FromProto(d *rpb.Digest) digest.Digest {
 	if d == nil {
-		return Digest{}
+		return digest.Digest{}
 	}
-	return Digest{
-		Hash:      d.Hash,
-		SizeBytes: d.SizeBytes,
+	return digest.Digest{
+		Hash: d.Hash,
+		Size: d.SizeBytes,
 	}
-}
-
-// IsZero returns true when digest is zero value (equivalent with nil digest proto).
-func (d Digest) IsZero() bool {
-	return d.Hash == ""
-}
-
-// Proto returns digest proto.
-func (d Digest) Proto() *rpb.Digest {
-	if d.IsZero() {
-		return nil
-	}
-	return &rpb.Digest{
-		Hash:      d.Hash,
-		SizeBytes: d.SizeBytes,
-	}
-}
-
-// String returns string representation of the digest (hash/sizes_bytes).
-func (d Digest) String() string {
-	if d.IsZero() {
-		return ""
-	}
-	return fmt.Sprintf("%s/%d", d.Hash, d.SizeBytes)
 }
 
 // Source is the interface that opens a data source.
@@ -102,12 +76,12 @@ type Source interface {
 // Data is a data instance that consists of Digest and Source.
 // TODO(b/268407930): it may be possible to be merged with Source.
 type Data struct {
-	digest Digest
+	digest digest.Digest
 	source Source
 }
 
 // NewData creates a Data from source and digest.
-func NewData(src Source, d Digest) Data {
+func NewData(src Source, d digest.Digest) Data {
 	return Data{
 		digest: d,
 		source: src,
@@ -116,11 +90,11 @@ func NewData(src Source, d Digest) Data {
 
 // IsZero returns true when the Data is zero value struct.
 func (d Data) IsZero() bool {
-	return d.digest.IsZero()
+	return d.digest.Hash == ""
 }
 
 // Digest returns the Digest of the data.
-func (d Data) Digest() Digest {
+func (d Data) Digest() digest.Digest {
 	return d.digest
 }
 

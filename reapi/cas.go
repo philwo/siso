@@ -47,7 +47,7 @@ func (c *Client) useCompressedBlob(d digest.Digest) bool {
 	if c.opt.CompressedBlob <= 0 {
 		return false
 	}
-	return d.SizeBytes >= c.opt.CompressedBlob
+	return d.Size >= c.opt.CompressedBlob
 }
 
 func (c *Client) getCompressor() rpb.Compressor_Value {
@@ -74,9 +74,9 @@ func (c *Client) resourceName(d digest.Digest) string {
 	if c.useCompressedBlob(d) {
 		return path.Join(c.opt.Instance, "compressed-blobs",
 			strings.ToLower(c.getCompressor().String()),
-			d.Hash, strconv.FormatInt(d.SizeBytes, 10))
+			d.Hash, strconv.FormatInt(d.Size, 10))
 	}
-	return path.Join(c.opt.Instance, "blobs", d.Hash, strconv.FormatInt(d.SizeBytes, 10))
+	return path.Join(c.opt.Instance, "blobs", d.Hash, strconv.FormatInt(d.Size, 10))
 }
 
 // newDecoder returns a decoder to uncompress blob.
@@ -103,15 +103,15 @@ func (c *Client) Get(ctx context.Context, d digest.Digest, name string) ([]byte,
 	if c == nil {
 		return nil, fmt.Errorf("reapi is not configured")
 	}
-	if d.SizeBytes == 0 {
+	if d.Size == 0 {
 		return nil, nil
 	}
 
 	ctx, span := trace.NewSpan(ctx, "reapi-get")
 	defer span.Close(nil)
-	span.SetAttr("sizebytes", d.SizeBytes)
+	span.SetAttr("sizebytes", d.Size)
 
-	if d.SizeBytes < bytestreamReadThreshold {
+	if d.Size < bytestreamReadThreshold {
 		return c.getWithBatchReadBlobs(ctx, d, name)
 	}
 	return c.getWithByteStream(ctx, d)
@@ -122,7 +122,7 @@ func (c *Client) getWithBatchReadBlobs(ctx context.Context, d digest.Digest, nam
 	casClient := rpb.NewContentAddressableStorageClient(c.conn)
 	resp, err := casClient.BatchReadBlobs(ctx, &rpb.BatchReadBlobsRequest{
 		InstanceName: c.opt.Instance,
-		Digests:      []*rpb.Digest{d.Proto()},
+		Digests:      []*rpb.Digest{d.ToProto()},
 	})
 	if err != nil {
 		c.m.ReadDone(0, err)
@@ -133,7 +133,7 @@ func (c *Client) getWithBatchReadBlobs(ctx context.Context, d digest.Digest, nam
 		return nil, fmt.Errorf("failed to read blobs %s for %s: responses=%d", d, name, len(resp.Responses))
 	}
 	c.m.ReadDone(len(resp.Responses[0].Data), err)
-	if int64(len(resp.Responses[0].Data)) != d.SizeBytes {
+	if int64(len(resp.Responses[0].Data)) != d.Size {
 		return nil, fmt.Errorf("failed to read blobs %s for %s: size mismatch got=%d", d, name, len(resp.Responses[0].Data))
 	}
 	return resp.Responses[0].Data, nil
@@ -158,7 +158,7 @@ func (c *Client) getWithByteStream(ctx context.Context, d digest.Digest) ([]byte
 			return err
 		}
 		defer rd.Close()
-		buf = make([]byte, d.SizeBytes)
+		buf = make([]byte, d.Size)
 		n, err := io.ReadFull(rd, buf)
 		c.m.ReadDone(n, err)
 		if err != nil {
@@ -173,7 +173,7 @@ func (c *Client) getWithByteStream(ctx context.Context, d digest.Digest) ([]byte
 func (c *Client) Missing(ctx context.Context, blobs []digest.Digest) ([]digest.Digest, error) {
 	blobspb := make([]*rpb.Digest, 0, len(blobs))
 	for _, b := range blobs {
-		blobspb = append(blobspb, b.Proto())
+		blobspb = append(blobspb, b.ToProto())
 	}
 	cas := rpb.NewContentAddressableStorageClient(c.conn)
 	resp, err := cas.FindMissingBlobs(ctx, &rpb.FindMissingBlobsRequest{
@@ -268,27 +268,27 @@ func separateBlobs(instance string, blobs []digest.Digest, byteLimit int64) (sma
 		return nil, nil
 	}
 	sort.Slice(blobs, func(i, j int) bool {
-		return blobs[i].SizeBytes < blobs[j].SizeBytes
+		return blobs[i].Size < blobs[j].Size
 	})
-	maxSizeBytes := blobs[len(blobs)-1].SizeBytes
-	if maxSizeBytes > byteLimit {
-		maxSizeBytes = byteLimit
+	maxSize := blobs[len(blobs)-1].Size
+	if maxSize > byteLimit {
+		maxSize = byteLimit
 	}
 	// Prepare a dummy request message to calculate the size of the BatchUpdateBlobsRequest accurately.
 	dummyReq := &rpb.BatchUpdateBlobsRequest{
 		InstanceName: instance,
 		Requests: []*rpb.BatchUpdateBlobsRequest_Request{
-			{Data: make([]byte, 0, maxSizeBytes)},
+			{Data: make([]byte, 0, maxSize)},
 		},
 	}
 	i := sort.Search(len(blobs), func(i int) bool {
-		if blobs[i].SizeBytes >= byteLimit {
+		if blobs[i].Size >= byteLimit {
 			return true
 		}
 		// When the BatchUpdateBlobsRequest with the single blob already exceeds the size limit.
 		// It can't send the blob via BatchUpdateBlobsRequest.
-		dummyReq.Requests[0].Digest = blobs[i].Proto()
-		dummyReq.Requests[0].Data = dummyReq.Requests[0].Data[:blobs[i].SizeBytes]
+		dummyReq.Requests[0].Digest = blobs[i].ToProto()
+		dummyReq.Requests[0].Data = dummyReq.Requests[0].Data[:blobs[i].Size]
 		return int64(proto.Size(dummyReq)) >= byteLimit
 	})
 	if i < len(blobs) {
@@ -374,7 +374,7 @@ func lookupBlobsInStore(ctx context.Context, blobs []digest.Digest, ds *digest.S
 				return
 			}
 			result.req = &rpb.BatchUpdateBlobsRequest_Request{
-				Digest: data.Digest().Proto(),
+				Digest: data.Digest().ToProto(),
 				Data:   b,
 			}
 		}(blobs[i], &results[i])
@@ -463,7 +463,7 @@ func (c *Client) uploadWithByteStream(ctx context.Context, digests []digest.Dige
 			})
 			continue
 		}
-		key := fmt.Sprintf("%s/%d", d.Hash, d.SizeBytes)
+		key := fmt.Sprintf("%s/%d", d.Hash, d.Size)
 		_, err, shared := c.bytestreamSingleflight.Do(key, func() (any, error) {
 			err := retry.Do(ctx, func() error {
 				rd, err := data.Open(ctx)
@@ -500,7 +500,7 @@ func (c *Client) uploadWithByteStream(ctx context.Context, digests []digest.Dige
 			return nil, err
 		})
 		if !shared {
-			c.m.WriteDone(int(d.SizeBytes), err)
+			c.m.WriteDone(int(d.Size), err)
 		}
 		if err != nil {
 			clog.Warningf(ctx, "Failed to stream %s: %v", data, err)
@@ -535,9 +535,9 @@ func (c *Client) uploadResourceName(d digest.Digest) string {
 			"compressed-blobs",
 			strings.ToLower(c.getCompressor().String()),
 			d.Hash,
-			strconv.FormatInt(d.SizeBytes, 10))
+			strconv.FormatInt(d.Size, 10))
 	}
-	return path.Join(c.opt.Instance, "uploads", uuid.New().String(), "blobs", d.Hash, strconv.FormatInt(d.SizeBytes, 10))
+	return path.Join(c.opt.Instance, "uploads", uuid.New().String(), "blobs", d.Hash, strconv.FormatInt(d.Size, 10))
 }
 
 // newEncoder returns an encoder to compress blob.

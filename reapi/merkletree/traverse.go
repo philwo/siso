@@ -55,7 +55,7 @@ func Traverse(ctx context.Context, base string, dir *rpb.Directory, ds *digest.S
 		}
 		dirs = append(dirs, &rpb.OutputDirectory{
 			Path:       filepath.Join(base, subd.Name),
-			TreeDigest: digest.Empty.Proto(),
+			TreeDigest: digest.Empty.ToProto(),
 		})
 		sfiles, ssymlinks, sdirs := Traverse(ctx, subdirname, subdir, ds)
 		files = append(files, sfiles...)

@@ -54,12 +54,12 @@ func (c *LocalCache) IOMetrics() *iometrics.IOMetrics {
 }
 
 func (c *LocalCache) actionCacheFilename(d digest.Digest) string {
-	name := fmt.Sprintf("%s-%d", d.Hash, d.SizeBytes)
+	name := fmt.Sprintf("%s-%d", d.Hash, d.Size)
 	return filepath.Join(c.dir, "actions", name[:2], name[2:])
 }
 
 func (c *LocalCache) contentCacheFilename(d digest.Digest) string {
-	name := fmt.Sprintf("%s-%d.gz", d.Hash, d.SizeBytes)
+	name := fmt.Sprintf("%s-%d.gz", d.Hash, d.Size)
 	return filepath.Join(c.dir, "contents", name[:2], name[2:])
 }
 
@@ -195,13 +195,13 @@ type dataSource struct {
 }
 
 func (s dataSource) Open(ctx context.Context) (io.ReadCloser, error) {
-	if s.d.SizeBytes == 0 {
+	if s.d.Size == 0 {
 		return io.NopCloser(bytes.NewReader(nil)), nil
 	}
 	if s.c == nil || s.c.dir == "" {
 		return nil, errors.New("cache is not configured")
 	}
-	name := fmt.Sprintf("%s-%d.gz", s.d.Hash, s.d.SizeBytes)
+	name := fmt.Sprintf("%s-%d.gz", s.d.Hash, s.d.Size)
 	cname := filepath.Join(s.c.dir, "contents", name[:2], name[2:])
 	r, err := os.Open(cname)
 	if err != nil {
