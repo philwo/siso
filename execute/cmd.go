@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	sdkdigest "github.com/bazelbuild/remote-apis-sdks/go/pkg/digest"
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
 	log "github.com/golang/glog"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -601,7 +602,7 @@ func (c *Cmd) EntriesFromResult(ctx context.Context, ds hashfs.DataSource, resul
 			continue
 		}
 		fname := filepath.Join(c.Dir, f.Path)
-		d := digest.FromProto(f.Digest)
+		d := sdkdigest.NewFromProtoUnvalidated(f.Digest)
 		entries = append(entries, merkletree.Entry{
 			Name:         fname,
 			Data:         digest.NewData(ds.Source(d, fname), d),
@@ -641,7 +642,7 @@ func ResultFromEntries(result *rpb.ActionResult, entries []merkletree.Entry) {
 			result.OutputDirectories = append(result.OutputDirectories, &rpb.OutputDirectory{
 				Path: ent.Name,
 				// TODO(b/275448031): calculate tree digest from the entry.
-				TreeDigest: digest.Empty.ToProto(),
+				TreeDigest: sdkdigest.Empty.ToProto(),
 			})
 		default:
 			result.OutputFiles = append(result.OutputFiles, &rpb.OutputFile{

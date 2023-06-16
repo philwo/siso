@@ -17,41 +17,6 @@ import (
 // testDigestStr123 is the digest string for []byte{1, 2, 3}.
 const testDigestStr123 = "039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81/3"
 
-func TestDigest(t *testing.T) {
-	// Regular case
-	b := []byte{1, 2, 3}
-	d := ofBytes(b)
-
-	if d.String() != testDigestStr123 {
-		t.Errorf("ofBytes(%v).String() = %s, want %s", b, d.String(), testDigestStr123)
-	}
-
-	p := d.ToProto()
-	if p == nil {
-		t.Errorf("ofBytes(%v).Proto() = nil, want a Digest proto", b)
-	}
-
-	dFromProto := FromProto(p)
-	if dFromProto != d {
-		t.Errorf("FromProto(%v) = %v, want %v", p, dFromProto, d)
-	}
-
-	// From nil proto
-	nild := FromProto(nil)
-	if nild.Hash != "" {
-		t.Errorf("FromProto(nil).Hash is non empty, want empty string")
-	}
-
-	// Empty digest
-	empty := ofBytes([]byte{})
-	if empty.Size != 0 {
-		t.Errorf("ofBytes([]byte{}).SizeBytes = %v, want 0", empty.Size)
-	}
-	if got, want := empty.Hash, "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"; got != want {
-		t.Errorf("ofBytes([]byte{}).Hash = %q, want %q", got, want)
-	}
-}
-
 func TestData(t *testing.T) {
 	ctx := context.Background()
 

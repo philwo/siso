@@ -16,6 +16,7 @@ import (
 	"strings"
 	"sync"
 
+	sdkdigest "github.com/bazelbuild/remote-apis-sdks/go/pkg/digest"
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
 	log "github.com/golang/glog"
 	"github.com/google/uuid"
@@ -186,7 +187,7 @@ func (c *Client) Missing(ctx context.Context, blobs []digest.Digest) ([]digest.D
 	}
 	ret := make([]digest.Digest, 0, len(resp.GetMissingBlobDigests()))
 	for _, b := range resp.GetMissingBlobDigests() {
-		ret = append(ret, digest.FromProto(b))
+		ret = append(ret, sdkdigest.NewFromProtoUnvalidated(b))
 	}
 	return ret, nil
 }
@@ -321,7 +322,7 @@ func (c *Client) uploadWithBatchUpdateBlobs(ctx context.Context, digests []diges
 				return nil, status.Errorf(status.Code(err), "batch update blobs: %v", err)
 			}
 			for _, res := range batchResp.Responses {
-				blob := digest.FromProto(res.Digest)
+				blob := sdkdigest.NewFromProtoUnvalidated(res.Digest)
 				data, ok := ds.Get(blob)
 				if !ok {
 					clog.Warningf(ctx, "Not found %s in store", blob)

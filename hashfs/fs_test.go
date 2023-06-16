@@ -20,11 +20,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/bazelbuild/remote-apis-sdks/go/pkg/digest"
 	"github.com/google/go-cmp/cmp"
 	"golang.org/x/sync/errgroup"
 
 	"infra/build/siso/hashfs"
-	"infra/build/siso/reapi/digest"
 	"infra/build/siso/reapi/merkletree"
 )
 
@@ -86,7 +86,7 @@ func TestStamp(t *testing.T) {
 			if got.Name != fullname {
 				t.Errorf("entry.Name=%q, want=%q", got.Name, fullname)
 			}
-			if got.Data.Digest() != digest.Empty {
+			if !got.Data.Digest().IsEmpty() {
 				t.Errorf("entry.Data.Digest=%v, want=%v", got.Data.Digest(), digest.Empty)
 			}
 		})

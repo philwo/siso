@@ -11,55 +11,19 @@ package digest
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"io"
 	"os"
 
 	"github.com/bazelbuild/remote-apis-sdks/go/pkg/digest"
-	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
 	"google.golang.org/protobuf/proto"
 
 	"infra/build/siso/o11y/iometrics"
 	"infra/build/siso/reapi/retry"
 )
 
-// Empty is a digest of empty content.
-var Empty = ofBytes([]byte{})
-
 // TODO: remove this.
 type Digest = digest.Digest
-
-// ofBytes creates a Digest from bytes.
-func ofBytes(b []byte) digest.Digest {
-	d, _ := fromReader(bytes.NewReader(b))
-	return d
-}
-
-// fromReader creates a digest.Digest from io.Reader.
-func fromReader(r io.Reader) (digest.Digest, error) {
-	h := sha256.New()
-	n, err := io.Copy(h, r)
-	if err != nil {
-		return digest.Digest{}, err
-	}
-	return digest.Digest{
-		Hash: hex.EncodeToString(h.Sum(nil)),
-		Size: n,
-	}, nil
-}
-
-// FromProto converts from digest proto.
-func FromProto(d *rpb.Digest) digest.Digest {
-	if d == nil {
-		return digest.Digest{}
-	}
-	return digest.Digest{
-		Hash: d.Hash,
-		Size: d.SizeBytes,
-	}
-}
 
 // Source is the interface that opens a data source.
 // It can be remote or local source.
@@ -137,7 +101,7 @@ func FromProtoMessage(m proto.Message) (Data, error) {
 // FromBytes creates data from raw byte values.
 func FromBytes(name string, b []byte) Data {
 	return Data{
-		digest: ofBytes(b),
+		digest: digest.NewFromBlob(b),
 		source: byteSource{name: name, b: b},
 	}
 }
@@ -163,7 +127,7 @@ func FromLocalFile(ctx context.Context, src LocalFileSource) (Data, error) {
 		return Data{}, err
 	}
 	defer f.Close()
-	d, err := fromReader(f)
+	d, err := digest.NewFromReader(f)
 	if err != nil {
 		return Data{}, err
 	}

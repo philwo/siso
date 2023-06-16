@@ -17,6 +17,7 @@ import (
 	"sort"
 	"strings"
 
+	sdkdigest "github.com/bazelbuild/remote-apis-sdks/go/pkg/digest"
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
 	"google.golang.org/protobuf/proto"
 
@@ -336,7 +337,7 @@ func (m *MerkleTree) Build(ctx context.Context) (digest.Digest, error) {
 	if err != nil {
 		return digest.Digest{}, err
 	}
-	return digest.FromProto(d), nil
+	return sdkdigest.NewFromProto(d)
 }
 
 // RootDirectory returns root directory in the merkle tree.

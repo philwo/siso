@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"time"
 
+	sdkdigest "github.com/bazelbuild/remote-apis-sdks/go/pkg/digest"
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
 	log "github.com/golang/glog"
 
@@ -159,7 +160,7 @@ func (re *RemoteExec) processResult(ctx context.Context, action digest.Digest, c
 	var dirs []*rpb.OutputDirectory
 	for _, d := range result.GetOutputDirectories() {
 		ds := digest.NewStore()
-		outdir, derr := re.client.FetchTree(ctx, d.GetPath(), digest.FromProto(d.GetTreeDigest()), ds)
+		outdir, derr := re.client.FetchTree(ctx, d.GetPath(), sdkdigest.NewFromProtoUnvalidated(d.GetTreeDigest()), ds)
 		if derr != nil {
 			clog.Errorf(ctx, "Failed to fetch tree %s %s: %v", d.GetPath(), d.GetTreeDigest(), derr)
 			continue
@@ -219,7 +220,7 @@ func setStdout(ctx context.Context, client *reapi.Client, d *rpb.Digest, cmd *ex
 		return
 	}
 	w := cmd.StdoutWriter()
-	b, err := client.Get(ctx, digest.FromProto(d), "stdout")
+	b, err := client.Get(ctx, sdkdigest.NewFromProtoUnvalidated(d), "stdout")
 	if err != nil {
 		// If the context is canceled, we should not write the error to stdout.
 		// Otherwise, we will receive a lot of "ctx canceled" error messages to stdout.
@@ -238,7 +239,7 @@ func setStderr(ctx context.Context, client *reapi.Client, d *rpb.Digest, cmd *ex
 		return
 	}
 	w := cmd.StderrWriter()
-	b, err := client.Get(ctx, digest.FromProto(d), "stderr")
+	b, err := client.Get(ctx, sdkdigest.NewFromProtoUnvalidated(d), "stderr")
 	if err != nil {
 		// Do not write the error to stderr for the same reason with stdout.
 		if ctx.Err() != nil {
