@@ -145,26 +145,35 @@ func (p *progress) step(ctx context.Context, b *Builder, step *Step, s string) {
 	if ui.IsTerminal() && (time.Since(t) < 30*time.Millisecond || strings.HasPrefix(s, progressPrefixFinish)) {
 		return
 	}
-	pstat := b.plan.stats()
 	stat := b.stats.stats()
 	var lines []string
 	if ui.IsTerminal() {
-		lines = append(lines, fmt.Sprintf("[%d+%d+(%d+%d)[%d+(%d+%d),(%d+%d)](%d,%d,%d,%d){%d,%d,%d}]",
-			pstat.npendings,
-			pstat.nready,
-			b.stepSema.NumWaits(),
-			b.stepSema.NumServs(),
+		runProgress := func(waits, servs int) string {
+			if waits > 0 {
+				return ui.SGR(ui.BackgroundRed, fmt.Sprintf("%d", waits+servs))
+			}
+			return fmt.Sprintf("%d", servs)
+		}
+
+		localProgress := runProgress(b.localSema.NumWaits(), b.localSema.NumServs())
+		var remoteProgress string
+		switch {
+		case experiments.Enabled("use-reproxy", ""):
+			remoteProgress = runProgress(b.reproxySema.NumWaits(), b.reproxySema.NumServs())
+		case b.rewrapSema.NumServs() > 0:
+			remoteProgress = runProgress(b.rewrapSema.NumWaits(), b.rewrapSema.NumServs())
+		default:
+			remoteProgress = runProgress(b.remoteSema.NumWaits(), b.remoteSema.NumServs())
+		}
+		var cacheHitRatio string
+		if stat.Remote+stat.CacheHit > 0 {
+			cacheHitRatio = fmt.Sprintf("cache:%5.02f%% ", float64(stat.CacheHit)/float64(stat.CacheHit+stat.Remote)*100.0)
+		}
+		lines = append(lines, fmt.Sprintf("pre:%d local:%s remote:%s %sfallback:%d",
 			stat.Preproc,
-			b.localSema.NumWaits(),
-			b.localSema.NumServs(),
-			b.remoteSema.NumWaits(),
-			b.remoteSema.NumServs(),
-			stat.Skipped,
-			stat.CacheHit,
-			stat.Local,
-			stat.Remote,
-			stat.FastDepsSuccess,
-			stat.FastDepsFailed,
+			localProgress,
+			remoteProgress,
+			cacheHitRatio,
 			stat.LocalFallback))
 	}
 	msg := s

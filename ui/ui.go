@@ -71,3 +71,13 @@ func writeLinesMaxWidth(buf *bytes.Buffer, msgs []string, width int) {
 		fmt.Fprint(buf, msg)
 	}
 }
+
+// https://en.wikipedia.org/wiki/ANSI_escape_code#SGR_(Select_Graphic_Rendition)_parameters
+const (
+	BackgroundRed = 41
+)
+
+// SGR formats s in SGR (select graphic rendition).
+func SGR(n int, s string) string {
+	return fmt.Sprintf("\033[%dm%s\033[0m", n, s)
+}
