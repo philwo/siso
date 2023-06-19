@@ -25,6 +25,7 @@ import (
 	"infra/build/siso/auth/cred"
 	"infra/build/siso/subcmd/fscmd"
 	"infra/build/siso/subcmd/ninja"
+	"infra/build/siso/subcmd/recall/recall"
 	"infra/build/siso/subcmd/version"
 	"infra/build/siso/ui"
 )
@@ -51,6 +52,7 @@ func getApplication() *cli.Application {
 
 			ninja.Cmd(authOpts),
 			fscmd.Cmd(authOpts),
+			recall.Cmd(authOpts),
 
 			authcli.SubcommandInfo(authOpts, "whoami", false),
 			authcli.SubcommandLogin(authOpts, "login", false),
