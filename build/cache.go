@@ -10,7 +10,6 @@ import (
 	"runtime"
 	"time"
 
-	sdkdigest "github.com/bazelbuild/remote-apis-sdks/go/pkg/digest"
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
 	log "github.com/golang/glog"
 	"google.golang.org/grpc/codes"
@@ -124,7 +123,7 @@ func (c *Cache) setActionResultStdout(ctx context.Context, cmd *execute.Cmd, res
 		w.Write(result.StdoutRaw)
 		return
 	}
-	d := sdkdigest.NewFromProtoUnvalidated(result.GetStdoutDigest())
+	d := digest.FromProto(result.GetStdoutDigest())
 	if d.Size == 0 {
 		return
 	}
@@ -141,7 +140,7 @@ func (c *Cache) setActionResultStderr(ctx context.Context, cmd *execute.Cmd, res
 		w.Write(result.StderrRaw)
 		return
 	}
-	d := sdkdigest.NewFromProtoUnvalidated(result.GetStderrDigest())
+	d := digest.FromProto(result.GetStderrDigest())
 	if d.Size == 0 {
 		return
 	}

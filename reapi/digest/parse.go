@@ -42,7 +42,8 @@ func Parse(s string) (digest.Digest, error) {
 	msg := &rpb.Digest{}
 	perr := prototext.Unmarshal([]byte(s), msg)
 	if perr == nil {
-		return digest.NewFromProto(msg)
+		d = FromProto(msg)
+		return d, nil
 	}
 	return d, fmt.Errorf("failed to unmarshal %T json:%v proto:%v", msg, err, perr)
 }

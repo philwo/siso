@@ -14,7 +14,6 @@ import (
 	"strings"
 	"testing"
 
-	sdkdigest "github.com/bazelbuild/remote-apis-sdks/go/pkg/digest"
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/protobuf/proto"
@@ -655,7 +654,7 @@ func readDir(dir *rpb.Directory) (files, dirs, symlinks []string) {
 func getDigest(dir *rpb.Directory, name string) (digest.Digest, bool, error) {
 	for _, e := range dir.Files {
 		if e.Name == name {
-			return sdkdigest.NewFromProtoUnvalidated(e.Digest), e.IsExecutable, nil
+			return digest.FromProto(e.Digest), e.IsExecutable, nil
 		}
 	}
 	for _, e := range dir.Symlinks {
@@ -665,7 +664,7 @@ func getDigest(dir *rpb.Directory, name string) (digest.Digest, bool, error) {
 	}
 	for _, e := range dir.Directories {
 		if e.Name == name {
-			return sdkdigest.NewFromProtoUnvalidated(e.Digest), false, nil
+			return digest.FromProto(e.Digest), false, nil
 		}
 	}
 	return digest.Digest{}, false, errors.New("not found")

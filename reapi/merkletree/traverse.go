@@ -8,7 +8,6 @@ import (
 	"context"
 	"path/filepath"
 
-	sdkdigest "github.com/bazelbuild/remote-apis-sdks/go/pkg/digest"
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
 	"google.golang.org/protobuf/proto"
 
@@ -40,7 +39,7 @@ func Traverse(ctx context.Context, base string, dir *rpb.Directory, ds *digest.S
 	var dirs []*rpb.OutputDirectory
 	for _, subd := range dir.Directories {
 		subdirname := filepath.Join(base, subd.Name)
-		dg := sdkdigest.NewFromProtoUnvalidated(subd.Digest)
+		dg := digest.FromProto(subd.Digest)
 		db, found := ds.Get(dg)
 		if !found {
 			// TODO(b/269199873): revisit error handling.
@@ -56,7 +55,7 @@ func Traverse(ctx context.Context, base string, dir *rpb.Directory, ds *digest.S
 		}
 		dirs = append(dirs, &rpb.OutputDirectory{
 			Path:       filepath.Join(base, subd.Name),
-			TreeDigest: sdkdigest.Empty.ToProto(),
+			TreeDigest: digest.Empty.ToProto(),
 		})
 		sfiles, ssymlinks, sdirs := Traverse(ctx, subdirname, subdir, ds)
 		files = append(files, sfiles...)
