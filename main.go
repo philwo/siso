@@ -23,6 +23,7 @@ import (
 	"go.chromium.org/luci/common/system/signals"
 
 	"infra/build/siso/auth/cred"
+	"infra/build/siso/subcmd/fetch"
 	"infra/build/siso/subcmd/fscmd"
 	"infra/build/siso/subcmd/ninja"
 	"infra/build/siso/subcmd/recall/recall"
@@ -53,6 +54,7 @@ func getApplication() *cli.Application {
 			ninja.Cmd(authOpts),
 			fscmd.Cmd(authOpts),
 			recall.Cmd(authOpts),
+			fetch.Cmd(authOpts),
 
 			authcli.SubcommandInfo(authOpts, "whoami", false),
 			authcli.SubcommandLogin(authOpts, "login", false),
