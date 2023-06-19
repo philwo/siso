@@ -176,7 +176,7 @@ func createRequest(ctx context.Context, cmd *execute.Cmd, execTimeout time.Durat
 			CompareWithLocal:  false,
 			NumLocalReruns:    0,
 			NumRemoteReruns:   0,
-			// TODO(b/273407069): need to support ReclientTimeout?
+			ReclientTimeout:   int32(time.Hour.Seconds()),
 			RemoteExecutionOptions: &ppb.RemoteExecutionOptions{
 				AcceptCached:                 !cmd.SkipCacheLookup,
 				DoNotCache:                   cmd.DoNotCache,
@@ -184,6 +184,10 @@ func createRequest(ctx context.Context, cmd *execute.Cmd, execTimeout time.Durat
 				Wrapper:                      cmd.RemoteWrapper,
 				CanonicalizeWorkingDir:       cmd.REProxyConfig.CanonicalizeWorkingDir,
 				PreserveUnchangedOutputMtime: false,
+			},
+			LocalExecutionOptions: &ppb.LocalExecutionOptions{
+				AcceptCached: true,
+				DoNotCache:   false,
 			},
 			LogEnvironment: false,
 			// Necessary for metadata such as digests to be returned.
