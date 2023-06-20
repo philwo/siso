@@ -20,6 +20,20 @@ import (
 	"infra/build/siso/ui"
 )
 
+// StepError is step execution error.
+type StepError struct {
+	Target string
+	Cause  error
+}
+
+func (e StepError) Error() string {
+	return e.Cause.Error()
+}
+
+func (e StepError) Unwrap() error {
+	return e.Cause
+}
+
 // runStep runs a step.
 //
 //   - check if up-to-date. do nothing if so.
@@ -129,7 +143,10 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 			msgs := cmdOutput(ctx, "FAILED:", step.cmd, err)
 			b.logOutput(ctx, msgs)
 		}
-		return err
+		return StepError{
+			Target: b.path.MustToWD(step.cmd.Outputs[0]),
+			Cause:  err,
+		}
 	}
 
 	msgs := cmdOutput(ctx, "SUCCESS:", step.cmd, nil)
