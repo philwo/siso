@@ -33,7 +33,7 @@ func ScanDepsParams(ctx context.Context, args, env []string) (files, dirs, sysro
 			}
 		}
 		switch arg {
-		case "-I", "--include-directory":
+		case "-I", "--include-directory", "-isystem", "-iquote":
 			i++
 			dirs = append(dirs, args[i])
 			continue
