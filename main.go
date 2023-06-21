@@ -25,6 +25,7 @@ import (
 	"infra/build/siso/auth/cred"
 	"infra/build/siso/subcmd/fetch"
 	"infra/build/siso/subcmd/fscmd"
+	"infra/build/siso/subcmd/metricscmp"
 	"infra/build/siso/subcmd/ninja"
 	"infra/build/siso/subcmd/recall/recall"
 	"infra/build/siso/subcmd/version"
@@ -55,6 +56,7 @@ func getApplication() *cli.Application {
 			fscmd.Cmd(authOpts),
 			recall.Cmd(authOpts),
 			fetch.Cmd(authOpts),
+			metricscmp.Cmd(),
 
 			authcli.SubcommandInfo(authOpts, "whoami", false),
 			authcli.SubcommandLogin(authOpts, "login", false),
