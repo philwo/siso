@@ -729,16 +729,18 @@ func (s *StepDef) Handle(ctx context.Context, cmd *execute.Cmd) error {
 	if handler == "" {
 		return nil
 	}
-	// expand here if handler is set.
-	// if handler is not set, expand later by depsExpandInput in build/builder.go
-	inputs := s.ExpandedInputs(ctx)
-	clog.Infof(ctx, "deps expands %d -> %d", len(cmd.Inputs), len(inputs))
-	cmd.Inputs = inputs
-	err := s.globals.buildConfig.Handle(ctx, handler, s.globals.path, cmd)
+	err := s.globals.buildConfig.Handle(ctx, handler, s.globals.path, cmd, func() []string {
+		// expand here if handler calls cmd.expand_inputs().
+		// if handler is not set, expand later by depsExpandInput in build/builder.go
+		inputs := s.ExpandedInputs(ctx)
+		clog.Infof(ctx, "cmd.expandedInputs %d", len(inputs))
+		return inputs
+	})
 	if err != nil {
 		return err
 	}
 	// handler may use labels in inputs, so expand here.
+	// TODO(ukai): always need to expand labels here?
 	cmd.Inputs = s.ExpandLabels(ctx, cmd.Inputs)
 	return nil
 }

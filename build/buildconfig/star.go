@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"strings"
 
+	log "github.com/golang/glog"
 	"go.starlark.net/starlark"
 	"go.starlark.net/starlarkstruct"
 
@@ -30,12 +31,14 @@ const (
 	cmdFieldInputs = "inputs"
 	// cmd tool_inputs. list
 	cmdFieldToolInputs = "tool_inputs"
+	// cmd expanded_inputs. func
+	cmdFieldExpandedInputs = "expanded_inputs"
 	// cmd outputs. list
 	cmdFieldOutputs = "outputs"
 )
 
 // packCmd packs cmd into Starlark struct.
-func packCmd(ctx context.Context, cmd *execute.Cmd) (*starlarkstruct.Struct, error) {
+func packCmd(ctx context.Context, cmd *execute.Cmd, expandedInputs func() []string) (*starlarkstruct.Struct, error) {
 	envs, err := packEnvmap(cmd.Env)
 	if err != nil {
 		return nil, err
@@ -48,9 +51,12 @@ func packCmd(ctx context.Context, cmd *execute.Cmd) (*starlarkstruct.Struct, err
 		cmdFieldDeps:       starlark.String(cmd.Deps),
 		cmdFieldInputs:     packList(cmd.Inputs),
 		cmdFieldToolInputs: packList(cmd.ToolInputs),
-		cmdFieldOutputs:    packList(cmd.Outputs),
+		cmdFieldExpandedInputs: starlark.NewBuiltin(cmdFieldExpandedInputs, func(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+			log.V(1).Infof("cmd.expanded_inputs")
+			return packList(expandedInputs()), nil
+		}),
+		cmdFieldOutputs: packList(cmd.Outputs),
 	}), nil
-
 }
 
 func packTuple(list []string) starlark.Value {

@@ -186,7 +186,7 @@ func (cfg *Config) Func(ctx context.Context, handler string) (starlark.Value, bo
 }
 
 // Handle runs handler for the cmd.
-func (cfg *Config) Handle(ctx context.Context, handler string, bpath *build.Path, cmd *execute.Cmd) error {
+func (cfg *Config) Handle(ctx context.Context, handler string, bpath *build.Path, cmd *execute.Cmd, expandedInputs func() []string) error {
 	fun, ok := cfg.Func(ctx, handler)
 	if !ok {
 		return fmt.Errorf("no handler:%q for %s", handler, cmd)
@@ -216,7 +216,7 @@ func (cfg *Config) Handle(ctx context.Context, handler string, bpath *build.Path
 		clog.Infof(ctx, "hctx: %v", hctx)
 	}
 
-	hcmd, err := packCmd(ctx, cmd)
+	hcmd, err := packCmd(ctx, cmd, expandedInputs)
 	if err != nil {
 		return fmt.Errorf("failed to pack cmd: %w", err)
 	}
