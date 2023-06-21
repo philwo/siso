@@ -72,13 +72,21 @@ func (re *REProxyExec) Run(ctx context.Context, cmd *execute.Cmd) error {
 	ctx, span := trace.NewSpan(ctx, "reproxy-exec")
 	defer span.Close(nil)
 
+	// Allow server address to be overridden by env var RBE_server_address.
+	// In rewrapper, all RBE_ env vars act as overrides to reproxy config.
+	// However in practice, only the RBE_server_address env var matters.
+	serverAddress := cmd.REProxyConfig.ServerAddress
+	if s := os.Getenv("RBE_server_address"); s != "" {
+		serverAddress = s
+	}
+
 	if len(cmd.REProxyConfig.Labels) == 0 {
 		return fmt.Errorf("REProxy config has no labels")
 	}
 	if len(cmd.REProxyConfig.Platform) == 0 {
 		return fmt.Errorf("REProxy config has no platform")
 	}
-	if cmd.REProxyConfig.ServerAddress == "" {
+	if serverAddress == "" {
 		return fmt.Errorf("REProxy config has no server address")
 	}
 	execTimeout := defaultExecTimeout
@@ -97,9 +105,10 @@ func (re *REProxyExec) Run(ctx context.Context, cmd *execute.Cmd) error {
 	// TODO(b/273407069): this will be problematic on windows, reuse connections instead.
 	dialCtx, cancel := context.WithTimeout(ctx, dialTimeout)
 	defer cancel()
-	conn, err := DialContext(dialCtx, cmd.REProxyConfig.ServerAddress)
+	conn, err := DialContext(dialCtx, serverAddress)
 	if err != nil {
-		log.Fatalf("Fail to dial %s: %v", cmd.REProxyConfig.ServerAddress, err)
+		log.Fatalf("Fail to dial %s: %v", serverAddress, err)
+		return err
 	}
 	defer conn.Close()
 
