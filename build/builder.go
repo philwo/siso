@@ -155,7 +155,7 @@ type Builder struct {
 	reapiclient *reapi.Client
 
 	reproxySema *semaphore.Semaphore
-	reproxyExec *reproxyexec.REProxyExec
+	reproxyExec reproxyexec.REProxyExec
 
 	actionSalt []byte
 
@@ -204,7 +204,7 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 	}
 	var le localexec.LocalExec
 	var re *remoteexec.RemoteExec
-	var pe *reproxyexec.REProxyExec
+	var pe reproxyexec.REProxyExec
 	if opts.REAPIClient != nil {
 		logger.Infof("enable remote exec")
 		re = remoteexec.New(ctx, opts.REAPIClient)

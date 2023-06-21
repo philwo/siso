@@ -18,7 +18,6 @@ import (
 	"github.com/bazelbuild/remote-apis-sdks/go/pkg/retry"
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
 	log "github.com/golang/glog"
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -63,12 +62,12 @@ var (
 type REProxyExec struct{}
 
 // New creates new remote executor.
-func New(ctx context.Context) *REProxyExec {
-	return &REProxyExec{}
+func New(ctx context.Context) REProxyExec {
+	return REProxyExec{}
 }
 
 // Run runs a cmd.
-func (re *REProxyExec) Run(ctx context.Context, cmd *execute.Cmd) error {
+func (REProxyExec) Run(ctx context.Context, cmd *execute.Cmd) error {
 	ctx, span := trace.NewSpan(ctx, "reproxy-exec")
 	defer span.Close(nil)
 
@@ -125,16 +124,11 @@ func (re *REProxyExec) Run(ctx context.Context, cmd *execute.Cmd) error {
 		return err
 	})
 
-	err = re.processResponse(ctx, cmd, resp, err)
+	err = processResponse(ctx, cmd, resp, err)
 	if err != nil {
-		log.Errorf("Command failed for cmd %q: %v", cmd.Desc, err)
+		clog.Warningf(ctx, "Command failed for cmd %q: %v", cmd.Desc, err)
 	}
 	return err
-}
-
-// Proxy is the interface of the RE Proxy API.
-type Proxy interface {
-	RunCommand(context.Context, *ppb.RunRequest, ...grpc.CallOption) (*ppb.RunResponse, error)
 }
 
 func createRequest(ctx context.Context, cmd *execute.Cmd, execTimeout time.Duration) (*ppb.RunRequest, error) {
@@ -164,7 +158,7 @@ func createRequest(ctx context.Context, cmd *execute.Cmd, execTimeout time.Durat
 	}
 
 	// Manually override remote_local_fallback to remote.
-	// Local fallback should always use our logic, not rewrapper.
+	// Local fallback should always use our logic, not reproxy.
 	if strategy == ppb.ExecutionStrategy_REMOTE_LOCAL_FALLBACK {
 		if log.V(1) {
 			clog.Infof(ctx, "overriding reproxy REMOTE_LOCAL_FALLBACK to REMOTE")
@@ -207,7 +201,7 @@ func createRequest(ctx context.Context, cmd *execute.Cmd, execTimeout time.Durat
 	}, nil
 }
 
-func (re *REProxyExec) processResponse(ctx context.Context, cmd *execute.Cmd, response *ppb.RunResponse, err error) error {
+func processResponse(ctx context.Context, cmd *execute.Cmd, response *ppb.RunResponse, err error) error {
 	if response == nil {
 		return errors.New("no response")
 	}
