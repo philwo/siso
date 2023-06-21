@@ -45,9 +45,6 @@ func (fakeStepDef) ToolInputs(context.Context) []string         { return nil }
 func (fakeStepDef) ExpandCaseSensitives(ctx context.Context, in []string) []string {
 	return in
 }
-func (fakeStepDef) ExpandLabels(ctx context.Context, in []string) []string {
-	return in
-}
 func (fakeStepDef) ExpandedInputs(context.Context) []string    { return nil }
 func (fakeStepDef) RemoteInputs() map[string]string            { return nil }
 func (fakeStepDef) REProxyConfig() execute.REProxyConfig       { return execute.REProxyConfig{} }

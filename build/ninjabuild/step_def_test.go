@@ -34,7 +34,7 @@ func TestStepExpandLabels(t *testing.T) {
 		globals: g,
 	}
 
-	got := s.ExpandLabels(ctx, []string{
+	got := s.expandLabels(ctx, []string{
 		"foo/bar",
 		"component:component",
 	})
@@ -45,6 +45,6 @@ func TestStepExpandLabels(t *testing.T) {
 		"component/a/2",
 	}
 	if diff := cmp.Diff(want, got); diff != "" {
-		t.Errorf("s.ExpandLabels(...): diff -want +got:\n%s", diff)
+		t.Errorf("s.expandLabels(...): diff -want +got:\n%s", diff)
 	}
 }

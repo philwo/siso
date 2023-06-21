@@ -518,13 +518,22 @@ func (s *StepDef) ExpandCaseSensitives(ctx context.Context, inputs []string) []s
 	return expanded
 }
 
-// ExpandLabels expands labels in given inputs.
-func (s *StepDef) ExpandLabels(ctx context.Context, inputs []string) []string {
+// expandLabels expands labels in given inputs.
+func (s *StepDef) expandLabels(ctx context.Context, inputs []string) []string {
 	ctx, span := trace.NewSpan(ctx, "stepdef-expand-labels")
 	defer span.Close(nil)
-
 	if s.rule.Debug {
 		clog.Infof(ctx, "expands labels")
+	}
+	var hasLabel bool
+	for _, input := range inputs {
+		if strings.Contains(input, ":") {
+			hasLabel = true
+			break
+		}
+	}
+	if !hasLabel {
+		return uniqueFiles(inputs)
 	}
 	p := s.globals.path
 	seen := make(map[string]bool)
@@ -741,7 +750,7 @@ func (s *StepDef) Handle(ctx context.Context, cmd *execute.Cmd) error {
 	}
 	// handler may use labels in inputs, so expand here.
 	// TODO(ukai): always need to expand labels here?
-	cmd.Inputs = s.ExpandLabels(ctx, cmd.Inputs)
+	cmd.Inputs = s.expandLabels(ctx, cmd.Inputs)
 	return nil
 }
 
@@ -824,7 +833,7 @@ func (s *StepDef) RuleFix(ctx context.Context, inadds, outadds []string) []byte 
 
 func uniqueFiles(files []string) []string {
 	seen := make(map[string]bool)
-	var ret []string
+	ret := files[:0] // reuse the same backing store.
 	for _, f := range files {
 		if seen[f] {
 			continue

@@ -64,9 +64,6 @@ type StepDef interface {
 	// ExpandCaseSensitives expands filenames to be used on case sensitive fs.
 	ExpandCaseSensitives(context.Context, []string) []string
 
-	// ExpandLabels expands labels that contain ':' in the given file list.
-	ExpandLabels(context.Context, []string) []string
-
 	// ExpandedInputs returns expanded inputs of the step.
 	ExpandedInputs(context.Context) []string
 
