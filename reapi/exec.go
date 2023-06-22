@@ -101,6 +101,8 @@ retryLoop:
 			break retryLoop
 		case codes.Aborted:
 			// "the bot running the task appears to be lost" ?
+		case codes.Internal:
+			// stream terminated by RST_STREAM ?
 		case codes.Unavailable, codes.ResourceExhausted:
 			unknownErr = false
 		case codes.DeadlineExceeded:
