@@ -184,7 +184,7 @@ func createRequest(ctx context.Context, cmd *execute.Cmd, execTimeout time.Durat
 				AcceptCached:                 !cmd.SkipCacheLookup,
 				DoNotCache:                   cmd.DoNotCache,
 				DownloadOutputs:              cmd.REProxyConfig.DownloadOutputs,
-				Wrapper:                      cmd.RemoteWrapper,
+				Wrapper:                      cmd.REProxyConfig.RemoteWrapper,
 				CanonicalizeWorkingDir:       cmd.REProxyConfig.CanonicalizeWorkingDir,
 				PreserveUnchangedOutputMtime: false,
 			},
