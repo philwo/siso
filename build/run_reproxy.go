@@ -26,6 +26,12 @@ func (b *Builder) runReproxy(ctx context.Context, step *Step) error {
 		if err == nil {
 			step.metrics.IsRemote = true
 		}
+		_, cached := step.cmd.ActionResult()
+		if cached {
+			b.stats.cacheHit(ctx)
+		} else {
+			b.stats.remoteDone(ctx, err) // use other stats for reproxy?
+		}
 		step.metrics.RunTime = IntervalMetric(time.Since(started))
 		step.metrics.done(ctx, step)
 		return err
