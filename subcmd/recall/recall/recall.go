@@ -262,11 +262,11 @@ func call(ctx context.Context, reopt reapi.Option, credential cred.Cred, execute
 	if err != nil {
 		return err
 	}
-	if !commandDigest.IsEmpty() {
-		action.CommandDigest = commandDigest.ToProto()
+	if !commandDigest.IsZero() {
+		action.CommandDigest = commandDigest.Proto()
 	}
-	if !inputRootDigest.IsEmpty() {
-		action.InputRootDigest = inputRootDigest.ToProto()
+	if !inputRootDigest.IsZero() {
+		action.InputRootDigest = inputRootDigest.Proto()
 	}
 	log.Infof("action: %s", action)
 	data, err := digest.FromProtoMessage(action)
@@ -283,7 +283,7 @@ func call(ctx context.Context, reopt reapi.Option, credential cred.Cred, execute
 		return err
 	}
 	log.Infof("upload %d/%d", n, len(ds.List()))
-	executeReq.ActionDigest = actionDigest.ToProto()
+	executeReq.ActionDigest = actionDigest.Proto()
 	log.Infof("execute req: %s", executeReq)
 	opName, resp, err := client.ExecuteAndWait(ctx, executeReq)
 	log.Infof("operation: %s", opName)

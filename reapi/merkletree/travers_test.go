@@ -73,15 +73,15 @@ func TestTraverse(t *testing.T) {
 	wantFiles := []*rpb.OutputFile{
 		{
 			Path:   filepath.Join("root", "file1"),
-			Digest: file1.Digest().ToProto(),
+			Digest: file1.Digest().Proto(),
 		},
 		{
 			Path:   filepath.Join("root", "dir2", "file2"),
-			Digest: file2.Digest().ToProto(),
+			Digest: file2.Digest().Proto(),
 		},
 		{
 			Path:   filepath.Join("root", "dir2", "dir3", "file1"),
-			Digest: file1.Digest().ToProto(),
+			Digest: file1.Digest().Proto(),
 		},
 	}
 	ignoreOpts := []cmp.Option{

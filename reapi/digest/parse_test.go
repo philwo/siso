@@ -17,24 +17,24 @@ func TestParse(t *testing.T) {
 			name:  "hash/size",
 			input: "6400fa014f9e835db82d6f27fb71e100d623eba0ab346fa890304412367e798c/310",
 			want: Digest{
-				Hash: "6400fa014f9e835db82d6f27fb71e100d623eba0ab346fa890304412367e798c",
-				Size: 310,
+				Hash:      "6400fa014f9e835db82d6f27fb71e100d623eba0ab346fa890304412367e798c",
+				SizeBytes: 310,
 			},
 		},
 		{
 			name:  "json",
-			input: `{"hash": "6400fa014f9e835db82d6f27fb71e100d623eba0ab346fa890304412367e798c", "size": 310}`,
+			input: `{"hash": "6400fa014f9e835db82d6f27fb71e100d623eba0ab346fa890304412367e798c", "size_bytes": 310}`,
 			want: Digest{
-				Hash: "6400fa014f9e835db82d6f27fb71e100d623eba0ab346fa890304412367e798c",
-				Size: 310,
+				Hash:      "6400fa014f9e835db82d6f27fb71e100d623eba0ab346fa890304412367e798c",
+				SizeBytes: 310,
 			},
 		},
 		{
 			name:  "prototext",
 			input: `hash: "6400fa014f9e835db82d6f27fb71e100d623eba0ab346fa890304412367e798c" size_bytes: 310`,
 			want: Digest{
-				Hash: "6400fa014f9e835db82d6f27fb71e100d623eba0ab346fa890304412367e798c",
-				Size: 310,
+				Hash:      "6400fa014f9e835db82d6f27fb71e100d623eba0ab346fa890304412367e798c",
+				SizeBytes: 310,
 			},
 		},
 	} {

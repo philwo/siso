@@ -26,7 +26,7 @@ func TestDigest(t *testing.T) {
 		t.Errorf("ofBytes(%v).String() = %s, want %s", b, d.String(), testDigestStr123)
 	}
 
-	p := d.ToProto()
+	p := d.Proto()
 	if p == nil {
 		t.Errorf("ofBytes(%v).Proto() = nil, want a Digest proto", b)
 	}
@@ -38,17 +38,17 @@ func TestDigest(t *testing.T) {
 
 	// From nil proto
 	nild := FromProto(nil)
-	if nild.Hash != "" {
-		t.Errorf("FromProto(nil).Hash is non empty, want empty string")
+	if nild.IsZero() != true {
+		t.Errorf("FromProto(nil).IsZero() = false, want true")
 	}
 
 	// Empty digest
 	empty := ofBytes([]byte{})
-	if empty.Size != 0 {
-		t.Errorf("ofBytes([]byte{}).SizeBytes = %v, want 0", empty.Size)
+	if empty.SizeBytes != 0 {
+		t.Errorf("ofBytes([]byte{}).SizeBytes = %v, want 0", empty.SizeBytes)
 	}
-	if got, want := empty.Hash, "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"; got != want {
-		t.Errorf("ofBytes([]byte{}).Hash = %q, want %q", got, want)
+	if empty.IsZero() {
+		t.Errorf("ofBytes([]byte{}).IsZero() = true, want false")
 	}
 }
 

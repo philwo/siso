@@ -69,7 +69,7 @@ func (re *RemoteExec) Run(ctx context.Context, cmd *execute.Cmd) error {
 
 	cctx, cspan := trace.NewSpan(ctx, "execute-and-wait")
 	opName, resp, err := re.client.ExecuteAndWait(cctx, &rpb.ExecuteRequest{
-		ActionDigest:    actionDigest.ToProto(),
+		ActionDigest:    actionDigest.Proto(),
 		SkipCacheLookup: cmd.SkipCacheLookup,
 	})
 	cspan.Close(nil)

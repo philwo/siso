@@ -97,18 +97,18 @@ func toDigest(d *pb.Digest) digest.Digest {
 		return digest.Digest{}
 	}
 	return digest.Digest{
-		Hash: d.Hash,
-		Size: d.SizeBytes,
+		Hash:      d.Hash,
+		SizeBytes: d.SizeBytes,
 	}
 }
 
 func fromDigest(d digest.Digest) *pb.Digest {
-	if d.Hash == "" {
+	if d.IsZero() {
 		return nil
 	}
 	return &pb.Digest{
 		Hash:      d.Hash,
-		SizeBytes: d.Size,
+		SizeBytes: d.SizeBytes,
 	}
 }
 
@@ -164,13 +164,13 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 			e.cmdhash = h
 			e.action = toDigest(ent.Action)
 			ftype := "file"
-			if e.d.Hash == "" && e.target == "" {
+			if e.d.IsZero() && e.target == "" {
 				ftype = "dir"
 				if len(e.cmdhash) == 0 {
 					clog.Infof(gctx, "ignore %s %s", ftype, ent.Name)
 					return nil
 				}
-			} else if e.d.Hash == "" && e.target != "" {
+			} else if e.d.IsZero() && e.target != "" {
 				ftype = "symlink"
 			}
 			switch et {
@@ -238,7 +238,7 @@ func newStateEntry(ent *pb.Entry, ftime time.Time, dataSource DataSource, m *iom
 	var dir *directory
 	var src digest.Source
 	entDigest := toDigest(ent.Digest)
-	if entDigest.Hash != "" {
+	if !entDigest.IsZero() {
 		if entType == entryEqLocal {
 			src = digest.LocalFileSource{Fname: ent.Name, IOMetrics: m}
 		} else {
@@ -254,7 +254,7 @@ func newStateEntry(ent *pb.Entry, ftime time.Time, dataSource DataSource, m *iom
 	}
 	e := &entry{
 		lready:    lready,
-		size:      entDigest.Size,
+		size:      entDigest.SizeBytes,
 		mtime:     entTime,
 		mode:      mode,
 		target:    ent.Target,
@@ -355,7 +355,7 @@ func (hfs *HashFS) State(ctx context.Context) *pb.State {
 					clog.Infof(ctx, "ignore %s: no mtime", name)
 				}
 			} else {
-				if e.d.Hash != "" || e.target != "" {
+				if !e.d.IsZero() || e.target != "" {
 					state.Entries = append(state.Entries, &pb.Entry{
 						Id: &pb.FileID{
 							ModTime: e.mtime.UnixNano(),

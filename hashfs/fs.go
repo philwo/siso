@@ -307,7 +307,7 @@ func (hfs *HashFS) ReadFile(ctx context.Context, root, fname string) ([]byte, er
 		return e.buf, nil
 	}
 	hfs.digester.compute(ctx, fname, e)
-	if e.d.Hash == "" {
+	if e.d.IsZero() {
 		return nil, fmt.Errorf("read file %s: no data", fname)
 	}
 	buf, err := digest.DataToBytes(ctx, digest.NewData(e.src, e.d))
@@ -337,7 +337,7 @@ func (hfs *HashFS) WriteFile(ctx context.Context, root, fname string, b []byte, 
 	}
 	e := &entry{
 		lready:  lready,
-		size:    data.Digest().Size,
+		size:    data.Digest().SizeBytes,
 		mtime:   mtime,
 		mode:    mode,
 		src:     data,
@@ -513,7 +513,7 @@ func (hfs *HashFS) Entries(ctx context.Context, root string, inputs []string) ([
 			ents = append(ents, e)
 			if e.mode.IsRegular() {
 				e.mu.Lock()
-				ready := e.d.Hash != ""
+				ready := !e.d.IsZero()
 				e.mu.Unlock()
 				if !ready {
 					wg.Add(1)
@@ -552,7 +552,7 @@ func (hfs *HashFS) Entries(ctx context.Context, root string, inputs []string) ([
 	for i, fname := range inputs {
 		e := ents[i]
 		d := e.digest()
-		if e.err != nil || (d.Hash == "" && e.target == "" && e.directory == nil) {
+		if e.err != nil || (d.IsZero() && e.target == "" && e.directory == nil) {
 			// TODO: hard fail instead?
 			clog.Warningf(ctx, "missing %s data:%v target:%q: %v", fname, e.d, e.target, e.err)
 			continue
@@ -639,7 +639,7 @@ func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []merkle
 			}
 			e := &entry{
 				lready:  lready,
-				size:    ent.Data.Digest().Size,
+				size:    ent.Data.Digest().SizeBytes,
 				mtime:   mtime,
 				mode:    mode,
 				cmdhash: cmdhash,
@@ -895,7 +895,7 @@ func (e *entry) compute(ctx context.Context, fname string) error {
 	if e.err != nil {
 		return e.err
 	}
-	if e.d.Hash != "" {
+	if !e.d.IsZero() {
 		return nil
 	}
 	// TODO(b/271059955): add xattr support.
@@ -1002,7 +1002,7 @@ func (e *entry) flush(ctx context.Context, fname string, m *iometrics.IOMetrics)
 		m.OpsDone(err)
 		clog.Infof(ctx, "flush dir %s: %v", fname, err)
 		return err
-	case d.Hash == "" && e.target != "":
+	case d.IsZero() && e.target != "":
 		err := os.Symlink(e.target, fname)
 		m.OpsDone(err)
 		if errors.Is(err, fs.ErrExist) {
@@ -1019,7 +1019,7 @@ func (e *entry) flush(ctx context.Context, fname string, m *iometrics.IOMetrics)
 	fi, err := os.Lstat(fname)
 	m.OpsDone(err)
 	if err == nil {
-		if fi.Size() == d.Size && fi.ModTime().Equal(mtime) {
+		if fi.Size() == d.SizeBytes && fi.ModTime().Equal(mtime) {
 			// TODO: check hash, mode?
 			clog.Infof(ctx, "flush %s: already exist", fname)
 			return nil
@@ -1037,7 +1037,7 @@ func (e *entry) flush(ctx context.Context, fname string, m *iometrics.IOMetrics)
 				return err
 			}
 		}
-		clog.Warningf(ctx, "flush %s: exists but mismatch size:%d!=%d mtime:%s!=%s d:%v!=%v", fname, fi.Size(), d.Size, fi.ModTime(), mtime, fileDigest, d)
+		clog.Warningf(ctx, "flush %s: exists but mismatch size:%d!=%d mtime:%s!=%s d:%v!=%v", fname, fi.Size(), d.SizeBytes, fi.ModTime(), mtime, fileDigest, d)
 		if fi.Mode()&0200 == 0 {
 			// need to be writable. otherwise os.WriteFile fails with permission denied.
 			err = os.Chmod(fname, fi.Mode()|0200)
@@ -1052,7 +1052,7 @@ func (e *entry) flush(ctx context.Context, fname string, m *iometrics.IOMetrics)
 		clog.Warningf(ctx, "flush %s: mkdir: %v", fname, err)
 		return fmt.Errorf("failed to create directory for %s: %w", fname, err)
 	}
-	if d.Size == 0 {
+	if d.SizeBytes == 0 {
 		clog.Infof(ctx, "flush %s: empty file", fname)
 		err := os.WriteFile(fname, nil, 0644)
 		m.WriteDone(0, err)
@@ -1068,13 +1068,13 @@ func (e *entry) flush(ctx context.Context, fname string, m *iometrics.IOMetrics)
 	}
 	buf := e.buf
 	if len(buf) == 0 {
-		if e.d.Hash == "" {
+		if e.d.IsZero() {
 			return fmt.Errorf("no data: retrieve %s: ", fname)
 		}
 		buf, err = digest.DataToBytes(ctx, digest.NewData(e.src, d))
 		clog.Infof(ctx, "flush %s %s from source: %v", fname, d, err)
 		if err != nil {
-			return fmt.Errorf("flush %s size=%d: %w", fname, d.Size, err)
+			return fmt.Errorf("flush %s size=%d: %w", fname, d.SizeBytes, err)
 		}
 	} else {
 		clog.Infof(ctx, "flush %s from embedded buf", fname)
@@ -1185,7 +1185,7 @@ func (d *directory) store(ctx context.Context, fname string, e *entry) (*entry, 
 					eetarget, etarget string
 				}{origFname, cmdchanged, ee.target, e.target}
 				clog.Infof(ctx, "store %s: cmdchange:%t s:%q to %q", lv.origFname, lv.cmdchanged, lv.eetarget, lv.etarget)
-			} else if !e.d.IsEmpty() && eed != e.d && eed.Size != 0 && e.d.Size != 0 {
+			} else if !e.d.IsZero() && eed != e.d && eed.SizeBytes != 0 && e.d.SizeBytes != 0 {
 				// don't log nil to digest of empty file (size=0)
 				lv := struct {
 					origFname  string
@@ -1200,7 +1200,7 @@ func (d *directory) store(ctx context.Context, fname string, e *entry) (*entry, 
 					actionchanged bool
 				}{origFname, cmdchanged, actionchanged}
 				clog.Infof(ctx, "store %s: cmdchange:%t actionchange:%t", lv.origFname, lv.cmdchanged, lv.actionchanged)
-			} else if ee.target == e.target && ee.size == e.size && ee.mode == e.mode && (e.d.Hash == "" || eed == e.d) {
+			} else if ee.target == e.target && ee.size == e.size && ee.mode == e.mode && (e.d.IsZero() || eed == e.d) {
 				// no change?
 
 				// if e.d is zero, it may be new local entry
