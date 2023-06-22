@@ -49,6 +49,7 @@ type REProxyConfig struct {
 	Inputs                 []string          `json:"inputs,omitempty"`
 	Labels                 map[string]string `json:"labels,omitempty"`
 	Platform               map[string]string `json:"platform,omitempty"`
+	RemoteWrapper          string            `json:"remote_wrapper,omitempty"`
 	ServerAddress          string            `json:"server_address,omitempty"`
 }
 
