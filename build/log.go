@@ -5,7 +5,6 @@
 package build
 
 import (
-	"bytes"
 	"fmt"
 
 	"cloud.google.com/go/logging"
@@ -20,30 +19,4 @@ func logFormat(e logging.Entry) string {
 		return fmt.Sprintf("%v", e.Payload)
 	}
 	return fmt.Sprintf("%s %v", stepID, e.Payload)
-}
-
-// panicLocation returns the first location just before runtime/panic.go
-// from stacktrace buffer.
-func panicLocation(buf []byte) []byte {
-	i := bytes.Index(buf, []byte("\truntime/panic.go"))
-	if i < 0 {
-		return buf
-	}
-	buf = buf[i:]
-	i = bytes.IndexByte(buf, '\n')
-	if i < 0 {
-		return buf
-	}
-	buf = buf[i+1:]
-	i = bytes.IndexByte(buf, '\n')
-	if i < 0 {
-		return buf
-	}
-	nextLine := buf[i+1:]
-	j := bytes.IndexByte(nextLine, '\n')
-	if j < 0 {
-		return buf
-	}
-	buf = buf[:i+1+j]
-	return buf
 }
