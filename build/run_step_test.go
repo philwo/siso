@@ -22,7 +22,7 @@ func TestCmdOutput(t *testing.T) {
 		Dir:        "out/siso",
 		Outputs:    []string{"out/siso/foo.o"},
 	}
-	checkMsg := func(msgs []string, result, desc, actionName, output string, err error) error {
+	checkMsg := func(msgs []string, result, desc, rule, actionName, output string, err error) error {
 		if len(msgs) < 2 {
 			return fmt.Errorf("msgs=%d; want >=2", len(msgs))
 		}
@@ -35,6 +35,15 @@ func TestCmdOutput(t *testing.T) {
 			errs = append(errs, fmt.Errorf("want desc=%q", desc))
 		}
 		msg = msgs[1]
+		if rule != "" {
+			if len(msgs) < 3 {
+				return fmt.Errorf("msgs=%d; want >=3", len(msgs))
+			}
+			if !strings.Contains(msg, fmt.Sprintf("siso_rule:%s", rule)) {
+				errs = append(errs, fmt.Errorf("want siso_rule=%s", rule))
+			}
+			msg = msgs[2]
+		}
 		if !strings.Contains(msg, actionName) {
 			errs = append(errs, fmt.Errorf("want action=%q", actionName))
 		}
@@ -53,6 +62,7 @@ func TestCmdOutput(t *testing.T) {
 		name           string
 		result         string
 		stdout, stderr []byte
+		rule           string
 		err            error
 		check          func([]string) error
 	}{
@@ -70,9 +80,35 @@ func TestCmdOutput(t *testing.T) {
 			name:   "successOut",
 			result: "SUCCESS",
 			stdout: []byte("warning: warning message\n"),
+			rule:   "clang/cxx",
 			check: func(msgs []string) error {
 				var errs []error
-				err := checkMsg(msgs, "SUCCESS", "CXX foo.o", "cxx", "./foo.o", nil)
+				err := checkMsg(msgs, "SUCCESS", "CXX foo.o", "clang/cxx", "cxx", "./foo.o", nil)
+				if err != nil {
+					errs = append(errs, err)
+				}
+				ok := false
+				for _, msg := range msgs {
+					if strings.Contains(msg, "stdout:") && strings.Contains(msg, "warning: warning message") {
+						ok = true
+					}
+				}
+				if !ok {
+					errs = append(errs, fmt.Errorf("missing stdout data:\n%q", msgs))
+				}
+				if len(errs) > 0 {
+					return errors.Join(errs...)
+				}
+				return nil
+			},
+		},
+		{
+			name:   "successOutNoRule",
+			result: "SUCCESS",
+			stdout: []byte("warning: warning message\n"),
+			check: func(msgs []string) error {
+				var errs []error
+				err := checkMsg(msgs, "SUCCESS", "CXX foo.o", "", "cxx", "./foo.o", nil)
 				if err != nil {
 					errs = append(errs, err)
 				}
@@ -95,9 +131,10 @@ func TestCmdOutput(t *testing.T) {
 			name:   "successErr",
 			result: "SUCCESS",
 			stderr: []byte("error: error message\n"),
+			rule:   "clang/cxx",
 			check: func(msgs []string) error {
 				var errs []error
-				err := checkMsg(msgs, "SUCCESS", "CXX foo.o", "cxx", "./foo.o", nil)
+				err := checkMsg(msgs, "SUCCESS", "CXX foo.o", "clang/cxx", "cxx", "./foo.o", nil)
 				if err != nil {
 					errs = append(errs, err)
 				}
@@ -119,9 +156,18 @@ func TestCmdOutput(t *testing.T) {
 		{
 			name:   "error",
 			result: "FAILED",
+			rule:   "clang/cxx",
 			err:    errors.New("failed to exec: exit=1"),
 			check: func(msgs []string) error {
-				return checkMsg(msgs, "FAILED", "CXX foo.o", "cxx", "./foo.o", errors.New("failed to exec: exit=1"))
+				return checkMsg(msgs, "FAILED", "CXX foo.o", "clang/cxx", "cxx", "./foo.o", errors.New("failed to exec: exit=1"))
+			},
+		},
+		{
+			name:   "errorNoRule",
+			result: "FAILED",
+			err:    errors.New("failed to exec: exit=1"),
+			check: func(msgs []string) error {
+				return checkMsg(msgs, "FAILED", "CXX foo.o", "", "cxx", "./foo.o", errors.New("failed to exec: exit=1"))
 			},
 		},
 	} {
@@ -137,7 +183,7 @@ func TestCmdOutput(t *testing.T) {
 				w := cmd.StderrWriter()
 				w.Write(tc.stderr)
 			}
-			msgs := cmdOutput(ctx, tc.result, cmd, tc.err)
+			msgs := cmdOutput(ctx, tc.result, cmd, tc.rule, tc.err)
 			err := tc.check(msgs)
 			if err != nil {
 				t.Error(err)

@@ -90,7 +90,7 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 	err = b.handleStep(ctx, step)
 	if err != nil {
 		if !experiments.Enabled("keep-going-handle-error", "handle %s failed: %v", step, err) {
-			msgs := cmdOutput(ctx, "FAILED[handle]:", step.cmd, err)
+			msgs := cmdOutput(ctx, "FAILED[handle]:", step.cmd, step.def.RuleName(), err)
 			b.logOutput(ctx, msgs)
 			clog.Warningf(ctx, "Failed to exec(handle): %v", err)
 			return fmt.Errorf("failed to run handler for %s: %w", step, err)
@@ -111,7 +111,7 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 
 	err = b.setupRSP(ctx, step)
 	if err != nil {
-		msgs := cmdOutput(ctx, "FAILED[rsp]:", step.cmd, err)
+		msgs := cmdOutput(ctx, "FAILED[rsp]:", step.cmd, step.def.RuleName(), err)
 		b.logOutput(ctx, msgs)
 		return fmt.Errorf("failed to setup rsp: %s: %w", step, err)
 	}
@@ -140,7 +140,7 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 	clog.Infof(ctx, "done err=%v", err)
 	if err != nil {
 		if !errors.Is(err, context.Canceled) {
-			msgs := cmdOutput(ctx, "FAILED:", step.cmd, err)
+			msgs := cmdOutput(ctx, "FAILED:", step.cmd, step.def.RuleName(), err)
 			b.logOutput(ctx, msgs)
 		}
 		return StepError{
@@ -149,7 +149,7 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 		}
 	}
 
-	msgs := cmdOutput(ctx, "SUCCESS:", step.cmd, nil)
+	msgs := cmdOutput(ctx, "SUCCESS:", step.cmd, step.def.RuleName(), nil)
 	if len(msgs) > 0 {
 		b.logOutput(ctx, msgs)
 		if experiments.Enabled("fail-on-stdouterr", "step %s emit stdout/stderr", step) {
@@ -176,7 +176,7 @@ func (b *Builder) tryFastStep(ctx context.Context, step, fastStep *Step) (bool, 
 		b.stats.fastDepsSuccess(ctx)
 		step.metrics = fastStep.metrics
 		step.metrics.DepsLog = true
-		msgs := cmdOutput(ctx, "SUCCESS:", fastStep.cmd, nil)
+		msgs := cmdOutput(ctx, "SUCCESS:", fastStep.cmd, step.def.RuleName(), nil)
 		clog.Infof(ctx, "fast done err=%v", err)
 		if len(msgs) > 0 {
 			b.logOutput(ctx, msgs)
@@ -193,7 +193,7 @@ func (b *Builder) tryFastStep(ctx context.Context, step, fastStep *Step) (bool, 
 		// RBE returns permission denied when
 		// platform container image are not available
 		// on RBE worker.
-		msgs := cmdOutput(ctx, "FAILED[badContainer]:", fastStep.cmd, err)
+		msgs := cmdOutput(ctx, "FAILED[badContainer]:", fastStep.cmd, fastStep.def.RuleName(), err)
 		b.logOutput(ctx, msgs)
 		return true, err
 	}
@@ -206,7 +206,7 @@ func (b *Builder) tryFastStep(ctx context.Context, step, fastStep *Step) (bool, 
 
 // cmdOutput returns cmd ouptut log (result, id, desc, err, action, output, args, stdout, stderr).
 // it will return nil if ctx is canceled or success with no stdout/stderr.
-func cmdOutput(ctx context.Context, result string, cmd *execute.Cmd, err error) []string {
+func cmdOutput(ctx context.Context, result string, cmd *execute.Cmd, rule string, err error) []string {
 	if ctx.Err() != nil {
 		return nil
 	}
@@ -224,6 +224,9 @@ func cmdOutput(ctx context.Context, result string, cmd *execute.Cmd, err error) 
 	}
 	var msgs []string
 	msgs = append(msgs, fmt.Sprintf("%s %s %s\n", result, cmd, cmd.Desc))
+	if rule != "" {
+		msgs = append(msgs, fmt.Sprintf("siso_rule:%s\n", rule))
+	}
 	msgs = append(msgs, fmt.Sprintf("err: %v\n%q %q\n%q\n", err, cmd.ActionName, output, cmd.Command()))
 	rsp := cmd.RSPFile
 	if rsp != "" {
