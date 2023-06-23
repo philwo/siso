@@ -28,6 +28,7 @@ import (
 	"infra/build/siso/subcmd/metricscmp"
 	"infra/build/siso/subcmd/ninja"
 	"infra/build/siso/subcmd/recall/recall"
+	"infra/build/siso/subcmd/scandeps"
 	"infra/build/siso/subcmd/version"
 	"infra/build/siso/ui"
 )
@@ -57,6 +58,7 @@ func getApplication() *cli.Application {
 			recall.Cmd(authOpts),
 			fetch.Cmd(authOpts),
 			metricscmp.Cmd(),
+			scandeps.Cmd(),
 
 			authcli.SubcommandInfo(authOpts, "whoami", false),
 			authcli.SubcommandLogin(authOpts, "login", false),
