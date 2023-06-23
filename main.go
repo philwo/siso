@@ -89,6 +89,19 @@ func main() {
 }
 
 func sisoMain() int {
+	flag.Usage = func() {
+		fmt.Fprint(flag.CommandLine.Output(), `
+Usage: siso [command] [arguments]
+
+Use "siso help" to display commands.
+Use "siso help [command]" for more information about a command.
+Use "siso help -advanced" to display all commands.
+
+`)
+		fmt.Fprintf(flag.CommandLine.Output(), "flags of %s:\n", os.Args[0])
+		flag.PrintDefaults()
+	}
+
 	// TODO(b/274361523): Ensure that these flags show up in `siso help`.
 	flag.StringVar(&pprofAddr, "pprof_addr", "", `listen address for "go tool pprof". e.g. "localhost:6060"`)
 	flag.StringVar(&cpuprofile, "cpuprofile", "", "write cpu profile to this file")
