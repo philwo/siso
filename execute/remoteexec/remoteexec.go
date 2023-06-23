@@ -151,6 +151,9 @@ func (re *RemoteExec) processResult(ctx context.Context, action digest.Digest, c
 		clog.Warningf(ctx, "exit=%d cache=%t result=%v err:%v", result.GetExitCode(), cached, result, err)
 	}
 	if result == nil {
+		if err != nil {
+			return err
+		}
 		return errors.New("no result")
 	}
 	now := time.Now()
