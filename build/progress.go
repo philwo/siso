@@ -169,12 +169,18 @@ func (p *progress) step(ctx context.Context, b *Builder, step *Step, s string) {
 		if stat.Remote+stat.CacheHit > 0 {
 			cacheHitRatio = fmt.Sprintf("cache:%5.02f%% ", float64(stat.CacheHit)/float64(stat.CacheHit+stat.Remote)*100.0)
 		}
-		lines = append(lines, fmt.Sprintf("pre:%d local:%s remote:%s %sfallback:%d",
+		var fallback string
+		if stat.LocalFallback > 0 {
+			fallback = ui.SGR(ui.BackgroundRed, fmt.Sprintf("%d", stat.LocalFallback))
+		} else {
+			fallback = "0"
+		}
+		lines = append(lines, fmt.Sprintf("pre:%d local:%s remote:%s %sfallback:%s",
 			stat.Preproc,
 			localProgress,
 			remoteProgress,
 			cacheHitRatio,
-			stat.LocalFallback))
+			fallback))
 	}
 	msg := s
 	if step != nil {
