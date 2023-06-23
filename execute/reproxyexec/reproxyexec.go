@@ -106,7 +106,7 @@ func (REProxyExec) Run(ctx context.Context, cmd *execute.Cmd) error {
 	defer cancel()
 	conn, err := DialContext(dialCtx, serverAddress)
 	if err != nil {
-		log.Fatalf("Fail to dial %s: %v", serverAddress, err)
+		clog.Warningf(ctx, "Fail to dial %s: %v", serverAddress, err)
 		return err
 	}
 	defer conn.Close()
