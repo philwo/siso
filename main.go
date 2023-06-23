@@ -94,6 +94,8 @@ func sisoMain() int {
 	flag.IntVar(&blockprofRate, "blockprof_rate", 0, "block profile rate")
 	flag.IntVar(&mutexprofFrac, "mutexprof_frac", 0, "mutex profile fraction")
 	flag.StringVar(&traceFile, "trace", "", "go trace output for `go tool trace`")
+	var printVersion bool
+	flag.BoolVar(&printVersion, "version", false, "print version")
 	flag.Parse()
 
 	// Flush the log on exit to not lose any messages.
@@ -108,6 +110,13 @@ func sisoMain() int {
 			log.Fatalf("panic: %v\n%s", r, buf)
 		}
 	}()
+
+	if printVersion {
+		a := getApplication()
+		c := version.Cmd(versionStr)
+		r := c.CommandRun()
+		return r.Run(a, nil, nil)
+	}
 
 	if blockprofRate > 0 {
 		runtime.SetBlockProfileRate(blockprofRate)
