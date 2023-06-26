@@ -1,4 +1,4 @@
-// Copyright 2023 The Chromium Authors. All rights reserved.
+// Copyright 2023 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -114,6 +114,8 @@ type ninjaCmdRun struct {
 	enableCloudTrace         bool
 	traceThreshold           time.Duration
 	traceSpanThreshold       time.Duration
+
+	debugMode debugMode
 }
 
 // Run runs the `ninja` subcommand.
@@ -135,6 +137,10 @@ func (c *ninjaCmdRun) Run(a subcommands.Application, args []string, env subcomma
 func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer signals.HandleInterrupt(cancel)()
+
+	if c.debugMode.check() {
+		return nil
+	}
 
 	projectID := c.reopt.UpdateProjectID(c.projectID)
 	var credential cred.Cred
@@ -595,6 +601,8 @@ func (c *ninjaCmdRun) init() {
 	c.Flags.BoolVar(&c.enableCloudProfiler, "enable_cloud_profiler", false, "enable cloud profiler")
 	c.Flags.StringVar(&c.cloudProfilerServiceName, "cloud_profiler_service_name", "siso", "cloud profiler service name")
 	c.Flags.BoolVar(&c.enableCloudTrace, "enable_cloud_trace", false, "enable cloud trace")
+
+	c.Flags.Var(&c.debugMode, "d", "enable debugging (use '-d list' to list modes)")
 }
 
 func defaultCacheDir() string {
