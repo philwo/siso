@@ -21,10 +21,10 @@ type debugMode struct {
 
 func (m *debugMode) check() bool {
 	if m.List {
-		fmt.Fprint(os.Stderr, `debugging modes - not implemented yet:
-  stats        print operation counts/timing info
-  explain      explain what caused a command to execute
-  keepdepfile  don't delete depfiles after they're read by ninja
+		fmt.Fprint(os.Stderr, `debugging modes
+  stats        not implemented: print operation counts/timing info
+  explain      not implemented b/288419130: explain what caused a command to execute
+  keepdepfile  not implemented: don't delete depfiles after they're read by ninja
   keeprsp      don't delete @response files on success
 multiple modes can be enabled via -d FOO -d BAR
 `)
@@ -38,9 +38,6 @@ multiple modes can be enabled via -d FOO -d BAR
 	}
 	if m.Keepdepfile {
 		fmt.Fprintln(os.Stderr, "WARNING: `-d keepdepfile` is not implemented yet")
-	}
-	if m.Keeprsp {
-		fmt.Fprintln(os.Stderr, "WARNING: `-d keeprsp` is not implemented yet. b/288418077")
 	}
 	return false
 

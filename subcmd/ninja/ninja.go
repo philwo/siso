@@ -493,6 +493,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 		Pprof:                c.buildPprof,
 		Clobber:              c.clobber,
 		DryRun:               c.dryRun,
+		KeepRSP:              c.debugMode.Keeprsp,
 	}
 	const failedTargetsFile = ".siso_failed_targets"
 	for {

@@ -36,6 +36,9 @@ func (b *Builder) setupRSP(ctx context.Context, step *Step) error {
 }
 
 func (b *Builder) teardownRSP(ctx context.Context, step *Step) {
+	if b.keepRSP {
+		return
+	}
 	rsp := step.cmd.RSPFile
 	if rsp == "" {
 		return

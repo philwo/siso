@@ -102,6 +102,9 @@ type Options struct {
 	// DryRun just prints the command to build, but does nothing.
 	DryRun bool
 
+	// don't delete @response files on success
+	KeepRSP bool
+
 	// RebuildManifest is a build manifest filename (i.e. build.ninja)
 	// when rebuilding manifest.
 	// empty for normal build.
@@ -176,8 +179,12 @@ type Builder struct {
 	tracePprof           *tracePprof
 	pprofUploader        *pprof.Uploader
 
-	clobber         bool
-	dryRun          bool
+	clobber bool
+	dryRun  bool
+
+	// ninja debug modes
+	keepRSP bool
+
 	rebuildManifest string
 }
 
@@ -276,6 +283,7 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 		pprofUploader:        opts.PprofUploader,
 		clobber:              opts.Clobber,
 		dryRun:               opts.DryRun,
+		keepRSP:              opts.KeepRSP,
 		rebuildManifest:      opts.RebuildManifest,
 	}, nil
 }
