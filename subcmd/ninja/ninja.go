@@ -82,7 +82,8 @@ type ninjaCmdRun struct {
 	clobber    bool
 	actionSalt string
 
-	fname string
+	ninjaJobs int
+	fname     string
 
 	cacheDir         string
 	localCacheEnable bool
@@ -143,6 +144,10 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 
 	if c.debugMode.check() {
 		return nil
+	}
+
+	if c.ninjaJobs >= 0 {
+		fmt.Fprintf(os.Stderr, "-j is specified. but not supported. b/288829511\n")
 	}
 
 	projectID := c.reopt.UpdateProjectID(c.projectID)
@@ -584,6 +589,7 @@ func (c *ninjaCmdRun) init() {
 	c.Flags.BoolVar(&c.clobber, "clobber", false, "clobber build")
 	c.Flags.StringVar(&c.actionSalt, "action_salt", "", "action salt")
 
+	c.Flags.IntVar(&c.ninjaJobs, "j", -1, "run N jobs in parallel (0 means infinity). not supported b/288829511")
 	c.Flags.StringVar(&c.fname, "f", "build.ninja", "input build manifet filename (relative to -C)")
 
 	c.Flags.StringVar(&c.cacheDir, "cache_dir", defaultCacheDir(), "cache directory")
