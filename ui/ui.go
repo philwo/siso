@@ -81,3 +81,30 @@ const (
 func SGR(n int, s string) string {
 	return fmt.Sprintf("\033[%dm%s\033[0m", n, s)
 }
+
+// StripANSIEscapeCodes strips ANSI escape codes.
+func StripANSIEscapeCodes(s string) string {
+	var sb strings.Builder
+	for i := 0; i < len(s); i++ {
+		if s[i] != '\033' {
+			// not an escape code.
+			sb.WriteByte(s[i])
+			continue
+		}
+		// Only strip CSIs for now.
+		if i+1 >= len(s) {
+			break
+		}
+		if s[i+1] != '[' {
+			// Not a CSI.
+			continue
+		}
+		i += 2
+
+		// Skip everything up to and including the next [a-zA-Z].
+		for i < len(s) && !((s[i] >= 'a' && s[i] <= 'z') || s[i] >= 'A' && s[i] <= 'Z') {
+			i++
+		}
+	}
+	return sb.String()
+}

@@ -595,11 +595,11 @@ loop:
 				fmt.Fprintf(&buf, "%s\n", step.cmd.Desc)
 				stderr := step.cmd.Stderr()
 				if len(stderr) > 0 {
-					buf.Write(stderr)
+					fmt.Fprint(&buf, ui.StripANSIEscapeCodes(string(stderr)))
 				}
 				stdout := step.cmd.Stdout()
 				if len(stdout) > 0 {
-					buf.Write(stdout)
+					fmt.Fprint(&buf, ui.StripANSIEscapeCodes(string(stdout)))
 				}
 				fmt.Fprintf(&buf, "%v\n", err)
 				b.failureSummaryWriter.Write(buf.Bytes())

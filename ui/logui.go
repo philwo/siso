@@ -38,6 +38,9 @@ type LogUI struct{}
 // PrintLines implements the ui.ui interface.
 // Because a log-based UI cannot support erasing previous lines, msgs will be printed as-is.
 func (LogUI) PrintLines(msgs ...string) {
+	for i := range msgs {
+		msgs[i] = StripANSIEscapeCodes(msgs[i])
+	}
 	os.Stdout.Write([]byte(strings.Join(msgs, "\t") + "\n"))
 }
 
