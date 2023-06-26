@@ -410,6 +410,9 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 				clog.Warningf(ctx, "failed to stat %s: %v", b.rebuildManifest, mferr)
 				return
 			}
+			if err != nil {
+				return
+			}
 			clog.Infof(ctx, "rebuild manifest %#v %s: %s->%s: %s", stat, b.rebuildManifest, mftime, fi.ModTime(), time.Since(started))
 			if fi.ModTime().After(mftime) || stat.Done != stat.Skipped {
 				ui.Default.PrintLines(fmt.Sprintf("manifest updated %s\n", time.Since(started)))
