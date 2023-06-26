@@ -390,7 +390,8 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 
 	stat := b.Stats()
 	if stat.Total == 0 {
-		return fmt.Errorf("nothing to build for %q", args)
+		clog.Infof(ctx, "nothing to build for %q", args)
+		return nil
 	}
 	ui.Default.PrintLines("\n", fmt.Sprintf("%s %d\n", name, stat.Total), "")
 	var mftime time.Time
