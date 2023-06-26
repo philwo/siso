@@ -51,6 +51,9 @@ import (
 	"infra/build/siso/ui"
 )
 
+// File name of ninja log.
+const ninjaLogName = ".ninja_log"
+
 // Cmd returns the Command for the `ninja` subcommand provided by this package.
 func Cmd(authOpts auth.Options) *subcommands.Command {
 	return &subcommands.Command{
@@ -442,6 +445,18 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 		}()
 		metricsJSONWriter = f
 	}
+	// TODO(b/288826281): produce ninja log in the valid format.
+	ninjaLogWriter, err := os.OpenFile(ninjaLogName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		clog.Infof(ctx, "close .ninja_log")
+		cerr := ninjaLogWriter.Close()
+		if err == nil {
+			err = cerr
+		}
+	}()
 	var actionSaltBytes []byte
 	if c.actionSalt != "" {
 		actionSaltBytes = []byte(c.actionSalt)
@@ -488,6 +503,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 		OutputLogWriter:      outputLogWriter,
 		LocalexecLogWriter:   localexecLogWriter,
 		MetricsJSONWriter:    metricsJSONWriter,
+		NinjaLogWriter:       ninjaLogWriter,
 		TraceExporter:        traceExporter,
 		TraceJSON:            c.traceJSON,
 		Pprof:                c.buildPprof,

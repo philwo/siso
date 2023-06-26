@@ -91,6 +91,7 @@ type Options struct {
 	OutputLogWriter      io.Writer
 	LocalexecLogWriter   io.Writer
 	MetricsJSONWriter    io.Writer
+	NinjaLogWriter       io.Writer
 	TraceJSON            string
 	Pprof                string
 	TraceExporter        *trace.Exporter
