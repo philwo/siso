@@ -159,7 +159,7 @@ func (g *Graph) load(ctx context.Context) error {
 	spin := ui.Default.NewSpinner()
 	spin.Start("loading %s...", g.fname)
 	err := p.Load(ctx, g.fname)
-	spin.Stop(err)
+	spin.Stop(nil)
 	if err != nil {
 		return fmt.Errorf("failed to load %s: %w", g.fname, err)
 	}

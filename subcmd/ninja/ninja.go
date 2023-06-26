@@ -360,7 +360,10 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 			return
 		}
 		clog.Infof(ctx, "save targets to %s...", lastTargetsFile)
-		err = saveTargets(ctx, lastTargetsFile, targets)
+		serr := saveTargets(ctx, lastTargetsFile, targets)
+		if serr != nil {
+			clog.Warningf(ctx, "failed to save failed targets: %v", serr)
+		}
 	}()
 	defer func() {
 		err := hashFS.Close(ctx)
@@ -548,7 +551,6 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 				if serr != nil {
 					clog.Warningf(ctx, "failed to save failed targets: %v", serr)
 				}
-
 			}
 		}
 		return err

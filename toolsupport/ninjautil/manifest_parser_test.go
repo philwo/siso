@@ -58,3 +58,22 @@ build result: cat in_1.cc in-2.O
 	}
 
 }
+
+func TestParser_Dupbuild_Error(t *testing.T) {
+	state := NewState()
+	p := NewManifestParser(state)
+	err := p.parse(context.Background(),
+		&lexer{
+			fname: "build.ninja",
+			buf: []byte(`
+rule cat
+  command = cat $in > $out
+build b: cat a
+build b: cat c
+`),
+		})
+	want := p.lexer.errorf("multiple rules generate b")
+	if err != want {
+		t.Errorf("p.parse() got: %v; want: %v", err, want)
+	}
+}
