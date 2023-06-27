@@ -107,6 +107,8 @@ func (b *Builder) runCmd(ctx context.Context, step *Step, allowLocalFallback boo
 			return fmt.Errorf("remote-exec %s failed no-fallback: %w", step.cmd.ActionDigest(), err)
 		}
 		step.metrics.Fallback = true
+		msgs := cmdOutput(ctx, "FALLBACK", step.cmd, step.def.RuleName(), err)
+		b.logOutput(ctx, msgs)
 	}
 	if !allowLocalFallback {
 		return errors.New("no allow-localfallback")

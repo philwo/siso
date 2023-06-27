@@ -248,6 +248,9 @@ func (b *Builder) logOutput(ctx context.Context, msgs []string) {
 	}
 	if b.outputLogWriter != nil {
 		fmt.Fprint(b.outputLogWriter, strings.Join(msgs, "")+"\f\n")
+		if strings.HasPrefix(msgs[0], "FALLBACK") {
+			return
+		}
 		var sb strings.Builder
 		fmt.Fprint(&sb, msgs[0])
 		for _, msg := range msgs {
@@ -257,6 +260,9 @@ func (b *Builder) logOutput(ctx context.Context, msgs []string) {
 			}
 		}
 		ui.Default.PrintLines(sb.String())
+		return
+	}
+	if strings.HasPrefix(msgs[0], "FALLBACK") {
 		return
 	}
 	ui.Default.PrintLines(append([]string{"\n", "\n"}, msgs...)...)
