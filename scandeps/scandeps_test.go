@@ -89,11 +89,11 @@ func TestScanDeps(t *testing.T) {
 		},
 	}
 
-	hashfs, err := hashfs.New(ctx, hashfs.Option{})
+	hashFS, err := hashfs.New(ctx, hashfs.Option{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	scanDeps := New(hashfs, inputDeps)
+	scanDeps := New(hashFS, inputDeps)
 
 	req := Request{
 		Sources: []string{
@@ -129,6 +129,167 @@ func TestScanDeps(t *testing.T) {
 		"third_party/glog/src/glog",
 		"third_party/glog/src/glog/export.h",
 		"third_party/glog/src/glog/logging.h",
+	}
+	if diff := cmp.Diff(want, got, cmpopts.SortSlices(func(a, b string) bool { return a < b })); diff != "" {
+		t.Errorf("scandeps diff -want +got:\n%s", diff)
+	}
+}
+
+func TestScanDeps_SelfIncludeInCommentAndMacroInclude(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+
+	for fname, content := range map[string]string{
+		"third_party/vulkan-deps/vulkan-validation-layers/src/layers/external/vma/vk_mem_alloc.h": `
+
+#ifndef AMD_VULKAN_MEMORY_ALLOCATOR_H
+#define AMD_VULKAN_MEMORY_ALLOCATOR_H
+
+/*
+    #include "vk_mem_alloc.h"
+*/
+#if !defined(VMA_CONFIGURATION_USER_INCLUDES_H)
+    #include <mutex>
+#else
+    #include VMA_CONFIGURATION_USER_INCLUDES_H
+#endif
+
+#endif
+`,
+		"apps/apps.cc": `
+#include "vma/vk_mem_alloc.h"
+`,
+	} {
+		fname := filepath.Join(dir, fname)
+		err := os.MkdirAll(filepath.Dir(fname), 0755)
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = os.WriteFile(fname, []byte(content), 0644)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	inputDeps := map[string][]string{}
+
+	hashFS, err := hashfs.New(ctx, hashfs.Option{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	scanDeps := New(hashFS, inputDeps)
+
+	req := Request{
+		Sources: []string{
+			"apps/apps.cc",
+		},
+		Dirs: []string{
+			"",
+			"third_party/vulkan-deps/vulkan-validation-layers/src/layers/external",
+		},
+	}
+	got, err := scanDeps.Scan(ctx, dir, req)
+	if err != nil {
+		t.Errorf("scandeps()=%v, %v; want nil err", got, err)
+	}
+
+	want := []string{
+		"apps",
+		"apps/apps.cc",
+		"third_party/vulkan-deps/vulkan-validation-layers/src/layers/external",
+		"third_party/vulkan-deps/vulkan-validation-layers/src/layers/external/vma",
+		"third_party/vulkan-deps/vulkan-validation-layers/src/layers/external/vma/vk_mem_alloc.h",
+	}
+	if diff := cmp.Diff(want, got, cmpopts.SortSlices(func(a, b string) bool { return a < b })); diff != "" {
+		t.Errorf("scandeps diff -want +got:\n%s", diff)
+	}
+}
+
+func TestScanDeps_IncludeByDifferentMacroValue(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+
+	for fname, content := range map[string]string{
+		"third_party/harfbuzz-ng/src/src/hb-subset.cc": `
+#include "hb-ot-post-table.hh"
+#include "hb-ot-cff1-table.hh"
+`,
+		"third_party/harfbuzz-ng/src/src/hb-ot-post-table.hh": `
+#ifndef HB_OT_POST_TABLE_HH
+#define HB_OT_POST_TABLE_HH
+
+#define HB_STRING_ARRAY_NAME format1_names
+#define HB_STRING_ARRAY_LIST "hb-ot-post-macroman.hh"
+#include "hb-string-array.hh"
+#undef HB_STRING_ARRAY_LIST
+#undef HB_STRING_ARRAY_NAME
+
+#endif
+`,
+		"third_party/harfbuzz-ng/src/src/hb-ot-cff1-table.hh": `
+#ifndef HB_OT_CFF1_TABLE_HH
+#define HB_OT_CFF1_TABLE_HH
+
+#define HB_STRING_ARRAY_NAME cff1_std_strings
+#define HB_STRING_ARRAY_LIST "hb-ot-cff1-std-str.hh"
+#include "hb-string-array.hh"
+#undef HB_STRING_ARRAY_LIST
+#undef HB_STRING_ARRAY_NAME
+
+#endif
+`,
+		"third_party/harfbuzz-ng/src/src/hb-string-array.hh": `
+#ifndef HB_STRING_ARRAY_HH
+#if 0 /* Make checks happy. */
+#define HB_STRING_ARRAY_HH
+#endif
+
+#include HB_STRING_ARRAY_LIST
+
+#endif
+`,
+		"third_party/harfbuzz-ng/src/src/hb-ot-post-macroman.hh": "",
+		"third_party/harfbuzz-ng/src/src/hb-ot-cff1-std-str.hh":  "",
+	} {
+		fname := filepath.Join(dir, fname)
+		err := os.MkdirAll(filepath.Dir(fname), 0755)
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = os.WriteFile(fname, []byte(content), 0644)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	inputDeps := map[string][]string{}
+	hashFS, err := hashfs.New(ctx, hashfs.Option{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	scanDeps := New(hashFS, inputDeps)
+
+	req := Request{
+		Sources: []string{
+			"third_party/harfbuzz-ng/src/src/hb-subset.cc",
+		},
+		Dirs: []string{
+			"",
+			"third_party/harfbuzz-ng/src/src",
+		},
+	}
+	got, err := scanDeps.Scan(ctx, dir, req)
+	if err != nil {
+		t.Errorf("scandeps()=%v, %v; want nil err", got, err)
+	}
+
+	want := []string{
+		"third_party/harfbuzz-ng/src/src",
+		"third_party/harfbuzz-ng/src/src/hb-subset.cc",
+		"third_party/harfbuzz-ng/src/src/hb-ot-post-table.hh",
+		"third_party/harfbuzz-ng/src/src/hb-ot-cff1-table.hh",
+		"third_party/harfbuzz-ng/src/src/hb-string-array.hh",
+		"third_party/harfbuzz-ng/src/src/hb-ot-post-macroman.hh",
+		"third_party/harfbuzz-ng/src/src/hb-ot-cff1-std-str.hh",
 	}
 	if diff := cmp.Diff(want, got, cmpopts.SortSlices(func(a, b string) bool { return a < b })); diff != "" {
 		t.Errorf("scandeps diff -want +got:\n%s", diff)

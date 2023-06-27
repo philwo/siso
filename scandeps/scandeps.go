@@ -80,7 +80,9 @@ func (s *ScanDeps) Scan(ctx context.Context, execRoot string, req Request) ([]st
 	}
 	started = time.Now()
 
-	const scanTimeout = 5 * time.Second
+	// max scandeps time in chromium/linux all build on P920 is 12s
+	// as of 2023-06-26
+	const scanTimeout = 20 * time.Second
 
 	icnt := 0
 	ncnt := 0

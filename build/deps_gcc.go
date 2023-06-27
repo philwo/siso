@@ -139,6 +139,7 @@ func (gcc depsGCC) depsInputs(ctx context.Context, b *Builder, step *Step) ([]st
 		if errors.Is(err, context.Canceled) {
 			return nil, err
 		}
+		// TODO(b/288523418): disable this fallback by default and add experiments to allow fallback.
 		clog.Warningf(ctx, "scandeps failed. fallback to gcc deps: %v", err)
 	}
 	cwd := b.path.AbsFromWD(".")

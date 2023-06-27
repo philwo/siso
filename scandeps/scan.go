@@ -42,6 +42,9 @@ type scanner struct {
 	// name -> dir -> visited
 	included map[string]map[string]bool
 
+	// macro name -> value -> used?
+	macroUsed map[string]map[string]bool
+
 	// filename -> has #include MACRO
 	macroInclude map[string]bool
 
@@ -83,6 +86,7 @@ func (fsys *filesystem) scanner(ctx context.Context, execRoot string, inputDeps 
 		},
 		macros:       make(map[string][]string),
 		included:     make(map[string]map[string]bool),
+		macroUsed:    make(map[string]map[string]bool),
 		macroInclude: make(map[string]bool),
 		macroDirs:    make(map[string][]string),
 		nameDirs:     make(map[string]int),
@@ -262,7 +266,7 @@ func (s *scanner) find(ctx context.Context, name string) (string, error) {
 
 func (s *scanner) macroCheck(ctx context.Context, dir, name, incpath string, incnames []string) {
 	for _, iname := range incnames {
-		if isMacro(iname) {
+		if isMacro(iname) && !s.macroAllUsed(ctx, iname) {
 			// incname uses macro.
 			// need to try include again
 			// because macro value may have been changed.
@@ -274,6 +278,27 @@ func (s *scanner) macroCheck(ctx context.Context, dir, name, incpath string, inc
 			return
 		}
 	}
+}
+
+func (s *scanner) macroAllUsed(ctx context.Context, macro string) bool {
+	if s.macroUsed[macro] == nil {
+		s.macroUsed[macro] = make(map[string]bool)
+	}
+	values, ok := s.macros[macro]
+	if !ok {
+		return true
+	}
+	allUsed := true
+	for _, v := range values {
+		if !s.macroUsed[macro][v] {
+			if log.V(1) {
+				clog.Infof(ctx, "macro %s=%s not used yet", macro, v)
+			}
+			s.macroUsed[macro][v] = true
+			allUsed = false
+		}
+	}
+	return allUsed
 }
 
 func (s *scanner) results() []string {
