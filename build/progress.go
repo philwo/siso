@@ -156,15 +156,7 @@ func (p *progress) step(ctx context.Context, b *Builder, step *Step, s string) {
 		}
 
 		localProgress := runProgress(b.localSema.NumWaits(), b.localSema.NumServs())
-		var remoteProgress string
-		switch {
-		case experiments.Enabled("use-reproxy", ""):
-			remoteProgress = runProgress(b.reproxySema.NumWaits(), b.reproxySema.NumServs())
-		case b.rewrapSema.NumServs() > 0:
-			remoteProgress = runProgress(b.rewrapSema.NumWaits(), b.rewrapSema.NumServs())
-		default:
-			remoteProgress = runProgress(b.remoteSema.NumWaits(), b.remoteSema.NumServs())
-		}
+		remoteProgress := runProgress(b.reproxySema.NumWaits()+b.rewrapSema.NumWaits()+b.remoteSema.NumWaits(), b.reproxySema.NumServs()+b.rewrapSema.NumServs()+b.remoteSema.NumServs())
 		var cacheHitRatio string
 		if stat.Remote+stat.CacheHit > 0 {
 			cacheHitRatio = fmt.Sprintf("cache:%5.02f%% ", float64(stat.CacheHit)/float64(stat.CacheHit+stat.Remote)*100.0)
