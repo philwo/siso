@@ -212,16 +212,13 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 	}
 	var le localexec.LocalExec
 	var re *remoteexec.RemoteExec
-	var pe reproxyexec.REProxyExec
 	if opts.REAPIClient != nil {
 		logger.Infof("enable remote exec")
 		re = remoteexec.New(ctx, opts.REAPIClient)
 	} else {
 		logger.Infof("disable remote exec")
 	}
-	if experiments.Enabled("use-reproxy", "enable use-reproxy") {
-		pe = reproxyexec.New(ctx)
-	}
+	pe := reproxyexec.New(ctx)
 	experiments.ShowOnce()
 	numCPU := runtime.NumCPU()
 	stepLimit := stepLimitFactor * numCPU

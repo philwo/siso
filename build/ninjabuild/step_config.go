@@ -189,7 +189,7 @@ type StepRule struct {
 	// - no file access trace
 	UseRemoteExecWrapper bool `json:"use_remote_exec_wrapper,omitempty"`
 	// REProxyConfig specifies configuration options for using reproxy.
-	REProxyConfig execute.REProxyConfig `json:"reproxy_config,omitempty"`
+	REProxyConfig *execute.REProxyConfig `json:"reproxy_config,omitempty"`
 
 	// Timeout specifies time duration for the step.
 	Timeout string `json:"timeout,omitempty"` // duration format

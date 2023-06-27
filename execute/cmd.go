@@ -161,7 +161,7 @@ type Cmd struct {
 
 	// REProxyConfig specifies configuration options for using reproxy.
 	// If using reproxy, this config takes precedence over options in this struct.
-	REProxyConfig REProxyConfig
+	REProxyConfig *REProxyConfig
 
 	// CanonicalizeDir specifies whether remote execution will canonicalize
 	// working directory or not.

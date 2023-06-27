@@ -47,7 +47,7 @@ func (fakeStepDef) ExpandCaseSensitives(ctx context.Context, in []string) []stri
 }
 func (fakeStepDef) ExpandedInputs(context.Context) []string    { return nil }
 func (fakeStepDef) RemoteInputs() map[string]string            { return nil }
-func (fakeStepDef) REProxyConfig() execute.REProxyConfig       { return execute.REProxyConfig{} }
+func (fakeStepDef) REProxyConfig() *execute.REProxyConfig      { return &execute.REProxyConfig{} }
 func (fakeStepDef) Handle(context.Context, *execute.Cmd) error { return nil }
 func (fakeStepDef) Outputs() []string                          { return nil }
 func (fakeStepDef) LocalOutputs() []string                     { return nil }

@@ -27,7 +27,6 @@ var knownExperiments = map[string]string{
 	"no-fallback":                 "",
 	"no-fast-deps-fallback":       "",
 	"no-scandeps":                 "",
-	"use-reproxy":                 "",
 }
 
 type experimentFeature struct {
