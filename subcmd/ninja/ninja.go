@@ -119,7 +119,8 @@ type ninjaCmdRun struct {
 	traceThreshold           time.Duration
 	traceSpanThreshold       time.Duration
 
-	debugMode debugMode
+	debugMode  debugMode
+	adjustWarn string
 }
 
 // Run runs the `ninja` subcommand.
@@ -154,6 +155,10 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 
 	if c.ninjaJobs >= 0 {
 		fmt.Fprintf(os.Stderr, "-j is specified. but not supported. b/288829511\n")
+	}
+
+	if c.adjustWarn != "" {
+		fmt.Fprintf(os.Stderr, "-w is specified. but not supported. b/288807840\n")
 	}
 
 	projectID := c.reopt.UpdateProjectID(c.projectID)
@@ -634,6 +639,7 @@ func (c *ninjaCmdRun) init() {
 	c.Flags.BoolVar(&c.enableCloudTrace, "enable_cloud_trace", false, "enable cloud trace")
 
 	c.Flags.Var(&c.debugMode, "d", "enable debugging (use '-d list' to list modes)")
+	c.Flags.StringVar(&c.adjustWarn, "w", "", "adjust warnings. not supported b/288807840")
 }
 
 func defaultCacheDir() string {
