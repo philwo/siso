@@ -431,14 +431,18 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 			return
 		}
 		clog.Infof(ctx, "build %s: %v", time.Since(started), err)
-		restat := b.reapiclient.IOMetrics().Stats()
+		var restatLine string
+		if b.reapiclient != nil {
+			restat := b.reapiclient.IOMetrics().Stats()
+			restatLine = fmt.Sprintf("reapi: ops: %d(err:%d) / r:%d(err:%d) %s / w:%d(err:%d) %s\n",
+				restat.Ops, restat.OpsErrs,
+				restat.ROps, restat.RErrs, numBytes(restat.RBytes),
+				restat.WOps, restat.WErrs, numBytes(restat.WBytes))
+		}
 		ui.Default.PrintLines(
 			fmt.Sprintf("run:%d+%d pure:%d fastDeps:%d+%d cache:%d fallback:%d skip:%d\n",
 				stat.Local, stat.Remote, stat.Pure, stat.FastDepsSuccess, stat.FastDepsFailed, stat.CacheHit, stat.LocalFallback, stat.Skipped) +
-				fmt.Sprintf("reapi: ops: %d(err:%d) / r:%d(err:%d) %s / w:%d(err:%d) %s\n",
-					restat.Ops, restat.OpsErrs,
-					restat.ROps, restat.RErrs, numBytes(restat.RBytes),
-					restat.WOps, restat.WErrs, numBytes(restat.WBytes)) +
+				restatLine +
 				fmt.Sprintf("total:%d in %s: %v\n",
 					stat.Total, time.Since(started), err))
 	}()
