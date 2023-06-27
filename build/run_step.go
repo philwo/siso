@@ -252,7 +252,14 @@ func (b *Builder) logOutput(ctx context.Context, msgs []string) {
 			return
 		}
 		var sb strings.Builder
-		fmt.Fprint(&sb, msgs[0])
+		switch {
+		case strings.HasPrefix(msgs[0], "FAILED"):
+			fmt.Fprint(&sb, ui.SGR(ui.Red, msgs[0]))
+		case strings.HasPrefix(msgs[0], "SUCCESS"):
+			fmt.Fprint(&sb, ui.SGR(ui.Green, msgs[0]))
+		default:
+			fmt.Fprint(&sb, msgs[0])
+		}
 		for _, msg := range msgs {
 			switch {
 			case strings.HasPrefix(msg, "stdout:") || strings.HasPrefix(msg, "stderr:"):

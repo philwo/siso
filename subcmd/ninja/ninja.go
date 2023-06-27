@@ -553,7 +553,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 					return err
 				}
 				os.Remove(failedTargetsFile)
-				ui.Default.PrintLines(fmt.Sprintf(" last failed targets fixed: %s\n", failedTargets))
+				ui.Default.PrintLines(fmt.Sprintf(" %s: %s\n", ui.SGR(ui.Green, "last failed targets fixed"), failedTargets))
 				continue
 			}
 		}
