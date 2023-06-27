@@ -131,7 +131,13 @@ func (c *ninjaCmdRun) Run(a subcommands.Application, args []string, env subcomma
 		case errors.Is(err, auth.ErrLoginRequired):
 			fmt.Fprintf(os.Stderr, "need to login: run `siso login`\n")
 		default:
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			msgPrefix := "Error:"
+			suggest := fmt.Sprintf("see %s/%s for command output, or %s/siso.INFO", c.dir, c.outputLogFile, c.dir)
+			if ui.IsTerminal() {
+				msgPrefix = ui.SGR(ui.BackgroundRed, msgPrefix)
+				suggest = ui.SGR(ui.Bold, suggest)
+			}
+			fmt.Fprintf(os.Stderr, "%s: %s\n %v\n", msgPrefix, suggest, err)
 		}
 		return 1
 	}

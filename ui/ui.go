@@ -74,6 +74,7 @@ func writeLinesMaxWidth(buf *bytes.Buffer, msgs []string, width int) {
 
 // https://en.wikipedia.org/wiki/ANSI_escape_code#SGR_(Select_Graphic_Rendition)_parameters
 const (
+	Bold          = 1
 	BackgroundRed = 41
 )
 
