@@ -17,6 +17,7 @@ import (
 type fakeStepDef struct {
 	actionName string
 	command    string
+	outputs    []string
 }
 
 func (f fakeStepDef) String() string     { return fmt.Sprintf("%#v", f) }
@@ -49,10 +50,14 @@ func (fakeStepDef) ExpandedInputs(context.Context) []string    { return nil }
 func (fakeStepDef) RemoteInputs() map[string]string            { return nil }
 func (fakeStepDef) REProxyConfig() *execute.REProxyConfig      { return &execute.REProxyConfig{} }
 func (fakeStepDef) Handle(context.Context, *execute.Cmd) error { return nil }
-func (fakeStepDef) Outputs() []string                          { return nil }
-func (fakeStepDef) LocalOutputs() []string                     { return nil }
-func (fakeStepDef) Pure() bool                                 { return false }
-func (fakeStepDef) Platform() map[string]string                { return nil }
+
+func (f fakeStepDef) Outputs() []string {
+	return f.outputs
+}
+
+func (fakeStepDef) LocalOutputs() []string      { return nil }
+func (fakeStepDef) Pure() bool                  { return false }
+func (fakeStepDef) Platform() map[string]string { return nil }
 func (fakeStepDef) RecordDeps(context.Context, string, time.Time, []string) (bool, error) {
 	return false, nil
 }

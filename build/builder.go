@@ -894,6 +894,7 @@ func (b *Builder) done(ctx context.Context, step *Step) error {
 			if !b.dryRun {
 				return fmt.Errorf("output %s for %s: %w", out, step, err)
 			}
+			continue
 		}
 		if !fi.ModTime().IsZero() {
 			mtime = fi.ModTime()
