@@ -89,6 +89,7 @@ type Options struct {
 	Cache                *Cache
 	FailureSummaryWriter io.Writer
 	OutputLogWriter      io.Writer
+	ExplainWriter        io.Writer
 	LocalexecLogWriter   io.Writer
 	MetricsJSONWriter    io.Writer
 	NinjaLogWriter       io.Writer
@@ -172,6 +173,7 @@ type Builder struct {
 
 	failureSummaryWriter io.Writer
 	outputLogWriter      io.Writer
+	explainWriter        io.Writer
 	localexecLogWriter   io.Writer
 	metricsJSONWriter    io.Writer
 	traceExporter        *trace.Exporter
@@ -194,6 +196,10 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 	logger := clog.FromContext(ctx)
 	if logger != nil {
 		logger.Formatter = logFormat
+	}
+	ew := opts.ExplainWriter
+	if ew == nil {
+		ew = io.Discard
 	}
 	lelw := opts.LocalexecLogWriter
 	if lelw == nil {
@@ -267,6 +273,7 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 		cache:                opts.Cache,
 		failureSummaryWriter: opts.FailureSummaryWriter,
 		outputLogWriter:      opts.OutputLogWriter,
+		explainWriter:        ew,
 		localexecLogWriter:   lelw,
 		metricsJSONWriter:    mw,
 		traceExporter:        opts.TraceExporter,
@@ -483,6 +490,10 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 	clog.Infof(ctx, "build pendings=%d ready=%d", pstat.npendings, pstat.nready)
 	b.progress.start(ctx, b)
 	defer b.progress.stop(ctx)
+
+	if b.clobber {
+		fmt.Fprintf(b.explainWriter, "--clobber is specified\n")
+	}
 	var wg sync.WaitGroup
 	errch := make(chan error, 1000)
 	ctx, cancel := context.WithCancel(ctx)

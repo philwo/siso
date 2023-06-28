@@ -100,6 +100,7 @@ type ninjaCmdRun struct {
 
 	failureSummaryFile string
 	outputLogFile      string
+	explainFile        string
 	localexecLogFile   string
 	metricsJSON        string
 	traceJSON          string
@@ -430,6 +431,21 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 		}()
 		outputLogWriter = f
 	}
+	var explainWriter io.Writer
+	if c.explainFile != "" {
+		f, err := os.Create(c.explainFile)
+		if err != nil {
+			return err
+		}
+		defer func() {
+			clog.Infof(ctx, "close explain log")
+			cerr := f.Close()
+			if err == nil {
+				err = cerr
+			}
+		}()
+		explainWriter = f
+	}
 	var localexecLogWriter io.Writer
 	if c.localexecLogFile != "" {
 		f, err := os.Create(c.localexecLogFile)
@@ -517,6 +533,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 		Cache:                cache,
 		FailureSummaryWriter: failureSummaryWriter,
 		OutputLogWriter:      outputLogWriter,
+		ExplainWriter:        explainWriter,
 		LocalexecLogWriter:   localexecLogWriter,
 		MetricsJSONWriter:    metricsJSONWriter,
 		NinjaLogWriter:       ninjaLogWriter,
@@ -613,6 +630,7 @@ func (c *ninjaCmdRun) init() {
 	c.Flags.StringVar(&c.depsLogFile, "deps_log", ".siso_deps", "deps log filename (relative to -C)")
 	c.Flags.StringVar(&c.failureSummaryFile, "failure_summary", "", "filename for failure summary (relative to -C)")
 	c.Flags.StringVar(&c.outputLogFile, "output_log", "siso_output", "output log filename (relative to -C")
+	c.Flags.StringVar(&c.explainFile, "explain_log", "siso_explain", "explain log filename (relative to -C")
 	c.Flags.StringVar(&c.localexecLogFile, "localexec_log", "siso_localexec", "localexec log filename (relative to -C")
 	c.Flags.StringVar(&c.metricsJSON, "metrics_json", "siso_metrics.json", "metrics JSON filename (relative to -C)")
 	c.Flags.StringVar(&c.traceJSON, "trace_json", "siso_trace.json", "trace JSON filename (relative to -C)")

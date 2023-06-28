@@ -27,27 +27,44 @@ func (b *Builder) checkUpToDate(ctx context.Context, step *Step) bool {
 	generator := step.def.Binding("generator") != ""
 	out0, outmtime, cmdhash := outputMtime(ctx, b, step.cmd)
 	lastIn, inmtime, err := inputMtime(ctx, b, step.cmd)
+
+	// TODO(b/288419130): make sure it covers all cases as ninja does.
+
+	outname := b.path.MustToWD(out0)
+	lastInName := b.path.MustToWD(lastIn)
 	if err != nil {
 		// missing inputs in deps file? maybe need to rebuild.
 		clog.Infof(ctx, "need: %v", err)
 		span.SetAttr("run-reason", "missing-inputs")
+		fmt.Fprintf(b.explainWriter, "deps for %s is missing: %v\n", outname, err)
+		return false
+	}
+	if outmtime.IsZero() {
+		clog.Infof(ctx, "need: output doesn't exist")
+		span.SetAttr("run-reason", "no-output")
+		fmt.Fprintf(b.explainWriter, "output %s doesn't exist\n", outname)
+		return false
+	}
+	if inmtime.After(outmtime) {
+		clog.Infof(ctx, "need: in:%s > out:%s %s: in:%s out:%s", lastIn, out0, inmtime.Sub(outmtime), inmtime, outmtime)
+		span.SetAttr("run-reason", "dirty")
+		fmt.Fprintf(b.explainWriter, "output %s older than most recent input %s: out:%s in:+%s\n", outname, lastInName, outmtime.Format(time.RFC3339), inmtime.Sub(outmtime))
+		return false
+	}
+	if !generator && !bytes.Equal(cmdhash, step.cmd.CmdHash) {
+		clog.Infof(ctx, "need: cmdhash differ %q -> %q", hex.EncodeToString(cmdhash), hex.EncodeToString(step.cmd.CmdHash))
+		span.SetAttr("run-reason", "cmdhash-update")
+		if len(cmdhash) == 0 {
+			fmt.Fprintf(b.explainWriter, "command line not found in log for %s\n", outname)
+		} else {
+			fmt.Fprintf(b.explainWriter, "command line changed for %s\n", outname)
+		}
 		return false
 	}
 	if b.clobber {
 		clog.Infof(ctx, "need: clobber")
 		span.SetAttr("run-reason", "clobber")
-		return false
-	} else if outmtime.IsZero() {
-		clog.Infof(ctx, "need: output doesn't exist")
-		span.SetAttr("run-reason", "no-output")
-		return false
-	} else if inmtime.After(outmtime) {
-		clog.Infof(ctx, "need: in:%s > out:%s %s: in:%s out:%s", lastIn, out0, inmtime.Sub(outmtime), inmtime, outmtime)
-		span.SetAttr("run-reason", "dirty")
-		return false
-	} else if !generator && !bytes.Equal(cmdhash, step.cmd.CmdHash) {
-		clog.Infof(ctx, "need: cmdhash differ %q -> %q", hex.EncodeToString(cmdhash), hex.EncodeToString(step.cmd.CmdHash))
-		span.SetAttr("run-reason", "cmdhash-update")
+		// explain once at the beginning of the build.
 		return false
 	}
 	clog.Infof(ctx, "skip: in:%s < out:%s %s", lastIn, out0, outmtime.Sub(inmtime))
