@@ -18,6 +18,7 @@ type stats struct {
 	nskipped         atomic.Int32
 	nfastDepsSuccess atomic.Int32
 	nfastDepsFailed  atomic.Int32
+	nscanDepsFailed  atomic.Int32
 	npreproc         atomic.Int32
 	ncacheHit        atomic.Int32
 	nlocal           atomic.Int32
@@ -44,6 +45,11 @@ func (s *stats) fastDepsSuccess(ctx context.Context) {
 func (s *stats) fastDepsFailed(ctx context.Context, err error) {
 	clog.Warningf(ctx, "fast deps failed: %v", err)
 	s.nfastDepsFailed.Add(1)
+}
+
+func (s *stats) scanDepsFailed(ctx context.Context, err error) {
+	clog.Warningf(ctx, "scandeps failed: %v", err)
+	s.nscanDepsFailed.Add(1)
 }
 
 func (s *stats) preprocStart(ctx context.Context) {
@@ -99,6 +105,7 @@ type Stats struct {
 	Skipped         int // skipped actions, because they were still up-to-date
 	FastDepsSuccess int // actions that ran successfully when we used deps from the deps cache
 	FastDepsFailed  int // actions that failed when we used deps from the deps cache
+	ScanDepsFailed  int // actions that scandeps failed
 	CacheHit        int // actions for which we got a cache hit
 	Local           int // locally executed actions
 	Remote          int // remote executed actions
@@ -114,6 +121,7 @@ func (s *stats) stats() Stats {
 		Skipped:         int(s.nskipped.Load()),
 		FastDepsSuccess: int(s.nfastDepsSuccess.Load()),
 		FastDepsFailed:  int(s.nfastDepsFailed.Load()),
+		ScanDepsFailed:  int(s.nscanDepsFailed.Load()),
 		CacheHit:        int(s.ncacheHit.Load()),
 		Local:           int(s.nlocal.Load()),
 		Remote:          int(s.nremote.Load()),

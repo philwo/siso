@@ -131,19 +131,20 @@ func (gcc depsGCC) DepsCmd(ctx context.Context, b *Builder, step *Step) ([]strin
 }
 
 func (gcc depsGCC) depsInputs(ctx context.Context, b *Builder, step *Step) ([]string, error) {
-	if b.scanDeps != nil {
-		ins, err := gcc.scandeps(ctx, b, step)
-		if err == nil {
-			return ins, nil
-		}
-		if errors.Is(err, context.Canceled) {
-			return nil, err
-		}
-		// TODO(b/288523418): disable this fallback by default and add experiments to allow fallback.
-		clog.Warningf(ctx, "scandeps failed. fallback to gcc deps: %v", err)
+	ins, err := gcc.scandeps(ctx, b, step)
+	if err == nil {
+		return ins, nil
 	}
+	if errors.Is(err, context.Canceled) {
+		return nil, err
+	}
+	b.stats.scanDepsFailed(ctx, err)
+	if !experiments.Enabled("scandeps-fallback", "scandeps failed, fallback to use `clang -M`") {
+		return nil, err
+	}
+	// TODO(b/289142353): drop `clang -M` support?
 	cwd := b.path.AbsFromWD(".")
-	err := b.prepareLocalInputs(ctx, step)
+	err = b.prepareLocalInputs(ctx, step)
 	if err != nil {
 		return nil, fmt.Errorf("prepare for gcc deps: %w", err)
 	}
@@ -151,7 +152,7 @@ func (gcc depsGCC) depsInputs(ctx context.Context, b *Builder, step *Step) ([]st
 	if len(dargs) == 0 {
 		dargs = gccutil.DepsArgs(step.cmd.Args)
 	}
-	ins, err := gccutil.Deps(ctx, dargs, nil, cwd)
+	ins, err = gccutil.Deps(ctx, dargs, nil, cwd)
 	if err != nil {
 		return nil, err
 	}

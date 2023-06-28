@@ -33,7 +33,9 @@ func preprocCmd(ctx context.Context, b *Builder, step *Step) {
 	defer span.Close(nil)
 	err := depsCmd(ctx, b, step)
 	if err != nil {
-		clog.Warningf(ctx, "failed to get %s deps: %v", step.cmd.Deps, err)
+		clog.Warningf(ctx, "disable remote: failed to get %s deps: %v", step.cmd.Deps, err)
+		// disable remote execution. b/289143861
+		step.cmd.Platform = nil
 	}
 }
 

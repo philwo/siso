@@ -26,7 +26,7 @@ var knownExperiments = map[string]string{
 	"keep-going-impure":           "check siso_localexec",
 	"no-fallback":                 "",
 	"no-fast-deps-fallback":       "",
-	"no-scandeps":                 "",
+	"scandeps-fallback":           "",
 }
 
 type experimentFeature struct {

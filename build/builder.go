@@ -238,11 +238,6 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 		numCPU, maxThreads, stepLimit, localLimit, rewrapLimit, remoteLimit)
 	logger.Infof("tool_invocation_id: %s", opts.ID)
 
-	var scanDeps *scandeps.ScanDeps
-	if !experiments.Enabled("no-scandeps", "disable scandeps - use `clang -M` only") {
-		scanDeps = scandeps.New(opts.HashFS, graph.InputDeps(ctx))
-	}
-
 	return &Builder{
 		id:        opts.ID,
 		projectID: opts.ProjectID,
@@ -254,7 +249,7 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 		stepSema:          semaphore.New("step", stepLimit),
 		preprocSema:       semaphore.New("preproc", stepLimit),
 		scanDepsSema:      semaphore.New("scandeps", scanDepsLimit),
-		scanDeps:          scanDeps,
+		scanDeps:          scandeps.New(opts.HashFS, graph.InputDeps(ctx)),
 		localSema:         semaphore.New("localexec", localLimit),
 		localExec:         le,
 		rewrapSema:        semaphore.New("rewrap", rewrapLimit),
@@ -437,8 +432,10 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 				restat.WOps, restat.WErrs, numBytes(restat.WBytes))
 		}
 		ui.Default.PrintLines(
-			fmt.Sprintf("run:%d+%d pure:%d fastDeps:%d+%d cache:%d fallback:%d skip:%d\n",
-				stat.Local, stat.Remote, stat.Pure, stat.FastDepsSuccess, stat.FastDepsFailed, stat.CacheHit, stat.LocalFallback, stat.Skipped) +
+			fmt.Sprintf("run:%d+%d pure:%d cache:%d fallback:%d skip:%d\n",
+				stat.Local, stat.Remote, stat.Pure, stat.CacheHit, stat.LocalFallback, stat.Skipped) +
+				fmt.Sprintf("deps log:%d logErr:%d scanErr:%d\n",
+					stat.FastDepsSuccess, stat.FastDepsFailed, stat.ScanDepsFailed) +
 				restatLine +
 				fmt.Sprintf("total:%d in %s: %v\n",
 					stat.Total, time.Since(started), err))
