@@ -561,6 +561,9 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 				ui.Default.PrintLines(fmt.Sprintf("Building last failed targets: %s...\n", failedTargets))
 				err = doBuild(ctx, graph, lbopts, failedTargets...)
 				if errors.Is(err, build.ErrManifestModified) {
+					if c.dryRun {
+						return nil
+					}
 					clog.Infof(ctx, "%s modified. refresh hashfs...", c.fname)
 					// need to refresh cached entries as `gn gen` updated files
 					// but nnja manifest doesn't know what files are updated.
@@ -582,6 +585,9 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 		os.Remove(failedTargetsFile)
 		err = doBuild(ctx, graph, bopts, c.Flags.Args()...)
 		if errors.Is(err, build.ErrManifestModified) {
+			if c.dryRun {
+				return nil
+			}
 			clog.Infof(ctx, "%s modified. refresh hashfs...", c.fname)
 			// need to refresh cached entries as `gn gen` updated files
 			// but nnja manifest doesn't know what files are updated.
