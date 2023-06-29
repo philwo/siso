@@ -16,6 +16,7 @@ import (
 	"infra/build/siso/execute"
 	"infra/build/siso/o11y/clog"
 	"infra/build/siso/o11y/trace"
+	"infra/build/siso/ui"
 )
 
 // checkUpToDate returns true if outputs are already up-to-date and
@@ -69,7 +70,7 @@ func (b *Builder) checkUpToDate(ctx context.Context, step *Step) bool {
 	}
 	clog.Infof(ctx, "skip: in:%s < out:%s %s", lastIn, out0, outmtime.Sub(inmtime))
 	span.SetAttr("skip", true)
-	if b.stats.skipped(ctx)%100 == 0 {
+	if b.stats.skipped(ctx)%100 == 0 && ui.IsTerminal() {
 		b.progressStepSkipped(ctx, step)
 	}
 	return true
