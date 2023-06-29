@@ -149,6 +149,10 @@ func (c *run) run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	err = os.Chdir(dir)
+	if err != nil {
+		return err
+	}
 
 	actionDigest, err := digest.Parse(c.Flags.Arg(1))
 	if err != nil {
@@ -159,7 +163,7 @@ func (c *run) run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	err = os.WriteFile(filepath.Join(dir, "action.txt"), []byte(prototext.Format(action)), 0644)
+	err = os.WriteFile("action.txt", []byte(prototext.Format(action)), 0644)
 	if err != nil {
 		return err
 	}
@@ -169,13 +173,13 @@ func (c *run) run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	err = os.WriteFile(filepath.Join(dir, "command.txt"), []byte(prototext.Format(command)), 0644)
+	err = os.WriteFile("command.txt", []byte(prototext.Format(command)), 0644)
 	if err != nil {
 		return err
 	}
 
 	e := exporter.New(client)
-	err = e.Export(ctx, filepath.Join(dir, "root"), digest.FromProto(action.InputRootDigest))
+	err = e.Export(ctx, "root", digest.FromProto(action.InputRootDigest))
 	if err != nil {
 		return err
 	}
@@ -183,7 +187,7 @@ func (c *run) run(ctx context.Context) error {
 	result, err := client.GetActionResult(ctx, actionDigest)
 	switch status.Code(err) {
 	case codes.OK:
-		err = os.WriteFile(filepath.Join(dir, "result.txt"), []byte(prototext.Format(result)), 0644)
+		err = os.WriteFile("result.txt", []byte(prototext.Format(result)), 0644)
 		if err != nil {
 			return err
 		}

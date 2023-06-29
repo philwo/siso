@@ -27,7 +27,7 @@ import (
 	"infra/build/siso/subcmd/fscmd"
 	"infra/build/siso/subcmd/metricscmp"
 	"infra/build/siso/subcmd/ninja"
-	"infra/build/siso/subcmd/recall/recall"
+	"infra/build/siso/subcmd/recall"
 	"infra/build/siso/subcmd/scandeps"
 	"infra/build/siso/subcmd/version"
 	"infra/build/siso/ui"
