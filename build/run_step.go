@@ -262,7 +262,7 @@ func (b *Builder) logOutput(ctx context.Context, msgs []string) {
 		}
 		for _, msg := range msgs {
 			switch {
-			case strings.HasPrefix(msg, "stdout:") || strings.HasPrefix(msg, "stderr:"):
+			case strings.HasPrefix(msg, "err:") || strings.HasPrefix(msg, "stdout:") || strings.HasPrefix(msg, "stderr:"):
 				fmt.Fprint(&sb, msg)
 			}
 		}
