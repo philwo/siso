@@ -399,6 +399,7 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 	stat := b.Stats()
 	if stat.Total == 0 {
 		clog.Infof(ctx, "nothing to build for %q", args)
+		ui.Default.PrintLines("ninja: no work to do")
 		return nil
 	}
 	ui.Default.PrintLines("\n", fmt.Sprintf("%s %d\n", name, stat.Total), "")
