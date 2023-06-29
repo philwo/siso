@@ -393,7 +393,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 	}()
 
 	clog.Infof(ctx, "sameTargets:%t hashfs clean:%t", sameTargets, hashFS.IsClean())
-	if !c.clobber && sameTargets && hashFS.IsClean() {
+	if !c.clobber && !c.dryRun && !c.debugMode.Explain && sameTargets && hashFS.IsClean() {
 		// TODO: better to check digest of .siso_fs_state?
 		ui.Default.PrintLines("Everything is up-to-date. Nothing to do.\n")
 		return nil
