@@ -216,6 +216,25 @@ func (g *Graph) Targets(ctx context.Context, args ...string) ([]string, error) {
 	}
 	targets := make([]string, 0, len(args))
 	for _, t := range args {
+		if strings.HasSuffix(t, "^") {
+			// Special syntax: "foo.cc^" means "the first output of foo.cc".
+			t = strings.TrimSuffix(t, "^")
+			n, ok := g.nstate.LookupNode(t)
+			if !ok {
+				return nil, fmt.Errorf("unknown target %q", t)
+			}
+			outs := n.OutEdges()
+			if len(outs) == 0 {
+				// TODO(b/289309062): deps log first reverse deps node?
+				return nil, fmt.Errorf("no outs for %q", t)
+			}
+			edge := outs[0]
+			outputs := edge.Outputs()
+			if len(outputs) == 0 {
+				return nil, fmt.Errorf("out edge of %q has no output", t)
+			}
+			t = outputs[0].Path()
+		}
 		targets = append(targets, g.globals.path.MustFromWD(t))
 	}
 	return targets, nil

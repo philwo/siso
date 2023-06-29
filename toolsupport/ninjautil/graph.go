@@ -23,6 +23,11 @@ func (n *Node) addOutEdge(e *Edge) {
 	n.outs = append(n.outs, e)
 }
 
+// OutEdges returns out-edges of the node.
+func (n *Node) OutEdges() []*Edge {
+	return n.outs
+}
+
 func (n *Node) hasInEdge() bool {
 	return n.inEdge != nil
 }
