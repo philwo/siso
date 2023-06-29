@@ -376,7 +376,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 		return err
 	}
 	defer func() {
-		if err != nil && c.batch {
+		if err != nil || c.dryRun {
 			return
 		}
 		clog.Infof(ctx, "save targets to %s...", lastTargetsFile)
