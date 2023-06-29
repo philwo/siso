@@ -356,6 +356,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 		if err != nil {
 			return err
 		}
+		defer client.Close()
 		cacheStore = client.CacheStore()
 	}
 	cache, err := build.NewCache(ctx, build.CacheOptions{
