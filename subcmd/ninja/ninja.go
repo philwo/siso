@@ -449,6 +449,13 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 		}()
 		explainWriter = f
 	}
+	if c.debugMode.Explain {
+		if explainWriter == nil {
+			explainWriter = newExplainWriter(os.Stderr, "")
+		} else {
+			explainWriter = io.MultiWriter(newExplainWriter(os.Stderr, filepath.Join(c.dir, c.explainFile)), explainWriter)
+		}
+	}
 	var localexecLogWriter io.Writer
 	if c.localexecLogFile != "" {
 		f, err := os.Create(c.localexecLogFile)

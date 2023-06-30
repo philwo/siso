@@ -61,6 +61,8 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 	}
 	// defer some initialization after mtimeCheck?
 	if step.def.IsPhony() {
+		b.stats.skipped(ctx)
+		step.metrics.skip = true
 		return b.phonyDone(ctx, step)
 	}
 

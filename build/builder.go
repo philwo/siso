@@ -431,6 +431,10 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 			return
 		}
 		clog.Infof(ctx, "build %s: %v", time.Since(started), err)
+		if stat.Skipped == stat.Total {
+			ui.Default.PrintLines("ninja: no work to do\n")
+			return
+		}
 		var restatLine string
 		if b.reapiclient != nil {
 			restat := b.reapiclient.IOMetrics().Stats()
@@ -872,6 +876,7 @@ func (b *Builder) phonyDone(ctx context.Context, step *Step) error {
 	if log.V(1) {
 		clog.Infof(ctx, "step phony %s", step)
 	}
+	b.stats.done(true)
 	b.plan.done(ctx, step, step.def.Outputs())
 	return nil
 }

@@ -6,6 +6,7 @@ package ninja
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"strings"
 )
@@ -23,7 +24,7 @@ func (m *debugMode) check() bool {
 	if m.List {
 		fmt.Fprint(os.Stderr, `debugging modes
   stats        not implemented: print operation counts/timing info
-  explain      not implemented b/288419130: explain what caused a command to execute
+  explain      explain what caused a command to execute
   keepdepfile  not implemented: don't delete depfiles after they're read by ninja
   keeprsp      don't delete @response files on success
 multiple modes can be enabled via -d FOO -d BAR
@@ -32,9 +33,6 @@ multiple modes can be enabled via -d FOO -d BAR
 	}
 	if m.Stats {
 		fmt.Fprintln(os.Stderr, "WARNING: `-d stats` is not implemented yet")
-	}
-	if m.Explain {
-		fmt.Fprintln(os.Stderr, "WARNING: `-d explain` is not implemented yet: b/288419130")
 	}
 	if m.Keepdepfile {
 		fmt.Fprintln(os.Stderr, "WARNING: `-d keepdepfile` is not implemented yet")
@@ -80,4 +78,20 @@ func (m *debugMode) Set(v string) error {
 		}
 	}
 	return nil
+}
+
+type explainDebugWriter struct {
+	w io.Writer
+}
+
+func (w explainDebugWriter) Write(buf []byte) (int, error) {
+	_, err := fmt.Fprintf(w.w, "ninja explain: %s", buf)
+	return len(buf), err
+}
+
+func newExplainWriter(w io.Writer, fname string) io.Writer {
+	if fname != "" {
+		fmt.Fprintf(w, "ninja explain: recorded in %s even without `-d explain`\n", fname)
+	}
+	return explainDebugWriter{w: w}
 }
