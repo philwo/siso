@@ -68,6 +68,9 @@ const (
 	remoteLimitFactor = 80
 )
 
+// chromium recipe module expects this string.
+const ninjaNoWorkToDo = "ninja: no work to do.\n"
+
 // OutputLocalFunc is a function to determine the file should be downloaded or not.
 type OutputLocalFunc func(context.Context, string) bool
 
@@ -399,7 +402,7 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 	stat := b.Stats()
 	if stat.Total == 0 {
 		clog.Infof(ctx, "nothing to build for %q", args)
-		ui.Default.PrintLines("ninja: no work to do")
+		ui.Default.PrintLines(ninjaNoWorkToDo)
 		return nil
 	}
 	ui.Default.PrintLines("\n", fmt.Sprintf("%s %d\n", name, stat.Total), "")
@@ -432,7 +435,7 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 		}
 		clog.Infof(ctx, "build %s: %v", time.Since(started), err)
 		if stat.Skipped == stat.Total {
-			ui.Default.PrintLines("ninja: no work to do\n")
+			ui.Default.PrintLines(ninjaNoWorkToDo)
 			return
 		}
 		var restatLine string
