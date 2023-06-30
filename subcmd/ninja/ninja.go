@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"math"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -77,10 +78,11 @@ type ninjaCmdRun struct {
 	configName string
 	projectID  string
 
-	batch      bool
-	dryRun     bool
-	clobber    bool
-	actionSalt string
+	batch           bool
+	dryRun          bool
+	clobber         bool
+	failuresAllowed int
+	actionSalt      string
 
 	ninjaJobs int
 	fname     string
@@ -156,6 +158,12 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 
 	if c.ninjaJobs >= 0 {
 		fmt.Fprintf(os.Stderr, "-j is specified. but not supported. b/288829511\n")
+	}
+	if c.failuresAllowed == 0 {
+		c.failuresAllowed = math.MaxInt
+	}
+	if c.failuresAllowed > 1 {
+		c.batch = true
 	}
 
 	if c.adjustWarn != "" {
@@ -552,6 +560,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 		Pprof:                c.buildPprof,
 		Clobber:              c.clobber,
 		DryRun:               c.dryRun,
+		FailuresAllowed:      c.failuresAllowed,
 		KeepRSP:              c.debugMode.Keeprsp,
 	}
 	const failedTargetsFile = ".siso_failed_targets"
@@ -631,6 +640,7 @@ func (c *ninjaCmdRun) init() {
 	c.Flags.BoolVar(&c.batch, "batch", !ui.IsTerminal(), "batch mode. prefer thoughput over low latency for build failures.")
 	c.Flags.BoolVar(&c.dryRun, "n", false, "dry run")
 	c.Flags.BoolVar(&c.clobber, "clobber", false, "clobber build")
+	c.Flags.IntVar(&c.failuresAllowed, "k", 1, "keep going until N jobs fail (0 means inifinity)")
 	c.Flags.StringVar(&c.actionSalt, "action_salt", "", "action salt")
 
 	c.Flags.IntVar(&c.ninjaJobs, "j", -1, "run N jobs in parallel (0 means infinity). not supported b/288829511")

@@ -107,6 +107,9 @@ type Options struct {
 	// DryRun just prints the command to build, but does nothing.
 	DryRun bool
 
+	// allow failures at most FailuresAllowed.
+	FailuresAllowed int
+
 	// don't delete @response files on success
 	KeepRSP bool
 
@@ -114,6 +117,11 @@ type Options struct {
 	// when rebuilding manifest.
 	// empty for normal build.
 	RebuildManifest string
+
+	// true for unit test. e.g. limit concurrency to 2, etc.
+	// otherwise, builder will start many steps, so hard to
+	// test !hasReady before b.failuresAllowed.
+	UnitTest bool
 }
 
 var experiments Experiments
@@ -188,6 +196,8 @@ type Builder struct {
 	clobber bool
 	dryRun  bool
 
+	failuresAllowed int
+
 	// ninja debug modes
 	keepRSP bool
 
@@ -243,6 +253,14 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 	} else {
 		maxThreads = 10000
 	}
+	if opts.UnitTest {
+		logger.Warningf("UnitTest mode. limit to 2")
+		stepLimit = 2
+		scanDepsLimit = 2
+		localLimit = 2
+		rewrapLimit = 2
+		remoteLimit = 2
+	}
 	logger.Infof("numcpu=%d threads:%d - step limit=%d local limit=%d rewrap limit=%d remote limit=%d",
 		numCPU, maxThreads, stepLimit, localLimit, rewrapLimit, remoteLimit)
 	logger.Infof("tool_invocation_id: %s", opts.ID)
@@ -286,6 +304,7 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 		pprofUploader:        opts.PprofUploader,
 		clobber:              opts.Clobber,
 		dryRun:               opts.DryRun,
+		failuresAllowed:      opts.FailuresAllowed,
 		keepRSP:              opts.KeepRSP,
 		rebuildManifest:      opts.RebuildManifest,
 	}, nil
@@ -503,6 +522,7 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 		fmt.Fprintf(b.explainWriter, "--clobber is specified\n")
 	}
 	var wg sync.WaitGroup
+	var errs []error
 	errch := make(chan error, 1000)
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -532,8 +552,17 @@ loop:
 		case err := <-errch:
 			clog.Infof(ctx, "err from errch: %v", err)
 			done()
-			cancel()
-			return err
+			errs = append(errs, err)
+			hasReady := b.plan.hasReady()
+			if !hasReady {
+				errs = append([]error{errors.New("cannot make progress due to previous errors")}, errs...)
+			}
+			clog.Infof(ctx, "errs=%d hasReady=%t", len(errs), hasReady)
+			if len(errs) >= b.failuresAllowed || !hasReady {
+				cancel()
+				break loop
+			}
+			continue
 		case <-ctx.Done():
 			clog.Infof(ctx, "context done")
 			done()
@@ -650,7 +679,7 @@ loop:
 	clog.Infof(ctx, "all pendings becomes ready")
 	wg.Wait()
 	close(errch)
-	err = <-errch
+	err = errors.Join(errs...)
 	ui.Default.PrintLines(fmt.Sprintf("%s finished: %v", name, err), "", "")
 	return err
 }

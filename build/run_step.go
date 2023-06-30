@@ -54,6 +54,9 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 			clog.Errorf(ctx, "runStep panic: %v\nstep.cmd: %p\n%s", r, step.cmd, buf)
 			err = fmt.Errorf("panic: %v: %s", r, buf)
 		}
+		if err != nil {
+			b.stats.fail()
+		}
 	}()
 
 	if log.V(1) {

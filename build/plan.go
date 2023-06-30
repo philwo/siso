@@ -301,6 +301,12 @@ func (p *plan) pushReady() {
 	}
 }
 
+func (p *plan) hasReady() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return len(p.q) > 0 || len(p.ready) > 0
+}
+
 func (p *plan) done(ctx context.Context, step *Step, outs []string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()

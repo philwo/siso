@@ -25,6 +25,7 @@ type stats struct {
 	nremote          atomic.Int32
 	nlocalFallback   atomic.Int32
 	ndone            atomic.Int32
+	nfail            atomic.Int32
 	npure            atomic.Int32
 }
 
@@ -93,6 +94,10 @@ func (s *stats) done(pure bool) {
 	}
 }
 
+func (s *stats) fail() {
+	s.nfail.Add(1)
+}
+
 func (s *stats) incTotal() {
 	s.ntotal.Add(1)
 }
@@ -101,6 +106,7 @@ func (s *stats) incTotal() {
 type Stats struct {
 	Preproc         int // preprocessor actions
 	Done            int // completed actions
+	Fail            int // failed actions
 	Pure            int // pure actions
 	Skipped         int // skipped actions, because they were still up-to-date
 	FastDepsSuccess int // actions that ran successfully when we used deps from the deps cache
@@ -117,6 +123,7 @@ func (s *stats) stats() Stats {
 	return Stats{
 		Preproc:         int(s.npreproc.Load()),
 		Done:            int(s.ndone.Load()),
+		Fail:            int(s.nfail.Load()),
 		Pure:            int(s.npure.Load()),
 		Skipped:         int(s.nskipped.Load()),
 		FastDepsSuccess: int(s.nfastDepsSuccess.Load()),
