@@ -90,16 +90,26 @@ func NewExporter(ctx context.Context, opts Options) (*Exporter, error) {
 
 // Close flushes all pending traces and closes the exporter.
 func (e *Exporter) Close(ctx context.Context) {
-	clog.Infof(ctx, "exporter close. last batch=%d q=%d", len(e.batches), len(e.q))
-	e.mu.Lock()
-	e.closed = true
-	e.mu.Unlock()
-	e.q <- e.batches
-	close(e.q)
-	t := time.Now()
-	e.wg.Wait()
-	clog.Infof(ctx, "exporter finish: %s", time.Since(t))
-	e.client.Close()
+	done := make(chan struct{})
+	go func() {
+		clog.Infof(ctx, "exporter close. last batch=%d q=%d", len(e.batches), len(e.q))
+		e.mu.Lock()
+		e.closed = true
+		e.mu.Unlock()
+		e.q <- e.batches
+		close(e.q)
+		t := time.Now()
+		e.wg.Wait()
+		clog.Infof(ctx, "exporter finish: %s", time.Since(t))
+		e.client.Close()
+		close(done)
+	}()
+	select {
+	case <-time.After(1 * time.Second):
+		clog.Warningf(ctx, "close not finished in 1sec")
+	case <-done:
+		clog.Infof(ctx, "exporter closed.")
+	}
 }
 
 // Export exports a trace.
