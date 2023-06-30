@@ -419,6 +419,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 
 	var outputLogWriter io.Writer
 	if c.outputLogFile != "" {
+		rotateFiles(ctx, c.outputLogFile)
 		f, err := os.Create(c.outputLogFile)
 		if err != nil {
 			return err
@@ -434,6 +435,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 	}
 	var explainWriter io.Writer
 	if c.explainFile != "" {
+		rotateFiles(ctx, c.explainFile)
 		f, err := os.Create(c.explainFile)
 		if err != nil {
 			return err
