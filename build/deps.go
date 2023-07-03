@@ -50,10 +50,7 @@ func depsFastStep(ctx context.Context, b *Builder, step *Step) (*Step, error) {
 	}
 	depsIns, err := step.def.DepInputs(ctx)
 	if err != nil {
-		depsIns, err = fastDepsLogInputs(ctx, b, step.cmd)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get fast deps log (deps=%q): %v", step.cmd.Deps, err)
-		}
+		return nil, fmt.Errorf("failed to get fast deps log (deps=%q): %v", step.cmd.Deps, err)
 	}
 	newCmd, err := ds.DepsFastCmd(ctx, b, step.cmd)
 	if err != nil {
@@ -78,7 +75,6 @@ func depsFastStep(ctx context.Context, b *Builder, step *Step) (*Step, error) {
 	fastStep := &Step{}
 	*fastStep = *step
 	fastStep.cmd = newCmd
-	fastStep.fastDeps = true
 	return fastStep, nil
 }
 
@@ -197,25 +193,6 @@ func depsAfterRun(ctx context.Context, b *Builder, step *Step) ([]string, error)
 			}
 		}
 	}
-	return deps, nil
-}
-
-// returns canonical paths
-func fastDepsLogInputs(ctx context.Context, b *Builder, cmd *execute.Cmd) ([]string, error) {
-	if len(cmd.Outputs) == 0 {
-		return nil, fmt.Errorf("no output for %s", cmd)
-	}
-	out := b.path.MustToWD(cmd.Outputs[0])
-	gctx, span := trace.NewSpan(ctx, "fast-deps-get")
-	deps, _, err := b.sharedDepsLog.Get(gctx, out, cmd.CmdHash)
-	span.Close(nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to lookups deps log for %s: %v", out, err)
-	}
-	for i := range deps {
-		deps[i] = b.path.MustFromWD(deps[i])
-	}
-	clog.Infof(ctx, "fast-deps %q %d", out, len(deps))
 	return deps, nil
 }
 

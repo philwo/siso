@@ -98,10 +98,9 @@ type StepDef interface {
 
 // Step is a build step.
 type Step struct {
-	def      StepDef
-	nwaits   int
-	cmd      *execute.Cmd
-	fastDeps bool
+	def    StepDef
+	nwaits int
+	cmd    *execute.Cmd
 
 	readyTime     time.Time
 	prevStepID    string

@@ -86,8 +86,7 @@ type Options struct {
 	// TODO(b/266518906): enable RECacheEnableWrite option for read-only client.
 	// RECacheEnableWrite bool
 	ActionSalt []byte
-	// TODO(b/266518906): enable shared deps log
-	// SharedDepsLog      SharedDepsLog
+
 	OutputLocal          OutputLocalFunc
 	Cache                *Cache
 	FailureSummaryWriter io.Writer
@@ -174,8 +173,6 @@ type Builder struct {
 	reproxyExec reproxyexec.REProxyExec
 
 	actionSalt []byte
-
-	sharedDepsLog SharedDepsLog
 
 	outputLocal OutputLocalFunc
 
@@ -288,7 +285,7 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 		reproxySema: semaphore.New("reproxyexec", remoteLimit),
 		actionSalt:  opts.ActionSalt,
 		reapiclient: opts.REAPIClient,
-		// sharedDepsLog:      opts.SharedDepsLog,
+
 		outputLocal:          opts.OutputLocal,
 		cacheSema:            semaphore.New("cache", stepLimit),
 		cache:                opts.Cache,
@@ -882,15 +879,7 @@ func (b *Builder) updateDeps(ctx context.Context, step *Step) error {
 	if len(deps) == 0 {
 		return nil
 	}
-	var updated bool
-	if step.fastDeps {
-		// if fastDeps case, we already know the correct deps for this cmd.
-		// just update for local deps log for incremental build.
-		updated, err = step.def.RecordDeps(ctx, output, fi.ModTime(), deps)
-	} else {
-		// otherwise, update both local and shared.
-		updated, err = b.recordDepsLog(ctx, step.def, output, step.cmd.CmdHash, fi.ModTime(), deps)
-	}
+	updated, err := step.def.RecordDeps(ctx, output, fi.ModTime(), deps)
 	if err != nil {
 		clog.Warningf(ctx, "update deps: failed to record deps %s, %s, %s, %s: %v", output, hex.EncodeToString(step.cmd.CmdHash), fi.ModTime(), deps, err)
 	}
