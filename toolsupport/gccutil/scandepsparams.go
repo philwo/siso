@@ -37,6 +37,10 @@ func ScanDepsParams(ctx context.Context, args, env []string) (files, dirs, sysro
 			i++
 			dirs = append(dirs, args[i])
 			continue
+		case "-isysroot":
+			i++
+			sysroots = append(sysroots, args[i])
+			continue
 		case "-D":
 			i++
 			defineMacro(defines, args[i])

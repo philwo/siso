@@ -199,6 +199,9 @@ func (depsGCC) scandeps(ctx context.Context, b *Builder, step *Step) ([]string, 
 			Dirs:     dirs,
 			Sysroots: sysroots,
 		}
+		if log.V(1) {
+			clog.Infof(ctx, "scandeps req=%#v", req)
+		}
 		started := time.Now()
 		ins, err = b.scanDeps.Scan(ctx, b.path.ExecRoot, req)
 		if log.V(1) {

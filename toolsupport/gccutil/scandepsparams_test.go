@@ -97,6 +97,43 @@ func TestScanDepsParams(t *testing.T) {
 				Defines: map[string]string{},
 			},
 		},
+		{
+			name: "clang++_mac",
+			args: []string{
+				"../../third_party/llvm-build/Release+Asserts/bin/clang++",
+				"-MMD",
+				"-MF",
+				"obj/third_party/abseil-cpp/absl/strings/str_format_internal/arg.o.d",
+				"-DDCHECK_ALWAYS_ON=1",
+				"-I../..",
+				"-Igen",
+				"-isysroot",
+				"../../build/mac_files/xcode_binaries/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX13.3.sdk",
+				"-mmacos-version-min=10.15",
+				"-isystem../../buildtools/third_party/libc++/trunk/include",
+				"-isystem../../buildtools/third_party/libc++abi/trunk/include",
+				"-c",
+				"../../third_party/abseil-cpp/absl/strings/internal/str_format/arg.cc",
+				"-o",
+				"obj/third_party/abseil-cpp/absl/strings/str_format_internal/arg.o",
+			},
+			want: result{
+				Files: []string{
+					"../../third_party/abseil-cpp/absl/strings/internal/str_format/arg.cc",
+				},
+				Dirs: []string{
+					"../..",
+					"gen",
+					"../../buildtools/third_party/libc++/trunk/include",
+					"../../buildtools/third_party/libc++abi/trunk/include",
+				},
+				Sysroots: []string{
+					"../../third_party/llvm-build/Release+Asserts",
+					"../../build/mac_files/xcode_binaries/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX13.3.sdk",
+				},
+				Defines: map[string]string{},
+			},
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var got result
