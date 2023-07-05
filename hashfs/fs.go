@@ -692,6 +692,8 @@ func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []merkle
 }
 
 // UpdateFromLocal updates cache information for inputs under execRoot with cmdhash from local disk.
+// when mtime is zero, it keeps mtime of local file (for restat=true).
+// otherwise, it will update mtime.
 func (hfs *HashFS) UpdateFromLocal(ctx context.Context, root string, inputs []string, mtime time.Time, cmdhash []byte) error {
 	ctx, span := trace.NewSpan(ctx, "fs-update-local")
 	defer span.Close(nil)
@@ -708,6 +710,9 @@ func (hfs *HashFS) UpdateFromLocal(ctx context.Context, root string, inputs []st
 			return err
 		}
 		hfs.digester.compute(ctx, fullname, e)
+		if mtime.IsZero() {
+			continue
+		}
 		if !mtime.Equal(e.getMtime()) {
 			e.mu.Lock()
 			e.mtime = mtime
