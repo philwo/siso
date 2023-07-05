@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -18,12 +19,16 @@ import (
 	"infra/build/siso/execute"
 	"infra/build/siso/o11y/clog"
 	"infra/build/siso/o11y/trace"
+	"infra/build/siso/reapi/merkletree"
 	"infra/build/siso/scandeps"
 	"infra/build/siso/toolsupport/gccutil"
 	"infra/build/siso/toolsupport/makeutil"
 )
 
-type depsGCC struct{}
+type depsGCC struct {
+	// for unittest
+	treeInput func(context.Context, string) (merkletree.TreeEntry, error)
+}
 
 func (gcc depsGCC) DepsFastCmd(ctx context.Context, b *Builder, cmd *execute.Cmd) (*execute.Cmd, error) {
 	newCmd := &execute.Cmd{}
@@ -60,7 +65,30 @@ func (gcc depsGCC) fixCmdInputs(ctx context.Context, b *Builder, cmd *execute.Cm
 	// [-Werror, -Wmissing-sysroot]
 	inputs = append(inputs, sysroots...)
 	inputs = b.expandInputs(ctx, inputs)
-	cmd.TreeInputs = append(cmd.TreeInputs, b.treeInputs(ctx, ":headers", sysroots, dirs)...)
+
+	fixSymlink := func(name string, dirs []string) {
+		for i := range dirs {
+			fi, err := b.hashFS.Stat(ctx, b.path.ExecRoot, dirs[i])
+			if err != nil {
+				continue
+			}
+			if target := fi.Target(); target != "" {
+				dir := dirs[i]
+				dirs[i] = path.Join(path.Dir(dir), target)
+				clog.Infof(ctx, "%s symlink: %s -> %s", name, dir, dirs[i])
+			}
+		}
+	}
+	fixSymlink("dirs", dirs)
+	fixSymlink("sysroots", sysroots)
+
+	fn := func(ctx context.Context, dir string) (merkletree.TreeEntry, error) {
+		return b.treeInput(ctx, dir, ":headers")
+	}
+	if gcc.treeInput != nil {
+		fn = gcc.treeInput
+	}
+	cmd.TreeInputs = append(cmd.TreeInputs, treeInputs(ctx, fn, sysroots, dirs)...)
 	return inputs, nil
 }
 

@@ -19,10 +19,10 @@ import (
 	"infra/build/siso/reapi/merkletree"
 )
 
-func (b *Builder) treeInputs(ctx context.Context, labelSuffix string, sysroots, dirs []string) []merkletree.TreeEntry {
+func treeInputs(ctx context.Context, fn func(context.Context, string) (merkletree.TreeEntry, error), sysroots, dirs []string) []merkletree.TreeEntry {
 	var treeEntries []merkletree.TreeEntry
 	for _, dir := range sysroots {
-		ti, err := b.treeInput(ctx, dir, labelSuffix)
+		ti, err := fn(ctx, dir)
 		if err != nil {
 			clog.Warningf(ctx, "treeinput[sysroot] %s: %v", dir, err)
 			continue
@@ -30,7 +30,7 @@ func (b *Builder) treeInputs(ctx context.Context, labelSuffix string, sysroots, 
 		treeEntries = append(treeEntries, ti)
 	}
 	for _, dir := range dirs {
-		ti, err := b.treeInput(ctx, dir, labelSuffix)
+		ti, err := fn(ctx, dir)
 		if err != nil {
 			if log.V(1) {
 				clog.Infof(ctx, "treeinput[dir] %s: %v", dir, err)
