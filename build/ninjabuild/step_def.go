@@ -220,8 +220,11 @@ func (s *StepDef) IsPhony() bool {
 	return s.edge.IsPhony()
 }
 
-// Binding returns binding of the step.
-// https://ninja-build.org/manual.html#ref_rule:~:text=Variables%20might%20better%20be%20called%20%22bindings%22%2C%20in%20that%20a%20given%20variable%20cannot%20be%20changed%2C%20only%20shadowed
+// Binding returns a binding of the step.
+//
+// Ninja bindings are explained in https://ninja-build.org/manual.html#ref_rule:~:text=bindings
+// StepDef may overwrites Ninja bindings. e.g. deps, restat.
+// StepDef also has custom bindings. e.g. remote_wrapper, remote_command.
 func (s *StepDef) Binding(name string) string {
 	switch name {
 	case "deps":
