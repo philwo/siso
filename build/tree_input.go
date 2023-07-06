@@ -51,79 +51,57 @@ func (b *Builder) treeInput(ctx context.Context, dir, labelSuffix string) (merkl
 	if !ok {
 		return merkletree.TreeEntry{}, errors.New("not in input_deps")
 	}
-	st := &subtree{ready: make(chan struct{})}
-	v, loaded := b.trees.LoadOrStore(dir, st)
-	if !loaded {
-		st.init(ctx, b, dir, files)
-	}
+	st := &subtree{}
+	v, _ := b.trees.LoadOrStore(dir, st)
 	st = v.(*subtree)
-	select {
-	case <-ctx.Done():
-		return merkletree.TreeEntry{}, ctx.Err()
-	case <-st.ready:
-	}
-	st.mu.Lock()
-	ds := st.ds
-	st.mu.Unlock()
+	st.init(ctx, b, dir, files)
 	return merkletree.TreeEntry{
 		Name:   dir,
 		Digest: st.d,
-		Store:  ds,
 	}, nil
 }
 
 type subtree struct {
-	ready chan struct{}
-	d     digest.Digest
-
-	mu sync.Mutex
-	ds *digest.Store
+	once sync.Once
+	d    digest.Digest
 }
 
 func (st *subtree) init(ctx context.Context, b *Builder, dir string, files []string) {
-	files = b.expandInputs(ctx, files)
-	var inputs []string
-	for _, f := range files {
-		if !strings.HasPrefix(f, dir+"/") {
-			continue
+	st.once.Do(func() {
+		files = b.expandInputs(ctx, files)
+		var inputs []string
+		for _, f := range files {
+			if !strings.HasPrefix(f, dir+"/") {
+				continue
+			}
+			inputs = append(inputs, strings.TrimPrefix(f, dir+"/"))
 		}
-		inputs = append(inputs, strings.TrimPrefix(f, dir+"/"))
-	}
-	sort.Strings(inputs)
-	ents, err := b.hashFS.Entries(ctx, filepath.Join(b.path.ExecRoot, dir), inputs)
-	if err != nil {
-		clog.Warningf(ctx, "failed to get subtree entries %s: %v", dir, err)
-	}
-	// keep digest in tree in st.ds
-	st.ds = digest.NewStore()
-	mt := merkletree.New(st.ds)
-	for _, ent := range ents {
-		err := mt.Set(ent)
+		sort.Strings(inputs)
+		ents, err := b.hashFS.Entries(ctx, filepath.Join(b.path.ExecRoot, dir), inputs)
 		if err != nil {
-			clog.Warningf(ctx, "failed to set %v: %v", ent, err)
+			clog.Warningf(ctx, "failed to get subtree entries %s: %v", dir, err)
 		}
-	}
-	d, err := mt.Build(ctx)
-	if err != nil {
-		clog.Warningf(ctx, "failed to build subtree %s: %v", dir, err)
-	}
-	st.d = d
-	clog.Infof(ctx, "subtree ready %s: %s", dir, d)
-	close(st.ready)
-	// now subtree's digest is ready to use, but
-	// file's digests in subtree may not exist in CAS,
-	// so uploading here, or action may use st.ds for file's digests.
+		// keep digest in tree in st.ds
+		ds := digest.NewStore()
+		mt := merkletree.New(ds)
+		for _, ent := range ents {
+			err := mt.Set(ent)
+			if err != nil {
+				clog.Warningf(ctx, "failed to set %v: %v", ent, err)
+			}
+		}
+		st.d, err = mt.Build(ctx)
+		if err != nil {
+			clog.Warningf(ctx, "failed to build subtree %s: %v", dir, err)
+		}
+		// now subtree's digest is ready to use, but
+		// file's digests in subtree may not exist in CAS,
 
-	n, err := b.reapiclient.UploadAll(ctx, st.ds)
-	if err != nil {
-		clog.Warningf(ctx, "failed to upload subtree data %s: %v", dir, err)
-	} else {
-		clog.Infof(ctx, "upload subtree data %s %d", dir, n)
-	}
-	st.mu.Lock()
-	// now all file's digests have been uploaded in CAS,
-	// so action that uses this subtree doesn't need to check
-	// file's digest, so reset st.ds.
-	st.ds = nil
-	st.mu.Unlock()
+		n, err := b.reapiclient.UploadAll(ctx, ds)
+		if err != nil {
+			clog.Warningf(ctx, "failed to upload subtree data %s: %v", dir, err)
+		} else {
+			clog.Infof(ctx, "upload subtree data %s %d", dir, n)
+		}
+	})
 }
