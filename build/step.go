@@ -52,6 +52,10 @@ type StepDef interface {
 	// Inputs returns inputs of the step.
 	Inputs(context.Context) []string
 
+	// TriggerInputs returns inputs of the step that would trigger
+	// the step's action.  no order-only, but includes deps in deps log.
+	TriggerInputs(context.Context) ([]string, error)
+
 	// DepInputs returns inputs via depfile of the step.
 	// if depfile is not set, returns nil, nil
 	// if depfile or deplog is not found, returns wrapped ErrMissingDeps.

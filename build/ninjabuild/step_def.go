@@ -343,6 +343,33 @@ func (s *StepDef) Inputs(ctx context.Context) []string {
 	return uniqueFiles(targets)
 }
 
+// TriggerInputs returns inputs of the step that would trigger the step's action.
+func (s *StepDef) TriggerInputs(ctx context.Context) ([]string, error) {
+	seen := make(map[string]bool)
+	var targets []string
+	for _, in := range s.edge.TriggerInputs() {
+		p := in.Path()
+		p = s.globals.path.MustFromWD(p)
+		if seen[p] {
+			continue
+		}
+		seen[p] = true
+		targets = append(targets, p)
+	}
+	deps, err := s.DepInputs(ctx)
+	if err != nil {
+		return targets, err
+	}
+	for _, in := range deps {
+		if seen[in] {
+			continue
+		}
+		seen[in] = true
+		targets = append(targets, in)
+	}
+	return targets, nil
+}
+
 // DepInputs returns inputs stored in depfile / depslog.
 func (s *StepDef) DepInputs(ctx context.Context) ([]string, error) {
 	ctx, span := trace.NewSpan(ctx, "stepdef-dep-inputs")

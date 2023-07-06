@@ -159,6 +159,12 @@ func (e *Edge) Inputs() []*Node {
 	return e.inputs
 }
 
+// TriggerInputs returns inputs nodes of the edge that would trigger
+// the edge command. i.e. not including order_only inputs.
+func (e *Edge) TriggerInputs() []*Node {
+	return e.inputs[:len(e.inputs)-e.orderOnlyDeps]
+}
+
 // Outputs returns output nodes of the edge.
 func (e *Edge) Outputs() []*Node {
 	return e.outputs

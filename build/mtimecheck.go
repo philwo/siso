@@ -27,7 +27,7 @@ func (b *Builder) checkUpToDate(ctx context.Context, step *Step) bool {
 
 	generator := step.def.Binding("generator") != ""
 	out0, outmtime, cmdhash := outputMtime(ctx, b, step.cmd)
-	lastIn, inmtime, err := inputMtime(ctx, b, step.cmd)
+	lastIn, inmtime, err := inputMtime(ctx, b, step)
 
 	// TODO(b/288419130): make sure it covers all cases as ninja does.
 
@@ -121,13 +121,17 @@ func outputMtime(ctx context.Context, b *Builder, cmd *execute.Cmd) (string, tim
 }
 
 // inputMtime returns the last modified input and its modified timestamp.
-func inputMtime(ctx context.Context, b *Builder, cmd *execute.Cmd) (string, time.Time, error) {
+func inputMtime(ctx context.Context, b *Builder, step *Step) (string, time.Time, error) {
 	var inmtime time.Time
 	lastIn := ""
-	for _, in := range cmd.Inputs {
+	ins, err := step.def.TriggerInputs(ctx)
+	if err != nil {
+		return "", inmtime, fmt.Errorf("failed to load deps %s: %v", step, err)
+	}
+	for _, in := range ins {
 		fi, err := b.hashFS.Stat(ctx, b.path.ExecRoot, in)
 		if err != nil {
-			return "", inmtime, fmt.Errorf("missing input %s for %s: %v", cmd, in, err)
+			return "", inmtime, fmt.Errorf("missing input %s for %s: %v", step, in, err)
 		}
 		if inmtime.Before(fi.ModTime()) {
 			inmtime = fi.ModTime()
