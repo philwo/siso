@@ -100,6 +100,7 @@ type ninjaCmdRun struct {
 	depsLogFile string
 	// depsLogBucket
 
+	logDir             string
 	failureSummaryFile string
 	outputLogFile      string
 	explainFile        string
@@ -136,7 +137,7 @@ func (c *ninjaCmdRun) Run(a subcommands.Application, args []string, env subcomma
 			fmt.Fprintf(os.Stderr, "need to login: run `siso login`\n")
 		default:
 			msgPrefix := "Error:"
-			suggest := fmt.Sprintf("see %s/%s for command output, or %s/siso.INFO", c.dir, c.outputLogFile, c.dir)
+			suggest := fmt.Sprintf("see %s for command output, or %s", c.logFilename(c.outputLogFile), c.logFilename("siso.INFO"))
 			if ui.IsTerminal() {
 				msgPrefix = ui.SGR(ui.BackgroundRed, msgPrefix)
 				suggest = ui.SGR(ui.Bold, suggest)
@@ -299,7 +300,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 	}
 	c.dir = rdir
 	clog.Infof(ctx, "working_directory in exec_root: %s", c.dir)
-	logSymlink(ctx)
+	c.logSymlink(ctx)
 
 	if c.configFilename == "" {
 		return err
@@ -409,54 +410,27 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 	}
 	os.Remove(lastTargetsFile)
 
-	var failureSummaryWriter io.Writer
-	if c.failureSummaryFile != "" {
-		f, err := os.Create(c.failureSummaryFile)
-		if err != nil {
-			return err
-		}
-		defer func() {
-			clog.Infof(ctx, "close failure summary")
-			cerr := f.Close()
-			if err == nil {
-				err = cerr
-			}
-		}()
-		failureSummaryWriter = f
+	err = os.MkdirAll(c.logDir, 0755)
+	if err != nil {
+		return err
 	}
+	failureSummaryWriter, done, err := c.logWriter(ctx, c.failureSummaryFile)
+	if err != nil {
+		return err
+	}
+	defer done(&err)
 
-	var outputLogWriter io.Writer
-	if c.outputLogFile != "" {
-		rotateFiles(ctx, c.outputLogFile)
-		f, err := os.Create(c.outputLogFile)
-		if err != nil {
-			return err
-		}
-		defer func() {
-			clog.Infof(ctx, "close output log")
-			cerr := f.Close()
-			if err == nil {
-				err = cerr
-			}
-		}()
-		outputLogWriter = f
+	outputLogWriter, done, err := c.logWriter(ctx, c.outputLogFile)
+	if err != nil {
+		return err
 	}
-	var explainWriter io.Writer
-	if c.explainFile != "" {
-		rotateFiles(ctx, c.explainFile)
-		f, err := os.Create(c.explainFile)
-		if err != nil {
-			return err
-		}
-		defer func() {
-			clog.Infof(ctx, "close explain log")
-			cerr := f.Close()
-			if err == nil {
-				err = cerr
-			}
-		}()
-		explainWriter = f
+	defer done(&err)
+
+	explainWriter, done, err := c.logWriter(ctx, c.explainFile)
+	if err != nil {
+		return err
 	}
+	defer done(&err)
 	if c.debugMode.Explain {
 		if explainWriter == nil {
 			explainWriter = newExplainWriter(os.Stderr, "")
@@ -464,37 +438,26 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 			explainWriter = io.MultiWriter(newExplainWriter(os.Stderr, filepath.Join(c.dir, c.explainFile)), explainWriter)
 		}
 	}
-	var localexecLogWriter io.Writer
-	if c.localexecLogFile != "" {
-		f, err := os.Create(c.localexecLogFile)
-		if err != nil {
-			return err
-		}
-		defer func() {
-			clog.Infof(ctx, "close localexec log")
-			cerr := f.Close()
-			if err == nil {
-				err = cerr
-			}
-		}()
-		localexecLogWriter = f
+
+	localexecLogWriter, done, err := c.logWriter(ctx, c.localexecLogFile)
+	if err != nil {
+		return err
 	}
-	var metricsJSONWriter io.Writer
-	if c.metricsJSON != "" {
-		rotateFiles(ctx, c.metricsJSON)
-		f, err := os.Create(c.metricsJSON)
-		if err != nil {
-			return err
-		}
-		defer func() {
-			clog.Infof(ctx, "close metrics json")
-			cerr := f.Close()
-			if err == nil {
-				err = cerr
-			}
-		}()
-		metricsJSONWriter = f
+	defer done(&err)
+
+	metricsJSONWriter, done, err := c.logWriter(ctx, c.metricsJSON)
+	if err != nil {
+		return err
 	}
+	defer done(&err)
+
+	if !filepath.IsAbs(c.traceJSON) {
+		c.traceJSON = filepath.Join(c.logDir, c.traceJSON)
+	}
+	if !filepath.IsAbs(c.buildPprof) {
+		c.buildPprof = filepath.Join(c.logDir, c.buildPprof)
+	}
+
 	// TODO(b/288826281): produce ninja log in the valid format.
 	ninjaLogWriter, err := os.OpenFile(ninjaLogName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
@@ -654,13 +617,15 @@ func (c *ninjaCmdRun) init() {
 	c.Flags.StringVar(&c.configFilename, "load", "@config//main.star", "config filename (@config// is --config_repo_dir)")
 	c.Flags.StringVar(&c.outputLocalStrategy, "output_local_strategy", "full", `strategy for output_local. "full": download all outputs. "greedy": downloads most outputs except intermediate objs. "minimum": downloads as few as possible`)
 	c.Flags.StringVar(&c.depsLogFile, "deps_log", ".siso_deps", "deps log filename (relative to -C)")
-	c.Flags.StringVar(&c.failureSummaryFile, "failure_summary", "", "filename for failure summary (relative to -C)")
-	c.Flags.StringVar(&c.outputLogFile, "output_log", "siso_output", "output log filename (relative to -C")
-	c.Flags.StringVar(&c.explainFile, "explain_log", "siso_explain", "explain log filename (relative to -C")
-	c.Flags.StringVar(&c.localexecLogFile, "localexec_log", "siso_localexec", "localexec log filename (relative to -C")
-	c.Flags.StringVar(&c.metricsJSON, "metrics_json", "siso_metrics.json", "metrics JSON filename (relative to -C)")
-	c.Flags.StringVar(&c.traceJSON, "trace_json", "siso_trace.json", "trace JSON filename (relative to -C)")
-	c.Flags.StringVar(&c.buildPprof, "build_pprof", "siso_build.pprof", "build pprof filename (relative to -C)")
+
+	c.Flags.StringVar(&c.logDir, "log_dir", ".", "log directory (relative to -C")
+	c.Flags.StringVar(&c.failureSummaryFile, "failure_summary", "", "filename for failure summary (relative to -log_dir)")
+	c.Flags.StringVar(&c.outputLogFile, "output_log", "siso_output", "output log filename (relative to -log_dir")
+	c.Flags.StringVar(&c.explainFile, "explain_log", "siso_explain", "explain log filename (relative to -log_dir")
+	c.Flags.StringVar(&c.localexecLogFile, "localexec_log", "siso_localexec", "localexec log filename (relative to -log_dir")
+	c.Flags.StringVar(&c.metricsJSON, "metrics_json", "siso_metrics.json", "metrics JSON filename (relative to -log_dir)")
+	c.Flags.StringVar(&c.traceJSON, "trace_json", "siso_trace.json", "trace JSON filename (relative to -log_dir)")
+	c.Flags.StringVar(&c.buildPprof, "build_pprof", "siso_build.pprof", "build pprof filename (relative to -log_dir)")
 
 	c.fsopt = new(hashfs.Option)
 	c.fsopt.StateFile = ".siso_fs_state"
@@ -684,6 +649,37 @@ func (c *ninjaCmdRun) init() {
 
 	c.Flags.Var(&c.debugMode, "d", "enable debugging (use '-d list' to list modes)")
 	c.Flags.StringVar(&c.adjustWarn, "w", "", "adjust warnings. not supported b/288807840")
+}
+
+func (c *ninjaCmdRun) logFilename(fname string) string {
+	dir := c.dir
+	if filepath.IsAbs(c.logDir) {
+		dir = c.logDir
+	} else {
+		dir = filepath.Join(dir, c.logDir)
+	}
+	return filepath.Join(dir, fname)
+}
+
+func (c *ninjaCmdRun) logWriter(ctx context.Context, fname string) (io.Writer, func(errp *error), error) {
+	if fname == "" {
+		return nil, func(*error) {}, nil
+	}
+	if !filepath.IsAbs(fname) {
+		fname = filepath.Join(c.logDir, fname)
+	}
+	rotateFiles(ctx, fname)
+	f, err := os.Create(fname)
+	if err != nil {
+		return nil, func(*error) {}, err
+	}
+	return f, func(errp *error) {
+		clog.Infof(ctx, "close %s", fname)
+		cerr := f.Close()
+		if *errp == nil {
+			*errp = cerr
+		}
+	}, nil
 }
 
 func defaultCacheDir() string {
@@ -852,7 +848,7 @@ type semaTrace struct {
 	waitBuckets, servBuckets [7]int
 }
 
-func logSymlink(ctx context.Context) {
+func (c *ninjaCmdRun) logSymlink(ctx context.Context) {
 	var logDirs []string
 	logDirFlag := flag.Lookup("log_dir")
 	if logDirFlag != nil && logDirFlag.Value.String() != "" {
@@ -863,7 +859,7 @@ func logSymlink(ctx context.Context) {
 	if runtime.GOOS == "windows" {
 		logFilename = "siso.exe.INFO"
 	}
-	rotateFiles(ctx, logFilename)
+	rotateFiles(ctx, filepath.Join(c.logDir, logFilename))
 	for _, dir := range logDirs {
 		target, err := os.Readlink(filepath.Join(dir, logFilename))
 		if err != nil {
@@ -872,9 +868,9 @@ func logSymlink(ctx context.Context) {
 			}
 			continue
 		}
-		os.Remove(logFilename)
+		os.Remove(filepath.Join(c.logDir, logFilename))
 		logFname := filepath.Join(dir, target)
-		err = os.Symlink(logFname, logFilename)
+		err = os.Symlink(logFname, filepath.Join(c.logDir, logFilename))
 		if err != nil {
 			clog.Warningf(ctx, "failed to create %s: %v", logFilename, err)
 			return
