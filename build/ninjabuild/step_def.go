@@ -241,18 +241,7 @@ func (s *StepDef) Binding(name string) string {
 	case "remote_wrapper":
 		return s.rule.RemoteWrapper
 	case "remote_command":
-		if s.rule.CommandPrefix == "" {
-			return ""
-		}
-		args0, _, ok := strings.Cut(s.rule.CommandPrefix, " ")
-		if !ok || args0 == "" {
-			return ""
-		}
-		args0 = strings.Trim(args0, `"`) // unquote
-		if strings.ContainsAny(args0, `/\`) {
-			return ""
-		}
-		return args0
+		return s.rule.RemoteCommand
 	case "canonicalize_dir":
 		if s.rule.CanonicalizeDir {
 			return "true"

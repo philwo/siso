@@ -171,6 +171,8 @@ type StepRule struct {
 	// RemoteWrapper is a wrapper used in remote execution.
 	// TODO: put RemoteWrapper in Platform["siso:remote_wrapper"]
 	RemoteWrapper string `json:"remote_wrapper,omitempty"`
+	// RemoteCommand is a command used in the first argument.
+	RemoteCommand string `json:"remote_command,omitempty"`
 	// RemoteInputs is a map for remote execution.
 	// path in remote action -> local path
 	RemoteInputs map[string]string `json:"remote_inputs,omitempty"`

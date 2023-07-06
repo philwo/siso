@@ -164,6 +164,7 @@ to register handlers and step configs.
           * `platform`: additional platform properties
           * `remote`: use remote exec or not
           * `remote_wrapper`: a wrapper command used in remote execution
+          * `remote_command`: args[0] will be replaced with remote_command.
           * `remote_inputs`
              * key: path of input of remote action
              * value: path of file (local) for the key path.
