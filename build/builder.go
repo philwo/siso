@@ -170,7 +170,7 @@ type Builder struct {
 	reapiclient *reapi.Client
 
 	reproxySema *semaphore.Semaphore
-	reproxyExec *reproxyexec.REProxyExec
+	reproxyExec reproxyexec.REProxyExec
 
 	actionSalt []byte
 
@@ -228,14 +228,13 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 	}
 	var le localexec.LocalExec
 	var re *remoteexec.RemoteExec
-	var pe *reproxyexec.REProxyExec
 	if opts.REAPIClient != nil {
 		logger.Infof("enable remote exec")
 		re = remoteexec.New(ctx, opts.REAPIClient)
 	} else {
 		logger.Infof("disable remote exec")
 	}
-	pe = reproxyexec.New(ctx)
+	pe := reproxyexec.New(ctx)
 	experiments.ShowOnce()
 	numCPU := runtime.NumCPU()
 	stepLimit := stepLimitFactor * numCPU
@@ -306,14 +305,6 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 		keepRSP:              opts.KeepRSP,
 		rebuildManifest:      opts.RebuildManifest,
 	}, nil
-}
-
-// Close cleans up the builder.
-func (b *Builder) Close() error {
-	if b.reproxyExec == nil {
-		return nil
-	}
-	return b.reproxyExec.Close()
 }
 
 func limitForREWrapper(ctx context.Context, numCPU int) int {

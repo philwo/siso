@@ -73,7 +73,7 @@ func (b *Builder) runCmd(ctx context.Context, step *Step, allowLocalFallback boo
 	}
 	// Criteria for remote executable:
 	// - Allow remote if available and command has platform container-image property.
-	// - Allow reproxy if available and command has reproxy config set.
+	// - Allow reproxy if command has labels set.
 	// If the command doesn't meet either criteria, fallback to local.
 	// Any further validation should be done in the exec handler, not here.
 	allowRemote := b.remoteExec != nil && len(step.cmd.Platform) > 0 && step.cmd.Platform["container-image"] != ""
