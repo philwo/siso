@@ -489,3 +489,115 @@ func TestUpdateFromLocal(t *testing.T) {
 		t.Errorf("entry modtime=%d lfi=%d", e.Id.ModTime, lfi.ModTime().UnixNano())
 	}
 }
+
+func TestSymlinkDir(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("no symlink test on windows")
+		return
+	}
+	ctx := context.Background()
+	dir := t.TempDir()
+
+	setupSymlink := func(fname, target string) {
+		t.Helper()
+		fullname := filepath.Join(dir, fname)
+		err := os.MkdirAll(filepath.Dir(fullname), 0755)
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = os.Symlink(target, fullname)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	setupFile := func(fname, content string) {
+		t.Helper()
+		fullname := filepath.Join(dir, fname)
+		err := os.MkdirAll(filepath.Dir(fullname), 0755)
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = os.WriteFile(fullname, []byte(content), 0644)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	setupFile("build/mac_files/xcode_binaries/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/somefile", "")
+	setupSymlink("build/mac_files/xcode_binaries/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX13.3.sdk", "MacOSX.sdk")
+
+	t.Run("SymlinkFirst", func(t *testing.T) {
+		hfs, err := hashfs.New(ctx, hashfs.Option{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() {
+			err := hfs.Close(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+		}()
+
+		fi, err := hfs.Stat(ctx, dir, "build/mac_files/xcode_binaries/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX13.3.sdk")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if fi.Target() != "MacOSX.sdk" {
+			t.Errorf("hfs.Stat(ctx, dir, %q) target=%q; want=%q", "build/mac_files/xcode_binaries/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX13.3.sdk", fi.Target(), "MacOSX.sdk")
+		}
+
+		fi, err = hfs.Stat(ctx, dir, "build/mac_files/xcode_binaries/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/somefile")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !fi.Mode().IsRegular() {
+			t.Errorf("hfs.Stat(ctx, dir, %q) mode=%s; want regular", "build/mac_files/xcode_binaries/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/somefile", fi.Mode())
+		}
+		fi, err = hfs.Stat(ctx, dir, "build/mac_files/xcode_binaries/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX13.3.sdk/somefile")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !fi.Mode().IsRegular() {
+			t.Errorf("hfs.Stat(ctx, dir, %q) mode=%s; want regular", "build/mac_files/xcode_binaries/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX13.3.sdk/somefile", fi.Mode())
+		}
+	})
+
+	t.Run("DirFirst", func(t *testing.T) {
+		hfs, err := hashfs.New(ctx, hashfs.Option{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() {
+			err := hfs.Close(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+		}()
+
+		fi, err := hfs.Stat(ctx, dir, "build/mac_files/xcode_binaries/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/somefile")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !fi.Mode().IsRegular() {
+			t.Errorf("hfs.Stat(ctx, dir, %q) mode=%s; want regular", "build/mac_files/xcode_binaries/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/somefile", fi.Mode())
+		}
+
+		fi, err = hfs.Stat(ctx, dir, "build/mac_files/xcode_binaries/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX13.3.sdk/somefile")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !fi.Mode().IsRegular() {
+			t.Errorf("hfs.Stat(ctx, dir, %q) mode=%s; want regular", "build/mac_files/xcode_binaries/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX13.3.sdk/somefile", fi.Mode())
+		}
+
+		fi, err = hfs.Stat(ctx, dir, "build/mac_files/xcode_binaries/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX13.3.sdk")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if fi.Target() != "MacOSX.sdk" {
+			t.Errorf("hfs.Stat(ctx, dir, %q) target=%q; want=%q", "build/mac_files/xcode_binaries/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX13.3.sdk", fi.Target(), "MacOSX.sdk")
+		}
+
+	})
+
+}

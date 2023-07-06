@@ -30,6 +30,10 @@ import (
 	"infra/build/siso/sync/semaphore"
 )
 
+// Linux imposes a limit of at most 40 symlinks in any one path lookup.
+// see: https://lwn.net/Articles/650786/
+const maxSymlinks = 40
+
 // FlushSemaphore is a semaphore to control concurrent flushes.
 var FlushSemaphore = semaphore.New("fs-flush", runtime.NumCPU()*2)
 
@@ -162,16 +166,16 @@ func needPathClean(names ...string) bool {
 
 func (hfs *HashFS) dirLookup(ctx context.Context, root, fname string) (*entry, *directory, bool) {
 	if needPathClean(root, fname) {
-		return hfs.directory.lookup(ctx, filepath.ToSlash(filepath.Join(root, fname)))
+		return hfs.directory.lookup(ctx, hfs.directory, filepath.ToSlash(filepath.Join(root, fname)))
 	}
-	e, _, ok := hfs.directory.lookup(ctx, root)
+	e, _, ok := hfs.directory.lookup(ctx, hfs.directory, root)
 	if !ok {
 		return nil, nil, false
 	}
 	if e.directory == nil {
 		return nil, nil, false
 	}
-	return e.directory.lookup(ctx, fname)
+	return e.directory.lookup(ctx, hfs.directory, fname)
 }
 
 func (hfs *HashFS) dirStoreAndNotify(ctx context.Context, fullname string, e *entry) error {
@@ -234,7 +238,7 @@ func (hfs *HashFS) ReadDir(ctx context.Context, root, name string) (dents []DirE
 	}
 	dirname := filepath.Join(root, name)
 	dname := filepath.ToSlash(dirname)
-	e, _, ok := hfs.directory.lookup(ctx, dname)
+	e, _, ok := hfs.directory.lookup(ctx, hfs.directory, dname)
 	if !ok {
 		e = newLocalEntry()
 		e.init(ctx, dname, hfs.IOMetrics)
@@ -287,7 +291,7 @@ func (hfs *HashFS) ReadFile(ctx context.Context, root, fname string) ([]byte, er
 	fname = filepath.Join(root, fname)
 	fname = filepath.ToSlash(fname)
 	span.SetAttr("fname", fname)
-	e, _, ok := hfs.directory.lookup(ctx, fname)
+	e, _, ok := hfs.directory.lookup(ctx, hfs.directory, fname)
 	if !ok {
 		e = newLocalEntry()
 		e.init(ctx, fname, hfs.IOMetrics)
@@ -383,7 +387,7 @@ func (hfs *HashFS) Copy(ctx context.Context, root, src, dst string, mtime time.T
 	srcfname := filepath.ToSlash(srcname)
 	dstfname := filepath.Join(root, dst)
 	dstfname = filepath.ToSlash(dstfname)
-	e, _, ok := hfs.directory.lookup(ctx, srcfname)
+	e, _, ok := hfs.directory.lookup(ctx, hfs.directory, srcfname)
 	if !ok {
 		e = newLocalEntry()
 		if log.V(9) {
@@ -505,7 +509,7 @@ func (hfs *HashFS) Entries(ctx context.Context, root string, inputs []string) ([
 	for _, fname := range inputs {
 		fname := filepath.Join(root, fname)
 		fname = filepath.ToSlash(fname)
-		e, _, ok := hfs.directory.lookup(ctx, fname)
+		e, _, ok := hfs.directory.lookup(ctx, hfs.directory, fname)
 		if ok {
 			if log.V(2) {
 				clog.Infof(ctx, "tree cache hit %s", fname)
@@ -561,9 +565,6 @@ func (hfs *HashFS) Entries(ctx context.Context, root string, inputs []string) ([
 		isExecutable := e.mode&0111 != 0
 		target := e.target
 		if target != "" {
-			// Linux imposes a limit of at most 40 symlinks in any one path lookup.
-			// see: https://lwn.net/Articles/650786/
-			const maxSymlinks = 40
 			var tname string
 			name := filepath.Join(root, fname)
 			elink := e
@@ -580,7 +581,7 @@ func (hfs *HashFS) Entries(ctx context.Context, root string, inputs []string) ([
 				name = tname
 				tname = ""
 				var ok bool
-				elink, _, ok = hfs.directory.lookup(ctx, name)
+				elink, _, ok = hfs.directory.lookup(ctx, hfs.directory, name)
 				if ok {
 					if log.V(2) {
 						clog.Infof(ctx, "tree cache hit %s", name)
@@ -759,7 +760,7 @@ func (hfs *HashFS) Flush(ctx context.Context, execRoot string, files []string) e
 	for _, file := range files {
 		fname := filepath.Join(execRoot, file)
 		fname = filepath.ToSlash(fname)
-		e, _, ok := hfs.directory.lookup(ctx, fname)
+		e, _, ok := hfs.directory.lookup(ctx, hfs.directory, fname)
 		if !ok {
 			// If it doesn't exist in memory, just use local disk as is.
 			continue
@@ -1114,9 +1115,11 @@ func (d *directory) String() string {
 	return fmt.Sprintf("&directory{m:%p}", &d.m)
 }
 
-func (d *directory) lookup(ctx context.Context, fname string) (*entry, *directory, bool) {
+func (d *directory) lookup(ctx context.Context, root *directory, fname string) (*entry, *directory, bool) {
 	origFname := fname
+	n := 0
 	for fname != "" {
+		n++
 		fname = strings.TrimPrefix(fname, "/")
 		elem, rest, ok := strings.Cut(fname, "/")
 		if !ok {
@@ -1131,6 +1134,26 @@ func (d *directory) lookup(ctx context.Context, fname string) (*entry, *director
 		var subdir *directory
 		if ok {
 			e := v.(*entry)
+			if e != nil && e.target != "" {
+				elems := make([]string, 0, strings.Count(origFname, "/")+1)
+				if strings.HasPrefix(origFname, "/") {
+					elems = append(elems, "/")
+				}
+				s := origFname
+				for i := 0; i < n; i++ {
+					s = strings.TrimPrefix(s, "/")
+					elem, rest, _ := strings.Cut(s, "/")
+					elems = append(elems, elem)
+					s = rest
+				}
+				target := filepath.Join(elems...)
+				target = filepath.ToSlash(filepath.Join(target, e.target))
+				e, _, ok = root.lookup(ctx, root, target)
+				if !ok {
+					return nil, nil, false
+				}
+				// resolve symlink until dir or reach the limit?
+			}
 			subdir = e.getDir()
 		}
 		if subdir == nil {
@@ -1230,81 +1253,124 @@ func (d *directory) store(ctx context.Context, fname string, e *entry) (*entry, 
 		}
 		elems = append(elems, elem)
 		fname = rest
-		v, ok := d.m.Load(elem)
-		if ok {
-			dent := v.(*entry)
-			if dent != nil && dent.err == nil {
-				subdir := dent.getDir()
-				if log.V(9) {
-					lv := struct {
-						origFname, elem, fname string
-						d                      *directory
-						dent                   *entry
-					}{origFname, elem, fname, d, dent}
-					clog.Infof(ctx, "store %s subdir0 %s %s -> %s (%v)", lv.origFname, lv.elem, lv.fname, lv.d, lv.dent)
-				}
-				if subdir == nil {
-					ev := struct {
-						elem string
-						dent *entry
-					}{elem, dent}
-					return nil, fmt.Errorf("failed to set entry: %s not dir %#v", ev.elem, ev.dent)
-				}
-				d = subdir
-				continue
+		i := 0
+		for ; i < maxSymlinks; i++ {
+			nextDir, target, err := d.nextDir(ctx, elems, origFname, fname)
+			if err != nil {
+				return nil, err
 			}
-			deleted := d.m.CompareAndDelete(elem, dent)
-			if log.V(9) {
-				lv := struct {
-					origFname, elem string
-					deleted         bool
-				}{origFname, elem, deleted}
-				clog.Infof(ctx, "store %s delete missing %s to create dir deleted:%t", lv.origFname, lv.elem, lv.deleted)
+			if nextDir != nil {
+				d = nextDir
+				break
+			}
+			if target != "" {
+				if !strings.Contains(target, "/") {
+					elems[len(elems)-1] = target
+					continue
+				}
+				// TODO(b/289869742): handle symlink target is not just basename.
+				d = nil
+				break
 			}
 		}
-		// create intermediate dir of elem.
-		mtime := time.Now()
-		dfi, err := os.Stat(filepath.Join(elems...))
-		if err == nil {
-			mtime = dfi.ModTime()
+		if d == nil || i == maxSymlinks {
+			return nil, fmt.Errorf("failed to set entry: %s", strings.Join(elems, "/"))
 		}
-		lready := make(chan bool, 1)
-		lready <- true
-		newDent := &entry{
-			lready: lready,
-			mode:   0644 | fs.ModeDir,
-			mtime:  mtime,
-			// don't set directory.mtime for intermediate dir.
-			// mtime will be updated by updateDir
-			// when all dirents have been loaded.
-			directory: &directory{},
-		}
-		dent := newDent
-		v, ok = d.m.LoadOrStore(elem, dent)
-		if ok {
-			dent = v.(*entry)
-		}
-		subdir := dent.getDir()
-		if log.V(9) {
-			lv := struct {
-				origFname, elem, fname string
-				subdir                 *directory
-				dent                   *entry
-			}{origFname, elem, fname, subdir, dent}
-			clog.Infof(ctx, "store %s subdir1 %s %s -> %s (%v)", lv.origFname, lv.elem, lv.fname, lv.subdir, lv.dent)
-		}
-		d = subdir
-		if d == nil {
-			ev := struct {
-				elem string
-				dent *entry
-			}{elem, dent}
-			return nil, fmt.Errorf("failed to set entry: %s not dir %#v", ev.elem, ev.dent)
-		}
-
 	}
 	errOrigFname := origFname
 	return nil, fmt.Errorf("bad fname? %q", errOrigFname)
+}
+
+func (d *directory) nextDir(ctx context.Context, elems []string, origFname, fname string) (*directory, string, error) {
+	elem := elems[len(elems)-1]
+	v, ok := d.m.Load(elem)
+	if ok {
+		dent := v.(*entry)
+		if dent != nil && dent.err == nil {
+			target := dent.target
+			subdir := dent.getDir()
+			if log.V(9) {
+				lv := struct {
+					origFname, elem, fname string
+					d                      *directory
+					dent                   *entry
+				}{origFname, elem, fname, d, dent}
+				clog.Infof(ctx, "store %s subdir0 %s %s -> %s (%v)", lv.origFname, lv.elem, lv.fname, lv.d, lv.dent)
+			}
+			if subdir == nil && target == "" {
+				ev := struct {
+					elem string
+					dent *entry
+				}{elem, dent}
+				return nil, "", fmt.Errorf("failed to set entry: %s not dir %#v", ev.elem, ev.dent)
+			}
+			d = subdir
+			return d, target, nil
+		}
+		deleted := d.m.CompareAndDelete(elem, dent)
+		if log.V(9) {
+			lv := struct {
+				origFname, elem string
+				deleted         bool
+			}{origFname, elem, deleted}
+			clog.Infof(ctx, "store %s delete missing %s to create dir deleted: %t", lv.origFname, lv.elem, lv.deleted)
+		}
+	}
+	// create intermediate dir of elem.
+	mtime := time.Now()
+	dfi, err := os.Lstat(filepath.Join(elems...))
+	if err == nil {
+		mtime = dfi.ModTime()
+		switch {
+		case dfi.IsDir():
+		case dfi.Mode().Type() == fs.ModeSymlink:
+			target, err := os.Readlink(filepath.Join(elems...))
+			if err != nil {
+				return nil, "", fmt.Errorf("failed to set entry %s symlink: %w", filepath.Join(elems...), err)
+			}
+			return nil, target, nil
+		default:
+			return nil, "", fmt.Errorf("failed to set entry: %s not dir", filepath.Join(elems...))
+		}
+	}
+	lready := make(chan bool, 1)
+	lready <- true
+	newDent := &entry{
+		lready: lready,
+		mode:   0644 | fs.ModeDir,
+		mtime:  mtime,
+		// don't set directory.mtime for intermediate dir.
+		// mtime will be updated by updateDir
+		// when all dirents have been loaded.
+		directory: &directory{},
+	}
+	dent := newDent
+	v, ok = d.m.LoadOrStore(elem, dent)
+	if ok {
+		dent = v.(*entry)
+	}
+	var target string
+	if dent != nil {
+		target = dent.target
+	}
+	subdir := dent.getDir()
+	if log.V(9) {
+		lv := struct {
+			origFname, elem, fname string
+			subdir                 *directory
+			dent                   *entry
+		}{origFname, elem, fname, subdir, dent}
+		clog.Infof(ctx, "store %s subdir1 %s %s -> %s (%v)", lv.origFname, lv.elem, lv.fname, lv.subdir, lv.dent)
+	}
+	d = subdir
+	if d == nil && target == "" {
+		ev := struct {
+			elem string
+			dent *entry
+		}{elem, dent}
+		return nil, target, fmt.Errorf("failed to set entry: %s not dir %#v", ev.elem, ev.dent)
+	}
+	return d, target, nil
 }
 
 func (d *directory) delete(ctx context.Context, fname string) {
