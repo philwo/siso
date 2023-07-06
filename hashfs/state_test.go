@@ -30,6 +30,11 @@ import (
 func TestLoadSave(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
+	dir, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	fname := filepath.Join(dir, ".siso_fs_state")
 
 	t.Logf("initial load")
@@ -67,6 +72,11 @@ func TestState(t *testing.T) {
 	defer hashFS.Close(ctx)
 
 	dir := t.TempDir()
+	dir, err = filepath.EvalSymlinks(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	err = hashFS.WriteFile(ctx, dir, "stamp", nil, false, time.Now(), []byte("dummy-cmdhash"))
 	if err != nil {
 		t.Errorf("WriteFile(...)=%v; want nil error", err)
@@ -95,6 +105,10 @@ func TestState_Dir(t *testing.T) {
 	defer hashFS.Close(ctx)
 
 	dir := t.TempDir()
+	dir, err = filepath.EvalSymlinks(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	mtime := time.Now()
 	h := sha256.New()

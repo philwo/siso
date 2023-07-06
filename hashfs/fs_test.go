@@ -32,6 +32,11 @@ func TestStamp(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	execRoot := t.TempDir()
+	execRoot, err := filepath.EvalSymlinks(execRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	opt := hashfs.Option{}
 	hfs, err := hashfs.New(ctx, opt)
 	if err != nil {
@@ -111,6 +116,10 @@ func setupFiles(tb testing.TB, dir string, files map[string]string) {
 
 func TestReadDir(t *testing.T) {
 	dir := t.TempDir()
+	dir, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
 	setupFiles(t, dir, map[string]string{
 		"base/base.h":        "",
 		"base/debug/debug.h": "",
@@ -209,6 +218,10 @@ func TestReadDir(t *testing.T) {
 
 func TestMkdir(t *testing.T) {
 	dir := t.TempDir()
+	dir, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
 	setupFiles(t, dir, map[string]string{
 		"out/siso/gen/v8/stamp": "",
 	})
@@ -275,6 +288,11 @@ func TestMkdir(t *testing.T) {
 
 func TestStat_Race(t *testing.T) {
 	dir := t.TempDir()
+	dir, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	fname := "third_party/breakpad/breakpad/src/google_breakpad/common/minidump_format.h"
 	setupFiles(t, dir, map[string]string{
 		fname: "",
@@ -372,6 +390,10 @@ func TestStatAllocs(t *testing.T) {
 
 	ctx := context.Background()
 	dir := t.TempDir()
+	dir, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
 	opt := hashfs.Option{}
 	hfs, err := hashfs.New(ctx, opt)
 	if err != nil {
@@ -417,6 +439,11 @@ func TestStatAllocs(t *testing.T) {
 func TestUpdateFromLocal(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
+	dir, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	opt := hashfs.Option{}
 	hfs, err := hashfs.New(ctx, opt)
 	if err != nil {
@@ -497,6 +524,10 @@ func TestSymlinkDir(t *testing.T) {
 	}
 	ctx := context.Background()
 	dir := t.TempDir()
+	dir, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	setupSymlink := func(fname, target string) {
 		t.Helper()
