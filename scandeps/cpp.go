@@ -69,7 +69,17 @@ func cppScan(ctx context.Context, fname string, buf []byte) ([]string, map[strin
 				}
 				continue
 			}
-		// TODO(ukai): handle `#import`?
+		case bytes.HasPrefix(line, []byte("import")):
+			line = bytes.TrimPrefix(line, []byte("import"))
+			switch line[0] {
+			case ' ', '\t':
+			default:
+				if log.V(2) {
+					logLineStart := lineStart
+					clog.Infof(ctx, "skip %q", logLineStart)
+				}
+				continue
+			}
 
 		case bytes.HasPrefix(line, []byte("define")):
 			line = bytes.TrimPrefix(line, []byte("define"))

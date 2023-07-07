@@ -106,6 +106,16 @@ namespace base {
 `,
 			wantDefines: map[string][]string{},
 		},
+		{
+			name: "objc-import",
+			buf: `
+#import "HTTPRequest.h"
+`,
+			wantIncludes: []string{
+				`"HTTPRequest.h"`,
+			},
+			wantDefines: map[string][]string{},
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			gotIncludes, gotDefines, err := cppScan(ctx, tc.name, []byte(tc.buf))
