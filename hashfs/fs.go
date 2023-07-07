@@ -1135,19 +1135,10 @@ func (d *directory) lookup(ctx context.Context, root *directory, fname string) (
 		if ok {
 			e := v.(*entry)
 			if e != nil && e.target != "" {
-				elems := make([]string, 0, strings.Count(origFname, "/")+1)
-				if strings.HasPrefix(origFname, "/") {
-					elems = append(elems, "/")
-				}
-				s := origFname
-				for i := 0; i < n; i++ {
-					s = strings.TrimPrefix(s, "/")
-					elem, rest, _ := strings.Cut(s, "/")
-					elems = append(elems, elem)
-					s = rest
-				}
-				target := filepath.Join(elems...)
-				target = filepath.ToSlash(filepath.Join(target, e.target))
+				// Resolve a symlink and lookup the target from root.
+				target := resolveSymlink(ctx, origFname, n, e.target)
+				// TODO(289869742): optimize for e.target is basename only?
+				// TODO(289869742): return resolved path and traverse again in caller side?
 				e, _, ok = root.lookup(ctx, root, target)
 				if !ok {
 					return nil, nil, false
@@ -1173,6 +1164,24 @@ func (d *directory) lookup(ctx context.Context, root *directory, fname string) (
 		clog.Infof(ctx, "lookup %s fname empty", logOrigFname)
 	}
 	return nil, nil, false
+}
+
+func resolveSymlink(ctx context.Context, origFname string, n int, target string) string {
+	// reconstruct elem's list as we traversed.
+	// we do this again to avoid unnecessary allocation for normal case.
+	elems := make([]string, 0, n)
+	if strings.HasPrefix(origFname, "/") {
+		elems = append(elems, "/")
+	}
+	s := origFname
+	for i := 0; i < n-1; i++ {
+		s = strings.TrimPrefix(s, "/")
+		elem, rest, _ := strings.Cut(s, "/")
+		elems = append(elems, elem)
+		s = rest
+	}
+	elems = append(elems, target)
+	return filepath.Join(elems...)
 }
 
 func (d *directory) store(ctx context.Context, fname string, e *entry) (*entry, error) {
