@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	cpb "github.com/bazelbuild/remote-apis-sdks/go/api/command"
@@ -18,6 +19,7 @@ import (
 	"github.com/bazelbuild/remote-apis-sdks/go/pkg/retry"
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
 	log "github.com/golang/glog"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -59,15 +61,29 @@ var (
 )
 
 // REProxyExec is executor with reproxy.
-type REProxyExec struct{}
+// Users of REProxyExec should ensure Close is called to clean up the connection.
+type REProxyExec struct {
+	conn        *grpc.ClientConn
+	connErr     error
+	connAddress string
+	connOnce    sync.Once
+}
 
 // New creates new remote executor.
-func New(ctx context.Context) REProxyExec {
-	return REProxyExec{}
+func New(ctx context.Context) *REProxyExec {
+	return &REProxyExec{}
+}
+
+// Close cleans up the executor.
+func (re *REProxyExec) Close() error {
+	if re.conn == nil {
+		return nil
+	}
+	return re.conn.Close()
 }
 
 // Run runs a cmd.
-func (REProxyExec) Run(ctx context.Context, cmd *execute.Cmd) error {
+func (re *REProxyExec) Run(ctx context.Context, cmd *execute.Cmd) error {
 	ctx, span := trace.NewSpan(ctx, "reproxy-exec")
 	defer span.Close(nil)
 
@@ -100,20 +116,24 @@ func (REProxyExec) Run(ctx context.Context, cmd *execute.Cmd) error {
 		execTimeout = parsed
 	}
 
-	// Create gRPC connection with the provided address.
-	// TODO(b/273407069): this will be problematic on windows, reuse connections instead.
-	dialCtx, cancel := context.WithTimeout(ctx, dialTimeout)
-	defer cancel()
-	conn, err := DialContext(dialCtx, serverAddress)
-	if err != nil {
-		clog.Warningf(ctx, "Fail to dial %s: %v", serverAddress, err)
-		return err
+	// Dial reproxy if no connection, ensure same address is used for subsequent calls.
+	// Only one dial is allowed, if it fails all subsequent calls will fail fast.
+	re.connOnce.Do(func() {
+		ctx, cancel := context.WithTimeout(ctx, dialTimeout)
+		defer cancel()
+		re.connAddress = serverAddress
+		re.conn, re.connErr = DialContext(ctx, serverAddress)
+	})
+	if re.connErr != nil {
+		return fmt.Errorf("fail to dial %s: %w", serverAddress, re.connErr)
 	}
-	defer conn.Close()
+	if serverAddress != re.connAddress {
+		return fmt.Errorf("given reproxy address %s does not match previously-used address %s", serverAddress, re.connAddress)
+	}
 
 	// Create REProxy client and send the request with backoff configuration above.
 	// (No timeout applied due to use of backoff with maximum attempts allowed.)
-	proxy := ppb.NewCommandsClient(conn)
+	proxy := ppb.NewCommandsClient(re.conn)
 	req, err := createRequest(ctx, cmd, execTimeout)
 	if err != nil {
 		return err

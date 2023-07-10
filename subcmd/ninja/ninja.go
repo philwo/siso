@@ -701,6 +701,10 @@ func doBuild(ctx context.Context, graph *ninjabuild.Graph, bopts build.Options, 
 		return err
 	}
 	err = mfb.Build(ctx, "rebuild manifest", graph.Filename())
+	cerr := mfb.Close()
+	if cerr != nil {
+		return fmt.Errorf("failed to close builder: %w", cerr)
+	}
 	if err != nil {
 		return err
 	}
@@ -710,6 +714,12 @@ func doBuild(ctx context.Context, graph *ninjabuild.Graph, bopts build.Options, 
 	if err != nil {
 		return err
 	}
+	defer func(ctx context.Context) {
+		cerr := b.Close()
+		if cerr != nil {
+			clog.Warningf(ctx, "failed to close builder: %v", cerr)
+		}
+	}(ctx)
 	// prof := newCPUProfiler(ctx, "build")
 	err = b.Build(ctx, "build", args...)
 	// prof.stop(ctx)
