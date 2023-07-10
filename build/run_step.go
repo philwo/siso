@@ -229,10 +229,11 @@ func cmdOutput(ctx context.Context, result string, cmd *execute.Cmd, rule string
 	}
 	var msgs []string
 	msgs = append(msgs, fmt.Sprintf("%s %s %s\n", result, cmd, cmd.Desc))
+	msgs = append(msgs, fmt.Sprintf("err: %v\n", err))
 	if rule != "" {
 		msgs = append(msgs, fmt.Sprintf("siso_rule:%s\n", rule))
 	}
-	msgs = append(msgs, fmt.Sprintf("err: %v\n%q %q\n%q\n", err, cmd.ActionName, output, cmd.Command()))
+	msgs = append(msgs, fmt.Sprintf("%q %q\n%q\n", cmd.ActionName, output, cmd.Command()))
 	rsp := cmd.RSPFile
 	if rsp != "" {
 		msgs = append(msgs, fmt.Sprintf(" %s=%q\n", rsp, cmd.RSPFileContent))
