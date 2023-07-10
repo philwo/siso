@@ -125,17 +125,38 @@ func New(ctx context.Context, cred cred.Cred, opt Option) (*Client, error) {
 		grpc.WithUnaryInterceptor(grpcInt.GCPUnaryClientInterceptor),
 		grpc.WithStreamInterceptor(grpcInt.GCPStreamClientInterceptor),
 		grpc.WithDisableServiceConfig(),
+		// no retry for ActionCache
 		grpc.WithDefaultServiceConfig(fmt.Sprintf(`
 {
 	"loadBalancingConfig": [{%q:{}}],
 	"methodConfig": [
 	  {
-		"name": [ { } ],
+		"name": [
+                  { "service": "build.bazel.remote.execution.v2.Execution" }
+                ],
 		"timeout": "600s",
 		"retryPolicy": {
 			"maxAttempts": 5,
 			"initialBackoff": "1s",
 			"maxBackoff": "120s",
+			"backoffMultiplier": 1.6,
+			"retriableStatusCodes": [
+				"RESOURCE_EXHAUSTED",
+				"UNAVAILABLE"
+			]
+		}
+	  },
+	  {
+		"name": [
+                  { "service": "build.bazel.remote.execution.v2.ContentAddressableStorage" },
+                  { "service": "build.bazel.remote.execution.v2.Capabilities" },
+                  { "service": "google.bytestream.ByteStream" }
+                ],
+		"timeout": "10s",
+		"retryPolicy": {
+			"maxAttempts": 5,
+			"initialBackoff": "0.1s",
+			"maxBackoff": "1s",
 			"backoffMultiplier": 1.6,
 			"retriableStatusCodes": [
 				"RESOURCE_EXHAUSTED",
