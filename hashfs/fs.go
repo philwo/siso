@@ -1030,27 +1030,32 @@ func (e *entry) flush(ctx context.Context, fname string, m *iometrics.IOMetrics)
 			clog.Infof(ctx, "flush %s: already exist", fname)
 			return nil
 		}
-		var fileDigest digest.Digest
-		ld, err := localDigest(ctx, fname, m)
-		if err == nil {
-			fileDigest = ld.Digest()
-			if fileDigest == d {
-				clog.Infof(ctx, "flush %s: already exist - hash match", fname)
-				if !fi.ModTime().Equal(mtime) {
-					err = os.Chtimes(fname, time.Now(), mtime)
-					m.OpsDone(err)
+		if isHardlink(fi) {
+			clog.Infof(ctx, "flush %s: remove hardlink", fname)
+			err = os.Remove(fname)
+			m.OpsDone(err)
+		} else {
+			var fileDigest digest.Digest
+			ld, err := localDigest(ctx, fname, m)
+			if err == nil {
+				fileDigest = ld.Digest()
+				if fileDigest == d {
+					clog.Infof(ctx, "flush %s: already exist - hash match", fname)
+					if !fi.ModTime().Equal(mtime) {
+						err = os.Chtimes(fname, time.Now(), mtime)
+						m.OpsDone(err)
+					}
+					return err
 				}
-				return err
+			}
+			clog.Warningf(ctx, "flush %s: exists but mismatch size:%d!=%d mtime:%s!=%s d:%v!=%v", fname, fi.Size(), d.SizeBytes, fi.ModTime(), mtime, fileDigest, d)
+			if fi.Mode()&0200 == 0 {
+				// need to be writable. otherwise os.WriteFile fails with permission denied.
+				err = os.Chmod(fname, fi.Mode()|0200)
+				m.OpsDone(err)
+				clog.Warningf(ctx, "flush %s: not writable? %s: %v", fname, fi.Mode(), err)
 			}
 		}
-		clog.Warningf(ctx, "flush %s: exists but mismatch size:%d!=%d mtime:%s!=%s d:%v!=%v", fname, fi.Size(), d.SizeBytes, fi.ModTime(), mtime, fileDigest, d)
-		if fi.Mode()&0200 == 0 {
-			// need to be writable. otherwise os.WriteFile fails with permission denied.
-			err = os.Chmod(fname, fi.Mode()|0200)
-			m.OpsDone(err)
-			clog.Warningf(ctx, "flush %s: not writable? %s: %v", fname, fi.Mode(), err)
-		}
-
 	}
 	err = os.MkdirAll(filepath.Dir(fname), 0755)
 	m.OpsDone(err)

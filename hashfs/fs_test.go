@@ -632,3 +632,77 @@ func TestSymlinkDir(t *testing.T) {
 	})
 
 }
+
+func TestFlusTohHardlink(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("no hardlink on windows")
+		return
+	}
+	ctx := context.Background()
+	dir := t.TempDir()
+	dir, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	setupFiles(t, dir, map[string]string{
+		"chrome/VERSION": "",
+	})
+	t.Logf("ln chrome/VERSION out/siso/cronet")
+	err = os.MkdirAll(filepath.Join(dir, "out/siso/cronet"), 0755)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = os.Link(filepath.Join(dir, "chrome/VERSION"), filepath.Join(dir, "out/siso/cronet/VERSION"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	hashFS, err := hashfs.New(ctx, hashfs.Option{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer hashFS.Close(ctx)
+	verfi, err := os.Stat(filepath.Join(dir, "chrome/VERSION"))
+	if err != nil {
+		t.Fatalf("Stat(%q) %v; want nil err", "chrome/VERSION", err)
+	}
+	t.Logf("%T", verfi.Sys())
+
+	verfi2, err := hashFS.Stat(ctx, dir, "chrome/VERSION")
+	if err != nil {
+		t.Fatalf("hashFS.Stat(ctx, dir, %q) %v; want nil err", "chrome/VERSION", err)
+	}
+	t.Logf("%T", verfi2.Sys())
+	if !verfi.ModTime().Equal(verfi2.ModTime()) {
+		t.Errorf("modtime differ %q os %v vs hashfs %v", "chrome/VERSION", verfi.ModTime(), verfi2.ModTime())
+	}
+
+	now := time.Now()
+	cmdhash := []byte("cmdhash")
+	t.Logf("copy chrome/VERSION to out/siso/cronet/VERSION at %s", now)
+	err = hashFS.Copy(ctx, dir, "chrome/VERSION", "out/siso/cronet/VERSION", now, cmdhash)
+	if err != nil {
+		t.Fatalf("hashFS.Copy(ctx, dir, %q, %q, now, cmdhash)=%v; want nil err", "chrome/VERSION", "out/siso/chronet/VERSION", err)
+	}
+	t.Logf("flush out/siso/cronet/VERSION")
+	err = hashFS.Flush(ctx, dir, []string{"out/siso/cronet/VERSION"})
+	if err != nil {
+		t.Fatalf("hashFS.Flush(ctx, dir, %q)=%v; want nil err", "out/siso/cronet/VERSION", err)
+	}
+	ofi, err := os.Stat(filepath.Join(dir, "chrome/VERSION"))
+	if err != nil {
+		t.Fatalf("Stat(%q) %v; want nil err", "chrome/VERSION", err)
+	}
+	nfi, err := os.Stat(filepath.Join(dir, "out/siso/cronet/VERSION"))
+	if err != nil {
+		t.Fatalf("Stat(%q) %v; want nil err", "out/siso/cronet/VERSION", err)
+	}
+	if !verfi.ModTime().Equal(ofi.ModTime()) {
+		t.Errorf("modtime unexpected updated %q %v -> %v", "chrome/VERSION", verfi.ModTime(), ofi.ModTime())
+	}
+	if ofi.ModTime().Equal(nfi.ModTime()) {
+		t.Errorf("modtime unexpected matches %q %v == %q %v", "chrome/VERSION", ofi.ModTime(), "out/siso/cronet/VERSION", nfi.ModTime())
+	}
+	if !nfi.ModTime().Equal(now) {
+		t.Errorf("modtime not set correctly %q %v != %v", "out/siso/cronet/VERSION", nfi.ModTime(), now)
+	}
+}
