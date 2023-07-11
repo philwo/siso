@@ -647,6 +647,9 @@ func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []merkle
 				action:  action,
 				src:     ent.Data,
 				d:       ent.Data.Digest(),
+
+				updatedTime: mtime,
+				isUpdated:   true,
 			}
 			err := hfs.dirStoreAndNotify(ctx, fname, e)
 			if err != nil {
@@ -662,6 +665,9 @@ func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []merkle
 				cmdhash: cmdhash,
 				action:  action,
 				target:  ent.Target,
+
+				updatedTime: mtime,
+				isUpdated:   true,
 			}
 			err := hfs.dirStoreAndNotify(ctx, fname, e)
 			if err != nil {
@@ -677,6 +683,9 @@ func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []merkle
 				cmdhash:   cmdhash,
 				action:    action,
 				directory: &directory{},
+
+				updatedTime: mtime,
+				isUpdated:   true,
 			}
 			err := hfs.dirStoreAndNotify(ctx, fname, e)
 			if err != nil {
@@ -692,10 +701,10 @@ func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []merkle
 	return nil
 }
 
-// UpdateFromLocal updates cache information for inputs under execRoot with cmdhash from local disk.
-// when mtime is zero, it keeps mtime of local file (for restat=true).
+// UpdateFromLocal updates cache information for inputs under execRoot with cmdhash from local disk and record it as updated at updatedTime.
+// when restat=true, it keeps mtime of local file.
 // otherwise, it will update mtime.
-func (hfs *HashFS) UpdateFromLocal(ctx context.Context, root string, inputs []string, mtime time.Time, cmdhash []byte) error {
+func (hfs *HashFS) UpdateFromLocal(ctx context.Context, root string, inputs []string, restat bool, updatedTime time.Time, cmdhash []byte) error {
 	ctx, span := trace.NewSpan(ctx, "fs-update-local")
 	defer span.Close(nil)
 	hfs.Forget(ctx, root, inputs)
@@ -703,22 +712,31 @@ func (hfs *HashFS) UpdateFromLocal(ctx context.Context, root string, inputs []st
 		fullname := filepath.Join(root, fname)
 		fullname = filepath.ToSlash(fullname)
 		e := newLocalEntry()
+		var mtime time.Time
+		if restat {
+			fi, err := hfs.Stat(ctx, root, fname)
+			if err == nil {
+				mtime = fi.ModTime()
+			}
+		} else {
+			e.mtime = updatedTime
+		}
+		e.updatedTime = updatedTime
 		e.init(ctx, fullname, hfs.IOMetrics)
+		// Mark as updated
+		// except when restat=1 and file mtime hasn't changed.
+		if !restat || !mtime.Equal(e.getMtime()) {
+			e.isUpdated = true
+		}
 		e.cmdhash = cmdhash
-		clog.Infof(ctx, "stat new entry(local outputs): %s %s", fullname, e)
+		clog.Infof(ctx, "stat new entry(local outputs): %s %s isUpdated=%t", fullname, e, e.isUpdated)
 		err := hfs.dirStoreAndNotify(ctx, fullname, e)
 		if err != nil {
 			return err
 		}
 		hfs.digester.compute(ctx, fullname, e)
-		if mtime.IsZero() {
-			continue
-		}
-		if !mtime.Equal(e.getMtime()) {
-			e.mu.Lock()
-			e.mtime = mtime
-			e.mu.Unlock()
-			err = os.Chtimes(fullname, time.Now(), mtime)
+		if e.isUpdated {
+			err = os.Chtimes(fullname, time.Now(), e.getMtime())
 			hfs.IOMetrics.OpsDone(err)
 			if errors.Is(err, fs.ErrNotExist) {
 				clog.Warningf(ctx, "failed to update mtime of %s: %v", fullname, err)
@@ -822,6 +840,15 @@ type entry struct {
 
 	// digest of action that generated this file.
 	action digest.Digest
+
+	// updatedTime is timestamp when the file has been updated
+	// by Update or UpdateFromLocal.
+	// need to distinguish from mtime, which is file mtime
+	// for restat=1.
+	updatedTime time.Time
+
+	// isUpdated indicates the file is updated in the session.
+	isUpdated bool
 
 	target string // symlink.
 
@@ -1437,6 +1464,17 @@ func (fi FileInfo) Mode() fs.FileMode {
 // ModTime is a modification time of the file.
 func (fi FileInfo) ModTime() time.Time {
 	return fi.e.getMtime()
+}
+
+// UpdatedTime is a update time of the file.
+// Usually it is the same with ModTime, but may differ for restat=1.
+func (fi FileInfo) UpdatedTime() time.Time {
+	return fi.e.updatedTime
+}
+
+// IsUpdated returns true if file has been updated in the session.
+func (fi FileInfo) IsUpdated() bool {
+	return fi.e.isUpdated
 }
 
 // IsDir returns true if it is the directory.

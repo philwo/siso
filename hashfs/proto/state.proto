@@ -29,6 +29,8 @@ message Entry {
   // action, cmd that generated this file.
   bytes cmd_hash = 6;
   Digest action = 7;
+
+  int64 updated_time = 8; // unix nano sec.
 }
 
 message State {

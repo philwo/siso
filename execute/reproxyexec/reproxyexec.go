@@ -263,7 +263,8 @@ func processResponse(ctx context.Context, cmd *execute.Cmd, response *ppb.RunRes
 	if cmd.HashFS == nil {
 		return nil
 	}
-	return cmd.HashFS.UpdateFromLocal(ctx, cmd.ExecRoot, cmd.AllOutputs(), time.Now(), cmd.CmdHash)
+	now := time.Now()
+	return cmd.HashFS.UpdateFromLocal(ctx, cmd.ExecRoot, cmd.AllOutputs(), cmd.Restat, now, cmd.CmdHash)
 }
 
 func resultErr(response *ppb.RunResponse) error {

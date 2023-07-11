@@ -251,7 +251,7 @@ func TestMkdir(t *testing.T) {
 	if mtimeInclude.IsZero() {
 		t.Errorf("out/siso/gen/v8/include mtime: %s", mtimeInclude)
 	}
-	t.Logf("out/siso/gen/v8/include mtime:%s", mtimeInclude)
+	t.Logf("out/siso/gen/v8/include mtime: %s", mtimeInclude)
 
 	fi, err = hashFS.Stat(ctx, dir, "out/siso/gen/v8/include/inspector")
 	if err != nil || !fi.IsDir() {
@@ -261,7 +261,7 @@ func TestMkdir(t *testing.T) {
 	if mtimeInspector.IsZero() {
 		t.Errorf("out/siso/gen/v8/include/inspector mtime: %s", mtimeInspector)
 	}
-	t.Logf("out/siso/gen/v8/include/inspector mtime:%s", mtimeInspector)
+	t.Logf("out/siso/gen/v8/include/inspector mtime: %s", mtimeInspector)
 
 	t.Logf("mkdir again. mtime preserved %s", time.Now())
 	err = hashFS.Mkdir(ctx, dir, "out/siso/gen/v8/include/inspector")
@@ -475,12 +475,12 @@ func TestUpdateFromLocal(t *testing.T) {
 	time.Sleep(1 * time.Microsecond)
 	now := time.Now()
 	if now.Equal(lfi.ModTime()) {
-		t.Fatalf("lfi.ModTime:%v should not be equal to now:%v", lfi.ModTime(), now)
+		t.Fatalf("lfi.ModTime: %v should not be equal to now: %v", lfi.ModTime(), now)
 	}
 	h := sha256.New()
 	h.Write([]byte("command line"))
 	cmdhash := h.Sum(nil)
-	err = hfs.UpdateFromLocal(ctx, dir, []string{fname}, now, cmdhash)
+	err = hfs.UpdateFromLocal(ctx, dir, []string{fname}, false, now, cmdhash)
 	if err != nil {
 		t.Errorf("UpdateFromLocal(ctx, %q, {%q}, %v, cmdhash)=%v; want nil err", dir, fname, now, err)
 	}
@@ -489,7 +489,13 @@ func TestUpdateFromLocal(t *testing.T) {
 		t.Fatalf("Stat(ctx, %q, %q)=_, %v; want nil err", dir, fname, err)
 	}
 	if !now.Equal(fi.ModTime()) {
-		t.Errorf("fi.ModTime:%v should equal to now:%v", fi.ModTime(), now)
+		t.Errorf("fi.ModTime: %v should equal to now: %v", fi.ModTime(), now)
+	}
+	if !now.Equal(fi.UpdatedTime()) {
+		t.Errorf("fi.UpdatedTime: %v should equal to now: %v", fi.UpdatedTime(), now)
+	}
+	if !fi.IsUpdated() {
+		t.Errorf("fi.IsUpdated()=%t; want true", fi.IsUpdated())
 	}
 	m := hashfs.StateMap(hfs.State(ctx))
 	hfs = nil
@@ -503,6 +509,93 @@ func TestUpdateFromLocal(t *testing.T) {
 		t.Fatalf("entry for %s not found: %q", fullname, keys)
 	}
 	if e.Id.ModTime != now.UnixNano() {
+		t.Errorf("entry modtime=%d want=%d", e.Id.ModTime, now.UnixNano())
+	}
+	if !bytes.Equal(e.CmdHash, cmdhash) {
+		t.Errorf("entry cmdhash=%q want=%q", hex.EncodeToString(e.CmdHash), hex.EncodeToString(cmdhash))
+	}
+	lfi, err = os.Lstat(fullname)
+	if err != nil {
+		t.Fatalf("lstat(%q)=%v; want nil", fullname, err)
+	}
+	if e.Id.ModTime != lfi.ModTime().UnixNano() {
+		t.Errorf("entry modtime=%d lfi=%d", e.Id.ModTime, lfi.ModTime().UnixNano())
+	}
+}
+
+func TestUpdateFromLocal_Restat(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	dir, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	opt := hashfs.Option{}
+	hfs, err := hashfs.New(ctx, opt)
+	if err != nil {
+		t.Fatalf("New=%v", err)
+	}
+	defer func() {
+		if hfs == nil {
+			return
+		}
+		err := hfs.Close(ctx)
+		if err != nil {
+			t.Fatalf("hfs.Close=%v", err)
+		}
+	}()
+
+	fname := "out/siso/gen/foo.stamp"
+	fullname := filepath.Join(dir, fname)
+	_, err = hfs.Stat(ctx, dir, fname)
+	if !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("Stat(ctx, %q,%q)=%v; want %v", dir, fname, err, fs.ErrNotExist)
+	}
+	setupFiles(t, dir, map[string]string{
+		fname: "",
+	})
+	lfi, err := os.Lstat(fullname)
+	if err != nil {
+		t.Fatalf("lstat(%q)=%v; want nil", fullname, err)
+	}
+	time.Sleep(1 * time.Microsecond)
+	now := time.Now()
+	if now.Equal(lfi.ModTime()) {
+		t.Fatalf("lfi.ModTime: %v should not be equal to now: %v", lfi.ModTime(), now)
+	}
+	h := sha256.New()
+	h.Write([]byte("command line"))
+	cmdhash := h.Sum(nil)
+	err = hfs.UpdateFromLocal(ctx, dir, []string{fname}, true, now, cmdhash)
+	if err != nil {
+		t.Errorf("UpdateFromLocal(ctx, %q, {%q}, %v, cmdhash)=%v; want nil err", dir, fname, now, err)
+	}
+	fi, err := hfs.Stat(ctx, dir, fname)
+	if err != nil {
+		t.Fatalf("Stat(ctx, %q, %q)=_, %v; want nil err", dir, fname, err)
+	}
+	if !lfi.ModTime().Equal(fi.ModTime()) {
+		t.Errorf("fi.ModTime: %v should equal to %v", fi.ModTime(), lfi.ModTime())
+	}
+	if !now.Equal(fi.UpdatedTime()) {
+		t.Errorf("fi.UpdatedTime: %v should equal to now: %v", fi.UpdatedTime(), now)
+	}
+	if fi.IsUpdated() {
+		t.Errorf("fi.IsUpdated()=%t; want false", fi.IsUpdated())
+	}
+	m := hashfs.StateMap(hfs.State(ctx))
+	hfs = nil
+	e, ok := m[fullname]
+	if !ok {
+		var keys []string
+		for k := range m {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		t.Fatalf("entry for %s not found: %q", fullname, keys)
+	}
+	if e.Id.ModTime != lfi.ModTime().UnixNano() {
 		t.Errorf("entry modtime=%d want=%d", e.Id.ModTime, now.UnixNano())
 	}
 	if !bytes.Equal(e.CmdHash, cmdhash) {

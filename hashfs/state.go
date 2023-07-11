@@ -252,15 +252,17 @@ func newStateEntry(ent *pb.Entry, ftime time.Time, dataSource DataSource, m *iom
 		dir = &directory{}
 		mode |= fs.ModeDir
 	}
+	updatedTime := time.Unix(0, ent.UpdatedTime)
 	e := &entry{
-		lready:    lready,
-		size:      entDigest.SizeBytes,
-		mtime:     entTime,
-		mode:      mode,
-		target:    ent.Target,
-		src:       src,
-		d:         entDigest,
-		directory: dir,
+		lready:      lready,
+		size:        entDigest.SizeBytes,
+		mtime:       entTime,
+		mode:        mode,
+		updatedTime: updatedTime,
+		target:      ent.Target,
+		src:         src,
+		d:           entDigest,
+		directory:   dir,
 	}
 	return e, entType
 }
@@ -366,6 +368,7 @@ func (hfs *HashFS) State(ctx context.Context) *pb.State {
 						Target:       e.target,
 						CmdHash:      e.cmdhash,
 						Action:       fromDigest(e.action),
+						UpdatedTime:  e.updatedTime.UnixNano(),
 					})
 				}
 			}
@@ -376,9 +379,10 @@ func (hfs *HashFS) State(ctx context.Context) *pb.State {
 						Id: &pb.FileID{
 							ModTime: e.mtime.UnixNano(),
 						},
-						Name:    name,
-						CmdHash: e.cmdhash,
-						Action:  fromDigest(e.action),
+						Name:        name,
+						CmdHash:     e.cmdhash,
+						Action:      fromDigest(e.action),
+						UpdatedTime: e.updatedTime.UnixNano(),
 					})
 				}
 				// TODO(b/253541407): record mtime for other directory?

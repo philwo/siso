@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"time"
 
@@ -33,7 +34,11 @@ func (b *Builder) checkUpToDate(ctx context.Context, step *Step) bool {
 
 	outname := b.path.MustToWD(out0)
 	lastInName := b.path.MustToWD(lastIn)
-	if err != nil {
+	if errors.Is(err, errDirty) {
+		clog.Infof(ctx, "need %v", err)
+		span.SetAttr("run-reason", "dirty")
+		fmt.Fprintf(b.explainWriter, "deps for %s is dirty: %v\n", outname, err)
+	} else if err != nil {
 		// missing inputs in deps file? maybe need to rebuild.
 		clog.Infof(ctx, "need: %v", err)
 		span.SetAttr("run-reason", "missing-inputs")
@@ -104,13 +109,19 @@ func outputMtime(ctx context.Context, b *Builder, cmd *execute.Cmd) (string, tim
 			}
 			outcmdhash = nil
 		}
+		var t time.Time
+		if cmd.Restat {
+			t = fi.UpdatedTime()
+		} else {
+			t = fi.ModTime()
+		}
 		if outmtime.IsZero() {
-			outmtime = fi.ModTime()
+			outmtime = t
 			out0 = out
 			continue
 		}
-		if outmtime.After(fi.ModTime()) {
-			outmtime = fi.ModTime()
+		if outmtime.After(t) {
+			outmtime = t
 			out0 = out
 		}
 	}
@@ -120,7 +131,10 @@ func outputMtime(ctx context.Context, b *Builder, cmd *execute.Cmd) (string, tim
 	return out0, outmtime, outcmdhash
 }
 
+var errDirty = errors.New("dirty")
+
 // inputMtime returns the last modified input and its modified timestamp.
+// it will return errDirty if input file has been updated in the build session.
 func inputMtime(ctx context.Context, b *Builder, step *Step) (string, time.Time, error) {
 	var inmtime time.Time
 	lastIn := ""
@@ -136,6 +150,9 @@ func inputMtime(ctx context.Context, b *Builder, step *Step) (string, time.Time,
 		if inmtime.Before(fi.ModTime()) {
 			inmtime = fi.ModTime()
 			lastIn = in
+		}
+		if fi.IsUpdated() {
+			return "", inmtime, fmt.Errorf("input %s for %s: %w", step, in, errDirty)
 		}
 	}
 	return lastIn, inmtime, nil
