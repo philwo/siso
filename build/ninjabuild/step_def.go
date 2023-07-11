@@ -371,10 +371,6 @@ func (s *StepDef) DepInputs(ctx context.Context) ([]string, error) {
 
 // depInputs returns deps inputs of the step.
 func depInputs(ctx context.Context, s *StepDef) ([]string, error) {
-	depfile := s.edge.UnescapedBinding("depfile")
-	if depfile == "" {
-		return nil, nil
-	}
 	var deps []string
 	var err error
 	switch s.edge.Binding("deps") {
@@ -393,6 +389,10 @@ func depInputs(ctx context.Context, s *StepDef) ([]string, error) {
 
 	case "":
 		// deps info is in depfile
+		depfile := s.edge.UnescapedBinding("depfile")
+		if depfile == "" {
+			return nil, nil
+		}
 		df := s.globals.path.MustFromWD(depfile)
 		if s.edge.Binding("generator") != "" {
 			// e.g. rule gn.
