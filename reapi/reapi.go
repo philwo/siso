@@ -162,7 +162,7 @@ func New(ctx context.Context, cred cred.Cred, opt Option) (*Client, error) {
                   { "service": "build.bazel.remote.execution.v2.Capabilities" },
                   { "service": "google.bytestream.ByteStream" }
                 ],
-		"timeout": "10s",
+		"timeout": "600s",
 		"retryPolicy": {
 			"maxAttempts": 5,
 			"initialBackoff": "0.1s",
