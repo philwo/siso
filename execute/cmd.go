@@ -552,7 +552,7 @@ func (c *Cmd) commandDigest(ctx context.Context, ds *digest.Store) (digest.Diges
 	}
 	command := &rpb.Command{
 		Arguments:        args,
-		WorkingDirectory: dir,
+		WorkingDirectory: filepath.ToSlash(dir),
 		// TODO(b/273151098): `OutputFiles` is deprecated. should use `OutputPaths` instead.
 		// https://github.com/bazelbuild/remote-apis/blob/main/build/bazel/remote/execution/v2/remote_execution.proto#L592
 		OutputFiles: outs,
