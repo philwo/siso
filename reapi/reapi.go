@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"path"
 	"strings"
+	"time"
 
 	"github.com/bazelbuild/remote-apis-sdks/go/pkg/balancer"
 	configpb "github.com/bazelbuild/remote-apis-sdks/go/pkg/balancer/proto"
@@ -19,6 +20,7 @@ import (
 	"go.chromium.org/luci/cipd/version"
 	"golang.org/x/sync/singleflight"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/proto"
 
@@ -36,6 +38,8 @@ type Option struct {
 	// use compressed blobs if server supports compressed blobs and size is bigger than this.
 	// When 0 is set, blob compression is disabled.
 	CompressedBlob int64
+
+	KeepAliveParams keepalive.ClientParameters
 }
 
 // RegisterFlags registers flags on the option.
@@ -51,6 +55,11 @@ func (o *Option) RegisterFlags(fs *flag.FlagSet, envs map[string]string) {
 	}
 	fs.StringVar(&o.Instance, "reapi_instance", instance, "reapi instance name")
 	fs.Int64Var(&o.CompressedBlob, "reapi_compress_blob", 1024, "use compressed blobs if server supports compressed blobs and size is bigger than this. specify 0 to disable comporession.")
+
+	// go/keepalive-ping-grpc-core
+	fs.DurationVar(&o.KeepAliveParams.Time, "reapi_grpc_keepalive_time", 20*time.Second, "grpc keepalive time")
+	fs.DurationVar(&o.KeepAliveParams.Timeout, "reapi_grpc_keepalive_timeout", 10*time.Second, "grpc keepalive timeout")
+	fs.BoolVar(&o.KeepAliveParams.PermitWithoutStream, "reapi_grpc_keepalive_permit_without_stream", true, "grpc keepalive permit without stream")
 }
 
 // UpdateProjectID updates the Option for projID and returns cloud project ID to use.
@@ -124,6 +133,7 @@ func New(ctx context.Context, cred cred.Cred, opt Option) (*Client, error) {
 	dopts := append(cred.GRPCDialOptions(),
 		grpc.WithUnaryInterceptor(grpcInt.GCPUnaryClientInterceptor),
 		grpc.WithStreamInterceptor(grpcInt.GCPStreamClientInterceptor),
+		grpc.WithKeepaliveParams(opt.KeepAliveParams),
 		grpc.WithDisableServiceConfig(),
 		// no retry for ActionCache
 		grpc.WithDefaultServiceConfig(fmt.Sprintf(`
