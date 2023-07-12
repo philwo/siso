@@ -25,7 +25,6 @@ import (
 	"infra/build/siso/o11y/clog"
 	"infra/build/siso/reapi/digest"
 	"infra/build/siso/reapi/merkletree"
-	"infra/build/siso/toolsupport/shutil"
 )
 
 // Executor is an interface to run the cmd.
@@ -192,14 +191,6 @@ type Cmd struct {
 // String returns an ID of the cmd.
 func (c *Cmd) String() string {
 	return c.ID
-}
-
-// Command returns a command line string.
-func (c *Cmd) Command() string {
-	if len(c.Args) == 3 && c.Args[0] == "/bin/sh" && c.Args[1] == "-c" {
-		return c.Args[2]
-	}
-	return shutil.Join(c.Args)
 }
 
 // AllInputs returns all inputs of the cmd.

@@ -59,6 +59,8 @@ func TestCmdOutput(t *testing.T) {
 		}
 		return nil
 	}
+	const command = "../../third_party/llvm-build/Release+Asserts/bin/clang++ -c ../../base/base.cc"
+
 	for _, tc := range []struct {
 		name           string
 		result         string
@@ -184,7 +186,7 @@ func TestCmdOutput(t *testing.T) {
 				w := cmd.StderrWriter()
 				w.Write(tc.stderr)
 			}
-			msgs := cmdOutput(ctx, tc.result, cmd, tc.rule, tc.err)
+			msgs := cmdOutput(ctx, tc.result, cmd, command, tc.rule, tc.err)
 			err := tc.check(msgs)
 			if err != nil {
 				t.Error(err)
