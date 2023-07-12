@@ -163,7 +163,7 @@ func (fv *fsview) scanFile(ctx context.Context, fname string) (*scanResult, erro
 	var defines map[string][]string
 	err = cppScanSema.Do(ctx, func(ctx context.Context) error {
 		var err error
-		includes, defines, err = cppScan(ctx, fname, buf)
+		includes, defines, err = CPPScan(ctx, fname, buf)
 		return err
 	})
 	sr.err = err

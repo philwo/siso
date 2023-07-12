@@ -16,7 +16,8 @@ import (
 	"infra/build/siso/o11y/trace"
 )
 
-func cppScan(ctx context.Context, fname string, buf []byte) ([]string, map[string][]string, error) {
+// CPPScan scans C preprocessor directives for #include/#define in buf.
+func CPPScan(ctx context.Context, fname string, buf []byte) ([]string, map[string][]string, error) {
 	ctx, span := trace.NewSpan(ctx, "cppScan")
 	defer span.Close(nil)
 

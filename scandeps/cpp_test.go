@@ -118,15 +118,15 @@ namespace base {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			gotIncludes, gotDefines, err := cppScan(ctx, tc.name, []byte(tc.buf))
+			gotIncludes, gotDefines, err := CPPScan(ctx, tc.name, []byte(tc.buf))
 			if err != nil {
-				t.Errorf("cppScan(ctx,%q,buf)=%v,%v,%v; want nil error", tc.name, gotIncludes, gotDefines, err)
+				t.Errorf("CPPScan(ctx,%q,buf)=%v,%v,%v; want nil error", tc.name, gotIncludes, gotDefines, err)
 			}
 			if diff := cmp.Diff(tc.wantIncludes, gotIncludes); diff != "" {
-				t.Errorf("cppSan(ctx,%q,buf) includes diff -want +got:\n%s", tc.name, diff)
+				t.Errorf("CPPScan(ctx,%q,buf) includes diff -want +got:\n%s", tc.name, diff)
 			}
 			if diff := cmp.Diff(tc.wantDefines, gotDefines); diff != "" {
-				t.Errorf("cppScan(ctx,%q,buf) defines diff -want +got:\n%s", tc.name, diff)
+				t.Errorf("CPPScan(ctx,%q,buf) defines diff -want +got:\n%s", tc.name, diff)
 			}
 		})
 	}
