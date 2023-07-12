@@ -57,7 +57,9 @@ func (o *Option) RegisterFlags(fs *flag.FlagSet, envs map[string]string) {
 	fs.Int64Var(&o.CompressedBlob, "reapi_compress_blob", 1024, "use compressed blobs if server supports compressed blobs and size is bigger than this. specify 0 to disable comporession.")
 
 	// go/keepalive-ping-grpc-core
-	fs.DurationVar(&o.KeepAliveParams.Time, "reapi_grpc_keepalive_time", 20*time.Second, "grpc keepalive time")
+	// 20s got
+	//  ERROR: [transport] Client received GoAway with error code ENHANCE_YOUR_CALM and debug data equal to ASCII "too_many_ping"
+	fs.DurationVar(&o.KeepAliveParams.Time, "reapi_grpc_keepalive_time", 30*time.Second, "grpc keepalive time")
 	fs.DurationVar(&o.KeepAliveParams.Timeout, "reapi_grpc_keepalive_timeout", 10*time.Second, "grpc keepalive timeout")
 	fs.BoolVar(&o.KeepAliveParams.PermitWithoutStream, "reapi_grpc_keepalive_permit_without_stream", true, "grpc keepalive permit without stream")
 }
