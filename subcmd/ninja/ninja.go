@@ -229,7 +229,8 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 			},
 		})
 		spin.Stop(err)
-		fmt.Println(logger.URL())
+		// TODO(b/288534744): use stdout?
+		fmt.Fprintln(os.Stderr, logger.URL())
 		if err != nil {
 			return err
 		}
