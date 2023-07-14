@@ -186,19 +186,11 @@ func (b *Builder) captureLocalOutputs(ctx context.Context, step *Step) error {
 	return nil
 }
 
-func argsForLogLocalExec(cmdArgs []string) []string {
-	var args []string
-	if len(cmdArgs) > 10 {
-		args = append(args, cmdArgs[:10]...)
-		args = append(args, "...")
-	} else {
-		args = append(args, cmdArgs...)
-	}
-	return args
-}
-
 func (b *Builder) logLocalExec(ctx context.Context, step *Step, dur time.Duration) {
-	args := argsForLogLocalExec(step.cmd.Args)
+	command := step.def.Binding("command")
+	if len(command) > 256 {
+		command = command[:256] + " ..."
+	}
 	allOutputs := step.cmd.AllOutputs()
 	var output string
 	if len(allOutputs) > 0 {
@@ -207,12 +199,12 @@ func (b *Builder) logLocalExec(ctx context.Context, step *Step, dur time.Duratio
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, `cmd: %s pure:%t/unknown restat:%t %s
 action: %s %s
-args: %q %d
+command: %q %d
 
 `,
 		step, step.cmd.Pure, step.cmd.Restat, dur,
 		step.cmd.ActionName, output,
-		args, dur.Milliseconds())
+		command, dur.Milliseconds())
 	_, err := b.localexecLogWriter.Write(buf.Bytes())
 	if err != nil {
 		clog.Warningf(ctx, "failed to log localexec: %v", err)

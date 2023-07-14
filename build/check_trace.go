@@ -45,7 +45,10 @@ import (
 func (b *Builder) checkTrace(ctx context.Context, step *Step, dur time.Duration) error {
 	ctx, span := trace.NewSpan(ctx, "check-trace")
 	defer span.Close(nil)
-	args := argsForLogLocalExec(step.cmd.Args)
+	command := step.def.Binding("command")
+	if len(command) > 256 {
+		command = command[:256] + "..."
+	}
 	allInputs := step.cmd.AllInputs()
 	allOutputs := step.cmd.AllOutputs()
 	var output string
@@ -78,14 +81,14 @@ func (b *Builder) checkTrace(ctx context.Context, step *Step, dur time.Duration)
 		var buf bytes.Buffer
 		fmt.Fprintf(&buf, `cmd: %s pure:%t/true restat:%t %s
 action: %s %s
-args: %q %d
+command: %s %d
 in:%d in/out:%d out:%d
 inerr:%d outerr:%d
 
 `,
 			step, step.cmd.Pure, step.cmd.Restat, dur,
 			step.cmd.ActionName, output,
-			args, dur.Milliseconds(),
+			command, dur.Milliseconds(),
 			len(allInputs), len(inouts), len(allOutputs),
 			len(inerrs), len(outerrs))
 		b.localexecLogWriter.Write(buf.Bytes())
@@ -101,7 +104,7 @@ inerr:%d outerr:%d
 		var buf bytes.Buffer
 		fmt.Fprintf(&buf, `cmd: %s pure:%t/can-be-true restat:%t %s
 action: %s %s
-args: %q %d
+command: %s %d
 in:%d in/out:%d out:%d
 inputs:
 -%s
@@ -111,7 +114,7 @@ outputs:
 `,
 			step, step.cmd.Pure, step.cmd.Restat, dur,
 			step.cmd.ActionName, output,
-			args, dur.Milliseconds(),
+			command, dur.Milliseconds(),
 			len(allInputs), len(inouts), len(allOutputs),
 			strings.Join(indels, "\n-"),
 			strings.Join(outdels, "\n-"))
@@ -133,7 +136,7 @@ outputs:
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, `cmd: %s pure:%t/false restat:%t %s
 action: %s %s
-args: %q %d
+command: %s %d
 in:%d in/out:%d out:%d
 inerr:%d outerr:%d
 inputs:
@@ -150,7 +153,7 @@ allInputs:
 `,
 		step, step.cmd.Pure, step.cmd.Restat, dur,
 		step.cmd.ActionName, output,
-		args, dur.Milliseconds(),
+		command, dur.Milliseconds(),
 		len(allInputs), len(inouts), len(allOutputs),
 		len(inerrs), len(outerrs),
 		strings.Join(inadds, "\n+"),
@@ -162,7 +165,7 @@ allInputs:
 	b.localexecLogWriter.Write(buf.Bytes())
 	if step.cmd.Pure {
 		clog.Warningf(ctx, "impure cmd deps=%q marked as pure", step.cmd.Deps)
-		return depsImpureCheck(ctx, step, args)
+		return depsImpureCheck(ctx, step, command)
 	}
 	return nil
 }
@@ -260,15 +263,15 @@ func filesDiff(ctx context.Context, b *Builder, x, opts, y []string, ignorePatte
 	return uniqueFiles(adds), uniqueFiles(dels), uniqueFiles(platforms), errs
 }
 
-func depsImpureCheck(ctx context.Context, step *Step, args []string) error {
+func depsImpureCheck(ctx context.Context, step *Step, command string) error {
 	// deps="gcc","msvc" doesn't use file access. new *.d will have correct deps.
 	switch step.cmd.Deps {
 	case "gcc", "msvc":
 		return nil
 	default:
-		if experiments.Enabled("keep-going-impure", "impure cmd %s %s %q marked as pure", step, step.cmd.ActionName, args) {
+		if experiments.Enabled("keep-going-impure", "impure cmd %s %s %s marked as pure", step, step.cmd.ActionName, command) {
 			return nil
 		}
 	}
-	return fmt.Errorf("impure cmd %s %s %q marked as pure", step, step.cmd.ActionName, args)
+	return fmt.Errorf("impure cmd %s %s %s marked as pure", step, step.cmd.ActionName, command)
 }
