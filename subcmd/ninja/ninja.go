@@ -131,7 +131,12 @@ type ninjaCmdRun struct {
 // Run runs the `ninja` subcommand.
 func (c *ninjaCmdRun) Run(a subcommands.Application, args []string, env subcommands.Env) int {
 	ctx := cli.GetContext(a, c, env)
-	err := c.run(ctx)
+	err := parseFlagsFully(&c.Flags)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 2
+	}
+	err = c.run(ctx)
 	if err != nil {
 		switch {
 		case errors.Is(err, auth.ErrLoginRequired):
@@ -148,6 +153,35 @@ func (c *ninjaCmdRun) Run(a subcommands.Application, args []string, env subcomma
 		return 1
 	}
 	return 0
+}
+
+// parse flags without stopping at non flags.
+func parseFlagsFully(flagSet *flag.FlagSet) error {
+	var targets []string
+	for {
+		args := flagSet.Args()
+		if len(args) == 0 {
+			break
+		}
+		var i int
+		for i = 0; i < len(args); i++ {
+			arg := args[i]
+			if !strings.HasPrefix(arg, "-") {
+				targets = append(targets, arg)
+				continue
+			}
+			err := flagSet.Parse(args[i:])
+			if err != nil {
+				return err
+			}
+			break
+		}
+		if i == len(args) {
+			break
+		}
+	}
+	// targets are non-flags. set it to Args.
+	return flagSet.Parse(targets)
 }
 
 func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
@@ -568,7 +602,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 			}
 		}
 		os.Remove(failedTargetsFile)
-		err = doBuild(ctx, graph, bopts, c.Flags.Args()...)
+		err = doBuild(ctx, graph, bopts, targets...)
 		if errors.Is(err, build.ErrManifestModified) {
 			if c.dryRun {
 				return nil

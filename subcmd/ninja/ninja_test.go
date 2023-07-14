@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
+
 	"infra/build/siso/build"
 	"infra/build/siso/build/buildconfig"
 	"infra/build/siso/build/ninjabuild"
@@ -178,5 +180,52 @@ build all: phony out1 out2 out3 out4 out5 out6
 	t.Logf("err %v; %#v", err, stats)
 	if got, want := stats.Fail, 6; got != want {
 		t.Errorf("stas.Fail=%d; want=%d", got, want)
+	}
+}
+
+func TestParseFlagsFully(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		args      []string
+		want      []string
+		wantDebug debugMode
+	}{
+		{
+			name: "simple",
+			args: []string{"-C", "out/siso"},
+			want: nil,
+		},
+		{
+			name: "target",
+			args: []string{"-C", "out/siso", "-project", "rbe-chrome-untrusted", "chrome"},
+			want: []string{"chrome"},
+		},
+		{
+			name: "after-flag",
+			args: []string{"-C", "out/siso", "-project", "rbe-chrome-untrusted", "chrome", "-d", "explain"},
+			want: []string{"chrome"},
+			wantDebug: debugMode{
+				Explain: true,
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := &ninjaCmdRun{}
+			c.init()
+			err := c.Flags.Parse(tc.args)
+			if err != nil {
+				t.Fatalf("flag parse %v; want nil err", err)
+			}
+			err = parseFlagsFully(&c.Flags)
+			if err != nil {
+				t.Fatalf("flag parse fully %v; want nil err", err)
+			}
+			if diff := cmp.Diff(tc.want, c.Flags.Args()); diff != "" {
+				t.Errorf("args diff -want +got:\n%s", diff)
+			}
+			if diff := cmp.Diff(tc.wantDebug, c.debugMode); diff != "" {
+				t.Errorf("debugMode diff -want +got:\n%s", diff)
+			}
+		})
 	}
 }
