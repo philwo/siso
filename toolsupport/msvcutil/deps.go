@@ -37,7 +37,7 @@ func ParseShowIncludes(b []byte) ([]string, []byte) {
 		i := bytes.IndexAny(s, "\r\n")
 		if i >= 0 {
 			line = line[:i]
-			s = s[i+1:]
+			s = s[i:]
 		} else {
 			s = nil
 		}

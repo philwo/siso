@@ -17,6 +17,7 @@ import (
 	"infra/build/siso/o11y/clog"
 	"infra/build/siso/o11y/trace"
 	"infra/build/siso/reapi"
+	"infra/build/siso/toolsupport/msvcutil"
 	"infra/build/siso/ui"
 )
 
@@ -217,6 +218,12 @@ func cmdOutput(ctx context.Context, result string, cmd *execute.Cmd, cmdline, ru
 	}
 	stdout := cmd.Stdout()
 	stderr := cmd.Stderr()
+	if cmd.Deps == "msvc" {
+		// cl.exe, clang-cl shows included file to stderr
+		// but RBE merges stderr into stdout...
+		_, stdout = msvcutil.ParseShowIncludes(stdout)
+		_, stderr = msvcutil.ParseShowIncludes(stderr)
+	}
 	if err == nil && len(stdout) == 0 && len(stderr) == 0 {
 		return nil
 	}

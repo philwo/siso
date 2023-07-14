@@ -38,6 +38,7 @@ fatal error: 'functional' not found
 #include <functional>
          ^~~~~~~~~~~~
 `)
+	wantOut = bytes.ReplaceAll(wantOut, []byte("\n"), []byte("\r\n"))
 	if !bytes.Equal(wantOut, out) {
 		t.Errorf("msvcutil.ParseShowIncludes(...) got:\n%q\nwant:\n%q", out, wantOut)
 	}
