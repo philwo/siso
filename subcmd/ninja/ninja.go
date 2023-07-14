@@ -141,14 +141,19 @@ func (c *ninjaCmdRun) Run(a subcommands.Application, args []string, env subcomma
 		switch {
 		case errors.Is(err, auth.ErrLoginRequired):
 			fmt.Fprintf(os.Stderr, "need to login: run `siso login`\n")
-		default:
-			msgPrefix := "Error:"
+		case errors.Is(err, errBuild):
+			// error is already printed
 			suggest := fmt.Sprintf("see %s for command output, or %s", c.logFilename(c.outputLogFile), c.logFilename("siso.INFO"))
 			if ui.IsTerminal() {
-				msgPrefix = ui.SGR(ui.BackgroundRed, msgPrefix)
 				suggest = ui.SGR(ui.Bold, suggest)
 			}
-			fmt.Fprintf(os.Stderr, "%s: %s\n %v\n", msgPrefix, suggest, err)
+			fmt.Fprintf(os.Stderr, "%s\n", suggest)
+		default:
+			msgPrefix := "Error:"
+			if ui.IsTerminal() {
+				msgPrefix = ui.SGR(ui.BackgroundRed, msgPrefix)
+			}
+			fmt.Fprintf(os.Stderr, "%s: %v\n", msgPrefix, err)
 		}
 		return 1
 	}
@@ -183,6 +188,8 @@ func parseFlagsFully(flagSet *flag.FlagSet) error {
 	// targets are non-flags. set it to Args.
 	return flagSet.Parse(targets)
 }
+
+var errBuild = errors.New("build error")
 
 func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 	ctx, cancel := context.WithCancel(ctx)
@@ -730,6 +737,7 @@ func defaultCacheDir() string {
 }
 
 func doBuild(ctx context.Context, graph *ninjabuild.Graph, bopts build.Options, args ...string) (err error) {
+	started := time.Now()
 	clog.Infof(ctx, "rebuild manifest")
 	mfbopts := bopts
 	mfbopts.Clobber = false
@@ -842,10 +850,25 @@ func doBuild(ctx context.Context, graph *ninjabuild.Graph, bopts build.Options, 
 		}
 		tw.Flush()
 	}
+	stats := b.Stats()
+	if err != nil {
+		msgPrefix := "Error:"
+		if ui.IsTerminal() {
+			msgPrefix = ui.SGR(ui.BackgroundRed, msgPrefix)
+		}
+		fmt.Fprintf(os.Stderr, "%s: %d done %d failed in %s\n %v\n", msgPrefix, stats.Done, stats.Fail, time.Since(started).Round(time.Millisecond), err)
+		err = errBuild
+	} else {
+		msgPrefix := "Build Succeeded:"
+		if ui.IsTerminal() {
+			msgPrefix = ui.SGR(ui.Green, msgPrefix)
+		}
+		fmt.Fprintf(os.Stderr, "%s: %d steps in %s\n", msgPrefix, stats.Done, time.Since(started).Round(time.Millisecond))
+
+	}
 	if bopts.REAPIClient == nil {
 		return err
 	}
-
 	// TODO(b/266518906): wait for completion of uploading manifest
 	return err
 }

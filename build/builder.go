@@ -485,9 +485,7 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 				stat.Local, stat.Remote, stat.Pure, stat.CacheHit, stat.LocalFallback, stat.Skipped) +
 				fmt.Sprintf("deps log:%d logErr:%d scanErr:%d\n",
 					stat.FastDepsSuccess, stat.FastDepsFailed, stat.ScanDepsFailed) +
-				restatLine +
-				fmt.Sprintf("total:%d in %s: %v\n",
-					stat.Total, time.Since(started), err))
+				restatLine)
 	}()
 	semas := []*semaphore.Semaphore{
 		b.stepSema,
