@@ -161,6 +161,7 @@ type Span struct {
 	spanID [8]byte
 	parent *Span
 
+	mu          sync.Mutex
 	displayName string
 	start       time.Time
 	end         time.Time
@@ -173,6 +174,8 @@ func (s *Span) SetAttr(key string, value any) {
 	if s == nil {
 		return
 	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.attrs[key] = value
 }
 
@@ -184,7 +187,9 @@ func (s *Span) Add(ctx context.Context, sd SpanData) *Span {
 	if s.t == nil {
 		return nil
 	}
+	s.mu.Lock()
 	ss := s.t.newSpan(ctx, sd.Name, s)
+	s.mu.Unlock()
 	ss.start = sd.Start
 	ss.end = sd.End
 	ss.attrs = sd.Attrs
@@ -197,6 +202,8 @@ func (s *Span) Close(st *spb.Status) {
 	if s == nil {
 		return
 	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.end = time.Now()
 	s.status = st
 }
@@ -221,6 +228,8 @@ func (s *Span) data() SpanData {
 	if s == nil {
 		return SpanData{}
 	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	end := s.end
 	if end.IsZero() {
 		end = time.Now()
@@ -254,6 +263,8 @@ func (s *Span) proto(ctx context.Context, projectID string) *tracepb.Span {
 			clog.Fatalf(ctx, "spanID == parent? %q span=%p[%q] parent=%p[%q]", spanID, s, s.displayName, s.parent, s.parent.displayName)
 		}
 	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	return &tracepb.Span{
 		Name: path.Join("projects", projectID,
 			"traces", hex.EncodeToString(s.t.traceID[:]),
