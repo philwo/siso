@@ -82,11 +82,11 @@ func (g *Graph) newStepDef(ctx context.Context, edge *ninjautil.Edge, next build
 		pure:    pure,
 		globals: g.globals,
 	}
-	updateNodeAssoc(stepDef)
+	updateNodeAssoc(ctx, stepDef)
 	return stepDef
 }
 
-func updateNodeAssoc(stepDef *StepDef) {
+func updateNodeAssoc(ctx context.Context, stepDef *StepDef) {
 	outputs := stepDef.Outputs()
 	var solibs []string
 	for _, in := range edgeSolibs(stepDef.edge) {
@@ -94,6 +94,9 @@ func updateNodeAssoc(stepDef *StepDef) {
 		solibs = append(solibs, in)
 	}
 	if len(solibs) > 0 {
+		if log.V(1) {
+			clog.Infof(ctx, "add solibs=%q to %q", solibs, outputs)
+		}
 		for _, out := range outputs {
 			stepDef.globals.accumulates[out] = append(stepDef.globals.accumulates[out], solibs...)
 		}
@@ -632,13 +635,19 @@ func (s *StepDef) ExpandedInputs(ctx context.Context) []string {
 		if s.rule.Debug {
 			clog.Infof(ctx, "indirect inputs")
 		}
+		// need to use different seen, so that replaces/accumulates
+		// works even if indirect inputs see/ignore the inputs.
+		iseen := make(map[string]bool)
+		for k, v := range seen {
+			iseen[k] = v
+		}
 		filter := s.rule.IndirectInputs.filter(ctx)
 		for _, in := range s.edge.Inputs() {
 			edge, ok := in.InEdge()
 			if !ok {
 				continue
 			}
-			inputs = s.appendIndirectInputs(ctx, filter, edge, inputs, seen)
+			inputs = s.appendIndirectInputs(ctx, filter, edge, inputs, iseen)
 		}
 		// and need to expand inputs for toolchain input etc.
 	}
@@ -684,6 +693,7 @@ func (s *StepDef) ExpandedInputs(ctx context.Context) []string {
 			changed = true
 		}
 	}
+
 	newInputs = fixInputs(ctx, s, newInputs, s.rule.ExcludeInputPatterns)
 	if changed {
 		inputs = make([]string, len(newInputs))
