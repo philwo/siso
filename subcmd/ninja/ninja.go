@@ -84,8 +84,9 @@ type ninjaCmdRun struct {
 	failuresAllowed int
 	actionSalt      string
 
-	ninjaJobs int
-	fname     string
+	ninjaJobs  int
+	remoteJobs int
+	fname      string
 
 	cacheDir         string
 	localCacheEnable bool
@@ -526,6 +527,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 		DryRun:               c.dryRun,
 		FailuresAllowed:      c.failuresAllowed,
 		KeepRSP:              c.debugMode.Keeprsp,
+		RemoteLimit:          c.remoteJobs,
 	}
 	const failedTargetsFile = ".siso_failed_targets"
 	for {
@@ -608,6 +610,7 @@ func (c *ninjaCmdRun) init() {
 	c.Flags.StringVar(&c.actionSalt, "action_salt", "", "action salt")
 
 	c.Flags.IntVar(&c.ninjaJobs, "j", -1, "run N jobs in parallel (0 means infinity). not supported b/288829511")
+	c.Flags.IntVar(&c.remoteJobs, "remote_jobs", 0, "run N remote jobs in parallel. when the value is no positive, the default will be computed based on # of CPUs.")
 	c.Flags.StringVar(&c.fname, "f", "build.ninja", "input build manifet filename (relative to -C)")
 
 	c.Flags.StringVar(&c.cacheDir, "cache_dir", defaultCacheDir(), "cache directory")

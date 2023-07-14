@@ -121,6 +121,9 @@ type Options struct {
 	// otherwise, builder will start many steps, so hard to
 	// test !hasReady before b.failuresAllowed.
 	UnitTest bool
+
+	// RemoteLimit limits the number of remote actions that can run in parallel.
+	RemoteLimit int
 }
 
 var experiments Experiments
@@ -241,8 +244,14 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 	stepLimit := stepLimitFactor * numCPU
 	scanDepsLimit := scanDepsLimitFactor * numCPU
 	localLimit := numCPU
-	rewrapLimit := limitForREWrapper(ctx, numCPU)
-	remoteLimit := remoteLimitFactor * numCPU
+	var rewrapLimit, remoteLimit int
+	if opts.RemoteLimit > 0 {
+		rewrapLimit = opts.RemoteLimit
+		remoteLimit = opts.RemoteLimit
+	} else {
+		rewrapLimit = limitForREWrapper(ctx, numCPU)
+		remoteLimit = remoteLimitFactor * numCPU
+	}
 	// on many cores machine, it would hit default max thread limit = 10000
 	// usually, it would require 1/3 threads of stepLimit (cache miss case?)
 	maxThreads := stepLimit / 3
