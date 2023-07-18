@@ -120,6 +120,9 @@ type Stats struct {
 }
 
 func (s *stats) stats() Stats {
+	if s == nil {
+		return Stats{}
+	}
 	return Stats{
 		Preproc:         int(s.npreproc.Load()),
 		Done:            int(s.ndone.Load()),
