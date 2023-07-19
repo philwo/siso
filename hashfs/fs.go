@@ -1213,6 +1213,7 @@ func resolveSymlink(ctx context.Context, origFname string, n int, target string)
 		s = rest
 	}
 	elems = append(elems, target)
+	// TODO: elems[0] += `\` on windows, but we don't support symlink on windows?
 	return filepath.Join(elems...)
 }
 
@@ -1359,7 +1360,12 @@ func (d *directory) nextDir(ctx context.Context, elems []string, origFname, fnam
 	}
 	// create intermediate dir of elem.
 	mtime := time.Now()
-	dfi, err := os.Lstat(filepath.Join(elems...))
+	if runtime.GOOS == "windows" && !strings.HasSuffix(elems[0], `\`) {
+		// elems[0] is drive letter. e.g "c:"
+		elems[0] += `\`
+	}
+	fullname := filepath.Join(elems...)
+	dfi, err := os.Lstat(fullname)
 	if err == nil {
 		mtime = dfi.ModTime()
 		switch {
@@ -1367,11 +1373,11 @@ func (d *directory) nextDir(ctx context.Context, elems []string, origFname, fnam
 		case dfi.Mode().Type() == fs.ModeSymlink:
 			target, err := os.Readlink(filepath.Join(elems...))
 			if err != nil {
-				return nil, "", fmt.Errorf("failed to set entry %s symlink: %w", filepath.Join(elems...), err)
+				return nil, "", fmt.Errorf("failed to set entry %s symlink: %w", fullname, err)
 			}
 			return nil, target, nil
 		default:
-			return nil, "", fmt.Errorf("failed to set entry: %s not dir", filepath.Join(elems...))
+			return nil, "", fmt.Errorf("failed to set entry: %s not dir", fullname)
 		}
 	}
 	lready := make(chan bool, 1)

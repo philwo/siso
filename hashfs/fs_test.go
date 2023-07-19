@@ -436,6 +436,47 @@ func TestStatAllocs(t *testing.T) {
 	})
 }
 
+func TestStat_IntermediateDir(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	dir, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	opt := hashfs.Option{}
+	hfs, err := hashfs.New(ctx, opt)
+	if err != nil {
+		t.Fatalf("New=%v", err)
+	}
+	defer func() {
+		err := hfs.Close(ctx)
+		if err != nil {
+			t.Fatalf("hfs.Close=%v", err)
+		}
+	}()
+	fname := "mojo/public/interfaces/bindings/tests/data/validation/data"
+	setupFiles(t, dir, map[string]string{
+		fname: "",
+	})
+	dname := filepath.Dir(fname)
+	lfi, err := os.Lstat(filepath.Join(dir, dname))
+	if err != nil {
+		t.Fatalf("stat(%q)=%v; want nil err", dname, err)
+	}
+	time.Sleep(1 * time.Microsecond)
+	_, err = hfs.Stat(ctx, dir, fname)
+	if err != nil {
+		t.Fatalf("Stat(%q)=%v; want nil err", fname, err)
+	}
+	fi, err := hfs.Stat(ctx, dir, dname)
+	if err != nil {
+		t.Fatalf("Stat(%q)=%v; want nil err", dname, err)
+	}
+	if !lfi.ModTime().Equal(fi.ModTime()) {
+		t.Errorf("%q modtime local=%v hfs=%v", dname, lfi.ModTime(), fi.ModTime())
+	}
+}
+
 func TestUpdateFromLocal(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
