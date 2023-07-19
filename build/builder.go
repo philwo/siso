@@ -892,9 +892,6 @@ func (b *Builder) updateDeps(ctx context.Context, step *Step) error {
 		clog.Warningf(ctx, "update deps: %v", err)
 		return err
 	}
-	if len(deps) == 0 {
-		return nil
-	}
 	updated, err := step.def.RecordDeps(ctx, output, fi.ModTime(), deps)
 	if err != nil {
 		clog.Warningf(ctx, "update deps: failed to record deps %s, %s, %s, %s: %v", output, hex.EncodeToString(step.cmd.CmdHash), fi.ModTime(), deps, err)
