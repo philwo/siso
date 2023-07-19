@@ -343,11 +343,12 @@ func newCmd(ctx context.Context, b *Builder, stepDef StepDef) *execute.Cmd {
 
 		HashFS: b.hashFS,
 
-		Platform:        stepDef.Platform(),
-		RemoteWrapper:   stepDef.Binding("remote_wrapper"),
-		RemoteCommand:   stepDef.Binding("remote_command"),
-		RemoteInputs:    stepDef.RemoteInputs(),
-		REProxyConfig:   stepDef.REProxyConfig(),
+		Platform:      stepDef.Platform(),
+		RemoteWrapper: stepDef.Binding("remote_wrapper"),
+		RemoteCommand: stepDef.Binding("remote_command"),
+		RemoteInputs:  stepDef.RemoteInputs(),
+		// always copy REProxyConfig, allows safe mutation via cmd.action.fix.
+		REProxyConfig:   stepDef.REProxyConfig().Copy(),
 		CanonicalizeDir: stepDef.Binding("canonicalize_dir") != "",
 
 		// TODO(b/266518906): enable DoNotCache for read-only client

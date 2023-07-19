@@ -52,6 +52,24 @@ type REProxyConfig struct {
 	ServerAddress          string            `json:"server_address,omitempty"`
 }
 
+// Copy returns a deep copy of *REProxyConfig which can be safely mutated.
+// Will return nil if given *REProxyConfig is nil.
+func (c *REProxyConfig) Copy() *REProxyConfig {
+	if c == nil {
+		return nil
+	}
+	copy := *c
+	copy.Labels = make(map[string]string, len(c.Labels))
+	for k := range c.Labels {
+		copy.Labels[k] = c.Labels[k]
+	}
+	copy.Platform = make(map[string]string, len(c.Platform))
+	for k := range c.Platform {
+		copy.Platform[k] = c.Platform[k]
+	}
+	return &copy
+}
+
 // Cmd includes all the information required to run a build command.
 type Cmd struct {
 	// ID is used as a unique identifier for this action in logs and tracing.
