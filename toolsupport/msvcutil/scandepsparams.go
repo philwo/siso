@@ -17,7 +17,7 @@ import (
 // full set of command line flags for include dirs can be found in
 // https://learn.microsoft.com/en-us/cpp/build/reference/compiler-options-listed-by-category?view=msvc-170
 // https://clang.llvm.org/docs/ClangCommandLineReference.html#include-path-management
-func ScanDepsParams(ctx context.Context, args, env []string) (files, dirs, sysroots []string, defines map[string]string, err error) {
+func ScanDepsParams(ctx context.Context, args, env []string) (files, includes, dirs, sysroots []string, defines map[string]string, err error) {
 	defines = make(map[string]string)
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
@@ -42,6 +42,10 @@ func ScanDepsParams(ctx context.Context, args, env []string) (files, dirs, sysro
 			i++
 			defineMacro(defines, args[i])
 			continue
+		case "-FI", "/FI":
+			i++
+			includes = append(includes, filepath.ToSlash(args[i]))
+			continue
 		}
 		switch {
 		case strings.HasPrefix(arg, "-I"):
@@ -54,6 +58,11 @@ func ScanDepsParams(ctx context.Context, args, env []string) (files, dirs, sysro
 		case strings.HasPrefix(arg, "/D"):
 			defineMacro(defines, strings.TrimPrefix(arg, "/D"))
 
+		case strings.HasPrefix(arg, "-FI"):
+			includes = append(includes, filepath.ToSlash(strings.TrimPrefix(arg, "-FI")))
+		case strings.HasPrefix(arg, "/FI"):
+			includes = append(includes, filepath.ToSlash(strings.TrimPrefix(arg, "/FI")))
+
 		case strings.HasPrefix(arg, "/winsysroot"):
 			sysroots = append(sysroots, filepath.ToSlash(strings.TrimPrefix(arg, "/winsysroot")))
 		case !strings.HasPrefix(arg, "-") && !strings.HasPrefix(arg, "/"):
@@ -64,7 +73,7 @@ func ScanDepsParams(ctx context.Context, args, env []string) (files, dirs, sysro
 			}
 		}
 	}
-	return files, dirs, sysroots, defines, nil
+	return files, includes, dirs, sysroots, defines, nil
 }
 
 func defineMacro(defines map[string]string, arg string) {

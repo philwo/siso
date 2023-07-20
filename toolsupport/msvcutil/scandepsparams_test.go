@@ -15,6 +15,7 @@ func TestScanDepsParams(t *testing.T) {
 	ctx := context.Background()
 	type result struct {
 		Files    []string
+		Includes []string
 		Dirs     []string
 		Sysroots []string
 		Defines  map[string]string
@@ -43,11 +44,15 @@ func TestScanDepsParams(t *testing.T) {
 				"-I../../buildtools/third_party/libc++",
 				"-I../../buildtools/third_party/libc++/trunk/include",
 				"-D__DATE_=",
+				"/FIcompat/msvcrt/snprintf.h",
 				"/Fdobj/base/base64_cc.pdb",
 			},
 			want: result{
 				Files: []string{
 					"../../base/base64.cc",
+				},
+				Includes: []string{
+					"compat/msvcrt/snprintf.h",
 				},
 				Dirs: []string{
 					"../..",
@@ -68,7 +73,7 @@ func TestScanDepsParams(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var got result
-			got.Files, got.Dirs, got.Sysroots, got.Defines, got.Err = ScanDepsParams(ctx, tc.args, tc.env)
+			got.Files, got.Includes, got.Dirs, got.Sysroots, got.Defines, got.Err = ScanDepsParams(ctx, tc.args, tc.env)
 			if diff := cmp.Diff(tc.want, got); diff != "" {
 				t.Errorf("ScanDepsParams(ctx, %q, %q): diff -want +got:\n%s", tc.args, tc.env, diff)
 			}

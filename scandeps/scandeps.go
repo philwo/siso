@@ -47,6 +47,9 @@ type Request struct {
 	// Sources are source files.
 	Sources []string
 
+	// Includes are additional include files (i.e. -include or /FI).
+	Includes []string
+
 	// Dirs are include directory (search paths).
 	Dirs []string
 
@@ -67,6 +70,9 @@ func (s *ScanDeps) Scan(ctx context.Context, execRoot string, req Request) ([]st
 	scanner := s.fs.scanner(ctx, execRoot, s.inputDeps, req.Sysroots)
 	scanner.setMacros(ctx, req.Defines)
 
+	for _, s := range req.Includes {
+		scanner.addInclude(ctx, s)
+	}
 	for _, s := range req.Sources {
 		scanner.addSource(ctx, s)
 	}

@@ -164,11 +164,21 @@ func (s *scanner) updateMacros(ctx context.Context, macros map[string][]string) 
 	}
 }
 
+func (s *scanner) addInclude(ctx context.Context, fname string) {
+	s.pushInputs(`"` + fname + `"`)
+	if log.V(1) {
+		clog.Infof(ctx, "include %q", fname)
+	}
+}
+
 func (s *scanner) addSource(ctx context.Context, fname string) {
 	// add dir and include as if #include "basename".
 	s.pushDir(ctx, filepath.ToSlash(filepath.Dir(fname)))
 	base := filepath.Base(fname)
 	s.pushInputs(`"` + base + `"`)
+	if log.V(1) {
+		clog.Infof(ctx, "source %q", fname)
+	}
 }
 
 func (s *scanner) addDir(ctx context.Context, dir string) {
@@ -187,6 +197,9 @@ func (s *scanner) pushDir(ctx context.Context, dir string) {
 }
 
 func (s *scanner) popDir(ctx context.Context) {
+	if len(s.dirstack) == 0 {
+		return
+	}
 	dir := s.dirstack[len(s.dirstack)-1]
 	s.dirstack = s.dirstack[:len(s.dirstack)-1]
 	if log.V(1) {
