@@ -116,6 +116,7 @@ func fromDigest(d digest.Digest) *pb.Digest {
 func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 	start := time.Now()
 	var neq, nnew, nnotexist, nfail, ninvalidate atomic.Int64
+	var dirty atomic.Bool
 	eg, gctx := errgroup.WithContext(ctx)
 	eg.SetLimit(runtime.NumCPU())
 	for i, ent := range state.Entries {
@@ -158,6 +159,7 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 			if err != nil {
 				clog.Warningf(gctx, "Failed to stat %s: %v", ent.Name, err)
 				nfail.Add(1)
+				dirty.Store(true)
 				return nil
 			}
 			e, et := newStateEntry(ent, fi.ModTime(), hfs.opt.DataSource, hfs.IOMetrics)
@@ -172,16 +174,36 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 				}
 			} else if e.d.IsZero() && e.target != "" {
 				ftype = "symlink"
+			} else if !e.d.IsZero() && len(h) > 0 && et != entryEqLocal && !dirty.Load() {
+				// mtime differ for generated file?
+				// check digest is the same and fix mtime if it matches.
+				// don't reconcile for source (non-generated file),
+				// as user may want to trigger build by touch.
+				src := digest.LocalFileSource{
+					Fname:     ent.Name,
+					IOMetrics: hfs.IOMetrics,
+				}
+				data, err := digest.FromLocalFile(ctx, src)
+				if err == nil && data.Digest() == e.d {
+					et = entryEqLocal
+					err = os.Chtimes(ent.Name, time.Now(), e.mtime)
+					hfs.IOMetrics.OpsDone(err)
+					clog.Infof(ctx, "reconcile mtime %s %v -> %v", ent.Name, fi.ModTime(), e.mtime)
+				} else {
+					clog.Warningf(ctx, "failed to reconcile mtime %s digest %s(state) != %s(local) err: %v", ent.Name, e.d, data.Digest(), err)
+				}
 			}
 			switch et {
 			case entryNoLocal: // never?
 				nnotexist.Add(1)
+				dirty.Store(true)
 				if len(h) == 0 {
 					return nil
 				}
 				clog.Infof(gctx, "not exist %s %s cmdhash:%s", ftype, ent.Name, hex.EncodeToString(e.cmdhash))
 			case entryBeforeLocal:
 				ninvalidate.Add(1)
+				dirty.Store(true)
 				clog.Warningf(gctx, "invalidate %s %s: state:%s disk:%s", ftype, ent.Name, e.mtime, fi.ModTime())
 				return nil
 			case entryEqLocal:
@@ -191,6 +213,7 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 				}
 			case entryAfterLocal:
 				nnew.Add(1)
+				dirty.Store(true)
 				if len(h) == 0 {
 					return nil
 				}
