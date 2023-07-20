@@ -25,9 +25,10 @@ import (
 
 // StepDeps is a dependency of a step.
 type StepDeps struct {
-	Inputs   []string          `json:"inputs,omitempty"`
-	Outputs  []string          `json:"outputs,omitempty"`
-	Platform map[string]string `json:"platform,omitempty"`
+	Inputs      []string          `json:"inputs,omitempty"`
+	Outputs     []string          `json:"outputs,omitempty"`
+	Platform    map[string]string `json:"platform,omitempty"`
+	PlatformRef string            `json:"platform_ref,omitempty"`
 }
 
 // IndirectInputs specifies what indirect inputs are used as action inputs.
@@ -390,13 +391,16 @@ loop:
 
 		rule := *c
 		rule.actionRE = nil
+		opt := rule.OutputsMap[outConfig]
 		if rule.Remote {
 			if len(rule.Platform) == 0 {
 				rule.Platform = make(map[string]string)
 			}
-			ref := rule.PlatformRef
-			if ref == "" {
-				ref = "default"
+			ref := "default"
+			if opt.PlatformRef != "" {
+				ref = opt.PlatformRef
+			} else if rule.PlatformRef != "" {
+				ref = rule.PlatformRef
 			}
 			p := sc.Platforms[ref]
 			for k, v := range p {
@@ -412,7 +416,6 @@ loop:
 			rule.Platform["InputRootAbsolutePath"] = bpath.ExecRoot
 		}
 
-		opt := rule.OutputsMap[outConfig]
 		if bool(log.V(1)) || rule.Debug {
 			clog.Infof(ctx, "hit %s actionName:%q out:%q args0:%q -> action_name:%q action_outs:%q command:%q inputs:%d+%d outputs:%d+%d output-local:%t platform:%v + %v", rule.Name, actionName, outConfig, args0, rule.ActionName, rule.ActionOuts, rule.CommandPrefix, len(rule.Inputs), len(opt.Inputs), len(rule.Outputs), len(opt.Outputs), rule.OutputLocal, rule.Platform, opt.Platform)
 		}

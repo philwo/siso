@@ -158,6 +158,7 @@ to register handlers and step configs.
                * `inputs`: additional inputs
                * `outputs`: additional outputs
                * `platform`: additional platform properties
+               * `platform_ref`: overrides reference to platform properties
           * `restat`: true if step cmd reads output file and not write it
             (when no update needed)
           * `platform_ref`: reference to platform properties
