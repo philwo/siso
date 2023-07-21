@@ -42,7 +42,7 @@ func treeInputs(ctx context.Context, fn func(context.Context, string) (merkletre
 	return treeEntries
 }
 
-func (b *Builder) treeInput(ctx context.Context, dir, labelSuffix string) (merkletree.TreeEntry, error) {
+func (b *Builder) treeInput(ctx context.Context, dir, labelSuffix string, expandFn func(context.Context, []string) []string) (merkletree.TreeEntry, error) {
 	if b.reapiclient == nil {
 		return merkletree.TreeEntry{}, errors.New("reapi is not configured")
 	}
@@ -54,7 +54,7 @@ func (b *Builder) treeInput(ctx context.Context, dir, labelSuffix string) (merkl
 	st := &subtree{}
 	v, _ := b.trees.LoadOrStore(dir, st)
 	st = v.(*subtree)
-	st.init(ctx, b, dir, files)
+	st.init(ctx, b, dir, files, expandFn)
 	return merkletree.TreeEntry{
 		Name:   dir,
 		Digest: st.d,
@@ -66,9 +66,12 @@ type subtree struct {
 	d    digest.Digest
 }
 
-func (st *subtree) init(ctx context.Context, b *Builder, dir string, files []string) {
+func (st *subtree) init(ctx context.Context, b *Builder, dir string, files []string, expandFn func(context.Context, []string) []string) {
 	st.once.Do(func() {
 		files = b.expandInputs(ctx, files)
+		if expandFn != nil {
+			files = expandFn(ctx, files)
+		}
 		var inputs []string
 		for _, f := range files {
 			if !strings.HasPrefix(f, dir+"/") {

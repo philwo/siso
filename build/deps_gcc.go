@@ -83,7 +83,7 @@ func (gcc depsGCC) fixCmdInputs(ctx context.Context, b *Builder, cmd *execute.Cm
 	fixSymlink("sysroots", sysroots)
 
 	fn := func(ctx context.Context, dir string) (merkletree.TreeEntry, error) {
-		return b.treeInput(ctx, dir, ":headers")
+		return b.treeInput(ctx, dir, ":headers", nil)
 	}
 	if gcc.treeInput != nil {
 		fn = gcc.treeInput
