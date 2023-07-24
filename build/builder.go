@@ -778,7 +778,18 @@ func dedupInputs(ctx context.Context, cmd *execute.Cmd) {
 func (b *Builder) outputs(ctx context.Context, step *Step) error {
 	ctx, span := trace.NewSpan(ctx, "outputs")
 	defer span.Close(nil)
-	span.SetAttr("outputs", len(step.cmd.Outputs))
+	outputs := step.cmd.Outputs
+	span.SetAttr("outputs", len(outputs))
+	if step.cmd.Depfile != "" {
+		switch step.cmd.Deps {
+		case "gcc", "msvc":
+			// for deps=gcc,msvc, ninja will record it in
+			// deps log and remove depfile.
+		default:
+			outputs = append(outputs, step.cmd.Depfile)
+		}
+	}
+
 	localOutputs := step.def.LocalOutputs()
 	span.SetAttr("outputs-local", len(localOutputs))
 	seen := make(map[string]bool)
@@ -789,11 +800,11 @@ func (b *Builder) outputs(ctx context.Context, step *Step) error {
 		seen[o] = true
 	}
 
-	clog.Infof(ctx, "outputs %d->%d", len(step.cmd.Outputs), len(localOutputs))
+	clog.Infof(ctx, "outputs %d->%d", len(outputs), len(localOutputs))
 	defOutputs := step.def.Outputs()
 	// need to check against step.cmd.Outputs, not step.def.Outputs, since
 	// handler may add to step.cmd.Outputs.
-	for _, out := range step.cmd.Outputs {
+	for _, out := range outputs {
 		// force to output local for inputs
 		// .h,/.hxx/.hpp/.inc/.c/.cc/.cxx/.cpp/.m/.mm for gcc deps or msvc showIncludes
 		// .json/.js/.ts for tsconfig.json, .js for grit etc.
