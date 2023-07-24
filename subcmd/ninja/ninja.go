@@ -149,7 +149,7 @@ func (c *ninjaCmdRun) Run(a subcommands.Application, args []string, env subcomma
 			}
 			fmt.Fprintf(os.Stderr, "%s\n", suggest)
 		default:
-			msgPrefix := "Error:"
+			msgPrefix := "Error"
 			if ui.IsTerminal() {
 				msgPrefix = ui.SGR(ui.BackgroundRed, msgPrefix)
 			}
@@ -852,14 +852,14 @@ func doBuild(ctx context.Context, graph *ninjabuild.Graph, bopts build.Options, 
 	}
 	stats := b.Stats()
 	if err != nil {
-		msgPrefix := "Error:"
+		msgPrefix := "Error"
 		if ui.IsTerminal() {
 			msgPrefix = ui.SGR(ui.BackgroundRed, msgPrefix)
 		}
 		fmt.Fprintf(os.Stderr, "%s: %d done %d failed in %s\n %v\n", msgPrefix, stats.Done, stats.Fail, time.Since(started).Round(time.Millisecond), err)
 		err = errBuild
 	} else {
-		msgPrefix := "Build Succeeded:"
+		msgPrefix := "Build Succeeded"
 		if ui.IsTerminal() {
 			msgPrefix = ui.SGR(ui.Green, msgPrefix)
 		}
