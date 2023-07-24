@@ -17,7 +17,6 @@ import (
 	"infra/build/siso/execute"
 	"infra/build/siso/o11y/clog"
 	"infra/build/siso/o11y/trace"
-	"infra/build/siso/ui"
 )
 
 // checkUpToDate returns true if outputs are already up-to-date and
@@ -73,11 +72,40 @@ func (b *Builder) checkUpToDate(ctx context.Context, step *Step) bool {
 		// explain once at the beginning of the build.
 		return false
 	}
+	if b.outputLocal != nil {
+		var localOutputs []string
+		outputs := step.cmd.Outputs
+		if step.cmd.Depfile != "" {
+			switch step.cmd.Deps {
+			case "gcc", "msvc":
+			default:
+				outputs = append(outputs, step.cmd.Depfile)
+			}
+		}
+		seen := make(map[string]bool)
+		for _, out := range outputs {
+			if seen[out] {
+				continue
+			}
+			if b.outputLocal(ctx, out) {
+				localOutputs = append(localOutputs, out)
+			}
+			seen[out] = true
+		}
+		if len(localOutputs) > 0 {
+			err := b.hashFS.Flush(ctx, b.path.ExecRoot, localOutputs)
+			if err != nil {
+				clog.Infof(ctx, "need: no local outputs %q: %v", localOutputs, err)
+				span.SetAttr("run-reason", "missing-local-outputs")
+				fmt.Fprintf(b.explainWriter, "output %s flush error %s: %v", outname, localOutputs, err)
+				return false
+			}
+			clog.Infof(ctx, "flush all outputs %s", localOutputs)
+		}
+	}
+
 	clog.Infof(ctx, "skip: in:%s < out:%s %s", lastIn, out0, outmtime.Sub(inmtime))
 	span.SetAttr("skip", true)
-	if b.stats.skipped(ctx)%100 == 0 && ui.IsTerminal() {
-		b.progressStepSkipped(ctx, step)
-	}
 	return true
 }
 

@@ -76,6 +76,9 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 
 	skip := b.checkUpToDate(ctx, step)
 	if skip {
+		if b.stats.skipped(ctx)%100 == 0 && ui.IsTerminal() {
+			b.progressStepSkipped(ctx, step)
+		}
 		step.metrics.skip = true
 		return b.done(ctx, step)
 	}
