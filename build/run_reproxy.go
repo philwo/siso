@@ -16,7 +16,15 @@ func (b *Builder) runReproxy(ctx context.Context, step *Step) error {
 	ctx, span := trace.NewSpan(ctx, "run-reproxy")
 	defer span.Close(nil)
 	clog.Infof(ctx, "run reproxy %s", step.cmd.Desc)
-	err := b.reproxySema.Do(ctx, func(ctx context.Context) error {
+	step.setPhase(stepInput)
+	// expand inputs to get full action inputs,
+	// before preparing inputs on local disk for reproxy.
+	depsExpandInputs(ctx, b, step)
+	err := b.prepareLocalInputs(ctx, step)
+	if err != nil && !experiments.Enabled("ignore-missing-local-inputs", "step %s missing inputs: %v", step, err) {
+		return err
+	}
+	err = b.reproxySema.Do(ctx, func(ctx context.Context) error {
 		started := time.Now()
 		clog.Infof(ctx, "step state: remote exec (via reproxy)")
 		step.setPhase(stepRemoteRun)
