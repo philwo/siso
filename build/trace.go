@@ -507,8 +507,8 @@ func (te *traceEvents) Close(ctx context.Context) {
 	}
 	defer os.Remove(tmpname)
 
-	traceData := map[string]string{
-		"traceEvents":     string(buf),
+	traceData := map[string]any{
+		"traceEvents":     json.RawMessage(buf),
 		"displayTimeUnit": "ms",
 	}
 	for _, key := range te.metadata.Keys() {
