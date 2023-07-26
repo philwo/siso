@@ -153,6 +153,15 @@ func (te *traceEvents) loop(ctx context.Context) {
 	te.write(ctx, w, traceEventObject{
 		Name: "process_name",
 		Ph:   "M",
+		Pid:  sisoReproxyPid,
+		Tid:  sisoTid,
+		Args: map[string]any{
+			"name": "reproxy-exec",
+		},
+	})
+	te.write(ctx, w, traceEventObject{
+		Name: "process_name",
+		Ph:   "M",
 		Pid:  sisoRBEPid,
 		Tid:  sisoTid,
 		Args: map[string]any{
@@ -193,6 +202,7 @@ const (
 	sisoPreprocPid
 	sisoLocalPid
 	sisoRemotePid
+	sisoReproxyPid
 	sisoRBEPid
 	sisoIOPid
 )
@@ -366,6 +376,8 @@ func (te *traceEvents) Add(ctx context.Context, tc *trace.Context) {
 			obj = te.runLocalSpanEvent(span, attr)
 		case "serv:remoteexec":
 			obj = te.runRemoteSpanEvent(span, attr)
+		case "serv:reproxyexec":
+			obj = te.runReproxySpanEvent(span, attr)
 		case "rbe:worker":
 			worker, _ := span.Attrs["worker"].(string)
 			te.mu.Lock()
@@ -462,6 +474,25 @@ func (te *traceEvents) runRemoteSpanEvent(span trace.SpanData, attr spanEventAtt
 		Ph:   "X",
 		T:    span.Start.Sub(te.start).Microseconds(),
 		Pid:  sisoRemotePid,
+		Tid:  int64(span.Attrs["tid"].(int)),
+		Dur:  span.Duration().Microseconds(),
+		Args: map[string]any{
+			"id":          attr.id,
+			"description": attr.description,
+			"action":      attr.action,
+			"command":     attr.command,
+			"backtrace":   attr.backtrace,
+		},
+	}
+}
+
+func (te *traceEvents) runReproxySpanEvent(span trace.SpanData, attr spanEventAttr) traceEventObject {
+	return traceEventObject{
+		Name: attr.output0,
+		Cat:  attr.spanName,
+		Ph:   "X",
+		T:    span.Start.Sub(te.start).Microseconds(),
+		Pid:  sisoReproxyPid,
 		Tid:  int64(span.Attrs["tid"].(int)),
 		Dur:  span.Duration().Microseconds(),
 		Args: map[string]any{
