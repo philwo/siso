@@ -30,7 +30,6 @@ func (b *Builder) runReproxy(ctx context.Context, step *Step) error {
 		step.setPhase(stepRemoteRun)
 		err := b.reproxyExec.Run(ctx, step.cmd)
 		step.setPhase(stepOutput)
-		b.stats.remoteDone(ctx, err)
 		if err == nil {
 			step.metrics.IsRemote = true
 		}
