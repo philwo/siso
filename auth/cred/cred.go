@@ -15,31 +15,58 @@ import (
 	"google.golang.org/api/option"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/credentials/oauth"
 )
 
 // Cred holds credentials and derived values.
 type Cred struct {
-	authenticator  *auth.Authenticator
 	rpcCredentials credentials.PerRPCCredentials
 	tokenSource    oauth2.TokenSource
 }
 
+type Options struct {
+	LUCIAuth    auth.Options
+	TokenSource oauth2.TokenSource
+}
+
 // AuthOpts returns the LUCI auth options that Siso uses.
-func AuthOpts() auth.Options {
+func AuthOpts(credHelper string) Options {
 	authOpts := chromeinfra.DefaultAuthOptions()
 	authOpts.Scopes = []string{
 		auth.OAuthScopeEmail,
 		"https://www.googleapis.com/auth/cloud-platform",
 	}
-	return authOpts
+	var tokenSource oauth2.TokenSource
+	if credHelper != "" {
+		tokenSource = credHelperTokenSource{credHelper}
+	} else {
+		tokenSource = gcloudTokenSource{}
+	}
+	return Options{
+		LUCIAuth:    authOpts,
+		TokenSource: tokenSource,
+	}
 }
 
 // New creates a Cred using LUCI auth's default options.
 // It ensures that the user is logged in and returns an error otherwise.
-func New(ctx context.Context, authOpts auth.Options) (Cred, error) {
-	authenticator := auth.NewAuthenticator(ctx, auth.SilentLogin, authOpts)
+func New(ctx context.Context, opts Options) (Cred, error) {
+	authenticator := auth.NewAuthenticator(ctx, auth.SilentLogin, opts.LUCIAuth)
 	if err := authenticator.CheckLoginRequired(); err != nil {
-		return Cred{}, err
+		if opts.TokenSource == nil {
+			return Cred{}, err
+		}
+		tok, err := opts.TokenSource.Token()
+		if err != nil {
+			return Cred{}, err
+		}
+		ts := oauth2.ReuseTokenSource(tok, opts.TokenSource)
+		return Cred{
+			rpcCredentials: oauth.TokenSource{
+				TokenSource: ts,
+			},
+			tokenSource: ts,
+		}, nil
 	}
 
 	tokenSource, err := authenticator.TokenSource()
@@ -53,7 +80,6 @@ func New(ctx context.Context, authOpts auth.Options) (Cred, error) {
 	}
 
 	return Cred{
-		authenticator:  authenticator,
 		rpcCredentials: rpcCredentials,
 		tokenSource:    tokenSource,
 	}, nil

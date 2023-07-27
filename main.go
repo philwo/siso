@@ -40,13 +40,12 @@ var (
 	blockprofRate int
 	mutexprofFrac int
 	traceFile     string
+	credHelper    string
 )
 
 const versionStr = "siso v0.0.7"
 
-func getApplication() *cli.Application {
-	authOpts := cred.AuthOpts()
-
+func getApplication(authOpts cred.Options) *cli.Application {
 	return &cli.Application{
 		Name:  "siso",
 		Title: "Ninja-compatible build system optimized for remote execution",
@@ -60,9 +59,9 @@ func getApplication() *cli.Application {
 			metricscmp.Cmd(),
 			scandeps.Cmd(),
 
-			authcli.SubcommandInfo(authOpts, "whoami", false),
-			authcli.SubcommandLogin(authOpts, "login", false),
-			authcli.SubcommandLogout(authOpts, "logout", false),
+			authcli.SubcommandInfo(authOpts.LUCIAuth, "whoami", true),
+			authcli.SubcommandLogin(authOpts.LUCIAuth, "login", true),
+			authcli.SubcommandLogout(authOpts.LUCIAuth, "logout", true),
 			version.Cmd(versionStr),
 		},
 		EnvVars: map[string]subcommands.EnvVarDefinition{
@@ -109,6 +108,13 @@ Use "siso help -advanced" to display all commands.
 	flag.IntVar(&blockprofRate, "blockprof_rate", 0, "block profile rate")
 	flag.IntVar(&mutexprofFrac, "mutexprof_frac", 0, "mutex profile fraction")
 	flag.StringVar(&traceFile, "trace", "", "go trace output for `go tool trace`")
+
+	const googleCredHelper = "/google/src/head/depot/google3/devtools/blaze/bazel/credhelper/credhelper"
+	if fi, err := os.Stat(googleCredHelper); err == nil && fi.Mode()&0111 != 0 {
+		credHelper = googleCredHelper
+	}
+	flag.StringVar(&credHelper, "credential_helper", credHelper, "path to a credential helper. see https://github.com/bazelbuild/proposals/blob/main/designs/2022-06-07-bazel-credential-helpers.md")
+
 	var printVersion bool
 	flag.BoolVar(&printVersion, "version", false, "print version")
 	flag.Parse()
@@ -126,8 +132,9 @@ Use "siso help -advanced" to display all commands.
 		}
 	}()
 
+	authOpts := cred.AuthOpts(credHelper)
 	if printVersion {
-		a := getApplication()
+		a := getApplication(authOpts)
 		c := version.Cmd(versionStr)
 		r := c.CommandRun()
 		return r.Run(a, nil, nil)
@@ -207,5 +214,5 @@ Use "siso help -advanced" to display all commands.
 	ui.Init()
 	defer ui.Restore()
 
-	return subcommands.Run(getApplication(), nil)
+	return subcommands.Run(getApplication(authOpts), nil)
 }

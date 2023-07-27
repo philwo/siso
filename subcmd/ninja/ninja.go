@@ -56,7 +56,7 @@ import (
 const ninjaLogName = ".ninja_log"
 
 // Cmd returns the Command for the `ninja` subcommand provided by this package.
-func Cmd(authOpts auth.Options) *subcommands.Command {
+func Cmd(authOpts cred.Options) *subcommands.Command {
 	return &subcommands.Command{
 		UsageLine: "ninja <args>...",
 		CommandRun: func() subcommands.CommandRun {
@@ -71,7 +71,7 @@ func Cmd(authOpts auth.Options) *subcommands.Command {
 
 type ninjaCmdRun struct {
 	subcommands.CommandRunBase
-	authOpts auth.Options
+	authOpts cred.Options
 
 	// flag values
 	dir        string

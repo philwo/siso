@@ -59,7 +59,7 @@ From in the <dir>,
 `
 
 // Cmd returns the Command for the `recall` subcommand provided by this package.
-func Cmd(authOpts auth.Options) *subcommands.Command {
+func Cmd(authOpts cred.Options) *subcommands.Command {
 	return &subcommands.Command{
 		UsageLine: "recall <args>....",
 		ShortDesc: "recall action",
@@ -77,7 +77,7 @@ func Cmd(authOpts auth.Options) *subcommands.Command {
 type run struct {
 	subcommands.CommandRunBase
 
-	authOpts          auth.Options
+	authOpts          cred.Options
 	projectID         string
 	reopt             *reapi.Option
 	executeRequestStr string

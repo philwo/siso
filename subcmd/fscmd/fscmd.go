@@ -9,13 +9,14 @@ import (
 	"os"
 
 	"github.com/maruel/subcommands"
-	"go.chromium.org/luci/auth"
+
+	"infra/build/siso/auth/cred"
 )
 
 const stateFile = ".siso_fs_state"
 
 // Cmd returns the Command for the `fs` subcommand provided by this package.
-func Cmd(authOpts auth.Options) *subcommands.Command {
+func Cmd(authOpts cred.Options) *subcommands.Command {
 	return &subcommands.Command{
 		UsageLine: "fs <subcommand>",
 		ShortDesc: "access siso hashfs data",
@@ -45,7 +46,7 @@ func Cmd(authOpts auth.Options) *subcommands.Command {
 
 type fsRun struct {
 	subcommands.CommandRunBase
-	authOpts auth.Options
+	authOpts cred.Options
 	app      *subcommands.DefaultApplication
 }
 

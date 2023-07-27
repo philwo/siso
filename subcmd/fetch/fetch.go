@@ -42,7 +42,7 @@ Print contents to stdout, or extract in <dir> for -type dir-extract.
 `
 
 // Cmd returns the Command for the `fetch` subcommand provided by this package.
-func Cmd(authOpts auth.Options) *subcommands.Command {
+func Cmd(authOpts cred.Options) *subcommands.Command {
 	return &subcommands.Command{
 		UsageLine: "fetch <args>...",
 		ShortDesc: "fetch contents",
@@ -60,7 +60,7 @@ func Cmd(authOpts auth.Options) *subcommands.Command {
 type run struct {
 	subcommands.CommandRunBase
 
-	authOpts  auth.Options
+	authOpts  cred.Options
 	projectID string
 	reopt     *reapi.Option
 	dataType  string
