@@ -43,7 +43,7 @@ var (
 	credHelper    string
 )
 
-const versionStr = "siso v0.0.7"
+const versionStr = "siso v0.0.8"
 
 func getApplication(authOpts cred.Options) *cli.Application {
 	return &cli.Application{
