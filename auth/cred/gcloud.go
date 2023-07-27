@@ -22,5 +22,5 @@ func (gcloudTokenSource) Token() (*oauth2.Token, error) {
 	}
 	token := strings.TrimSpace(string(out))
 
-	return fromTokenString(token)
+	return fromTokenString("gcloud", token)
 }

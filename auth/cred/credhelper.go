@@ -28,7 +28,10 @@ func (h credHelperTokenSource) Token() (*oauth2.Token, error) {
 	cmd.Stderr = &stderr
 	err := cmd.Run()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get token from helper %s: %w\nstderr: %s", h.credHelper, err, stderr.String())
+		if len(stderr.Bytes()) == 0 {
+			return nil, fmt.Errorf("failed to run helper: %w", err)
+		}
+		return nil, fmt.Errorf("failed to run helper: %w\nstderr: %s", err, stderr.String())
 	}
 	type response struct {
 		Headers map[string][]string `json:"headers"`
@@ -43,5 +46,5 @@ func (h credHelperTokenSource) Token() (*oauth2.Token, error) {
 		return nil, fmt.Errorf("no Authorization in resp from helper %s: %w\nstdout: %s", h.credHelper, err, stdout.String())
 	}
 	token := strings.TrimSpace(strings.TrimPrefix(auth[0], "Bearer "))
-	return fromTokenString(token)
+	return fromTokenString(h.credHelper, token)
 }

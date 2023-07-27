@@ -16,7 +16,7 @@ import (
 	"golang.org/x/oauth2"
 )
 
-func fromTokenString(token string) (*oauth2.Token, error) {
+func fromTokenString(src, token string) (*oauth2.Token, error) {
 	resp, err := http.Post("https://oauth2.googleapis.com/tokeninfo", "application/x-www-form-urlencoded", strings.NewReader("access_token="+token))
 	if err != nil {
 		return nil, fmt.Errorf("failed to get tokeninfo: %w", err)
@@ -39,8 +39,14 @@ func fromTokenString(token string) (*oauth2.Token, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse exp %q in %q (token:%q): %w", tok.Exp, string(buf), token, err)
 	}
-	return &oauth2.Token{
+	t := &oauth2.Token{
 		AccessToken: token,
 		Expiry:      time.Unix(exp, 0),
-	}, nil
+	}
+	t = t.WithExtra(map[string]any{
+		"x-token-source": src,
+		"x-token-email":  tok.Email,
+	})
+	return t, nil
+
 }

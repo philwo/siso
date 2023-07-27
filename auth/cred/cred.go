@@ -16,6 +16,8 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/oauth"
+
+	"infra/build/siso/o11y/clog"
 )
 
 // Cred holds credentials and derived values.
@@ -60,6 +62,7 @@ func New(ctx context.Context, opts Options) (Cred, error) {
 		if err != nil {
 			return Cred{}, err
 		}
+		clog.Infof(ctx, "use auth %v email: %s", tok.Extra("x-token-source"), tok.Extra("x-token-email"))
 		ts := oauth2.ReuseTokenSource(tok, opts.TokenSource)
 		return Cred{
 			rpcCredentials: oauth.TokenSource{
@@ -79,6 +82,7 @@ func New(ctx context.Context, opts Options) (Cred, error) {
 		return Cred{}, err
 	}
 
+	clog.Infof(ctx, "use luci-auth")
 	return Cred{
 		rpcCredentials: rpcCredentials,
 		tokenSource:    tokenSource,

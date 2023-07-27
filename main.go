@@ -78,6 +78,11 @@ func getApplication(authOpts cred.Options) *cli.Application {
 				ShortDesc: "RE API address",
 				Default:   "remotebuildexecution.googleapis.com:443",
 			},
+			"SISO_CREDENTIAL_HELPER": {
+				Advanced:  true,
+				ShortDesc: "credential helper",
+				Default:   "",
+			},
 		},
 	}
 }
@@ -109,9 +114,9 @@ Use "siso help -advanced" to display all commands.
 	flag.IntVar(&mutexprofFrac, "mutexprof_frac", 0, "mutex profile fraction")
 	flag.StringVar(&traceFile, "trace", "", "go trace output for `go tool trace`")
 
-	const googleCredHelper = "/google/src/head/depot/google3/devtools/blaze/bazel/credhelper/credhelper"
-	if fi, err := os.Stat(googleCredHelper); err == nil && fi.Mode()&0111 != 0 {
-		credHelper = googleCredHelper
+	credHelper := defaultCredentialHelper()
+	if h, ok := os.LookupEnv("SISO_CREDENTIAL_HELPER"); ok {
+		credHelper = h
 	}
 	flag.StringVar(&credHelper, "credential_helper", credHelper, "path to a credential helper. see https://github.com/bazelbuild/proposals/blob/main/designs/2022-06-07-bazel-credential-helpers.md")
 
