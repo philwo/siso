@@ -291,6 +291,12 @@ func (c *Cmd) ActionDigest() digest.Digest {
 	return c.actionDigest
 }
 
+// SetActionDigest sets action digest.
+// This is used to set the digest provided by Reproxy.
+func (c *Cmd) SetActionDigest(d digest.Digest) {
+	c.actionDigest = d
+}
+
 // Digest computes action digest of the cmd.
 // If ds is nil, then it will reuse the previous calculated digest if any.
 // TODO(b/267576561): Integrate with Cloud Trace.

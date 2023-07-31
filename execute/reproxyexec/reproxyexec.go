@@ -26,6 +26,7 @@ import (
 	"infra/build/siso/execute"
 	"infra/build/siso/o11y/clog"
 	"infra/build/siso/o11y/trace"
+	"infra/build/siso/reapi/digest"
 	ppb "infra/third_party/reclient/api/proxy"
 )
 
@@ -250,6 +251,13 @@ func processResponse(ctx context.Context, cmd *execute.Cmd, response *ppb.RunRes
 	}
 	if len(response.Stderr) > 0 {
 		cmd.StderrWriter().Write(response.Stderr)
+	}
+	if d := response.GetActionLog().GetRemoteMetadata().GetActionDigest(); d != "" {
+		dg, err := digest.Parse(d)
+		if err != nil {
+			return err
+		}
+		cmd.SetActionDigest(dg)
 	}
 	cmd.SetActionResult(result, cached)
 	err = resultErr(response)
