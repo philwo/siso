@@ -22,6 +22,7 @@ import (
 	"time"
 
 	log "github.com/golang/glog"
+	"github.com/pkg/xattr"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/protobuf/proto"
 
@@ -33,15 +34,24 @@ import (
 
 const defaultStateFile = ".siso_fs_state"
 
+// defaultDigestXattr is default xattr for digest. http://shortn/_8GHggPD2vw
+const defaultDigestXattr = "google.digest.sha256"
+
 // Option is an option for HashFS.
 type Option struct {
-	StateFile  string
-	DataSource DataSource
+	StateFile       string
+	DataSource      DataSource
+	DigestXattrName string
 }
 
 // RegisterFlags registers flags for the option.
 func (o *Option) RegisterFlags(flagSet *flag.FlagSet) {
 	flagSet.StringVar(&o.StateFile, "fs_state", defaultStateFile, "fs state filename")
+	var xattrname string
+	if xattr.XATTR_SUPPORTED {
+		xattrname = defaultDigestXattr
+	}
+	flagSet.StringVar(&o.DigestXattrName, "fs_digest_xattr", xattrname, "xattr for sha256 digest")
 }
 
 // DataSource is an interface to get digest source for digest and its name.
@@ -179,11 +189,7 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 				// check digest is the same and fix mtime if it matches.
 				// don't reconcile for source (non-generated file),
 				// as user may want to trigger build by touch.
-				src := digest.LocalFileSource{
-					Fname:     ent.Name,
-					IOMetrics: hfs.IOMetrics,
-				}
-				data, err := digest.FromLocalFile(ctx, src)
+				data, err := localDigest(ctx, ent.Name, hfs.opt.DigestXattrName, fi.Size(), hfs.IOMetrics)
 				if err == nil && data.Digest() == e.d {
 					et = entryEqLocal
 					err = os.Chtimes(ent.Name, time.Now(), e.mtime)

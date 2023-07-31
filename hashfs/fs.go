@@ -20,6 +20,7 @@ import (
 	"time"
 
 	log "github.com/golang/glog"
+	"github.com/pkg/xattr"
 	"golang.org/x/sync/errgroup"
 
 	"infra/build/siso/o11y/clog"
@@ -72,15 +73,22 @@ func New(ctx context.Context, opt Option) (*HashFS, error) {
 	if opt.DataSource == nil {
 		opt.DataSource = noDataSource{}
 	}
+	if !xattr.XATTR_SUPPORTED {
+		opt.DigestXattrName = ""
+	}
+	if opt.DigestXattrName != "" {
+		clog.Infof(ctx, "use xattr %s for file digest", opt.DigestXattrName)
+	}
 	fsys := &HashFS{
 		opt:       opt,
 		directory: &directory{},
 		IOMetrics: iometrics.New("fs"),
 
 		digester: digester{
-			q:    make(chan digestReq, 1000),
-			quit: make(chan struct{}),
-			done: make(chan struct{}),
+			xattrname: opt.DigestXattrName,
+			q:         make(chan digestReq, 1000),
+			quit:      make(chan struct{}),
+			done:      make(chan struct{}),
 		},
 	}
 	if opt.StateFile != "" {
@@ -810,7 +818,7 @@ func (hfs *HashFS) Flush(ctx context.Context, execRoot string, files []string) e
 		}
 		eg.Go(func() error {
 			defer done()
-			return e.flush(ctx, fname, hfs.IOMetrics)
+			return e.flush(ctx, fname, hfs.opt.DigestXattrName, hfs.IOMetrics)
 		})
 	}
 	return eg.Wait()
@@ -922,7 +930,7 @@ func (e *entry) init(ctx context.Context, fname string, m *iometrics.IOMetrics) 
 	}
 }
 
-func (e *entry) compute(ctx context.Context, fname string) error {
+func (e *entry) compute(ctx context.Context, fname, xattrname string) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if e.err != nil {
@@ -931,7 +939,16 @@ func (e *entry) compute(ctx context.Context, fname string) error {
 	if !e.d.IsZero() {
 		return nil
 	}
-	// TODO(b/271059955): add xattr support.
+	if xattrname != "" {
+		d, err := xattr.LGet(fname, xattrname)
+		if err == nil {
+			e.d = digest.Digest{
+				Hash:      string(d),
+				SizeBytes: e.size,
+			}
+			return nil
+		}
+	}
 	src, ok := e.src.(digest.LocalFileSource)
 	if !ok {
 		return nil
@@ -1011,7 +1028,7 @@ func (e *entry) getDir() *directory {
 	return e.directory
 }
 
-func (e *entry) flush(ctx context.Context, fname string, m *iometrics.IOMetrics) error {
+func (e *entry) flush(ctx context.Context, fname, xattrname string, m *iometrics.IOMetrics) error {
 	defer close(e.lready)
 
 	if errors.Is(e.err, fs.ErrNotExist) {
@@ -1063,7 +1080,7 @@ func (e *entry) flush(ctx context.Context, fname string, m *iometrics.IOMetrics)
 			m.OpsDone(err)
 		} else {
 			var fileDigest digest.Digest
-			ld, err := localDigest(ctx, fname, m)
+			ld, err := localDigest(ctx, fname, xattrname, fi.Size(), m)
 			if err == nil {
 				fileDigest = ld.Digest()
 				if fileDigest == d {

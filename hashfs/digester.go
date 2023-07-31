@@ -9,6 +9,8 @@ import (
 	"runtime"
 	"sync"
 
+	"github.com/pkg/xattr"
+
 	"infra/build/siso/o11y/clog"
 	"infra/build/siso/o11y/iometrics"
 	"infra/build/siso/reapi/digest"
@@ -18,9 +20,17 @@ import (
 // DigestSemaphore is a semaphore to control concurrent digest calculation.
 var DigestSemaphore = semaphore.New("file-digest", runtime.NumCPU())
 
-func localDigest(ctx context.Context, fname string, m *iometrics.IOMetrics) (digest.Data, error) {
-	// TODO(b/271059955): add xattr support.
+func localDigest(ctx context.Context, fname, xattrname string, size int64, m *iometrics.IOMetrics) (digest.Data, error) {
 	src := digest.LocalFileSource{Fname: fname, IOMetrics: m}
+	if xattrname != "" {
+		d, err := xattr.LGet(fname, xattrname)
+		if err == nil {
+			return digest.NewData(src, digest.Digest{
+				Hash:      string(d),
+				SizeBytes: size,
+			}), nil
+		}
+	}
 	return digest.FromLocalFile(ctx, src)
 }
 
@@ -31,7 +41,8 @@ type digestReq struct {
 }
 
 type digester struct {
-	q chan digestReq
+	xattrname string
+	q         chan digestReq
 
 	mu    sync.Mutex
 	queue []digestReq
@@ -101,7 +112,7 @@ func (d *digester) lazyCompute(ctx context.Context, fname string, e *entry) {
 
 func (d *digester) compute(ctx context.Context, fname string, e *entry) {
 	err := DigestSemaphore.Do(ctx, func(ctx context.Context) error {
-		return e.compute(ctx, fname)
+		return e.compute(ctx, fname, d.xattrname)
 	})
 	if err != nil {
 		clog.Warningf(ctx, "failed to digest compute %s: %v", fname, err)
