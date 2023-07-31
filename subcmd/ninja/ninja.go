@@ -462,6 +462,11 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 		return err
 	}
 	defer done(&err)
+	defer func() {
+		if failureSummaryWriter != nil && err != nil {
+			fmt.Fprintf(failureSummaryWriter, "error: %v\n", err)
+		}
+	}()
 
 	outputLogWriter, done, err := c.logWriter(ctx, c.outputLogFile)
 	if err != nil {
