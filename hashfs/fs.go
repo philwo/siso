@@ -919,6 +919,7 @@ func (e *entry) init(ctx context.Context, fname string, m *iometrics.IOMetrics) 
 		if isExecutable(fi, fname) {
 			e.mode |= 0111
 		}
+		e.size = fi.Size()
 		e.src = digest.LocalFileSource{Fname: fname, IOMetrics: m}
 	default:
 		e.err = fmt.Errorf("unexpected filetype not regular %s: %s", fi.Mode(), fname)

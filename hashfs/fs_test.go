@@ -10,6 +10,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"flag"
 	"fmt"
 	"io/fs"
 	"os"
@@ -838,5 +839,59 @@ func TestFlusTohHardlink(t *testing.T) {
 	}
 	if !nfi.ModTime().Equal(now) {
 		t.Errorf("modtime not set correctly %q %v != %v", "out/siso/cronet/VERSION", nfi.ModTime(), now)
+	}
+}
+
+// to test up cog for xattr test, see http://shortn/_m41XtnJUGu
+var (
+	xattrTestDir  = flag.String("xattr_test_dir", "", "exec root dir for TestXattr")
+	xattrTestPath = flag.String("xattr_test_path", "", "test path for TestXattr")
+	xattrName     = flag.String("xattr_test_name", "", "xattr name for TestXattr")
+)
+
+func TestXattr(t *testing.T) {
+	if *xattrTestDir == "" || *xattrTestPath == "" || *xattrName == "" {
+		t.Skip("use --xattr_test_dir, --xattr_test_path, --xattr_name")
+	}
+	dir := *xattrTestDir
+	file := *xattrTestPath
+	ctx := context.Background()
+	wantDigest := func() digest.Digest {
+		hashFS, err := hashfs.New(ctx, hashfs.Option{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer hashFS.Close(ctx)
+		ents, err := hashFS.Entries(ctx, dir, []string{file})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(ents) == 0 {
+			t.Fatalf("hashFS.Entries(ctx, %q, %q); no ents", dir, file)
+		}
+		return ents[0].Data.Digest()
+	}()
+	t.Logf("digest of %s/%s = %v", dir, file, wantDigest)
+
+	hashFS, err := hashfs.New(ctx, hashfs.Option{
+		DigestXattrName: *xattrName,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer hashFS.Close(ctx)
+	ents, err := hashFS.Entries(ctx, dir, []string{file})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ents) == 0 {
+		t.Fatalf("hashFS.Entries(ctx, %q, %q); no ents", dir, file)
+	}
+	if got := ents[0].Data.Digest(); got != wantDigest {
+		t.Errorf("digest %v; want %v", got, wantDigest)
+	}
+	stats := hashFS.IOMetrics.Stats()
+	if stats.RBytes > 0 {
+		t.Errorf("read %d; want 0", stats.RBytes)
 	}
 }
