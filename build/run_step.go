@@ -206,6 +206,7 @@ func (b *Builder) tryFastStep(ctx context.Context, step, fastStep *Step) (bool, 
 		b.logOutput(ctx, msgs)
 		return true, err
 	}
+	step.metrics.DepsLogErr = true
 	b.stats.fastDepsFailed(ctx, err)
 	if experiments.Enabled("no-fast-deps-fallback", "fast-deps %s failed", step) {
 		return true, fmt.Errorf("fast-deps failed: %w", err)

@@ -74,7 +74,10 @@ type StepMetric struct {
 	// The hash of the action proto of this build step.
 	Digest string `json:"digest"`
 
-	DepsLog  bool `json:"deps_log"`  // whether the action used the deps log.
+	DepsLog     bool `json:"deps_log"`               // whether the action used the deps log.
+	DepsLogErr  bool `json:"deps_log_err,omitempty"` // whether the action failed with deps log.
+	ScandepsErr bool `json:"scandeps_err,omitempty"` // whether the action failed in scandeps.
+
 	IsRemote bool `json:"is_remote"` // whether the action ran remotely.
 	Cached   bool `json:"cached"`    // whether the action was a cache hit.
 	Fallback bool `json:"fallback"`  // whether the action failed remotely and was retried locally.

@@ -166,6 +166,7 @@ func (gcc depsGCC) depsInputs(ctx context.Context, b *Builder, step *Step) ([]st
 	if errors.Is(err, context.Canceled) {
 		return nil, err
 	}
+	step.metrics.ScandepsErr = true
 	b.stats.scanDepsFailed(ctx, err)
 	if !experiments.Enabled("scandeps-fallback", "scandeps failed, fallback to use `clang -M`") {
 		return nil, err
