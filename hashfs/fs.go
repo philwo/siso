@@ -851,8 +851,8 @@ type entry struct {
 
 	// updatedTime is timestamp when the file has been updated
 	// by Update or UpdateFromLocal.
-	// need to distinguish from mtime, which is file mtime
-	// for restat=1.
+	// need to distinguish from mtime for restat=1.
+	// updatedTime should be equal or newer than mtime.
 	updatedTime time.Time
 
 	// isUpdated indicates the file is updated in the session.
@@ -928,6 +928,9 @@ func (e *entry) init(ctx context.Context, fname string, m *iometrics.IOMetrics) 
 	}
 	if e.mtime.Before(fi.ModTime()) {
 		e.mtime = fi.ModTime()
+	}
+	if e.updatedTime.Before(e.mtime) {
+		e.updatedTime = e.mtime
 	}
 }
 
