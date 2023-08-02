@@ -545,6 +545,9 @@ type TraceStat struct {
 	// N is count of the trace.
 	N int
 
+	// NErr is error count of the trace.
+	NErr int
+
 	// Total is total duration of the trace.
 	Total time.Duration
 
@@ -582,8 +585,11 @@ func bucketIndex(dur time.Duration) int {
 	}
 }
 
-func (t *TraceStat) update(dur time.Duration) {
+func (t *TraceStat) update(dur time.Duration, isErr bool) {
 	t.N++
+	if isErr {
+		t.NErr++
+	}
 	t.Total += dur
 	if t.Max < dur {
 		t.Max = dur
@@ -605,7 +611,7 @@ func (s *traceStats) update(ctx context.Context, tc *trace.Context) {
 			ts = &TraceStat{Name: span.Name}
 			s.s[span.Name] = ts
 		}
-		ts.update(span.Duration())
+		ts.update(span.Duration(), span.Status != nil)
 	}
 }
 

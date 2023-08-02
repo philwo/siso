@@ -816,8 +816,8 @@ func (hfs *HashFS) Flush(ctx context.Context, execRoot string, files []string) e
 		if err != nil {
 			return fmt.Errorf("flush %s: %w", fname, err)
 		}
-		eg.Go(func() error {
-			defer done()
+		eg.Go(func() (err error) {
+			defer func() { done(err) }()
 			return e.flush(ctx, fname, hfs.opt.DigestXattrName, hfs.IOMetrics)
 		})
 	}

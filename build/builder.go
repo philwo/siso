@@ -559,12 +559,12 @@ loop:
 		case step, ok = <-b.plan.q:
 			if !ok {
 				clog.Infof(ctx, "q is closed")
-				done()
+				done(nil)
 				break loop
 			}
 		case err := <-errch:
 			clog.Infof(ctx, "err from errch: %v", err)
-			done()
+			done(err)
 			errs = append(errs, err)
 			hasReady := b.plan.hasReady()
 			if !hasReady {
@@ -578,7 +578,7 @@ loop:
 			continue
 		case <-ctx.Done():
 			clog.Infof(ctx, "context done")
-			done()
+			done(ctx.Err())
 			cancel()
 			b.plan.dump(ctx)
 			return ctx.Err()
@@ -587,7 +587,7 @@ loop:
 		wg.Add(1)
 		go func(step *Step) {
 			defer wg.Done()
-			defer done()
+			defer done(nil)
 			stepStart := time.Now()
 			tc := trace.New(ctx, step.def.String())
 			ctx := trace.NewContext(ctx, tc)
@@ -636,7 +636,11 @@ loop:
 			}
 			span.SetAttr("backtraces", stepBacktraces(step))
 			err := b.runStep(sctx, step)
-			span.Close(nil)
+			st, ok := status.FromError(err)
+			if !ok {
+				st = status.FromContextError(err)
+			}
+			span.Close(st.Proto())
 			duration := time.Since(stepStart)
 			stepLogEntry(sctx, logger, step, duration, err)
 

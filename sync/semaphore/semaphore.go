@@ -14,6 +14,8 @@ import (
 	"sync/atomic"
 
 	"infra/build/siso/o11y/trace"
+
+	"google.golang.org/grpc/status"
 )
 
 var (
@@ -60,7 +62,7 @@ func New(name string, n int) *Semaphore {
 // WaitAcquire acquires a semaphore.
 // It returns a context for acquired semaphore and func to release it.
 // TODO(b/267576561): add Cloud Trace integration and add tid as an attribute of a Span.
-func (s *Semaphore) WaitAcquire(ctx context.Context) (context.Context, func(), error) {
+func (s *Semaphore) WaitAcquire(ctx context.Context) (context.Context, func(error), error) {
 	_, span := trace.NewSpan(ctx, fmt.Sprintf("wait:%s", s.name))
 	s.waits.Add(1)
 	defer span.Close(nil)
@@ -70,12 +72,16 @@ func (s *Semaphore) WaitAcquire(ctx context.Context) (context.Context, func(), e
 		s.reqs.Add(1)
 		ctx, span := trace.NewSpan(ctx, fmt.Sprintf("serv:%s", s.name))
 		span.SetAttr("tid", tid)
-		return ctx, func() {
-			span.Close(nil)
+		return ctx, func(err error) {
+			st, ok := status.FromError(err)
+			if !ok {
+				st = status.FromContextError(err)
+			}
+			span.Close(st.Proto())
 			s.ch <- tid
 		}, nil
 	case <-ctx.Done():
-		return ctx, func() {}, ctx.Err()
+		return ctx, func(error) {}, ctx.Err()
 	}
 }
 
@@ -105,11 +111,13 @@ func (s *Semaphore) NumRequests() int {
 }
 
 // Do runs f under semaphore.
-func (s *Semaphore) Do(ctx context.Context, f func(ctx context.Context) error) error {
-	ctx, done, err := s.WaitAcquire(ctx)
+func (s *Semaphore) Do(ctx context.Context, f func(ctx context.Context) error) (err error) {
+	var done func(error)
+	ctx, done, err = s.WaitAcquire(ctx)
 	if err != nil {
 		return err
 	}
-	defer done()
-	return f(ctx)
+	defer func() { done(err) }()
+	err = f(ctx)
+	return err
 }

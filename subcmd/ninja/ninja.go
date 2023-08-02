@@ -794,6 +794,7 @@ func doBuild(ctx context.Context, graph *ninjabuild.Graph, bopts build.Options, 
 			t := semaTraces[name]
 			t.name = name
 			t.n = ts.N
+			t.nerr = ts.NErr
 			t.servAvg = ts.Avg()
 			t.servBuckets = ts.Buckets
 			semaTraces[name] = t
@@ -802,6 +803,7 @@ func doBuild(ctx context.Context, graph *ninjabuild.Graph, bopts build.Options, 
 			t := semaTraces[name]
 			t.name = name
 			t.n = ts.N
+			t.nerr = ts.NErr
 			t.waitAvg = ts.Avg()
 			t.waitBuckets = ts.Buckets
 			semaTraces[name] = t
@@ -843,7 +845,7 @@ func doBuild(ctx context.Context, graph *ninjabuild.Graph, bopts build.Options, 
 		}
 		sort.Strings(semaNames)
 		tw := tabwriter.NewWriter(os.Stdout, 10, 8, 1, ' ', tabwriter.AlignRight)
-		fmt.Fprintf(tw, "resource/capa\tused\twait-avg\t|   s m |\tserv-avg\t|   s m |\t\n")
+		fmt.Fprintf(tw, "resource/capa\tused(err)\twait-avg\t|   s m |\tserv-avg\t|   s m |\t\n")
 		for _, key := range semaNames {
 			t := semaTraces[key]
 			s, _ := semaphore.Lookup(t.name)
@@ -851,7 +853,7 @@ func doBuild(ctx context.Context, graph *ninjabuild.Graph, bopts build.Options, 
 			if s != nil {
 				c = strconv.Itoa(s.Capacity())
 			}
-			fmt.Fprintf(tw, "%s/%s\t%d\t%s\t%s\t%s\t%s\t\n", t.name, c, t.n, t.waitAvg.Round(time.Millisecond), histogram(t.waitBuckets), t.servAvg.Round(time.Millisecond), histogram(t.servBuckets))
+			fmt.Fprintf(tw, "%s/%s\t%d(%d)\t%s\t%s\t%s\t%s\t\n", t.name, c, t.n, t.nerr, t.waitAvg.Round(time.Millisecond), histogram(t.waitBuckets), t.servAvg.Round(time.Millisecond), histogram(t.servBuckets))
 		}
 		tw.Flush()
 	}
@@ -919,7 +921,7 @@ func histogram(b [7]int) string {
 
 type semaTrace struct {
 	name                     string
-	n                        int
+	n, nerr                  int
 	waitAvg, servAvg         time.Duration
 	waitBuckets, servBuckets [7]int
 }

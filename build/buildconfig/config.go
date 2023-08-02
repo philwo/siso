@@ -186,7 +186,7 @@ func (cfg *Config) Func(ctx context.Context, handler string) (starlark.Value, bo
 }
 
 // Handle runs handler for the cmd.
-func (cfg *Config) Handle(ctx context.Context, handler string, bpath *build.Path, cmd *execute.Cmd, expandedInputs func() []string) error {
+func (cfg *Config) Handle(ctx context.Context, handler string, bpath *build.Path, cmd *execute.Cmd, expandedInputs func() []string) (err error) {
 	fun, ok := cfg.Func(ctx, handler)
 	if !ok {
 		return fmt.Errorf("no handler:%q for %s", handler, cmd)
