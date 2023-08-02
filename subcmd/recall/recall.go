@@ -393,7 +393,7 @@ func callLocal(ctx context.Context) error {
 	if v := platformProperty(p, "InputRootAbsolutePath"); v != "" {
 		inputRootDir = v
 	}
-	cmdline := []string{"docker", "run",
+	cmdline := []string{"docker", "run", "--rm",
 		"-v", passwd + ":/etc/passwd",
 		"-v", root + ":" + inputRootDir,
 		"-w", filepath.Join(inputRootDir, command.WorkingDirectory),
