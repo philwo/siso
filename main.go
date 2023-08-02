@@ -23,6 +23,7 @@ import (
 	"go.chromium.org/luci/common/system/signals"
 
 	"infra/build/siso/auth/cred"
+	"infra/build/siso/subcmd/authcheck"
 	"infra/build/siso/subcmd/fetch"
 	"infra/build/siso/subcmd/fscmd"
 	"infra/build/siso/subcmd/metricscmp"
@@ -58,8 +59,8 @@ func getApplication(authOpts cred.Options) *cli.Application {
 			fetch.Cmd(authOpts),
 			metricscmp.Cmd(),
 			scandeps.Cmd(),
+			authcheck.Cmd(authOpts),
 
-			authcli.SubcommandInfo(authOpts.LUCIAuth, "whoami", true),
 			authcli.SubcommandLogin(authOpts.LUCIAuth, "login", true),
 			authcli.SubcommandLogout(authOpts.LUCIAuth, "logout", true),
 			version.Cmd(versionStr),
@@ -114,7 +115,7 @@ Use "siso help -advanced" to display all commands.
 	flag.IntVar(&mutexprofFrac, "mutexprof_frac", 0, "mutex profile fraction")
 	flag.StringVar(&traceFile, "trace", "", "go trace output for `go tool trace`")
 
-	credHelper := defaultCredentialHelper()
+	credHelper := cred.DefaultCredentialHelper()
 	if h, ok := os.LookupEnv("SISO_CREDENTIAL_HELPER"); ok {
 		credHelper = h
 	}
