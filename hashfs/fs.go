@@ -1267,6 +1267,12 @@ func (d *directory) store(ctx context.Context, fname string, e *entry) (*entry, 
 			// check whether there is an update from previous entry.
 			ee := v.(*entry)
 			eed := ee.digest()
+			// old entry has cmdhash, but new entry has no cmdhash&action (not by Update*).
+			if len(ee.cmdhash) > 0 && len(e.cmdhash) == 0 && e.action.IsZero() {
+				// keep cmdhash and action
+				e.cmdhash = ee.cmdhash
+				e.action = ee.action
+			}
 			cmdchanged := !bytes.Equal(ee.cmdhash, e.cmdhash)
 			actionchanged := ee.action != e.action
 			if e.target != "" && ee.target != e.target {
