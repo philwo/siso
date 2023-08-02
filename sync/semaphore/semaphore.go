@@ -13,9 +13,9 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"infra/build/siso/o11y/trace"
-
 	"google.golang.org/grpc/status"
+
+	"infra/build/siso/o11y/trace"
 )
 
 var (
