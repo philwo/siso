@@ -249,6 +249,7 @@ func call(ctx context.Context, reopt reapi.Option, credential cred.Cred, execute
 	}
 
 	var commandDigest digest.Digest
+	var platform *rpb.Platform
 	_, err = os.Stat("command.txt")
 	if err == nil {
 		fmt.Printf("command from command.txt: ")
@@ -257,6 +258,7 @@ func call(ctx context.Context, reopt reapi.Option, credential cred.Cred, execute
 		if err != nil {
 			return err
 		}
+		platform = command.Platform
 		data, err := digest.FromProtoMessage(command)
 		if err != nil {
 			return err
@@ -276,6 +278,9 @@ func call(ctx context.Context, reopt reapi.Option, credential cred.Cred, execute
 	}
 	if !commandDigest.IsZero() {
 		action.CommandDigest = commandDigest.Proto()
+		if platform != nil && action.Platform != nil && !proto.Equal(platform, action.Platform) {
+			return fmt.Errorf("platform mismatch: command=%s action=%s", platform, action.Platform)
+		}
 	}
 	if !inputRootDigest.IsZero() {
 		action.InputRootDigest = inputRootDigest.Proto()
