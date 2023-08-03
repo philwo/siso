@@ -53,6 +53,11 @@ From in the <dir>,
  $ siso recall -project <project> -reapi_instance <instnace> \
 	    <dir>
 
+ - To re-run the command on a remote worker without fetching cache.
+
+ $ siso recall -project <project> -reapi_instance <instnace> -re_cache_enable_read=false \
+	    <dir>
+
  - To use local docker to run the command.
 
  $ siso recall <dir>
@@ -81,10 +86,12 @@ type run struct {
 	projectID         string
 	reopt             *reapi.Option
 	executeRequestStr string
+	reCacheEnableRead bool
 }
 
 func (c *run) init() {
 	c.Flags.StringVar(&c.projectID, "project", os.Getenv("SISO_PROJECT"), "cloud project ID. can be set by $SISO_PROJECT")
+	c.Flags.BoolVar(&c.reCacheEnableRead, "re_cache_enable_read", true, "remote exec cache enable read")
 	c.reopt = new(reapi.Option)
 	envs := map[string]string{
 		"SISO_REAPI_ADDRESS":  os.Getenv("SISO_REAPI_ADDRESS"),
@@ -138,6 +145,7 @@ func (c *run) run(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
+		executeReq.SkipCacheLookup = !c.reCacheEnableRead
 		return call(ctx, *c.reopt, credential, executeReq)
 	}
 	client, err := reapi.New(ctx, credential, *c.reopt)
