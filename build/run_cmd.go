@@ -77,7 +77,7 @@ func (b *Builder) runCmd(ctx context.Context, step *Step, allowLocalFallback boo
 	// If the command doesn't meet either criteria, fallback to local.
 	// Any further validation should be done in the exec handler, not here.
 	allowRemote := b.remoteExec != nil && len(step.cmd.Platform) > 0 && step.cmd.Platform["container-image"] != ""
-	allowREProxy := step.cmd.REProxyConfig != nil
+	allowREProxy := b.reproxyExec.Enabled() && step.cmd.REProxyConfig != nil
 	if step.cmd.Pure && (allowRemote || allowREProxy) {
 		var err error
 		if allowREProxy {

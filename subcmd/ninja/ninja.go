@@ -78,6 +78,7 @@ type ninjaCmdRun struct {
 	configName string
 	projectID  string
 
+	offline         bool
 	batch           bool
 	dryRun          bool
 	clobber         bool
@@ -115,6 +116,7 @@ type ninjaCmdRun struct {
 	reopt             *reapi.Option
 	reCacheEnableRead bool
 	// reCacheEnableWrite bool
+	reproxyAddr string
 
 	enableCloudLogging bool
 	// enableCPUProfiler bool
@@ -211,6 +213,17 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 
 	if c.adjustWarn != "" {
 		fmt.Fprintf(os.Stderr, "-w is specified. but not supported. b/288807840\n")
+	}
+
+	if c.offline {
+		fmt.Fprintln(os.Stderr, ui.SGR(ui.Red, "offline mode"))
+		clog.Warningf(ctx, "offline mode")
+		c.reopt = new(reapi.Option)
+		c.projectID = ""
+		c.enableCloudLogging = false
+		c.enableCloudProfiler = false
+		c.enableCloudTrace = false
+		c.reproxyAddr = ""
 	}
 
 	projectID := c.reopt.UpdateProjectID(c.projectID)
@@ -557,6 +570,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 		HashFS:               hashFS,
 		REAPIClient:          client,
 		RECacheEnableRead:    c.reCacheEnableRead,
+		ReproxyAddr:          c.reproxyAddr,
 		ActionSalt:           actionSaltBytes,
 		OutputLocal:          outputLocal,
 		Cache:                cache,
@@ -649,6 +663,16 @@ func (c *ninjaCmdRun) init() {
 	c.Flags.StringVar(&c.configName, "config", "", "config name passed to starlark")
 	c.Flags.StringVar(&c.projectID, "project", os.Getenv("SISO_PROJECT"), "cloud project ID. can set by $SISO_PROJECT")
 
+	c.Flags.BoolVar(&c.offline, "offline", false, "offline mode.")
+	c.Flags.BoolVar(&c.offline, "o", false, "alias of `-offline`")
+	if f := c.Flags.Lookup("offline"); f != nil {
+		if s := os.Getenv("RBE_remote_disabled"); s != "" {
+			err := f.Value.Set(s)
+			if err != nil {
+				log.Errorf("invalid RBE_remote_disabled=%q: %v", s, err)
+			}
+		}
+	}
 	c.Flags.BoolVar(&c.batch, "batch", !ui.IsTerminal(), "batch mode. prefer thoughput over low latency for build failures.")
 	c.Flags.BoolVar(&c.dryRun, "n", false, "dry run")
 	c.Flags.BoolVar(&c.clobber, "clobber", false, "clobber build")
@@ -688,6 +712,9 @@ func (c *ninjaCmdRun) init() {
 	}
 	c.reopt.RegisterFlags(&c.Flags, envs)
 	c.Flags.BoolVar(&c.reCacheEnableRead, "re_cache_enable_read", true, "remote exec cache enable read")
+	// reclient_helper.py sets the RBE_server_address
+	// https://chromium.googlesource.com/chromium/tools/depot_tools.git/+/e13840bd9a04f464e3bef22afac1976fc15a96a0/reclient_helper.py#138
+	c.reproxyAddr = os.Getenv("RBE_server_address")
 
 	c.Flags.DurationVar(&c.traceThreshold, "trace_threshold", 1*time.Minute, "threshold for trace record")
 	c.Flags.DurationVar(&c.traceSpanThreshold, "trace_span_threshold", 100*time.Millisecond, "theshold for trace span record")

@@ -85,7 +85,8 @@ type Options struct {
 	RECacheEnableRead bool
 	// TODO(b/266518906): enable RECacheEnableWrite option for read-only client.
 	// RECacheEnableWrite bool
-	ActionSalt []byte
+	ReproxyAddr string
+	ActionSalt  []byte
 
 	OutputLocal          OutputLocalFunc
 	Cache                *Cache
@@ -238,7 +239,7 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 	} else {
 		logger.Infof("disable remote exec")
 	}
-	pe = reproxyexec.New(ctx)
+	pe = reproxyexec.New(ctx, opts.ReproxyAddr)
 	experiments.ShowOnce()
 	numCPU := runtime.NumCPU()
 	stepLimit := stepLimitFactor * numCPU

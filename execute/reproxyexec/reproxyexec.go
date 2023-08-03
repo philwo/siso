@@ -71,8 +71,10 @@ type REProxyExec struct {
 }
 
 // New creates new remote executor.
-func New(ctx context.Context) *REProxyExec {
-	return &REProxyExec{}
+func New(ctx context.Context, addr string) *REProxyExec {
+	return &REProxyExec{
+		connAddress: addr,
+	}
 }
 
 // Close cleans up the executor.
@@ -83,27 +85,27 @@ func (re *REProxyExec) Close() error {
 	return re.conn.Close()
 }
 
+// Enabled returns whether reproxy is enabled or not.
+func (re *REProxyExec) Enabled() bool {
+	return re.connAddress != ""
+}
+
 // Run runs a cmd.
 func (re *REProxyExec) Run(ctx context.Context, cmd *execute.Cmd) error {
 	ctx, span := trace.NewSpan(ctx, "reproxy-exec")
 	defer span.Close(nil)
 
-	// Allow server address to be overridden by env var RBE_server_address.
-	// In rewrapper, all RBE_ env vars act as overrides to reproxy config.
-	// However in practice, only the RBE_server_address env var matters.
-	serverAddress := cmd.REProxyConfig.ServerAddress
-	if s := os.Getenv("RBE_server_address"); s != "" {
-		serverAddress = s
+	// ignore cmd.REProxyConfig.ServerAddress, which is
+	// default value in rewrapper.cfg, but will be overridden
+	// by RBE_server_address (which we set in re.connAddress).
+	if !re.Enabled() {
+		return fmt.Errorf("reproxy mode is not enabled")
 	}
-
 	if len(cmd.REProxyConfig.Labels) == 0 {
 		return fmt.Errorf("REProxy config has no labels")
 	}
 	if len(cmd.REProxyConfig.Platform) == 0 {
 		return fmt.Errorf("REProxy config has no platform")
-	}
-	if serverAddress == "" {
-		return fmt.Errorf("REProxy config has no server address")
 	}
 	execTimeout := defaultExecTimeout
 	if cmd.REProxyConfig.ExecTimeout != "" {
@@ -122,14 +124,10 @@ func (re *REProxyExec) Run(ctx context.Context, cmd *execute.Cmd) error {
 	re.connOnce.Do(func() {
 		ctx, cancel := context.WithTimeout(ctx, dialTimeout)
 		defer cancel()
-		re.connAddress = serverAddress
-		re.conn, re.connErr = DialContext(ctx, serverAddress)
+		re.conn, re.connErr = DialContext(ctx, re.connAddress)
 	})
 	if re.connErr != nil {
-		return fmt.Errorf("fail to dial %s: %w", serverAddress, re.connErr)
-	}
-	if serverAddress != re.connAddress {
-		return fmt.Errorf("given reproxy address %s does not match previously-used address %s", serverAddress, re.connAddress)
+		return fmt.Errorf("fail to dial %s: %w", re.connAddress, re.connErr)
 	}
 
 	// Create REProxy client and send the request with backoff configuration above.
