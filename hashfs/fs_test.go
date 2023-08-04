@@ -664,7 +664,7 @@ func TestSymlinkDir(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	setupSymlink := func(fname, target string) {
+	setupSymlink := func(t *testing.T, fname, target string) {
 		t.Helper()
 		fullname := filepath.Join(dir, fname)
 		err := os.MkdirAll(filepath.Dir(fullname), 0755)
@@ -676,7 +676,7 @@ func TestSymlinkDir(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	setupFile := func(fname, content string) {
+	setupFile := func(t *testing.T, fname, content string) {
 		t.Helper()
 		fullname := filepath.Join(dir, fname)
 		err := os.MkdirAll(filepath.Dir(fullname), 0755)
@@ -689,83 +689,106 @@ func TestSymlinkDir(t *testing.T) {
 		}
 	}
 
-	setupFile("build/mac_files/xcode_binaries/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/somefile", "")
-	setupSymlink("build/mac_files/xcode_binaries/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX13.3.sdk", "MacOSX.sdk")
+	testcases := []struct {
+		name          string
+		realfile      string
+		symlink       string
+		target        string
+		symlinkedfile string
+	}{
+		{
+			name:          "macosx",
+			realfile:      "build/mac_files/xcode_binaries/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/somefile",
+			symlink:       "build/mac_files/xcode_binaries/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX13.3.sdk",
+			target:        "MacOSX.sdk",
+			symlinkedfile: "build/mac_files/xcode_binaries/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX13.3.sdk/somefile",
+		},
+		{
+			name:          "cros",
+			realfile:      "build/cros_cache/chrome-sdk/tarballs/sysroot_chromeos-base_chromeos-chrome.tar.xz/chromiumos-image-archive-amd64-generic-public-R117-15563.0.0-sysroot_chromeos-base_chromeos-chrome.tar.xz/usr/include/stdio.h",
+			symlink:       "build/cros_cache/chrome-sdk/symlinks/amd64-generic+15563.0.0+sysroot_chromeos-base_chromeos-chrome.tar.xz",
+			target:        "../tarballs/sysroot_chromeos-base_chromeos-chrome.tar.xz/chromiumos-image-archive-amd64-generic-public-R117-15563.0.0-sysroot_chromeos-base_chromeos-chrome.tar.xz",
+			symlinkedfile: "build/cros_cache/chrome-sdk/symlinks/amd64-generic+15563.0.0+sysroot_chromeos-base_chromeos-chrome.tar.xz/usr/include/stdio.h",
+		},
+	}
 
-	t.Run("SymlinkFirst", func(t *testing.T) {
-		hfs, err := hashfs.New(ctx, hashfs.Option{})
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer func() {
-			err := hfs.Close(ctx)
-			if err != nil {
-				t.Fatal(err)
-			}
-		}()
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			setupFile(t, tc.realfile, "")
+			setupSymlink(t, tc.symlink, tc.target)
+			t.Run("SymlinkFirst", func(t *testing.T) {
+				hfs, err := hashfs.New(ctx, hashfs.Option{})
+				if err != nil {
+					t.Fatal(err)
+				}
+				t.Cleanup(func() {
+					err := hfs.Close(ctx)
+					if err != nil {
+						t.Fatal(err)
+					}
+				})
+				fi, err := hfs.Stat(ctx, dir, tc.symlink)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if fi.Target() != tc.target {
+					t.Errorf("hfs.Stat(ctx, dir, %q) target=%q; want=%q", tc.symlink, fi.Target(), tc.target)
+				}
 
-		fi, err := hfs.Stat(ctx, dir, "build/mac_files/xcode_binaries/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX13.3.sdk")
-		if err != nil {
-			t.Fatal(err)
-		}
-		if fi.Target() != "MacOSX.sdk" {
-			t.Errorf("hfs.Stat(ctx, dir, %q) target=%q; want=%q", "build/mac_files/xcode_binaries/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX13.3.sdk", fi.Target(), "MacOSX.sdk")
-		}
+				fi, err = hfs.Stat(ctx, dir, tc.realfile)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !fi.Mode().IsRegular() {
+					t.Errorf("hfs.Stat(ctx, dir, %q) mode=%s; want regular", tc.realfile, fi.Mode())
+				}
+				fi, err = hfs.Stat(ctx, dir, tc.realfile)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !fi.Mode().IsRegular() {
+					t.Errorf("hfs.Stat(ctx, dir, %q) mode=%s; want regular", tc.realfile, fi.Mode())
+				}
+			})
 
-		fi, err = hfs.Stat(ctx, dir, "build/mac_files/xcode_binaries/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/somefile")
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !fi.Mode().IsRegular() {
-			t.Errorf("hfs.Stat(ctx, dir, %q) mode=%s; want regular", "build/mac_files/xcode_binaries/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/somefile", fi.Mode())
-		}
-		fi, err = hfs.Stat(ctx, dir, "build/mac_files/xcode_binaries/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX13.3.sdk/somefile")
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !fi.Mode().IsRegular() {
-			t.Errorf("hfs.Stat(ctx, dir, %q) mode=%s; want regular", "build/mac_files/xcode_binaries/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX13.3.sdk/somefile", fi.Mode())
-		}
-	})
+			t.Run("DirFirst", func(t *testing.T) {
+				hfs, err := hashfs.New(ctx, hashfs.Option{})
+				if err != nil {
+					t.Fatal(err)
+				}
+				t.Cleanup(func() {
+					err := hfs.Close(ctx)
+					if err != nil {
+						t.Fatal(err)
+					}
+				})
 
-	t.Run("DirFirst", func(t *testing.T) {
-		hfs, err := hashfs.New(ctx, hashfs.Option{})
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer func() {
-			err := hfs.Close(ctx)
-			if err != nil {
-				t.Fatal(err)
-			}
-		}()
+				fi, err := hfs.Stat(ctx, dir, tc.realfile)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !fi.Mode().IsRegular() {
+					t.Errorf("hfs.Stat(ctx, dir, %q) mode=%s; want regular", tc.realfile, fi.Mode())
+				}
 
-		fi, err := hfs.Stat(ctx, dir, "build/mac_files/xcode_binaries/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/somefile")
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !fi.Mode().IsRegular() {
-			t.Errorf("hfs.Stat(ctx, dir, %q) mode=%s; want regular", "build/mac_files/xcode_binaries/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/somefile", fi.Mode())
-		}
+				fi, err = hfs.Stat(ctx, dir, tc.symlinkedfile)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !fi.Mode().IsRegular() {
+					t.Errorf("hfs.Stat(ctx, dir, %q) mode=%s; want regular", tc.symlinkedfile, fi.Mode())
+				}
 
-		fi, err = hfs.Stat(ctx, dir, "build/mac_files/xcode_binaries/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX13.3.sdk/somefile")
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !fi.Mode().IsRegular() {
-			t.Errorf("hfs.Stat(ctx, dir, %q) mode=%s; want regular", "build/mac_files/xcode_binaries/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX13.3.sdk/somefile", fi.Mode())
-		}
-
-		fi, err = hfs.Stat(ctx, dir, "build/mac_files/xcode_binaries/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX13.3.sdk")
-		if err != nil {
-			t.Fatal(err)
-		}
-		if fi.Target() != "MacOSX.sdk" {
-			t.Errorf("hfs.Stat(ctx, dir, %q) target=%q; want=%q", "build/mac_files/xcode_binaries/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX13.3.sdk", fi.Target(), "MacOSX.sdk")
-		}
-
-	})
-
+				fi, err = hfs.Stat(ctx, dir, tc.symlink)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if fi.Target() != tc.target {
+					t.Errorf("hfs.Stat(ctx, dir, %q) target=%q; want=%q", tc.symlink, fi.Target(), tc.target)
+				}
+			})
+		})
+	}
 }
 
 func TestFlusTohHardlink(t *testing.T) {

@@ -60,9 +60,9 @@ func TestDirectoryLookup_Symlink(t *testing.T) {
 	var m iometrics.IOMetrics
 
 	fname := filepath.Join(dir, symlinkName)
-	_, _, ok := d.lookup(ctx, d, fname)
+	_, _, ok := d.lookup(ctx, fname)
 	if ok {
-		t.Fatalf("d.lookup(ctx, d. %q): %t; want false", fname, ok)
+		t.Fatalf("d.lookup(ctx, %q): %t; want false", fname, ok)
 	}
 	e := newLocalEntry()
 	e.init(ctx, fname, &m)
@@ -72,9 +72,9 @@ func TestDirectoryLookup_Symlink(t *testing.T) {
 	}
 
 	fname = filepath.Join(dir, fileName)
-	_, _, ok = d.lookup(ctx, d, fname)
+	_, _, ok = d.lookup(ctx, fname)
 	if ok {
-		t.Fatalf("d.lookup(ctx, d, %q): %t; want false", fname, ok)
+		t.Fatalf("d.lookup(ctx, %q): %t; want false", fname, ok)
 	}
 	e = newLocalEntry()
 	e.init(ctx, fname, &m)
@@ -84,27 +84,27 @@ func TestDirectoryLookup_Symlink(t *testing.T) {
 	}
 
 	t.Log(fname)
-	_, _, ok = d.lookup(ctx, d, fname)
+	_, _, ok = d.lookup(ctx, fname)
 	if !ok {
-		t.Fatalf("d.lookup(ctx, d, %q) %t; want true", fname, ok)
+		t.Fatalf("d.lookup(ctx, %q) %t; want true", fname, ok)
 	}
 	fname = filepath.Dir(fname)
 	t.Log(fname)
-	_, _, ok = d.lookup(ctx, d, fname)
+	_, _, ok = d.lookup(ctx, fname)
 	if !ok {
-		t.Fatalf("d.lookup(ctx, d, %q) %t; want true", fname, ok)
+		t.Fatalf("d.lookup(ctx, %q) %t; want true", fname, ok)
 	}
 
 	fname = filepath.Join(dir, symlinkName)
 	t.Log(fname)
-	_, _, ok = d.lookup(ctx, d, fname)
+	_, _, ok = d.lookup(ctx, fname)
 	if !ok {
-		t.Fatalf("d.lookup(ctx, d, %q) %t; want true", fname, ok)
+		t.Fatalf("d.lookup(ctx, %q) %t; want true", fname, ok)
 	}
 	fname = filepath.Join(fname, "somefile")
 	t.Log(fname)
-	_, _, ok = d.lookup(ctx, d, fname)
+	_, _, ok = d.lookup(ctx, fname)
 	if !ok {
-		t.Fatalf("d.lookup(ctx, d, %q) %t; want true", fname, ok)
+		t.Fatalf("d.lookup(ctx, %q) %t; want true", fname, ok)
 	}
 }

@@ -17,6 +17,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	log "github.com/golang/glog"
@@ -174,16 +175,24 @@ func needPathClean(names ...string) bool {
 
 func (hfs *HashFS) dirLookup(ctx context.Context, root, fname string) (*entry, *directory, bool) {
 	if needPathClean(root, fname) {
-		return hfs.directory.lookup(ctx, hfs.directory, filepath.ToSlash(filepath.Join(root, fname)))
+		return hfs.directory.lookup(ctx, filepath.ToSlash(filepath.Join(root, fname)))
 	}
-	e, _, ok := hfs.directory.lookup(ctx, hfs.directory, root)
+	e, _, ok := hfs.directory.lookup(ctx, root)
 	if !ok {
 		return nil, nil, false
 	}
 	if e.directory == nil {
 		return nil, nil, false
 	}
-	return e.directory.lookup(ctx, hfs.directory, fname)
+	e, dir, resolved, ok := e.directory.lookupEntry(ctx, fname)
+	if ok {
+		return e, dir, true
+	}
+	if resolved != "" {
+		resolvedName := filepath.ToSlash(filepath.Join(root, resolved))
+		return hfs.directory.lookup(ctx, resolvedName)
+	}
+	return nil, nil, false
 }
 
 func (hfs *HashFS) dirStoreAndNotify(ctx context.Context, fullname string, e *entry) error {
@@ -246,7 +255,7 @@ func (hfs *HashFS) ReadDir(ctx context.Context, root, name string) (dents []DirE
 	}
 	dirname := filepath.Join(root, name)
 	dname := filepath.ToSlash(dirname)
-	e, _, ok := hfs.directory.lookup(ctx, hfs.directory, dname)
+	e, _, ok := hfs.directory.lookup(ctx, dname)
 	if !ok {
 		e = newLocalEntry()
 		e.init(ctx, dname, hfs.IOMetrics)
@@ -299,7 +308,7 @@ func (hfs *HashFS) ReadFile(ctx context.Context, root, fname string) ([]byte, er
 	fname = filepath.Join(root, fname)
 	fname = filepath.ToSlash(fname)
 	span.SetAttr("fname", fname)
-	e, _, ok := hfs.directory.lookup(ctx, hfs.directory, fname)
+	e, _, ok := hfs.directory.lookup(ctx, fname)
 	if !ok {
 		e = newLocalEntry()
 		e.init(ctx, fname, hfs.IOMetrics)
@@ -395,7 +404,7 @@ func (hfs *HashFS) Copy(ctx context.Context, root, src, dst string, mtime time.T
 	srcfname := filepath.ToSlash(srcname)
 	dstfname := filepath.Join(root, dst)
 	dstfname = filepath.ToSlash(dstfname)
-	e, _, ok := hfs.directory.lookup(ctx, hfs.directory, srcfname)
+	e, _, ok := hfs.directory.lookup(ctx, srcfname)
 	if !ok {
 		e = newLocalEntry()
 		if log.V(9) {
@@ -517,7 +526,7 @@ func (hfs *HashFS) Entries(ctx context.Context, root string, inputs []string) ([
 	for _, fname := range inputs {
 		fname := filepath.Join(root, fname)
 		fname = filepath.ToSlash(fname)
-		e, _, ok := hfs.directory.lookup(ctx, hfs.directory, fname)
+		e, _, ok := hfs.directory.lookup(ctx, fname)
 		if ok {
 			if log.V(2) {
 				clog.Infof(ctx, "tree cache hit %s", fname)
@@ -589,7 +598,7 @@ func (hfs *HashFS) Entries(ctx context.Context, root string, inputs []string) ([
 				name = tname
 				tname = ""
 				var ok bool
-				elink, _, ok = hfs.directory.lookup(ctx, hfs.directory, name)
+				elink, _, ok = hfs.directory.lookup(ctx, name)
 				if ok {
 					if log.V(2) {
 						clog.Infof(ctx, "tree cache hit %s", name)
@@ -786,7 +795,7 @@ func (hfs *HashFS) Flush(ctx context.Context, execRoot string, files []string) e
 	for _, file := range files {
 		fname := filepath.Join(execRoot, file)
 		fname = filepath.ToSlash(fname)
-		e, _, ok := hfs.directory.lookup(ctx, hfs.directory, fname)
+		e, _, ok := hfs.directory.lookup(ctx, fname)
 		if !ok {
 			// If it doesn't exist in memory, just use local disk as is.
 			continue
@@ -1168,85 +1177,92 @@ func (d *directory) String() string {
 	return fmt.Sprintf("&directory{m:%p}", &d.m)
 }
 
-func (d *directory) lookup(ctx context.Context, root *directory, fname string) (*entry, *directory, bool) {
-	origFname := fname
-	n := 0
+// path elements of filepath.
+// defer allocation for lookup, but pass elems for store.
+type pathElements struct {
+	origFname string
+
+	// number of elements processed.
+	n int
+
+	// elements processed. maybe empty for lookup
+	elems []string
+}
+
+func (d *directory) lookup(ctx context.Context, fname string) (*entry, *directory, bool) {
+	var i int
+	for i = 0; i < maxSymlinks; i++ {
+		e, dir, resolved, ok := d.lookupEntry(ctx, fname)
+		if e != nil || dir != nil {
+			return e, dir, ok
+		}
+		if resolved != "" {
+			fname = resolved
+			continue
+		}
+		return nil, nil, false
+	}
+	return nil, nil, false
+}
+
+func (d *directory) lookupEntry(ctx context.Context, fname string) (*entry, *directory, string, bool) {
+	pe := pathElements{
+		origFname: fname,
+	}
 	for fname != "" {
-		n++
 		fname = strings.TrimPrefix(fname, "/")
 		elem, rest, ok := strings.Cut(fname, "/")
 		if !ok {
 			e, ok := d.m.Load(fname)
 			if !ok {
-				return nil, d, ok
+				return nil, d, "", false
 			}
-			return e.(*entry), d, ok
+			return e.(*entry), d, "", true
 		}
 		fname = rest
-		v, ok := d.m.Load(elem)
-		var subdir *directory
-		if ok {
-			e := v.(*entry)
-			if e != nil && e.target != "" {
-				// Resolve a symlink and lookup the target from root.
-				target := resolveSymlink(ctx, origFname, n, e.target)
-				// TODO(289869742): optimize for e.target is basename only?
-				// TODO(289869742): return resolved path and traverse again in caller side?
-				e, _, ok = root.lookup(ctx, root, target)
-				if !ok {
-					return nil, nil, false
-				}
-				// resolve symlink until dir or reach the limit?
-			}
-			subdir = e.getDir()
-		}
+		pe.n++
+		subdir, target, ok := resolveNextDir(ctx, d, lookupNextDir, pe, elem, fname)
 		if subdir == nil {
-			if log.V(1) {
-				lv := struct {
-					origFname, elem, fname string
-					subdir                 *directory
-				}{origFname, elem, fname, subdir}
-				clog.Infof(ctx, "lookup %s subdir %s %s -> %s", lv.origFname, lv.elem, lv.fname, lv.subdir)
+			if !ok {
+				return nil, nil, "", false
 			}
-			return nil, nil, false
+			if target != "" {
+				return nil, nil, target, false
+			}
 		}
 		d = subdir
 	}
 	if log.V(1) {
-		logOrigFname := origFname
+		logOrigFname := pe.origFname
 		clog.Infof(ctx, "lookup %s fname empty", logOrigFname)
 	}
-	return nil, nil, false
-}
-
-func resolveSymlink(ctx context.Context, origFname string, n int, target string) string {
-	// reconstruct elem's list as we traversed.
-	// we do this again to avoid unnecessary allocation for normal case.
-	elems := make([]string, 0, n)
-	if strings.HasPrefix(origFname, "/") {
-		elems = append(elems, "/")
-	}
-	s := origFname
-	for i := 0; i < n-1; i++ {
-		s = strings.TrimPrefix(s, "/")
-		elem, rest, _ := strings.Cut(s, "/")
-		elems = append(elems, elem)
-		s = rest
-	}
-	elems = append(elems, target)
-	// TODO: elems[0] += `\` on windows, but we don't support symlink on windows?
-	return filepath.Join(elems...)
+	return nil, nil, "", false
 }
 
 func (d *directory) store(ctx context.Context, fname string, e *entry) (*entry, error) {
-	origFname := fname
-	elems := make([]string, 0, strings.Count(fname, "/")+1)
+	var i int
+	for i = 0; i < maxSymlinks; i++ {
+		ent, resolved, err := d.storeEntry(ctx, fname, e)
+		if resolved != "" {
+			fname = resolved
+			continue
+		}
+		return ent, err
+	}
+	return nil, fmt.Errorf("store %s: %w", fname, syscall.ELOOP)
+}
+
+func (d *directory) storeEntry(ctx context.Context, fname string, e *entry) (*entry, string, error) {
+	pe := pathElements{
+		origFname: fname,
+		elems:     make([]string, 0, strings.Count(fname, "/")+1),
+	}
 	if log.V(8) {
-		logOrigFname := origFname
+		logOrigFname := pe.origFname
 		clog.Infof(ctx, "store %s %v", logOrigFname, e)
 	}
 	if strings.HasPrefix(fname, "/") {
-		elems = append(elems, "/")
+		pe.elems = append(pe.elems, "/")
 	}
 	for fname != "" {
 		fname = strings.TrimPrefix(fname, "/")
@@ -1259,10 +1275,10 @@ func (d *directory) store(ctx context.Context, fname string, e *entry) (*entry, 
 						origFname string
 						d         *directory
 						fname     string
-					}{origFname, d, fname}
+					}{pe.origFname, d, fname}
 					clog.Infof(ctx, "store %s -> %p %s", lv.origFname, lv.d, lv.fname)
 				}
-				return e, nil
+				return e, "", nil
 			}
 			// check whether there is an update from previous entry.
 			ee := v.(*entry)
@@ -1280,7 +1296,7 @@ func (d *directory) store(ctx context.Context, fname string, e *entry) (*entry, 
 					origFname         string
 					cmdchanged        bool
 					eetarget, etarget string
-				}{origFname, cmdchanged, ee.target, e.target}
+				}{pe.origFname, cmdchanged, ee.target, e.target}
 				clog.Infof(ctx, "store %s: cmdchange:%t s:%q to %q", lv.origFname, lv.cmdchanged, lv.eetarget, lv.etarget)
 			} else if !e.d.IsZero() && eed != e.d && eed.SizeBytes != 0 && e.d.SizeBytes != 0 {
 				// don't log nil to digest of empty file (size=0)
@@ -1288,14 +1304,14 @@ func (d *directory) store(ctx context.Context, fname string, e *entry) (*entry, 
 					origFname  string
 					cmdchanged bool
 					eed, ed    digest.Digest
-				}{origFname, cmdchanged, eed, e.d}
+				}{pe.origFname, cmdchanged, eed, e.d}
 				clog.Infof(ctx, "store %s: cmdchange:%t d:%v to %v", lv.origFname, lv.cmdchanged, lv.eed, lv.ed)
 			} else if cmdchanged || actionchanged {
 				lv := struct {
 					origFname     string
 					cmdchanged    bool
 					actionchanged bool
-				}{origFname, cmdchanged, actionchanged}
+				}{pe.origFname, cmdchanged, actionchanged}
 				clog.Infof(ctx, "store %s: cmdchange:%t actionchange:%t", lv.origFname, lv.cmdchanged, lv.actionchanged)
 			} else if ee.target == e.target && ee.size == e.size && ee.mode == e.mode && (e.d.IsZero() || eed == e.d) {
 				// no change?
@@ -1307,51 +1323,110 @@ func (d *directory) store(ctx context.Context, fname string, e *entry) (*entry, 
 				ee.mu.Lock()
 				ee.mtime = e.mtime
 				ee.mu.Unlock()
-				return ee, nil
+				return ee, "", nil
 			}
 			// e should be new value for fname.
 			swapped := d.m.CompareAndSwap(fname, ee, e)
 			if !swapped {
 				// store race?
 				v, ok := d.m.Load(fname)
-				return nil, fmt.Errorf("store race %s: %p -> %p -> %p %t", fname, ee, e, v, ok)
+				return nil, "", fmt.Errorf("store race %s: %p -> %p -> %p %t", fname, ee, e, v, ok)
 			}
 			// e is stored for fname
-			return e, nil
+			return e, "", nil
 
 		}
-		elems = append(elems, elem)
+		pe.n++
+		pe.elems = append(pe.elems, elem)
 		fname = rest
-		i := 0
-		for ; i < maxSymlinks; i++ {
-			nextDir, target, err := d.nextDir(ctx, elems, origFname, fname)
-			if err != nil {
-				return nil, err
-			}
-			if nextDir != nil {
-				d = nextDir
-				break
-			}
-			if target != "" {
-				if !strings.Contains(target, "/") {
-					elems[len(elems)-1] = target
-					continue
-				}
-				// TODO(b/289869742): handle symlink target is not just basename.
-				d = nil
-				break
-			}
+		subdir, resolved, ok := resolveNextDir(ctx, d, nextDir, pe, elem, fname)
+		if resolved != "" {
+			return nil, resolved, nil
 		}
-		if d == nil || i == maxSymlinks {
-			return nil, fmt.Errorf("failed to set entry: %s", strings.Join(elems, "/"))
+		if !ok {
+			return nil, "", fmt.Errorf("store resolv next dir failed: %s", pe.origFname)
 		}
+		d = subdir
 	}
-	errOrigFname := origFname
-	return nil, fmt.Errorf("bad fname? %q", errOrigFname)
+	errOrigFname := pe.origFname
+	return nil, "", fmt.Errorf("bad fname? %q", errOrigFname)
 }
 
-func (d *directory) nextDir(ctx context.Context, elems []string, origFname, fname string) (*directory, string, error) {
-	elem := elems[len(elems)-1]
+// resolveNextDir resolves a dir named `elem` by calling `next`.
+// `next` will return *directory if `elem` entry is directory.
+// `next` will return string if `elem` entry is symlink.
+// resolveNextDir will resolve simple symlnk (i.e. symlink is just base name).
+// resolveNextDir returns directory if resolved `elem` is directory.
+// resolveNextDir returns resolved path name as string if resolved `elem` is symlink.
+func resolveNextDir(ctx context.Context, d *directory, next func(context.Context, *directory, pathElements, string) (*directory, string, bool), pe pathElements, elem, rest string) (*directory, string, bool) {
+	var i int
+	for i = 0; i < maxSymlinks; i++ {
+		nextDir, target, ok := next(ctx, d, pe, elem)
+		if target != "" {
+			if !strings.Contains(target, "/") {
+				elem = target
+				continue
+			}
+
+			if len(pe.elems) != pe.n {
+				// reconstruct elems for lookup
+				pe.elems = make([]string, 0, pe.n+1)
+				if strings.HasPrefix(pe.origFname, "/") {
+					pe.elems = append(pe.elems, "/")
+				}
+				s := pe.origFname
+				for i := 0; i < pe.n-1; i++ {
+					s = strings.TrimPrefix(s, "/")
+					elem, rest, _ := strings.Cut(s, "/")
+					pe.elems = append(pe.elems, elem)
+					s = rest
+				}
+				if runtime.GOOS == "windows" && !strings.HasSuffix(pe.elems[0], `\`) {
+					// elems[0] is drive letter. e.g. "C:"
+					pe.elems[0] += `\`
+				}
+				pe.elems = append(pe.elems, elem)
+			}
+			pe.elems[len(pe.elems)-1] = target
+			pe.elems = append(pe.elems, rest)
+			resolved := filepath.ToSlash(filepath.Join(pe.elems...))
+			return nil, resolved, false
+		}
+
+		if !ok {
+			return nil, "", false
+		}
+		if nextDir != nil {
+			return nextDir, "", true
+		}
+	}
+	return nil, "", false
+}
+
+// next for lookup case.
+func lookupNextDir(ctx context.Context, d *directory, pe pathElements, elem string) (*directory, string, bool) {
+	v, ok := d.m.Load(elem)
+	if !ok {
+		return nil, "", false
+	}
+	dent := v.(*entry)
+	if dent != nil {
+		if dent.err != nil {
+			return nil, "", false
+		}
+		target := dent.target
+		subdir := dent.getDir()
+		if subdir == nil && target == "" {
+			return nil, "", false
+		}
+		return subdir, target, true
+	}
+	return nil, "", false
+}
+
+// next for store case.
+// nextDir will create next dir entry if needed.
+func nextDir(ctx context.Context, d *directory, pe pathElements, elem string) (*directory, string, bool) {
 	v, ok := d.m.Load(elem)
 	if ok {
 		dent := v.(*entry)
@@ -1360,51 +1435,46 @@ func (d *directory) nextDir(ctx context.Context, elems []string, origFname, fnam
 			subdir := dent.getDir()
 			if log.V(9) {
 				lv := struct {
-					origFname, elem, fname string
-					d                      *directory
-					dent                   *entry
-				}{origFname, elem, fname, d, dent}
-				clog.Infof(ctx, "store %s subdir0 %s %s -> %s (%v)", lv.origFname, lv.elem, lv.fname, lv.d, lv.dent)
+					origFname, elem string
+					d               *directory
+					dent            *entry
+				}{pe.origFname, elem, d, dent}
+				clog.Infof(ctx, "store %s subdir0 %s -> %s (%v)", lv.origFname, lv.elem, lv.d, lv.dent)
 			}
 			if subdir == nil && target == "" {
-				ev := struct {
-					elem string
-					dent *entry
-				}{elem, dent}
-				return nil, "", fmt.Errorf("failed to set entry: %s not dir %#v", ev.elem, ev.dent)
+				return nil, "", false
 			}
-			d = subdir
-			return d, target, nil
+			return subdir, target, true
 		}
 		deleted := d.m.CompareAndDelete(elem, dent)
 		if log.V(9) {
 			lv := struct {
 				origFname, elem string
 				deleted         bool
-			}{origFname, elem, deleted}
+			}{pe.origFname, elem, deleted}
 			clog.Infof(ctx, "store %s delete missing %s to create dir deleted: %t", lv.origFname, lv.elem, lv.deleted)
 		}
 	}
 	// create intermediate dir of elem.
 	mtime := time.Now()
-	if runtime.GOOS == "windows" && !strings.HasSuffix(elems[0], `\`) {
+	if runtime.GOOS == "windows" && !strings.HasSuffix(pe.elems[0], `\`) {
 		// elems[0] is drive letter. e.g "c:"
-		elems[0] += `\`
+		pe.elems[0] += `\`
 	}
-	fullname := filepath.Join(elems...)
+	fullname := filepath.Join(pe.elems...)
 	dfi, err := os.Lstat(fullname)
 	if err == nil {
 		mtime = dfi.ModTime()
 		switch {
 		case dfi.IsDir():
 		case dfi.Mode().Type() == fs.ModeSymlink:
-			target, err := os.Readlink(filepath.Join(elems...))
+			target, err := os.Readlink(fullname)
 			if err != nil {
-				return nil, "", fmt.Errorf("failed to set entry %s symlink: %w", fullname, err)
+				return nil, "", false
 			}
-			return nil, target, nil
+			return nil, target, true
 		default:
-			return nil, "", fmt.Errorf("failed to set entry: %s not dir", fullname)
+			return nil, "", false
 		}
 	}
 	lready := make(chan bool, 1)
@@ -1430,21 +1500,17 @@ func (d *directory) nextDir(ctx context.Context, elems []string, origFname, fnam
 	subdir := dent.getDir()
 	if log.V(9) {
 		lv := struct {
-			origFname, elem, fname string
-			subdir                 *directory
-			dent                   *entry
-		}{origFname, elem, fname, subdir, dent}
-		clog.Infof(ctx, "store %s subdir1 %s %s -> %s (%v)", lv.origFname, lv.elem, lv.fname, lv.subdir, lv.dent)
+			origFname, elem string
+			subdir          *directory
+			dent            *entry
+		}{pe.origFname, elem, subdir, dent}
+		clog.Infof(ctx, "store %s subdir1 %s -> %s (%v)", lv.origFname, lv.elem, lv.subdir, lv.dent)
 	}
 	d = subdir
 	if d == nil && target == "" {
-		ev := struct {
-			elem string
-			dent *entry
-		}{elem, dent}
-		return nil, target, fmt.Errorf("failed to set entry: %s not dir %#v", ev.elem, ev.dent)
+		return nil, "", false
 	}
-	return d, target, nil
+	return d, target, true
 }
 
 func (d *directory) delete(ctx context.Context, fname string) {
