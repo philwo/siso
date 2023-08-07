@@ -189,7 +189,8 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 				// check digest is the same and fix mtime if it matches.
 				// don't reconcile for source (non-generated file),
 				// as user may want to trigger build by touch.
-				data, err := localDigest(ctx, ent.Name, hfs.opt.DigestXattrName, fi.Size(), hfs.IOMetrics)
+				src := digest.LocalFileSource{Fname: ent.Name, IOMetrics: hfs.IOMetrics}
+				data, err := localDigest(ctx, src, ent.Name, hfs.opt.DigestXattrName, fi.Size())
 				if err == nil && data.Digest() == e.d {
 					et = entryEqLocal
 					err = os.Chtimes(ent.Name, time.Now(), e.mtime)

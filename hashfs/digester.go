@@ -12,7 +12,6 @@ import (
 	"github.com/pkg/xattr"
 
 	"infra/build/siso/o11y/clog"
-	"infra/build/siso/o11y/iometrics"
 	"infra/build/siso/reapi/digest"
 	"infra/build/siso/sync/semaphore"
 )
@@ -20,8 +19,7 @@ import (
 // DigestSemaphore is a semaphore to control concurrent digest calculation.
 var DigestSemaphore = semaphore.New("file-digest", runtime.NumCPU())
 
-func localDigest(ctx context.Context, fname, xattrname string, size int64, m *iometrics.IOMetrics) (digest.Data, error) {
-	src := digest.LocalFileSource{Fname: fname, IOMetrics: m}
+func localDigest(ctx context.Context, src digest.Source, fname, xattrname string, size int64) (digest.Data, error) {
 	if xattrname != "" {
 		d, err := xattr.LGet(fname, xattrname)
 		if err == nil {

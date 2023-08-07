@@ -183,7 +183,14 @@ func (b byteSource) String() string {
 }
 
 // FromLocalFile creates Data from local file source.
-func FromLocalFile(ctx context.Context, src LocalFileSource) (Data, error) {
+// it requires LocalFileSource because it doesn't handle
+// retriable err from src.
+func FromLocalFile(ctx context.Context, src Source) (Data, error) {
+	_, ok := src.(LocalFileSource)
+	if !ok {
+		return Data{}, fmt.Errorf("src=%T is not LocalFileSource", src)
+	}
+
 	f, err := src.Open(ctx)
 	if err != nil {
 		return Data{}, err
