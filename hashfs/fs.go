@@ -1004,6 +1004,12 @@ func (e *entry) updateDir(ctx context.Context, hfs *HashFS, dname string) []stri
 		return nil
 	}
 	for _, name := range names {
+		// don't scan temporary file by readdir.
+		// it may cause race on windows.
+		// b/294318963
+		if strings.HasSuffix(name, ".tmp") {
+			continue
+		}
 		// update entry in e.directory.
 		_, err = hfs.Stat(ctx, dname, name)
 		if err != nil {
