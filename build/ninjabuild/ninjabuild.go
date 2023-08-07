@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -219,6 +220,7 @@ func (g *Graph) Targets(ctx context.Context, args ...string) ([]string, error) {
 		if strings.HasSuffix(t, "^") {
 			// Special syntax: "foo.cc^" means "the first output of foo.cc".
 			t = strings.TrimSuffix(t, "^")
+			t = filepath.ToSlash(t)
 			n, ok := g.nstate.LookupNode(t)
 			if !ok {
 				return nil, fmt.Errorf("unknown target %q", t)
