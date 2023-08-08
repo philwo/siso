@@ -17,8 +17,9 @@ import (
 )
 
 type progress struct {
-	mu sync.Mutex
-	ts time.Time
+	started time.Time
+	mu      sync.Mutex
+	ts      time.Time
 
 	actives       activeSteps
 	done          chan struct{}
@@ -49,6 +50,7 @@ func (as *activeSteps) Pop() any {
 }
 
 func (p *progress) start(ctx context.Context, b *Builder) {
+	p.started = time.Now()
 	p.done = make(chan struct{})
 	p.updateStopped = make(chan struct{})
 	go p.update(ctx, b)
@@ -157,6 +159,10 @@ func (p *progress) step(ctx context.Context, b *Builder, step *Step, s string) {
 
 		localProgress := runProgress(b.localSema.NumWaits(), b.localSema.NumServs())
 		remoteProgress := runProgress(b.reproxySema.NumWaits()+b.rewrapSema.NumWaits()+b.remoteSema.NumWaits(), b.reproxySema.NumServs()+b.rewrapSema.NumServs()+b.remoteSema.NumServs())
+		var stepsPerSec string
+		if stat.Done > 0 {
+			stepsPerSec = fmt.Sprintf("%.1f/s ", float64(stat.Done)/time.Since(p.started).Seconds())
+		}
 		var cacheHitRatio string
 		if stat.Remote+stat.CacheHit > 0 {
 			cacheHitRatio = fmt.Sprintf("cache:%5.02f%% ", float64(stat.CacheHit)/float64(stat.CacheHit+stat.Remote)*100.0)
@@ -167,10 +173,11 @@ func (p *progress) step(ctx context.Context, b *Builder, step *Step, s string) {
 		} else {
 			fallback = "0"
 		}
-		lines = append(lines, fmt.Sprintf("pre:%d local:%s remote:%s %sfallback:%s",
+		lines = append(lines, fmt.Sprintf("pre:%d local:%s remote:%s %s%sfallback:%s",
 			stat.Preproc,
 			localProgress,
 			remoteProgress,
+			stepsPerSec,
 			cacheHitRatio,
 			fallback))
 	}
