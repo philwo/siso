@@ -819,7 +819,6 @@ func (hfs *HashFS) Flush(ctx context.Context, execRoot string, files []string) e
 		case <-ctx.Done():
 			return fmt.Errorf("flush %s: %w", fname, ctx.Err())
 		}
-
 		hfs.digester.compute(ctx, fname, e)
 		ctx, done, err := FlushSemaphore.WaitAcquire(ctx)
 		if err != nil {
@@ -950,6 +949,9 @@ func (e *entry) compute(ctx context.Context, fname, xattrname string) error {
 		return e.err
 	}
 	if !e.d.IsZero() {
+		return nil
+	}
+	if e.src == nil {
 		return nil
 	}
 	data, err := localDigest(ctx, e.src, fname, xattrname, e.size)

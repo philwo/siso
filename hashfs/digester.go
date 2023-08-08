@@ -109,10 +109,13 @@ func (d *digester) lazyCompute(ctx context.Context, fname string, e *entry) {
 }
 
 func (d *digester) compute(ctx context.Context, fname string, e *entry) {
+	if e.err != nil || e.src == nil {
+		return
+	}
 	err := DigestSemaphore.Do(ctx, func(ctx context.Context) error {
 		return e.compute(ctx, fname, d.xattrname)
 	})
 	if err != nil {
-		clog.Warningf(ctx, "failed to digest compute %s: %v", fname, err)
+		clog.Warningf(ctx, "failed to compute digest %s: %v", fname, err)
 	}
 }
