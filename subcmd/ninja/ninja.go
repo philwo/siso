@@ -866,23 +866,7 @@ func doBuild(ctx context.Context, graph *ninjabuild.Graph, bopts build.Options, 
 		semaTraces[name] = t
 	}
 	if len(semaTraces) > 0 {
-		var semaNames []string
-		for key := range semaTraces {
-			semaNames = append(semaNames, key)
-		}
-		sort.Strings(semaNames)
-		tw := tabwriter.NewWriter(os.Stdout, 10, 8, 1, ' ', tabwriter.AlignRight)
-		fmt.Fprintf(tw, "resource/capa\tused(err)\twait-avg\t|   s m |\tserv-avg\t|   s m |\t\n")
-		for _, key := range semaNames {
-			t := semaTraces[key]
-			s, _ := semaphore.Lookup(t.name)
-			c := "nil"
-			if s != nil {
-				c = strconv.Itoa(s.Capacity())
-			}
-			fmt.Fprintf(tw, "%s/%s\t%d(%d)\t%s\t%s\t%s\t%s\t\n", t.name, c, t.n, t.nerr, t.waitAvg.Round(time.Millisecond), histogram(t.waitBuckets), t.servAvg.Round(time.Millisecond), histogram(t.servBuckets))
-		}
-		tw.Flush()
+		dumpResourceUsageTable(ctx, semaTraces)
 	}
 	stats := b.Stats()
 	if err != nil {
@@ -920,7 +904,36 @@ func detectExecRoot(ctx context.Context, execRoot, crdir string) (string, error)
 		}
 		execRoot = dir
 	}
+}
 
+func dumpResourceUsageTable(ctx context.Context, semaTraces map[string]semaTrace) {
+	var semaNames []string
+	for key := range semaTraces {
+		semaNames = append(semaNames, key)
+	}
+	sort.Strings(semaNames)
+	var sb strings.Builder
+	ltw := tabwriter.NewWriter(&sb, 10, 8, 1, ' ', tabwriter.AlignRight)
+	utw := tabwriter.NewWriter(os.Stdout, 10, 8, 1, ' ', tabwriter.AlignRight)
+	fmt.Fprintf(ltw, "resource/capa\tused(err)\twait-avg\t|   s m |\tserv-avg\t|   s m |\t\n")
+	fmt.Fprintf(utw, "resource/capa\tused(err)\twait-avg\t|   s m |\tserv-avg\t|   s m |\t\n")
+	for _, key := range semaNames {
+		t := semaTraces[key]
+		s, _ := semaphore.Lookup(t.name)
+		c := "nil"
+		if s != nil {
+			c = strconv.Itoa(s.Capacity())
+		}
+		fmt.Fprintf(ltw, "%s/%s\t%d(%d)\t%s\t%s\t%s\t%s\t\n", t.name, c, t.n, t.nerr, t.waitAvg.Round(time.Millisecond), histogram(t.waitBuckets), t.servAvg.Round(time.Millisecond), histogram(t.servBuckets))
+		// bucket 5 = [1m,10m)
+		// bucket 6 = [10m,*)
+		if t.waitBuckets[5] > 0 || t.waitBuckets[6] > 0 || t.servBuckets[5] > 0 || t.servBuckets[6] > 0 {
+			fmt.Fprintf(utw, "%s/%s\t%d(%d)\t%s\t%s\t%s\t%s\t\n", t.name, c, t.n, t.nerr, ui.FormatDuration(t.waitAvg), histogram(t.waitBuckets), ui.FormatDuration(t.servAvg), histogram(t.servBuckets))
+		}
+	}
+	ltw.Flush()
+	utw.Flush()
+	clog.Infof(ctx, "resource usage table:\n%s", sb.String())
 }
 
 var histchar = [...]string{"▂", "▃", "▄", "▅", "▆", "▇", "█"}
