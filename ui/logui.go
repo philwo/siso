@@ -26,10 +26,10 @@ func (l *logSpinner) Start(format string, args ...any) {
 // Because a log-based UI cannot support an animated spinner, this is used to report how long the spinner operation took to complete.
 func (l *logSpinner) Stop(err error) {
 	if err != nil {
-		fmt.Printf("\bfailed %s %v\n", time.Since(l.started), err)
+		fmt.Printf(" failed %s %v\n", time.Since(l.started), err)
 		return
 	}
-	fmt.Printf("\bdone %s\n", time.Since(l.started))
+	fmt.Printf(" done %s\n", time.Since(l.started))
 }
 
 // LogUI is a log-based UI.

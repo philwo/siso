@@ -234,7 +234,8 @@ func (s *scheduler) finish(ctx context.Context, d time.Duration) {
 	defer s.plan.mu.Unlock()
 	nready := len(s.plan.q) + len(s.plan.ready)
 	npendings := s.plan.npendings
-	s.progressReport("schedule pending:%d+ready:%d (node:%d edge:%d) %s\n", npendings, nready, len(s.plan.m), s.visited, d)
+	// TODO(b/294443556): omit if duration is too short
+	s.progressReport("%6s schedule pending:%d+ready:%d (node:%d edge:%d)\n", ui.FormatDuration(d), npendings, nready, len(s.plan.m), s.visited)
 }
 
 // add adds new stepDef to run.

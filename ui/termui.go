@@ -17,12 +17,14 @@ type termSpinner struct {
 	quit, done chan struct{}
 	started    time.Time
 	n          int
+	msg        string
 }
 
 // Start starts the spinner.
 func (s *termSpinner) Start(format string, args ...any) {
 	s.started = time.Now()
-	fmt.Printf(format, args...)
+	s.msg = fmt.Sprintf(format, args...)
+	fmt.Printf("%s...", s.msg)
 	s.quit = make(chan struct{})
 	s.done = make(chan struct{})
 	fmt.Printf(" ")
@@ -49,10 +51,11 @@ func (s *termSpinner) Stop(err error) {
 	close(s.quit)
 	<-s.done
 	if err != nil {
-		fmt.Printf("\bfailed %s %v\n", time.Since(s.started), err)
+		fmt.Printf("\r\033[K%6s %s failed %v\n", FormatDuration(time.Since(s.started)), s.msg, err)
 		return
 	}
-	fmt.Printf("\bdone %s\n", time.Since(s.started))
+	// TODO(b/294443556): omit if duration is too short
+	fmt.Printf("\r\033[K%6s %s\n", FormatDuration(time.Since(s.started)), s.msg)
 }
 
 // TermUI is a terminal-based UI.

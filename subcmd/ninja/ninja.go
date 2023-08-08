@@ -260,7 +260,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 		log.Infof("enable cloud logging project=%s id=%s", projectID, buildID)
 
 		spin := ui.Default.NewSpinner()
-		spin.Start("init cloud logging to %s...", projectID)
+		spin.Start("init cloud logging to %s", projectID)
 		// log_id: "siso.log" and "siso.step"
 		// use generic_task resource
 		// https://cloud.google.com/logging/docs/api/v2/resource-list
@@ -431,7 +431,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 	if err != nil {
 		clog.Warningf(ctx, "no cache enabled: %v", err)
 	}
-	spin.Start("loading fs state...")
+	spin.Start("loading fs state")
 	c.fsopt.DataSource = dataSource{
 		cache:  cacheStore,
 		client: client,
@@ -897,7 +897,7 @@ func doBuild(ctx context.Context, graph *ninjabuild.Graph, bopts build.Options, 
 		if ui.IsTerminal() {
 			msgPrefix = ui.SGR(ui.Green, msgPrefix)
 		}
-		fmt.Fprintf(os.Stderr, "%s: %d steps in %s\n", msgPrefix, stats.Done, time.Since(started).Round(time.Millisecond))
+		fmt.Fprintf(os.Stderr, "%s: %d steps in %s\n", msgPrefix, stats.Done, ui.FormatDuration(time.Since(started)))
 
 	}
 	if bopts.REAPIClient == nil {
