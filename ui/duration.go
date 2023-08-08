@@ -10,6 +10,10 @@ import (
 	"time"
 )
 
+// DurationThreshold is a threshold to show event time only if
+// duration is higher than this threshold. b/294443556
+const DurationThreshold = 1 * time.Second
+
 // FormatDuration formats duration in "X.XXs", "XmXX.XXs" or "XhXmXX.XXs".
 func FormatDuration(d time.Duration) string {
 	d = d.Round(10 * time.Millisecond)

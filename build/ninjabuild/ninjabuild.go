@@ -133,8 +133,13 @@ func updateFilegroups(ctx context.Context, config *buildconfig.Config, hashFS *h
 	started := time.Now()
 	ui.Default.PrintLines("update filegroups...")
 	defer func() {
-		// TODO(b/294443556): omit if duration is too short
-		ui.Default.PrintLines(fmt.Sprintf("%6s update filegroups\n", ui.FormatDuration(time.Since(started))))
+		d := time.Since(started)
+		if d < ui.DurationThreshold {
+			// omit if duration is too short
+			ui.Default.PrintLines("")
+			return
+		}
+		ui.Default.PrintLines(fmt.Sprintf("%6s update filegroups\n", ui.FormatDuration(d)))
 	}()
 	fg, err = config.UpdateFilegroups(ctx, hashFS, buildPath, fg)
 	if err != nil {
@@ -162,10 +167,11 @@ func (g *Graph) load(ctx context.Context) error {
 	spin := ui.Default.NewSpinner()
 	spin.Start("loading %s", g.fname)
 	err := p.Load(ctx, g.fname)
-	spin.Stop(errors.New("")) // err will be reported as Build's err.
 	if err != nil {
+		spin.Stop(errors.New("")) // err will be reported as Build's err.
 		return fmt.Errorf("failed to load %s: %w", g.fname, err)
 	}
+	spin.Stop(nil)
 	clog.Infof(ctx, "load %s %s", g.fname, time.Since(started))
 	return nil
 }

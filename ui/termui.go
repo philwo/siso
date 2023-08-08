@@ -50,12 +50,17 @@ func (s *termSpinner) Start(format string, args ...any) {
 func (s *termSpinner) Stop(err error) {
 	close(s.quit)
 	<-s.done
+	d := time.Since(s.started)
 	if err != nil {
-		fmt.Printf("\r\033[K%6s %s failed %v\n", FormatDuration(time.Since(s.started)), s.msg, err)
+		fmt.Printf("\r\033[K%6s %s failed %v\n", FormatDuration(d), s.msg, err)
 		return
 	}
-	// TODO(b/294443556): omit if duration is too short
-	fmt.Printf("\r\033[K%6s %s\n", FormatDuration(time.Since(s.started)), s.msg)
+	if d < DurationThreshold {
+		// omit if duration is too short
+		fmt.Printf("\r\033[K")
+		return
+	}
+	fmt.Printf("\r\033[K%6s %s\n", FormatDuration(d), s.msg)
 }
 
 // TermUI is a terminal-based UI.
