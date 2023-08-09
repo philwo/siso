@@ -916,9 +916,10 @@ func dumpResourceUsageTable(ctx context.Context, semaTraces map[string]semaTrace
 		semaNames = append(semaNames, key)
 	}
 	sort.Strings(semaNames)
-	var sb strings.Builder
-	ltw := tabwriter.NewWriter(&sb, 10, 8, 1, ' ', tabwriter.AlignRight)
-	utw := tabwriter.NewWriter(os.Stdout, 10, 8, 1, ' ', tabwriter.AlignRight)
+	var lsb, usb strings.Builder
+	var needToShow bool
+	ltw := tabwriter.NewWriter(&lsb, 10, 8, 1, ' ', tabwriter.AlignRight)
+	utw := tabwriter.NewWriter(&usb, 10, 8, 1, ' ', tabwriter.AlignRight)
 	fmt.Fprintf(ltw, "resource/capa\tused(err)\twait-avg\t|   s m |\tserv-avg\t|   s m |\t\n")
 	fmt.Fprintf(utw, "resource/capa\tused(err)\twait-avg\t|   s m |\tserv-avg\t|   s m |\t\n")
 	for _, key := range semaNames {
@@ -932,12 +933,16 @@ func dumpResourceUsageTable(ctx context.Context, semaTraces map[string]semaTrace
 		// bucket 5 = [1m,10m)
 		// bucket 6 = [10m,*)
 		if t.waitBuckets[5] > 0 || t.waitBuckets[6] > 0 || t.servBuckets[5] > 0 || t.servBuckets[6] > 0 {
+			needToShow = true
 			fmt.Fprintf(utw, "%s/%s\t%d(%d)\t%s\t%s\t%s\t%s\t\n", t.name, c, t.n, t.nerr, ui.FormatDuration(t.waitAvg), histogram(t.waitBuckets), ui.FormatDuration(t.servAvg), histogram(t.servBuckets))
 		}
 	}
 	ltw.Flush()
 	utw.Flush()
-	clog.Infof(ctx, "resource usage table:\n%s", sb.String())
+	if needToShow {
+		fmt.Print(usb.String())
+	}
+	clog.Infof(ctx, "resource usage table:\n%s", lsb.String())
 }
 
 var histchar = [...]string{"▂", "▃", "▄", "▅", "▆", "▇", "█"}
