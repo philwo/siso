@@ -229,10 +229,14 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 	projectID := c.reopt.UpdateProjectID(c.projectID)
 	var credential cred.Cred
 	if projectID != "" {
+		spin := ui.Default.NewSpinner()
+		spin.Start("init credentials")
 		credential, err = cred.New(ctx, c.authOpts)
 		if err != nil {
+			spin.Stop(errors.New(""))
 			return err
 		}
+		spin.Stop(nil)
 	}
 	// don't use $PWD for current directory
 	// to avoid symlink issue. b/286779149
