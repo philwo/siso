@@ -486,10 +486,11 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 				restat.WOps, restat.WErrs, numBytes(restat.WBytes))
 		}
 		ui.Default.PrintLines(
-			fmt.Sprintf("run:%d+%d pure:%d cache:%d fallback:%d skip:%d\n",
-				stat.Local, stat.Remote, stat.Pure, stat.CacheHit, stat.LocalFallback, stat.Skipped) +
+			"",
+			fmt.Sprintf("local:%d remote:%d cache:%d fallback:%d skip:%d\n",
+				stat.Local+stat.NoExec, stat.Remote, stat.CacheHit, stat.LocalFallback, stat.Skipped)+
 				fmt.Sprintf("deps log:%d logErr:%d scanErr:%d\n",
-					stat.FastDepsSuccess, stat.FastDepsFailed, stat.ScanDepsFailed) +
+					stat.FastDepsSuccess, stat.FastDepsFailed, stat.ScanDepsFailed)+
 				restatLine)
 	}()
 	semas := []*semaphore.Semaphore{

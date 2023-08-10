@@ -16,6 +16,7 @@ import (
 type stats struct {
 	ntotal           atomic.Int32
 	nskipped         atomic.Int32
+	nnoExec          atomic.Int32
 	nfastDepsSuccess atomic.Int32
 	nfastDepsFailed  atomic.Int32
 	nscanDepsFailed  atomic.Int32
@@ -34,6 +35,13 @@ func (s *stats) skipped(ctx context.Context) int {
 		clog.Infof(ctx, "step state: skip")
 	}
 	return int(s.nskipped.Add(1))
+}
+
+func (s *stats) noExec(ctx context.Context) {
+	if log.V(1) {
+		clog.Infof(ctx, "no exec")
+	}
+	s.nnoExec.Add(1)
 }
 
 func (s *stats) fastDepsSuccess(ctx context.Context) {
@@ -109,6 +117,7 @@ type Stats struct {
 	Fail            int // failed actions
 	Pure            int // pure actions
 	Skipped         int // skipped actions, because they were still up-to-date
+	NoExec          int // actions that was completed by handler without execute cmds e.g. stamp, copy
 	FastDepsSuccess int // actions that ran successfully when we used deps from the deps cache
 	FastDepsFailed  int // actions that failed when we used deps from the deps cache
 	ScanDepsFailed  int // actions that scandeps failed
@@ -129,6 +138,7 @@ func (s *stats) stats() Stats {
 		Fail:            int(s.nfail.Load()),
 		Pure:            int(s.npure.Load()),
 		Skipped:         int(s.nskipped.Load()),
+		NoExec:          int(s.nnoExec.Load()),
 		FastDepsSuccess: int(s.nfastDepsSuccess.Load()),
 		FastDepsFailed:  int(s.nfastDepsFailed.Load()),
 		ScanDepsFailed:  int(s.nscanDepsFailed.Load()),

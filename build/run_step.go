@@ -112,6 +112,7 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 			clog.Infof(ctx, "outputs[handler] %d", len(step.cmd.Outputs))
 			err = b.hashFS.Flush(ctx, step.cmd.ExecRoot, step.cmd.Outputs)
 			if err == nil {
+				b.stats.noExec(ctx)
 				return b.done(ctx, step)
 			}
 			clog.Warningf(ctx, "handle step failure: %v", err)
