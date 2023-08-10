@@ -78,6 +78,8 @@ type ninjaCmdRun struct {
 	configName string
 	projectID  string
 
+	jobID string
+
 	offline         bool
 	batch           bool
 	dryRun          bool
@@ -320,13 +322,18 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		if err != nil {
 			return stats, err
 		}
+		// Monitored resource labels have a maximum length of 1024. b/295251052
+		job := c.jobID
+		if len(job) > 1024 {
+			job = job[:1024]
+		}
 		logger, err := clog.New(ctx, client, "siso.log", "siso.step", &mrpb.MonitoredResource{
 			Type: "generic_task",
 			Labels: map[string]string{
 				"project_id": projectID,
 				"location":   hostname,
 				"namespace":  execRoot,
-				"job":        fmt.Sprintf("%q", os.Args),
+				"job":        job,
 				"task_id":    buildID,
 			},
 		})
@@ -609,6 +616,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		defer localDepsLog.Close()
 	}
 	bopts := build.Options{
+		JobID:                c.jobID,
 		ID:                   buildID,
 		ProjectID:            projectID,
 		Metadata:             config.Metadata,
@@ -708,6 +716,8 @@ func (c *ninjaCmdRun) init() {
 	c.Flags.StringVar(&c.dir, "C", ".", "ninja running directory")
 	c.Flags.StringVar(&c.configName, "config", "", "config name passed to starlark")
 	c.Flags.StringVar(&c.projectID, "project", os.Getenv("SISO_PROJECT"), "cloud project ID. can set by $SISO_PROJECT")
+
+	c.Flags.StringVar(&c.jobID, "job_id", uuid.New().String(), "job id for a grouping of related builds. used for cloud logging resource labels job (truncated to 1024), or correlated_invocations_id for remote-apis request metadata")
 
 	c.Flags.BoolVar(&c.offline, "offline", false, "offline mode.")
 	c.Flags.BoolVar(&c.offline, "o", false, "alias of `-offline`")

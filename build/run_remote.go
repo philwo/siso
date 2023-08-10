@@ -22,10 +22,11 @@ func (b *Builder) runRemote(ctx context.Context, step *Step) error {
 	err := b.remoteSema.Do(ctx, func(ctx context.Context) error {
 		started := time.Now()
 		ctx = reapi.NewContext(ctx, &rpb.RequestMetadata{
-			ActionId:         step.cmd.ID,
-			ToolInvocationId: b.id,
-			ActionMnemonic:   step.def.ActionName(),
-			TargetId:         step.cmd.Outputs[0],
+			ActionId:                step.cmd.ID,
+			ToolInvocationId:        b.id,
+			CorrelatedInvocationsId: b.jobID,
+			ActionMnemonic:          step.def.ActionName(),
+			TargetId:                step.cmd.Outputs[0],
 		})
 		clog.Infof(ctx, "step state: remote exec")
 		step.setPhase(stepRemoteRun)

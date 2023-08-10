@@ -76,6 +76,7 @@ type OutputLocalFunc func(context.Context, string) bool
 
 // Options is builder options.
 type Options struct {
+	JobID             string
 	ID                string
 	Metadata          metadata.Metadata
 	ProjectID         string
@@ -131,6 +132,7 @@ var experiments Experiments
 
 // Builder is a builder.
 type Builder struct {
+	jobID string // correlated invocations id.
 	// build session id, tool invocation id.
 	id        string
 	projectID string
@@ -271,9 +273,11 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 	}
 	logger.Infof("numcpu=%d threads:%d - step limit=%d local limit=%d rewrap limit=%d remote limit=%d",
 		numCPU, maxThreads, stepLimit, localLimit, rewrapLimit, remoteLimit)
+	logger.Infof("correlated_invocations_id: %s", opts.JobID)
 	logger.Infof("tool_invocation_id: %s", opts.ID)
 
 	return &Builder{
+		jobID:     opts.JobID,
 		id:        opts.ID,
 		projectID: opts.ProjectID,
 		metadata:  opts.Metadata,
