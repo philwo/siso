@@ -105,7 +105,7 @@ func (s *stats) incTotal() {
 // Stats keeps statistics about the build, such as the number of total, skipped or remote actions.
 type Stats struct {
 	Preproc         int // preprocessor actions
-	Done            int // completed actions
+	Done            int // completed actions, including skipped
 	Fail            int // failed actions
 	Pure            int // pure actions
 	Skipped         int // skipped actions, because they were still up-to-date

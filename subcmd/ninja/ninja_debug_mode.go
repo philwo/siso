@@ -5,6 +5,7 @@
 package ninja
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -20,16 +21,14 @@ type debugMode struct {
 	List        bool // lists modes
 }
 
-func (m *debugMode) check() bool {
+func (m *debugMode) check() error {
 	if m.List {
-		fmt.Fprint(os.Stderr, `debugging modes
+		return errors.New(`debugging modes
   stats        not implemented: print operation counts/timing info
   explain      explain what caused a command to execute
   keepdepfile  not implemented: don't delete depfiles after they're read by ninja
   keeprsp      don't delete @response files on success
-multiple modes can be enabled via -d FOO -d BAR
-`)
-		return true
+multiple modes can be enabled via -d FOO -d BAR`)
 	}
 	if m.Stats {
 		fmt.Fprintln(os.Stderr, "WARNING: `-d stats` is not implemented yet")
@@ -37,8 +36,7 @@ multiple modes can be enabled via -d FOO -d BAR
 	if m.Keepdepfile {
 		fmt.Fprintln(os.Stderr, "WARNING: `-d keepdepfile` is not implemented yet")
 	}
-	return false
-
+	return nil
 }
 
 // String returns mode flag value as comma separated values.

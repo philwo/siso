@@ -160,8 +160,8 @@ func (p *progress) step(ctx context.Context, b *Builder, step *Step, s string) {
 		localProgress := runProgress(b.localSema.NumWaits(), b.localSema.NumServs())
 		remoteProgress := runProgress(b.reproxySema.NumWaits()+b.rewrapSema.NumWaits()+b.remoteSema.NumWaits(), b.reproxySema.NumServs()+b.rewrapSema.NumServs()+b.remoteSema.NumServs())
 		var stepsPerSec string
-		if stat.Done > 0 {
-			stepsPerSec = fmt.Sprintf("%.1f/s ", float64(stat.Done)/time.Since(p.started).Seconds())
+		if stat.Done-stat.Skipped > 0 {
+			stepsPerSec = fmt.Sprintf("%.1f/s ", float64(stat.Done-stat.Skipped)/time.Since(p.started).Seconds())
 		}
 		var cacheHitRatio string
 		if stat.Remote+stat.CacheHit > 0 {

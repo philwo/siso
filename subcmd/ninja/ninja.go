@@ -132,19 +132,39 @@ type ninjaCmdRun struct {
 
 // Run runs the `ninja` subcommand.
 func (c *ninjaCmdRun) Run(a subcommands.Application, args []string, env subcommands.Env) int {
+	started := time.Now()
 	ctx := cli.GetContext(a, c, env)
 	err := parseFlagsFully(&c.Flags)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 2
 	}
-	err = c.run(ctx)
+	stats, err := c.run(ctx)
+	dur := ui.FormatDuration(time.Since(started))
 	if err != nil {
+		var errFlag flagError
+		var errBuild buildError
 		switch {
 		case errors.Is(err, auth.ErrLoginRequired):
 			fmt.Fprintf(os.Stderr, "need to login: run `siso login`\n")
-		case errors.Is(err, errBuild):
-			// error is already printed
+		case errors.Is(err, errNothingToDo):
+			msgPrefix := "Everything is up-to-date"
+			if ui.IsTerminal() {
+				msgPrefix = ui.SGR(ui.Green, msgPrefix)
+			}
+			fmt.Fprintf(os.Stderr, "%s Nothing to do.\n", msgPrefix)
+			return 0
+
+		case errors.As(err, &errFlag):
+			fmt.Fprintf(os.Stderr, "%v\n", err)
+
+		case errors.As(err, &errBuild):
+			msgPrefix := "Build Failure"
+			if ui.IsTerminal() {
+				dur = ui.SGR(ui.Bold, dur)
+				msgPrefix = ui.SGR(ui.BackgroundRed, msgPrefix)
+			}
+			fmt.Fprintf(os.Stderr, "%6s %s: %d done %d failed\n %v\n", dur, msgPrefix, stats.Done-stats.Skipped, stats.Fail, errBuild.err)
 			suggest := fmt.Sprintf("see %s for command output, or %s", c.logFilename(c.outputLogFile), c.logFilename("siso.INFO"))
 			if ui.IsTerminal() {
 				suggest = ui.SGR(ui.Bold, suggest)
@@ -155,10 +175,16 @@ func (c *ninjaCmdRun) Run(a subcommands.Application, args []string, env subcomma
 			if ui.IsTerminal() {
 				msgPrefix = ui.SGR(ui.BackgroundRed, msgPrefix)
 			}
-			fmt.Fprintf(os.Stderr, "%s: %v\n", msgPrefix, err)
+			fmt.Fprintf(os.Stderr, "%6s %s: %v\n", ui.FormatDuration(time.Since(started)), msgPrefix, err)
 		}
 		return 1
 	}
+	msgPrefix := "Build Succeeded"
+	if ui.IsTerminal() {
+		dur = ui.SGR(ui.Bold, dur)
+		msgPrefix = ui.SGR(ui.Green, msgPrefix)
+	}
+	fmt.Fprintf(os.Stderr, "%6s %s: %d steps\n", dur, msgPrefix, stats.Done-stats.Skipped)
 	return 0
 }
 
@@ -191,14 +217,31 @@ func parseFlagsFully(flagSet *flag.FlagSet) error {
 	return flagSet.Parse(targets)
 }
 
-var errBuild = errors.New("build error")
+type buildError struct {
+	err error
+}
 
-func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
+func (b buildError) Error() string {
+	return b.err.Error()
+}
+
+type flagError struct {
+	err error
+}
+
+func (f flagError) Error() string {
+	return f.err.Error()
+}
+
+var errNothingToDo = errors.New("nothing to do")
+
+func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer signals.HandleInterrupt(cancel)()
 
-	if c.debugMode.check() {
-		return nil
+	err = c.debugMode.check()
+	if err != nil {
+		return stats, flagError{err: err}
 	}
 
 	if c.ninjaJobs >= 0 {
@@ -234,7 +277,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 		credential, err = cred.New(ctx, c.authOpts)
 		if err != nil {
 			spin.Stop(errors.New(""))
-			return err
+			return stats, err
 		}
 		spin.Stop(nil)
 	}
@@ -247,13 +290,13 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 		os.Setenv("PWD", pwd)
 	}
 	if err != nil {
-		return err
+		return stats, err
 	}
 	clog.Infof(ctx, "wd: %s", execRoot)
 	if !filepath.IsAbs(c.configRepoDir) {
 		execRoot, err = detectExecRoot(ctx, execRoot, c.configRepoDir)
 		if err != nil {
-			return err
+			return stats, err
 		}
 		c.configRepoDir = filepath.Join(execRoot, c.configRepoDir)
 	}
@@ -271,11 +314,11 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 		// https://cloud.google.com/monitoring/api/resources#tag_generic_task
 		client, err := logging.NewClient(ctx, projectID, credential.ClientOptions()...)
 		if err != nil {
-			return err
+			return stats, err
 		}
 		hostname, err := os.Hostname()
 		if err != nil {
-			return err
+			return stats, err
 		}
 		logger, err := clog.New(ctx, client, "siso.log", "siso.step", &mrpb.MonitoredResource{
 			Type: "generic_task",
@@ -291,7 +334,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 		// TODO(b/288534744): use stdout?
 		fmt.Fprintln(os.Stderr, logger.URL())
 		if err != nil {
-			return err
+			return stats, err
 		}
 		defer logger.Close()
 		ctx = clog.NewContext(ctx, logger)
@@ -342,28 +385,28 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 	}
 	err = os.Chdir(c.dir)
 	if err != nil {
-		return err
+		return stats, err
 	}
 	clog.Infof(ctx, "change dir to %s", c.dir)
 	cwd, err := os.Getwd()
 	if err != nil {
-		return err
+		return stats, err
 	}
 	// recalculate dir as relative to exec_root.
 	// recipe may use absolute path for -C.
 	rdir, err := filepath.Rel(execRoot, cwd)
 	if err != nil {
-		return err
+		return stats, err
 	}
 	if !filepath.IsLocal(rdir) {
-		return fmt.Errorf("dir %q is out of exec root %q", cwd, execRoot)
+		return stats, fmt.Errorf("dir %q is out of exec root %q", cwd, execRoot)
 	}
 	c.dir = rdir
 	clog.Infof(ctx, "working_directory in exec_root: %s", c.dir)
 	c.logSymlink(ctx)
 
 	if c.configFilename == "" {
-		return err
+		return stats, err
 	}
 	flags := make(map[string]string)
 	c.Flags.Visit(func(f *flag.Flag) {
@@ -380,7 +423,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 
 	config, err := buildconfig.New(ctx, c.configFilename, flags, cfgrepos)
 	if err != nil {
-		return err
+		return stats, err
 	}
 
 	if gnArgs, err := os.ReadFile("args.gn"); err == nil {
@@ -423,7 +466,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 		ui.Default.PrintLines(fmt.Sprintf("reapi instance: %s\n", c.reopt.Instance))
 		client, err = reapi.New(ctx, credential, *c.reopt)
 		if err != nil {
-			return err
+			return stats, err
 		}
 		defer client.Close()
 		cacheStore = client.CacheStore()
@@ -443,7 +486,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 	hashFS, err := hashfs.New(ctx, *c.fsopt)
 	spin.Stop(err)
 	if err != nil {
-		return err
+		return stats, err
 	}
 	defer func() {
 		if err != nil || c.dryRun {
@@ -465,18 +508,17 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 	clog.Infof(ctx, "sameTargets:%t hashfs clean:%t", sameTargets, hashFS.IsClean())
 	if !c.clobber && !c.dryRun && !c.debugMode.Explain && sameTargets && hashFS.IsClean() {
 		// TODO: better to check digest of .siso_fs_state?
-		ui.Default.PrintLines("Everything is up-to-date. Nothing to do.\n")
-		return nil
+		return stats, errNothingToDo
 	}
 	os.Remove(lastTargetsFile)
 
 	err = os.MkdirAll(c.logDir, 0755)
 	if err != nil {
-		return err
+		return stats, err
 	}
 	failureSummaryWriter, done, err := c.logWriter(ctx, c.failureSummaryFile)
 	if err != nil {
-		return err
+		return stats, err
 	}
 	defer done(&err)
 	defer func() {
@@ -487,13 +529,13 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 
 	outputLogWriter, done, err := c.logWriter(ctx, c.outputLogFile)
 	if err != nil {
-		return err
+		return stats, err
 	}
 	defer done(&err)
 
 	explainWriter, done, err := c.logWriter(ctx, c.explainFile)
 	if err != nil {
-		return err
+		return stats, err
 	}
 	defer done(&err)
 	if c.debugMode.Explain {
@@ -506,13 +548,13 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 
 	localexecLogWriter, done, err := c.logWriter(ctx, c.localexecLogFile)
 	if err != nil {
-		return err
+		return stats, err
 	}
 	defer done(&err)
 
 	metricsJSONWriter, done, err := c.logWriter(ctx, c.metricsJSON)
 	if err != nil {
-		return err
+		return stats, err
 	}
 	defer done(&err)
 
@@ -526,7 +568,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 	// TODO(b/288826281): produce ninja log in the valid format.
 	ninjaLogWriter, err := os.OpenFile(ninjaLogName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		return err
+		return stats, err
 	}
 	defer func() {
 		clog.Infof(ctx, "close .ninja_log")
@@ -560,7 +602,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 	case "minimum":
 		outputLocal = func(context.Context, string) bool { return false }
 	default:
-		return fmt.Errorf("unknown output local strategy:%q. should be full/greedy/minimum", c.outputLocalStrategy)
+		return stats, fmt.Errorf("unknown output local strategy:%q. should be full/greedy/minimum", c.outputLocalStrategy)
 	}
 	wg.Wait() // wait for localDepsLog loading
 	if localDepsLog != nil {
@@ -598,7 +640,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 		clog.Infof(ctx, "build starts")
 		graph, err := ninjabuild.NewGraph(ctx, c.fname, config, buildPath, hashFS, localDepsLog)
 		if err != nil {
-			return err
+			return stats, err
 		}
 		if !c.batch && sameTargets && !c.clobber {
 			failedTargets, err := loadTargets(ctx, failedTargetsFile)
@@ -608,23 +650,23 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 				lbopts := bopts
 				lbopts.REAPIClient = nil
 				ui.Default.PrintLines(fmt.Sprintf("Building last failed targets: %s...\n", failedTargets))
-				err = doBuild(ctx, graph, lbopts, failedTargets...)
+				stats, err = doBuild(ctx, graph, lbopts, failedTargets...)
 				if errors.Is(err, build.ErrManifestModified) {
 					if c.dryRun {
-						return nil
+						return stats, nil
 					}
 					clog.Infof(ctx, "%s modified. refresh hashfs...", c.fname)
 					// need to refresh cached entries as `gn gen` updated files
 					// but nnja manifest doesn't know what files are updated.
 					err := hashFS.Refresh(ctx, buildPath.ExecRoot)
 					if err != nil {
-						return err
+						return stats, err
 					}
 					clog.Infof(ctx, "refresh hashfs done. build retry")
 					continue
 				}
 				if err != nil {
-					return err
+					return stats, err
 				}
 				os.Remove(failedTargetsFile)
 				ui.Default.PrintLines(fmt.Sprintf(" %s: %s\n", ui.SGR(ui.Green, "last failed targets fixed"), failedTargets))
@@ -632,17 +674,17 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 			}
 		}
 		os.Remove(failedTargetsFile)
-		err = doBuild(ctx, graph, bopts, targets...)
+		stats, err = doBuild(ctx, graph, bopts, targets...)
 		if errors.Is(err, build.ErrManifestModified) {
 			if c.dryRun {
-				return nil
+				return stats, nil
 			}
 			clog.Infof(ctx, "%s modified. refresh hashfs...", c.fname)
 			// need to refresh cached entries as `gn gen` updated files
 			// but nnja manifest doesn't know what files are updated.
 			err := hashFS.Refresh(ctx, buildPath.ExecRoot)
 			if err != nil {
-				return err
+				return stats, err
 			}
 			clog.Infof(ctx, "refresh hashfs done. build retry")
 			continue
@@ -658,7 +700,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (err error) {
 				}
 			}
 		}
-		return err
+		return stats, err
 	}
 }
 
@@ -772,29 +814,28 @@ func defaultCacheDir() string {
 	return filepath.Join(d, "siso")
 }
 
-func doBuild(ctx context.Context, graph *ninjabuild.Graph, bopts build.Options, args ...string) (err error) {
-	started := time.Now()
+func doBuild(ctx context.Context, graph *ninjabuild.Graph, bopts build.Options, args ...string) (stats build.Stats, err error) {
 	clog.Infof(ctx, "rebuild manifest")
 	mfbopts := bopts
 	mfbopts.Clobber = false
 	mfbopts.RebuildManifest = graph.Filename()
 	mfb, err := build.New(ctx, graph, mfbopts)
 	if err != nil {
-		return err
+		return stats, err
 	}
 	err = mfb.Build(ctx, "rebuild manifest", graph.Filename())
 	cerr := mfb.Close()
 	if cerr != nil {
-		return fmt.Errorf("failed to close builder: %w", cerr)
+		return stats, fmt.Errorf("failed to close builder: %w", cerr)
 	}
 	if err != nil {
-		return err
+		return stats, err
 	}
 	// TODO(b/266518906): upload manifest
 
 	b, err := build.New(ctx, graph, bopts)
 	if err != nil {
-		return err
+		return stats, err
 	}
 	defer func(ctx context.Context) {
 		cerr := b.Close()
@@ -872,27 +913,15 @@ func doBuild(ctx context.Context, graph *ninjabuild.Graph, bopts build.Options, 
 	if len(semaTraces) > 0 {
 		dumpResourceUsageTable(ctx, semaTraces)
 	}
-	stats := b.Stats()
+	stats = b.Stats()
 	if err != nil {
-		msgPrefix := "Error"
-		if ui.IsTerminal() {
-			msgPrefix = ui.SGR(ui.BackgroundRed, msgPrefix)
-		}
-		fmt.Fprintf(os.Stderr, "%s: %d done %d failed in %s\n %v\n", msgPrefix, stats.Done, stats.Fail, time.Since(started).Round(time.Millisecond), err)
-		err = errBuild
-	} else {
-		msgPrefix := "Build Succeeded"
-		if ui.IsTerminal() {
-			msgPrefix = ui.SGR(ui.Green, msgPrefix)
-		}
-		fmt.Fprintf(os.Stderr, "%s: %d steps in %s\n", msgPrefix, stats.Done, ui.FormatDuration(time.Since(started)))
-
+		return stats, buildError{err: err}
 	}
 	if bopts.REAPIClient == nil {
-		return err
+		return stats, err
 	}
 	// TODO(b/266518906): wait for completion of uploading manifest
-	return err
+	return stats, err
 }
 
 func detectExecRoot(ctx context.Context, execRoot, crdir string) (string, error) {
