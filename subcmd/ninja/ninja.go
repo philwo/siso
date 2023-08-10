@@ -142,7 +142,9 @@ func (c *ninjaCmdRun) Run(a subcommands.Application, args []string, env subcomma
 		return 2
 	}
 	stats, err := c.run(ctx)
-	dur := ui.FormatDuration(time.Since(started))
+	d := time.Since(started)
+	sps := float64(stats.Done-stats.Skipped) / d.Seconds()
+	dur := ui.FormatDuration(d)
 	if err != nil {
 		var errFlag flagError
 		var errBuild buildError
@@ -166,7 +168,7 @@ func (c *ninjaCmdRun) Run(a subcommands.Application, args []string, env subcomma
 				dur = ui.SGR(ui.Bold, dur)
 				msgPrefix = ui.SGR(ui.BackgroundRed, msgPrefix)
 			}
-			fmt.Fprintf(os.Stderr, "%6s %s: %d done %d failed\n %v\n", dur, msgPrefix, stats.Done-stats.Skipped, stats.Fail, errBuild.err)
+			fmt.Fprintf(os.Stderr, "%6s %s: %d done %d failed - %.02f/s\n %v\n", dur, msgPrefix, stats.Done-stats.Skipped, stats.Fail, sps, errBuild.err)
 			suggest := fmt.Sprintf("see %s for command output, or %s", c.logFilename(c.outputLogFile), c.logFilename("siso.INFO"))
 			if ui.IsTerminal() {
 				suggest = ui.SGR(ui.Bold, suggest)
@@ -186,7 +188,7 @@ func (c *ninjaCmdRun) Run(a subcommands.Application, args []string, env subcomma
 		dur = ui.SGR(ui.Bold, dur)
 		msgPrefix = ui.SGR(ui.Green, msgPrefix)
 	}
-	fmt.Fprintf(os.Stderr, "%6s %s: %d steps\n", dur, msgPrefix, stats.Done-stats.Skipped)
+	fmt.Fprintf(os.Stderr, "%6s %s: %d steps - %.02f/s\n", dur, msgPrefix, stats.Done-stats.Skipped, sps)
 	return 0
 }
 
