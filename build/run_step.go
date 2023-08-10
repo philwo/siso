@@ -284,7 +284,11 @@ func (b *Builder) logOutput(ctx context.Context, msgs []string) {
 				fmt.Fprint(&sb, msg)
 			}
 		}
-		ui.Default.PrintLines(sb.String())
+		out := sb.String()
+		if !strings.HasSuffix(out, "\n") {
+			out += "\n"
+		}
+		ui.Default.PrintLines(out + "\n")
 		return
 	}
 	if strings.HasPrefix(msgs[0], "FALLBACK") {

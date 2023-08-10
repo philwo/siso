@@ -703,7 +703,8 @@ loop:
 	wg.Wait()
 	close(errch)
 	err = errors.Join(errs...)
-	ui.Default.PrintLines(fmt.Sprintf("%s finished: %v", name, err), "", "")
+	// replace 2 progress lines.
+	ui.Default.PrintLines(fmt.Sprintf("%s finished: %v", name, err), "")
 	return err
 }
 
