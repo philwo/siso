@@ -283,6 +283,9 @@ func newStateEntry(ent *pb.Entry, ftime time.Time, dataSource DataSource, m *iom
 		mode |= fs.ModeDir
 	}
 	updatedTime := time.Unix(0, ent.UpdatedTime)
+	if updatedTime.Before(entTime) {
+		updatedTime = entTime
+	}
 	e := &entry{
 		lready:      lready,
 		size:        entDigest.SizeBytes,

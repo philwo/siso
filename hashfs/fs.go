@@ -857,12 +857,6 @@ type entry struct {
 	// digest of action that generated this file.
 	action digest.Digest
 
-	// updatedTime is timestamp when the file has been updated
-	// by Update or UpdateFromLocal.
-	// need to distinguish from mtime for restat=1.
-	// updatedTime should be equal or newer than mtime.
-	updatedTime time.Time
-
 	// isUpdated indicates the file is updated in the session.
 	isUpdated bool
 
@@ -873,7 +867,13 @@ type entry struct {
 
 	mu sync.RWMutex
 	// mtime of entry in hashfs.
-	mtime     time.Time
+	mtime time.Time
+	// updatedTime is timestamp when the file has been updated
+	// by Update or UpdateFromLocal.
+	// need to distinguish from mtime for restat=1.
+	// updatedTime should be equal or newer than mtime.
+	updatedTime time.Time
+
 	d         digest.Digest
 	directory *directory
 }
@@ -972,6 +972,12 @@ func (e *entry) getMtime() time.Time {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	return e.mtime
+}
+
+func (e *entry) getUpdatedTime() time.Time {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.updatedTime
 }
 
 func (e *entry) updateDir(ctx context.Context, hfs *HashFS, dname string) []string {
@@ -1314,9 +1320,10 @@ func (d *directory) storeEntry(ctx context.Context, fname string, e *entry) (*en
 				// if e.d is zero, it may be new local entry
 				// and ee.d has been calculated
 
-				// update mtime.
+				// update mtime and updatedTime.
 				ee.mu.Lock()
 				ee.mtime = e.mtime
+				ee.updatedTime = e.updatedTime
 				ee.mu.Unlock()
 				return ee, "", nil
 			}
@@ -1563,7 +1570,7 @@ func (fi FileInfo) ModTime() time.Time {
 // UpdatedTime is a update time of the file.
 // Usually it is the same with ModTime, but may differ for restat=1.
 func (fi FileInfo) UpdatedTime() time.Time {
-	return fi.e.updatedTime
+	return fi.e.getUpdatedTime()
 }
 
 // IsUpdated returns true if file has been updated in the session.
