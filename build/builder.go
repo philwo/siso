@@ -572,12 +572,15 @@ loop:
 			clog.Infof(ctx, "err from errch: %v", err)
 			done(err)
 			errs = append(errs, err)
+			numServs := b.stepSema.NumServs()
 			hasReady := b.plan.hasReady()
-			if !hasReady {
+			// no active steps and no ready steps?
+			stuck := numServs == 0 && !hasReady
+			if stuck {
 				errs = append([]error{errors.New("cannot make progress due to previous errors")}, errs...)
 			}
 			clog.Infof(ctx, "errs=%d hasReady=%t", len(errs), hasReady)
-			if len(errs) >= b.failuresAllowed || !hasReady {
+			if len(errs) >= b.failuresAllowed || stuck {
 				cancel()
 				break loop
 			}
