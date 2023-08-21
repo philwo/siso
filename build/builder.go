@@ -706,9 +706,13 @@ loop:
 	clog.Infof(ctx, "all pendings becomes ready")
 	wg.Wait()
 	close(errch)
+	for e := range errch {
+		errs = append(errs, e)
+	}
 	err = errors.Join(errs...)
 	// replace 2 progress lines.
 	ui.Default.PrintLines(fmt.Sprintf("%s finished: %v", name, err), "")
+	clog.Infof(ctx, "%s finished: %v", name, err)
 	return err
 }
 
