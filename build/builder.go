@@ -677,6 +677,7 @@ loop:
 			if err != nil && b.failureSummaryWriter != nil {
 				var buf bytes.Buffer
 				fmt.Fprintf(&buf, "%s\n", step.cmd.Desc)
+				fmt.Fprintf(&buf, "%s\n", strings.Join(step.cmd.Args, " "))
 				stderr := step.cmd.Stderr()
 				if len(stderr) > 0 {
 					fmt.Fprint(&buf, ui.StripANSIEscapeCodes(string(stderr)))
