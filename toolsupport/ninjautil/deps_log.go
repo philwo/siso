@@ -40,6 +40,8 @@ type DepsLog struct {
 	deps    []*depsRecord
 
 	w *os.File
+
+	needsRecompact bool
 }
 
 const fileSignature = "# ninjadeps\n"
@@ -171,7 +173,6 @@ func readPathRecord(ctx context.Context, buf []byte, size int, numDepsLogPaths i
 
 // NewDepsLog reads or creates a new deps log.
 // If there are read errors, returns a truncated deps log.
-// TODO(ukai): recompact the deps log.
 func NewDepsLog(ctx context.Context, fname string) (*DepsLog, error) {
 	if fname == "" {
 		return nil, errors.New("no ninja_deps")
@@ -202,7 +203,8 @@ func NewDepsLog(ctx context.Context, fname string) (*DepsLog, error) {
 	buf := make([]byte, maxRecordSize+1)
 	// Perform read loop. Truncates with current state of deps log if error
 	// encountered while parsing (i.e. broken input should never cause error)
-	// TODO(ukai): recompact the deps log.
+	totalRecords := 0
+	uniqueRecords := 0
 readLoop:
 	for {
 		offset, err = f.Seek(0, os.SEEK_CUR)
@@ -238,7 +240,10 @@ readLoop:
 			}
 			// don't update if deps record is invalid, but allow continuation
 			if outID != -1 {
-				depsLog.update(ctx, outID, deps)
+				totalRecords++
+				if !depsLog.update(ctx, outID, deps) {
+					uniqueRecords++
+				}
 			}
 		} else {
 			pathname, err := readPathRecord(ctx, buf, size, len(depsLog.paths))
@@ -250,13 +255,94 @@ readLoop:
 			depsLog.paths = append(depsLog.paths, pathname)
 		}
 	}
-	clog.Infof(ctx, "ninja deps %s => paths=%d, deps=%d", depsLog.fname, len(depsLog.paths), len(depsLog.deps))
+	// need recompact the log if there are too many dead records.
+	// https://github.com/ninja-build/ninja/blob/36843d387cb0621c1a288179af223d4f1410be73/src/deps_log.cc#L280
+	const minCompactionEntryCount = 1000
+	const compactionRatio = 3
+	depsLog.needsRecompact = totalRecords > minCompactionEntryCount && totalRecords > uniqueRecords*compactionRatio
+
+	clog.Infof(ctx, "ninja deps %s => paths=%d, deps=%d total=%d uniqu=%d recompact=%t", depsLog.fname, len(depsLog.paths), len(depsLog.deps), totalRecords, uniqueRecords, depsLog.needsRecompact)
 	depsLog.rPaths = depsLog.paths
 	for k, v := range depsLog.pathIdx {
 		depsLog.rPathIdx[k] = v
 	}
 	depsLog.rDeps = depsLog.deps
+
 	return depsLog, nil
+}
+
+// NeedsRecompact reports whether it needs recompact or not.
+func (d *DepsLog) NeedsRecompact() bool {
+	return d.needsRecompact
+}
+
+// Recompact recompacts deps log file, i.e.
+// rewrites the known log entries, throwing away old data.
+func (d *DepsLog) Recompact(ctx context.Context) error {
+	clog.Infof(ctx, ".siso_deps recompact")
+	err := d.Close()
+	if err != nil {
+		return fmt.Errorf("failed to close before recompact: %w", err)
+	}
+
+	tempPath := d.fname + ".recompact"
+	// openForWrite() opens for append.  Make sure it's not appending to a
+	// left-over file from a previous recompaction attempt that crashed somehow.
+	os.Remove(tempPath)
+
+	nd := &DepsLog{
+		fname:    tempPath,
+		rPathIdx: make(map[string]int),
+		pathIdx:  make(map[string]int),
+	}
+	err = nd.openForWrite(ctx)
+	if err != nil {
+		return err
+	}
+
+	// write out all deps again.
+	for i := 0; i < len(d.rDeps); i++ {
+		deps := d.rDeps[i]
+		if deps == nil {
+			continue
+		}
+		// TODO: ignore if entry has deps= for now?
+		out := d.rPaths[i]
+		mtime := time.Unix(int64(deps.mtime), 0)
+		_, err = nd.Record(ctx, out, mtime, deps.inputs)
+		if err != nil {
+			nd.Close()
+			return fmt.Errorf("record in recompaction: %w", err)
+		}
+	}
+	err = nd.Close()
+	if err != nil {
+		return fmt.Errorf("close recompacted deps log: %w", err)
+	}
+
+	err = os.Remove(d.fname)
+	if err != nil {
+		return fmt.Errorf("remove old deps log: %w", err)
+	}
+	err = os.Rename(nd.fname, d.fname)
+	if err != nil {
+		return fmt.Errorf("rename compacted deps log: %w", err)
+	}
+
+	d.mu.Lock()
+	d.rPaths = nd.paths
+	for k, v := range nd.pathIdx {
+		d.rPathIdx[k] = v
+	}
+	d.rDeps = nd.deps
+
+	d.paths = nd.paths
+	d.pathIdx = nd.pathIdx
+	d.deps = nd.deps
+	d.mu.Unlock()
+
+	d.needsRecompact = false
+	return nil
 }
 
 // Close closes the deps log.
@@ -267,8 +353,11 @@ func (d *DepsLog) Close() error {
 	return d.w.Close()
 }
 
-func (d *DepsLog) update(ctx context.Context, outID int32, deps *depsRecord) {
-	if int(outID) >= len(d.deps) {
+// update updates deps records of output identified by outID
+// and returns true if updated, false if added.
+func (d *DepsLog) update(ctx context.Context, outID int32, deps *depsRecord) bool {
+	existed := int(outID) < len(d.deps)
+	if !existed {
 		if int(outID) < cap(d.deps) {
 			d.deps = d.deps[:outID+1]
 		} else {
@@ -284,6 +373,7 @@ func (d *DepsLog) update(ctx context.Context, outID int32, deps *depsRecord) {
 		clog.Infof(ctx, "update deps out=%d deps=%v", outID, deps)
 	}
 	d.deps[outID] = deps
+	return existed
 }
 
 // Get returns deps log for the output.
@@ -322,6 +412,12 @@ func (d *DepsLog) lookupDepRecord(ctx context.Context, i int) (*depsRecord, erro
 	return deps, nil
 }
 
+func (d *DepsLog) openForWrite(ctx context.Context) error {
+	var err error
+	d.w, err = os.OpenFile(d.fname, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	return err
+}
+
 // Record records deps log for the output. This will write to disk.
 // Returns whether any deps were updated.
 func (d *DepsLog) Record(ctx context.Context, output string, mtime time.Time, deps []string) (bool, error) {
@@ -333,8 +429,7 @@ func (d *DepsLog) Record(ctx context.Context, output string, mtime time.Time, de
 	defer d.mu.Unlock()
 
 	if d.w == nil {
-		var err error
-		d.w, err = os.OpenFile(d.fname, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		err := d.openForWrite(ctx)
 		if err != nil {
 			return false, err
 		}

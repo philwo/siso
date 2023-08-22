@@ -6,6 +6,7 @@ package ninjautil
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -84,5 +85,121 @@ func TestReadWriteDepsLog(t *testing.T) {
 	}
 	if !mtime.Equal(t2) {
 		t.Errorf(`dl2.Get(ctx, "out2.o")=_, %v, _; want _, %v, _`, mtime, t2)
+	}
+}
+
+func TestRecompact(t *testing.T) {
+	ctx := context.Background()
+	fname := filepath.Join(t.TempDir(), "mydepslog")
+	t1 := time.Unix(1, 0)
+	t2 := time.Unix(2, 0)
+	t3 := time.Unix(3, 0)
+
+	var fileSize1 int64
+	t.Logf("Write some deps to the file and grab its size.")
+	{
+		dl, err := NewDepsLog(ctx, fname)
+		if err != nil {
+			t.Fatalf("NewDepsLog(ctx, %s)=_, %v; want nil error", fname, err)
+		}
+		r, err := dl.Record(ctx, "out.o", t1, []string{"foo.h", "bar.h"})
+		if err != nil || !r {
+			t.Fatalf(`dl.Record(ctx, "out.o", %v, {"foo.h", "bar.h")=%t, %v; want true, nil error`, t1, r, err)
+		}
+		r, err = dl.Record(ctx, "other_out.o", t2, []string{"foo.h", "baz.h"})
+		if err != nil || !r {
+			t.Fatalf(`dl.Record(ctx, "other_out.o", %v, {"foo.h", "baz.h")=%t, %v; want true, nil error`, t2, r, err)
+		}
+		err = dl.Close()
+		if err != nil {
+			t.Fatalf("dl.Close()=%v; want nil err", err)
+		}
+
+		fi, err := os.Stat(fname)
+		if err != nil {
+			t.Fatalf("Stat(%q)=_, %v; want nil err", fname, err)
+		}
+		fileSize1 = fi.Size()
+		t.Logf("depslog size=%d", fileSize1)
+	}
+
+	var fileSize2 int64
+	t.Logf("Now reload the file, and add slightly different deps.")
+	{
+		dl, err := NewDepsLog(ctx, fname)
+		if err != nil {
+			t.Fatalf("NewDepsLog(ctx, %s)=_, %v; want nil error", fname, err)
+		}
+		r, err := dl.Record(ctx, "out.o", t3, []string{"foo.h"})
+		if err != nil || !r {
+			t.Fatalf(`dl.Record(ctx, "out.o", %v, {"foo.h"})=%t, %v; want true, nil error`, t1, r, err)
+		}
+		err = dl.Close()
+		if err != nil {
+			t.Fatalf("dl.Close()=%v; want nil err", err)
+		}
+
+		fi, err := os.Stat(fname)
+		if err != nil {
+			t.Fatalf("Stat(%q)=_, %v; want nil err", fname, err)
+		}
+		fileSize2 = fi.Size()
+		t.Logf("depslog size=%d", fileSize2)
+	}
+	if fileSize2 <= fileSize1 {
+		t.Errorf("deps log size %d must be bigger than %d", fileSize2, fileSize1)
+	}
+
+	var fileSize3 int64
+	t.Logf("Now reload the file, verify the new deps have replaced the old, then recompact.")
+	{
+		dl, err := NewDepsLog(ctx, fname)
+		if err != nil {
+			t.Fatalf("NewDepsLog(ctx, %s)=_, %v; want nil error", fname, err)
+		}
+		deps, ts, err := dl.Get(ctx, "out.o")
+		want := []string{"foo.h"}
+		if !cmp.Equal(deps, want) || !ts.Equal(t3) || err != nil {
+			t.Errorf(`dl.Get(ctx, "out.o")=%v, %v, %v; want %v, %v, %v`, deps, ts, err, want, t3, nil)
+		}
+
+		deps, ts, err = dl.Get(ctx, "other_out.o")
+		want = []string{"foo.h", "baz.h"}
+		if !cmp.Equal(deps, want) || !ts.Equal(t2) || err != nil {
+			t.Errorf(`d1.Get(ctx, "other_out.o")=%v, %v, %v; want %v, %v, %v`, deps, ts, err, want, t2, nil)
+		}
+
+		err = dl.Recompact(ctx)
+		if err != nil {
+			t.Errorf("dl.Recompact(ctx)=%v; want nil err", err)
+		}
+
+		t.Logf("The in-memory deps graph should still be valid after recompaction.")
+		deps, ts, err = dl.Get(ctx, "out.o")
+		want = []string{"foo.h"}
+		if !cmp.Equal(deps, want) || !ts.Equal(t3) || err != nil {
+			t.Errorf(`dl.Get(ctx, "out.o")=%v, %v, %v; want %v, %v, %v`, deps, ts, err, want, t3, nil)
+		}
+		deps, ts, err = dl.Get(ctx, "other_out.o")
+		want = []string{"foo.h", "baz.h"}
+		if !cmp.Equal(deps, want) || !ts.Equal(t2) || err != nil {
+			t.Errorf(`d1.Get("other_out.o")=%v, %v, %v; want %v, %v, %v`, deps, ts, err, want, t2, nil)
+		}
+
+		err = dl.Close()
+		if err != nil {
+			t.Fatalf("dl.Close()=%v; want nil err", err)
+		}
+
+		t.Logf("The file should have shrunk a bit for the smaller deps.")
+		fi, err := os.Stat(fname)
+		if err != nil {
+			t.Fatalf("Stat(%q)=_, %v; want nil err", fname, err)
+		}
+		fileSize3 = fi.Size()
+		t.Logf("depslog size=%d", fileSize3)
+	}
+	if fileSize3 >= fileSize2 {
+		t.Errorf("deps log size %d must be smaller than %d", fileSize3, fileSize2)
 	}
 }

@@ -21,7 +21,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"text/tabwriter"
 	"time"
 
@@ -34,6 +33,7 @@ import (
 	"go.chromium.org/luci/cipd/version"
 	"go.chromium.org/luci/common/cli"
 	"go.chromium.org/luci/common/system/signals"
+	"golang.org/x/sync/errgroup"
 	"google.golang.org/api/option"
 	mrpb "google.golang.org/genproto/googleapis/api/monitoredres"
 	"google.golang.org/grpc/grpclog"
@@ -442,25 +442,32 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	}
 
 	spin := ui.Default.NewSpinner()
-	// depsLogBucket
 
+	var eg errgroup.Group
 	var localDepsLog *ninjautil.DepsLog
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	eg.Go(func() error {
 		err := os.MkdirAll(filepath.Dir(c.depsLogFile), 0755)
 		if err != nil {
 			clog.Warningf(ctx, "failed to mkdir for deps log: %v", err)
-			return
+			return err
 		}
 		depsLog, err := ninjautil.NewDepsLog(ctx, c.depsLogFile)
 		if err != nil {
 			clog.Warningf(ctx, "failed to load deps log: %v", err)
-			return
+			return err
+		}
+		if !depsLog.NeedsRecompact() {
+			localDepsLog = depsLog
+			return nil
+		}
+		err = depsLog.Recompact(ctx)
+		if err != nil {
+			clog.Warningf(ctx, "failed to recompact deps log: %v", err)
+			return err
 		}
 		localDepsLog = depsLog
-	}()
+		return nil
+	})
 
 	if !c.localCacheEnable {
 		c.cacheDir = ""
@@ -613,7 +620,11 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	default:
 		return stats, fmt.Errorf("unknown output local strategy:%q. should be full/greedy/minimum", c.outputLocalStrategy)
 	}
-	wg.Wait() // wait for localDepsLog loading
+
+	spin.Start("loading/recompacting deps log")
+	err = eg.Wait()
+	spin.Stop(err)
+
 	if localDepsLog != nil {
 		defer localDepsLog.Close()
 	}
