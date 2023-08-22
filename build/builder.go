@@ -569,9 +569,11 @@ loop:
 				break loop
 			}
 		case err := <-errch:
-			clog.Infof(ctx, "err from errch: %v", err)
 			done(err)
-			errs = append(errs, err)
+			if err != nil {
+				clog.Infof(ctx, "err from errch: %v", err)
+				errs = append(errs, err)
+			}
 			numServs := b.stepSema.NumServs()
 			hasReady := b.plan.hasReady()
 			// no active steps and no ready steps?
@@ -579,7 +581,7 @@ loop:
 			if stuck {
 				errs = append([]error{errors.New("cannot make progress due to previous errors")}, errs...)
 			}
-			clog.Infof(ctx, "errs=%d hasReady=%t", len(errs), hasReady)
+			clog.Infof(ctx, "errs=%d numServs=%d hasReady=%t stuck=%t", len(errs), numServs, hasReady, stuck)
 			if len(errs) >= b.failuresAllowed || stuck {
 				cancel()
 				break loop
@@ -693,23 +695,25 @@ loop:
 			// unref for GC to reclaim memory.
 			tc = nil
 			step.cmd = nil
-			if err != nil {
-				select {
-				case <-ctx.Done():
-				case errch <- err:
-				default:
-					clog.Warningf(ctx, "failed to send err channel: %v", err)
-				}
+			select {
+			case <-ctx.Done():
+			case errch <- err:
+			default:
+				clog.Warningf(ctx, "failed to send err channel: %v", err)
 			}
 		}(step)
 	}
 	clog.Infof(ctx, "all pendings becomes ready")
+	errdone := make(chan error)
+	go func() {
+		for e := range errch {
+			errs = append(errs, e)
+		}
+		errdone <- errors.Join(errs...)
+	}()
 	wg.Wait()
 	close(errch)
-	for e := range errch {
-		errs = append(errs, e)
-	}
-	err = errors.Join(errs...)
+	err = <-errdone
 	// replace 2 progress lines.
 	ui.Default.PrintLines(fmt.Sprintf("%s finished: %v", name, err), "")
 	clog.Infof(ctx, "%s finished: %v", name, err)

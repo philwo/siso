@@ -5,7 +5,9 @@
 package ninja
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -72,6 +74,12 @@ func setupBuild(ctx context.Context, t *testing.T, dir string) (build.Options, b
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() {
+		err := depsLog.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
 	graph, err := ninjabuild.NewGraph(ctx, "build.ninja", config, path, hashFS, depsLog)
 	if err != nil {
 		t.Fatal(err)
@@ -180,6 +188,90 @@ build all: phony out1 out2 out3 out4 out5 out6
 	t.Logf("err %v; %#v", err, stats)
 	if got, want := stats.Fail, 6; got != want {
 		t.Errorf("stas.Fail=%d; want=%d", got, want)
+	}
+}
+
+func TestBuild_KeepGoing(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+
+	setupFiles(t, dir, map[string]string{
+		"build/config/siso/main.star": `
+load("@builtin//struct.star", "module")
+def init(ctx):
+  return module(
+    "config",
+    step_config = "{}",
+    filegroups = {},
+    handlers = {},
+  )
+`,
+		"success.py": `
+import sys
+with open(sys.argv[1], "w") as f:
+  f.write("")
+`,
+		"out/siso/build.ninja": `
+rule success
+  command = python3 ../../success.py ${out}
+rule fail
+  command = fail
+build out1: fail
+build out2: fail
+build out3: success
+build out4: success
+build out5: success
+build out6: success
+build out7: success out1
+build out8: success out2
+build out9: success out3
+build out10: success out4
+build out11: success out5
+build out12: success out6
+build all: phony out1 out2 out3 out4 out5 out6 out7 out8 out9 out10 out11 out12
+`})
+	opt, graph := setupBuild(ctx, t, dir)
+	opt.UnitTest = true
+	opt.FailuresAllowed = 11
+	var metricsBuffer bytes.Buffer
+	opt.MetricsJSONWriter = &metricsBuffer
+
+	b, err := build.New(ctx, graph, opt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = b.Build(ctx, "build", "all")
+	if err == nil {
+		t.Fatal(`b.Build(ctx, "build", "all")=nil, want err`)
+	}
+
+	stats := b.Stats()
+	t.Logf("err %v; %#v", err, stats)
+	if got, want := stats.Fail, 2; got != want {
+		t.Errorf("stats.Fail=%d; want=%d", got, want)
+	}
+	if got, want := stats.Done, 8; got != want {
+		t.Errorf("stats.Done=%d; want=%d", got, want)
+	}
+	dec := json.NewDecoder(bytes.NewReader(metricsBuffer.Bytes()))
+	for dec.More() {
+		var m build.StepMetric
+		err := dec.Decode(&m)
+		if err != nil {
+			t.Errorf("decode %v", err)
+		}
+		switch filepath.Base(m.Output) {
+		case "out1", "out2":
+			if !m.Err {
+				t.Errorf("%s err=%t; want true", m.Output, m.Err)
+			}
+		case "out3", "out4", "out5", "out6", "out9", "out10", "out11", "out12":
+			if m.Err {
+				t.Errorf("%s err=%t; want false", m.Output, m.Err)
+			}
+		default:
+			t.Errorf("%s unexpected", m.Output)
+		}
 	}
 }
 
