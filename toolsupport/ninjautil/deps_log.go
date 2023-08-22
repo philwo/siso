@@ -198,7 +198,9 @@ func NewDepsLog(ctx context.Context, fname string) (*DepsLog, error) {
 	}
 	f := bytes.NewReader(fbuf)
 	if err = verifySignature(ctx, f); err != nil {
-		return nil, err
+		clog.Warningf(ctx, "ninja_deps %s error: %v", fname, err)
+		createNewDepsLogFile(ctx, fname)
+		return depsLog, nil
 	}
 	if err = verifyVersion(ctx, f); err != nil {
 		clog.Warningf(ctx, "ninja_deps %s error: %v", fname, err)
@@ -296,7 +298,7 @@ func (d *DepsLog) Recompact(ctx context.Context) error {
 	// openForWrite() opens for append.  Make sure it's not appending to a
 	// left-over file from a previous recompaction attempt that crashed somehow.
 	os.Remove(tempPath)
-
+	createNewDepsLogFile(ctx, tempPath)
 	nd := &DepsLog{
 		fname:    tempPath,
 		rPathIdx: make(map[string]int),
@@ -357,7 +359,9 @@ func (d *DepsLog) Close() error {
 	if d == nil || d.w == nil {
 		return nil
 	}
-	return d.w.Close()
+	err := d.w.Close()
+	d.w = nil
+	return err
 }
 
 // update updates deps records of output identified by outID
