@@ -45,7 +45,7 @@ type DepsLog struct {
 }
 
 const fileSignature = "# ninjadeps\n"
-const currentVersion = 3
+const currentVersion = 4
 const maxRecordSize = 1<<19 - 1
 
 // record length.
@@ -66,8 +66,7 @@ func (h recordHeader) RecordSize() int {
 }
 
 type depsRecord struct {
-	// TODO(b/270278015): use 64bit timestamp to avoid year 2038 problem.
-	mtime  int32
+	mtime  int64
 	inputs []string
 }
 
@@ -92,8 +91,11 @@ func verifyVersion(ctx context.Context, f io.Reader) error {
 	if log.V(3) {
 		clog.Infof(ctx, "version=%d: %v", ver, err)
 	}
-	if err != nil || ver != currentVersion {
-		return fmt.Errorf("wrong version %d: %w", ver, err)
+	if err != nil {
+		return fmt.Errorf("failed to read version: %w", err)
+	}
+	if ver != currentVersion {
+		return fmt.Errorf("wrong version %d", ver)
 	}
 	return nil
 }
@@ -114,7 +116,8 @@ func readDepsRecord(ctx context.Context, buf []byte, size int, depsLogPaths []st
 	// dependency record
 	// array of 4-byte integers
 	//   output path id
-	//   output path mtime
+	//   output path mtime_lo
+	//   output path mtime_hi
 	//   input path id, ...
 	rec := make([]int32, size/4)
 	err := binary.Read(bytes.NewReader(buf[:size]), binary.LittleEndian, rec)
@@ -125,8 +128,10 @@ func readDepsRecord(ctx context.Context, buf []byte, size int, depsLogPaths []st
 		return -1, nil, err
 	}
 	outID := rec[0]
-	mtime := rec[1]
-	rec = rec[2:]
+	mtimeLo := rec[1]
+	mtimeHi := rec[2]
+	mtime := int64(uint32(mtimeHi))<<32 | int64(uint32(mtimeLo))
+	rec = rec[3:]
 	deps := &depsRecord{mtime: mtime, inputs: make([]string, 0, len(rec))}
 	for _, id := range rec {
 		if int(id) < 0 || int(id) >= len(depsLogPaths) {
@@ -196,7 +201,9 @@ func NewDepsLog(ctx context.Context, fname string) (*DepsLog, error) {
 		return nil, err
 	}
 	if err = verifyVersion(ctx, f); err != nil {
-		return nil, err
+		clog.Warningf(ctx, "ninja_deps %s error: %v", fname, err)
+		createNewDepsLogFile(ctx, fname)
+		return depsLog, nil
 	}
 	var offset int64
 	// TODO(ukai): this reflects original ninja impl, may not be optimal
@@ -308,7 +315,7 @@ func (d *DepsLog) Recompact(ctx context.Context) error {
 		}
 		// TODO: ignore if entry has deps= for now?
 		out := d.rPaths[i]
-		mtime := time.Unix(int64(deps.mtime), 0)
+		mtime := time.Unix(0, deps.mtime)
 		_, err = nd.Record(ctx, out, mtime, deps.inputs)
 		if err != nil {
 			nd.Close()
@@ -398,7 +405,7 @@ func (d *DepsLog) Get(ctx context.Context, output string) ([]string, time.Time, 
 	if deps == nil {
 		return nil, mtime, errors.New("no deps log entry")
 	}
-	return deps.inputs, time.Unix(int64(deps.mtime), 0), nil
+	return deps.inputs, time.Unix(0, deps.mtime), nil
 }
 
 func (d *DepsLog) lookupDepRecord(ctx context.Context, i int) (*depsRecord, error) {
@@ -478,7 +485,7 @@ func (d *DepsLog) Record(ctx context.Context, output string, mtime time.Time, de
 	if !willUpdateDeps {
 		return false, nil
 	}
-	d.update(ctx, int32(i), &depsRecord{mtime: int32(mtime.Unix()), inputs: deps})
+	d.update(ctx, int32(i), &depsRecord{mtime: mtime.UnixNano(), inputs: deps})
 	err := d.recordDeps(ctx, i, mtime, depIDs)
 	if err != nil {
 		return false, err
@@ -541,20 +548,25 @@ func (d *DepsLog) recordPath(ctx context.Context, i int, path string) error {
 }
 
 func (d *DepsLog) recordDeps(ctx context.Context, i int, mtime time.Time, inputs []int) error {
-	size := 4 + 4 + 4*len(inputs)
+	size := 4 + 4 + 4 + 4*len(inputs)
 	if size > maxRecordSize {
 		return fmt.Errorf("too large record %d for %s", size, d.paths[i])
 	}
 	// header: size, high bit set.
 	// array of 4-byte integers
 	//   output path id
-	//   output path mtime
+	//   output path mtime_lo
+	//   output path mtime_hi
 	//   input path id
 	header := uint32(size) | (1 << 31)
 	var buf bytes.Buffer
 	binary.Write(&buf, binary.LittleEndian, int32(header))
 	binary.Write(&buf, binary.LittleEndian, int32(i))
-	binary.Write(&buf, binary.LittleEndian, int32(mtime.Unix()))
+	t := mtime.UnixNano()
+	mtimeLo := int32(t & 0xffffffff)
+	binary.Write(&buf, binary.LittleEndian, mtimeLo)
+	mtimeHi := int32(t >> 32)
+	binary.Write(&buf, binary.LittleEndian, mtimeHi)
 	for _, id := range inputs {
 		binary.Write(&buf, binary.LittleEndian, int32(id))
 	}
