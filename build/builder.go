@@ -423,7 +423,6 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 		}
 		clog.Infof(ctx, "build %v", err)
 	}()
-	started := time.Now()
 	// scheduling
 	// TODO: run asynchronously?
 	schedOpts := schedulerOption{
@@ -445,6 +444,7 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 		return nil
 	}
 	ui.Default.PrintLines("\n", fmt.Sprintf("%s %d\n", name, stat.Total), "")
+	started := time.Now()
 	var mftime time.Time
 	if b.rebuildManifest != "" {
 		fi, err := b.hashFS.Stat(ctx, b.path.ExecRoot, filepath.Join(b.path.Dir, b.rebuildManifest))
