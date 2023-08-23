@@ -836,6 +836,7 @@ func (hfs *HashFS) Flush(ctx context.Context, execRoot string, files []string) e
 func (hfs *HashFS) Refresh(ctx context.Context, execRoot string) error {
 	// TODO: optimize?
 	state := hfs.State(ctx)
+	hfs.directory = &directory{}
 	return hfs.SetState(ctx, state)
 }
 

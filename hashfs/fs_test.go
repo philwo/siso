@@ -918,3 +918,51 @@ func TestXattr(t *testing.T) {
 		t.Errorf("read %d; want 0", stats.RBytes)
 	}
 }
+
+func TestRefresh(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	dir, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hashFS, err := hashfs.New(ctx, hashfs.Option{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer hashFS.Close(ctx)
+	setupFiles(t, dir, map[string]string{
+		"out/siso/gen/expected.json": "[]",
+	})
+	fi, err := hashFS.Stat(ctx, dir, "out/siso/gen/expected.json")
+	if err != nil {
+		t.Fatalf("hashfs.Stat(ctx, %q, %q)=%v, %v; want nil err", dir, "out/siso/gen/expected.json", fi, err)
+	}
+	omtime := fi.ModTime()
+	time.Sleep(1 * time.Microsecond)
+	setupFiles(t, dir, map[string]string{
+		"out/siso/gen/expected.json": `["foo"]`,
+	})
+	fullname := filepath.Join(dir, "out/siso/gen/expected.json")
+	err = os.Chtimes(fullname, time.Now(), time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	lfi, err := os.Stat(fullname)
+	if err != nil {
+		t.Fatalf("stat(%q)=%v, %v; want nil err", fullname, lfi, err)
+	}
+	if !lfi.ModTime().After(omtime) {
+		t.Errorf("disk mtime=%v must be newer than state mtime=%v", lfi.ModTime(), omtime)
+	}
+	err = hashFS.Refresh(ctx, dir)
+	if err != nil {
+		t.Fatalf("hashFS.Refresh(ctx, %q)=%v; want nil err", dir, err)
+	}
+	// fullname should be invalidated after Refresh, so not exist in state.
+	m := hashfs.StateMap(hashFS.State(ctx))
+	_, ok := m[fullname]
+	if ok {
+		t.Fatalf("entry for %s exists", fullname)
+	}
+}
