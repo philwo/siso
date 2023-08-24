@@ -107,7 +107,7 @@ func (depsMSVC) DepsAfterRun(ctx context.Context, b *Builder, step *Step) ([]str
 	// so records cmd.inputs used too.
 	for _, in := range step.cmd.Inputs {
 		switch ext := filepath.Ext(in); ext {
-		case ".h", ".hxx", ".hpp":
+		case ".h", ".hxx", ".hpp", ".inc":
 			// include header files only.
 			// other files/dirs may add unnecessary deps
 			// and break no-op check.
@@ -258,7 +258,7 @@ func expandCPPCaseSensitiveIncludes(ctx context.Context, b *Builder, files []str
 		}
 		seen[f] = true
 		switch strings.ToLower(filepath.Ext(f)) {
-		case ".h", ".hxx", ".hpp":
+		case ".h", ".hxx", ".hpp", ".inc":
 			clog.Infof(ctx, "expand cs %s -> header", f)
 		default:
 			clog.Infof(ctx, "expand cs %s -> ignore", f)
