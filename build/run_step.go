@@ -241,7 +241,9 @@ func cmdOutput(ctx context.Context, result string, cmd *execute.Cmd, cmdline, ru
 	}
 	var msgs []string
 	msgs = append(msgs, fmt.Sprintf("%s %s %s\n", result, cmd, cmd.Desc))
-	msgs = append(msgs, fmt.Sprintf("err: %v\n", err))
+	if err != nil {
+		msgs = append(msgs, fmt.Sprintf("err: %v\n", err))
+	}
 	if rule != "" {
 		msgs = append(msgs, fmt.Sprintf("siso_rule:%s\n", rule))
 	}

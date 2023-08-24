@@ -27,18 +27,24 @@ func TestCmdOutput(t *testing.T) {
 			return fmt.Errorf("msgs=%d; want >=2", len(msgs))
 		}
 		var errs []error
-		msg := msgs[0]
+		i := 0
+		msg := msgs[i]
+		i++
 		if !strings.Contains(msg, result) {
 			errs = append(errs, fmt.Errorf("want result=%q", result))
 		}
 		if !strings.Contains(msg, desc) {
 			errs = append(errs, fmt.Errorf("want desc=%q", desc))
 		}
-		msg = msgs[1]
-		if err != nil && !strings.Contains(msg, err.Error()) {
-			errs = append(errs, fmt.Errorf("want err=%q", err))
+		if err != nil {
+			msg = msgs[i]
+			i++
+			if !strings.Contains(msg, err.Error()) {
+				errs = append(errs, fmt.Errorf("want err=%q", err))
+			}
 		}
-		msg = msgs[2]
+		msg = msgs[i]
+		i++
 		if rule != "" {
 			if len(msgs) < 4 {
 				return fmt.Errorf("msgs=%d; want >=3", len(msgs))
@@ -46,7 +52,7 @@ func TestCmdOutput(t *testing.T) {
 			if !strings.Contains(msg, fmt.Sprintf("siso_rule:%s", rule)) {
 				errs = append(errs, fmt.Errorf("want siso_rule=%s", rule))
 			}
-			msg = msgs[3]
+			msg = msgs[i]
 		}
 		if !strings.Contains(msg, actionName) {
 			errs = append(errs, fmt.Errorf("want action=%q", actionName))
