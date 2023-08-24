@@ -478,6 +478,117 @@ func TestStat_IntermediateDir(t *testing.T) {
 	}
 }
 
+func TestUpdate(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	dir, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	opt := hashfs.Option{}
+	hfs, err := hashfs.New(ctx, opt)
+	if err != nil {
+		t.Fatalf("New=%v", err)
+	}
+	defer func() {
+		if hfs == nil {
+			return
+		}
+		err := hfs.Close(ctx)
+		if err != nil {
+			t.Fatalf("hfs.Close=%v", err)
+		}
+	}()
+
+	fname := "out/siso/gen/foo.stamp"
+	_, err = hfs.Stat(ctx, dir, fname)
+	if !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("hfs.Stat(ctx, %q,%q)=%v; want %v", dir, fname, err, fs.ErrNotExist)
+	}
+	now := time.Now()
+	h := sha256.New()
+	h.Write([]byte("command line"))
+	cmdhash := h.Sum(nil)
+	action := digest.FromBytes("action", []byte("action proto"))
+
+	t.Logf("update restat=false")
+	err = hfs.Update(ctx, dir, []merkletree.Entry{
+		{
+			Name: fname,
+			Data: digest.FromBytes("empty", nil),
+		},
+	}, false, now, cmdhash, action.Digest())
+	if err != nil {
+		t.Fatalf("hfs.Update(ctx, %q, {%q}, false, %v, %v, %v)=%v; want nil err", dir, fname, now, cmdhash, action.Digest(), err)
+	}
+
+	fi, err := hfs.Stat(ctx, dir, fname)
+	if err != nil {
+		t.Fatalf("hfs.Stat(ctx, %q, %q)=%v, %v; want nil err", dir, fname, fi, err)
+	}
+	if !now.Equal(fi.ModTime()) {
+		t.Errorf("modtime=%v; want %v", fi.ModTime(), now)
+	}
+	if !now.Equal(fi.UpdatedTime()) {
+		t.Errorf("updated_time=%v; want %v", fi.UpdatedTime(), now)
+	}
+
+	t.Logf("update restat=true")
+	mtime := now
+	time.Sleep(1 * time.Millisecond)
+	now = time.Now()
+	if now.Equal(mtime) {
+		t.Fatalf("mtime=%v now=%v", mtime, now)
+	}
+	err = hfs.Update(ctx, dir, []merkletree.Entry{
+		{
+			Name: fname,
+			Data: digest.FromBytes("empty", nil),
+		},
+	}, true, now, cmdhash, action.Digest())
+	if err != nil {
+		t.Fatalf("hfs.Update(ctx, %q, {%q}, true, %v, %v, %v)=%v; want nil err", dir, fname, now, cmdhash, action.Digest(), err)
+	}
+
+	fi, err = hfs.Stat(ctx, dir, fname)
+	if err != nil {
+		t.Fatalf("hfs.Stat(ctx, %q, %q)=%v, %v; want nil err", dir, fname, fi, err)
+	}
+	if !mtime.Equal(fi.ModTime()) {
+		t.Errorf("modtime=%v; want %v", fi.ModTime(), mtime)
+	}
+	if !now.Equal(fi.UpdatedTime()) {
+		t.Errorf("updated_time=%v; want %v", fi.UpdatedTime(), now)
+	}
+
+	t.Logf("update restat=true new data")
+	time.Sleep(1 * time.Millisecond)
+	now = time.Now()
+	if now.Equal(mtime) {
+		t.Fatalf("mtime=%v now=%v", mtime, now)
+	}
+	err = hfs.Update(ctx, dir, []merkletree.Entry{
+		{
+			Name: fname,
+			Data: digest.FromBytes(fname, []byte("new data")),
+		},
+	}, true, now, cmdhash, action.Digest())
+	if err != nil {
+		t.Fatalf("hfs.Update(ctx, %q, {%q}, true, %v, %v, %v)=%v; want nil err", dir, fname, now, cmdhash, action.Digest(), err)
+	}
+
+	fi, err = hfs.Stat(ctx, dir, fname)
+	if err != nil {
+		t.Fatalf("hfs.Stat(ctx, %q, %q)=%v, %v; want nil err", dir, fname, fi, err)
+	}
+	if !now.Equal(fi.ModTime()) {
+		t.Errorf("modtime=%v; want %v", fi.ModTime(), now)
+	}
+	if !now.Equal(fi.UpdatedTime()) {
+		t.Errorf("updated_time=%v; want %v", fi.UpdatedTime(), now)
+	}
+}
+
 func TestUpdateFromLocal(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()

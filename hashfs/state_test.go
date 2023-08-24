@@ -121,7 +121,7 @@ func TestState_Dir(t *testing.T) {
 		{
 			Name: "gen/generate_all",
 		},
-	}, mtime, cmdhash, d)
+	}, false, mtime, cmdhash, d)
 	if err != nil {
 		t.Fatalf("Update %v; want nil err", err)
 	}
