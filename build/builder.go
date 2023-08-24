@@ -597,6 +597,16 @@ loop:
 		wg.Add(1)
 		go func(step *Step) {
 			defer wg.Done()
+			var err error
+			defer func() {
+				// send errch after done is called. b/297301112
+				select {
+				case <-ctx.Done():
+				case errch <- err:
+				default:
+					clog.Warningf(ctx, "failed to send err channel: %v", err)
+				}
+			}()
 			defer done(nil)
 			stepStart := time.Now()
 			tc := trace.New(ctx, step.def.String())
@@ -645,7 +655,7 @@ loop:
 				span.SetAttr("next_id", step.def.Next().String())
 			}
 			span.SetAttr("backtraces", stepBacktraces(step))
-			err := b.runStep(sctx, step)
+			err = b.runStep(sctx, step)
 			st, ok := status.FromError(err)
 			if !ok {
 				st = status.FromContextError(err)
@@ -694,12 +704,6 @@ loop:
 			// unref for GC to reclaim memory.
 			tc = nil
 			step.cmd = nil
-			select {
-			case <-ctx.Done():
-			case errch <- err:
-			default:
-				clog.Warningf(ctx, "failed to send err channel: %v", err)
-			}
 		}(step)
 	}
 	clog.Infof(ctx, "all pendings becomes ready")
