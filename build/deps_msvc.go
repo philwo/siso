@@ -97,18 +97,48 @@ func (depsMSVC) DepsAfterRun(ctx context.Context, b *Builder, step *Step) ([]str
 	output = append(output, step.cmd.Stdout()...)
 	_, dspan := trace.NewSpan(ctx, "parse-deps")
 	deps, filteredOutput := msvcutil.ParseShowIncludes(output)
+
+	m := make(map[string]bool)
+	for _, d := range deps {
+		m[d] = true
+	}
+	// clang-cl /showIncludes doesn't report correctly.
+	// b/294927170 https://github.com/llvm/llvm-project/issues/58726
+	// so records cmd.inputs used too.
+	for _, in := range step.cmd.Inputs {
+		switch ext := filepath.Ext(in); ext {
+		case ".h", ".hxx", ".hpp":
+			// include header files only.
+			// other files/dirs may add unnecessary deps
+			// and break no-op check.
+		default:
+			continue
+		}
+		in = b.path.MustToWD(in)
+		if m[in] {
+			continue
+		}
+		m[in] = true
+		deps = append(deps, in)
+	}
+
 	dspan.SetAttr("deps", len(deps))
 	dspan.Close(nil)
-	clog.Infof(ctx, "deps-for-msvc stdout=%d stderr=%d -> deps=%d extra=%q", len(step.cmd.Stdout()), len(step.cmd.Stderr()), len(deps), filteredOutput)
+
 	step.cmd.StdoutWriter().Write(filteredOutput)
 	step.cmd.StderrWriter().Write(nil)
 	// /showIncludes doesn't include source file.
 	for _, arg := range step.cmd.Args {
 		switch ext := filepath.Ext(arg); ext {
 		case ".cpp", ".cxx", ".cc", ".c", ".S", ".s":
+			if m[arg] {
+				continue
+			}
+			m[arg] = true
 			deps = append(deps, arg)
 		}
 	}
+	clog.Infof(ctx, "deps-for-msvc stdout=%d stderr=%d -> deps=%d inputs=%d extra=%q", len(step.cmd.Stdout()), len(step.cmd.Stderr()), len(deps), len(step.cmd.Inputs), filteredOutput)
 	return deps, nil
 }
 
