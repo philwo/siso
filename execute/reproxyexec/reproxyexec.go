@@ -215,7 +215,10 @@ func createRequest(ctx context.Context, cmd *execute.Cmd, execTimeout time.Durat
 			// Necessary for metadata such as digests to be returned.
 			IncludeActionLog: true,
 		},
-		ToolchainInputs: cmd.ToolInputs,
+		// b/297458470: Do not apply cmd.ToolInputs because Reproxy adds
+		// the directories of ToolchainInputs to PATH and it may cause
+		// "docker: argument list too long" error.
+		ToolchainInputs: nil,
 		Metadata:        md,
 	}, nil
 }
