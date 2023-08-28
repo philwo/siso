@@ -167,6 +167,7 @@ type Builder struct {
 	scanDeps     *scandeps.ScanDeps
 
 	localSema *semaphore.Semaphore
+	poolSemas map[string]*semaphore.Semaphore
 	localExec localexec.LocalExec
 
 	rewrapSema *semaphore.Semaphore
@@ -428,6 +429,7 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 		}
 		clog.Infof(ctx, "build %v", err)
 	}()
+
 	// scheduling
 	// TODO: run asynchronously?
 	schedOpts := schedulerOption{
@@ -449,6 +451,32 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 		return nil
 	}
 	ui.Default.PrintLines("\n", fmt.Sprintf("%s %d\n", name, stat.Total), "")
+
+	var pools []string
+	localLimit := b.localSema.Capacity()
+	stepLimits := b.graph.StepLimits(ctx)
+	for k := range stepLimits {
+		pools = append(pools, k)
+	}
+	sort.Strings(pools)
+	b.poolSemas = map[string]*semaphore.Semaphore{}
+	for _, k := range pools {
+		v := stepLimits[k]
+		name := "pool=" + k
+		if strings.HasSuffix(name, "_pool") {
+			// short name for semaphore/resource name
+			// e.g. build_toolchain_action_pool -> pool=action
+			s := strings.Split(name, "_")
+			name = "pool=" + s[len(s)-2]
+		}
+		// No matter what pools you specify, ninja will never run more concurrent jobs than the default parallelism,
+		if v > localLimit {
+			v = localLimit
+		}
+		b.poolSemas[k] = semaphore.New(name, v)
+		clog.Infof(ctx, "limit %s -> %s=%d", k, name, v)
+	}
+
 	started := time.Now()
 	var mftime time.Time
 	if b.rebuildManifest != "" {

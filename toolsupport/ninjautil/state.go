@@ -4,7 +4,9 @@
 
 package ninjautil
 
-import "fmt"
+import (
+	"fmt"
+)
 
 var (
 	// The default pool is used when no other pool is specified. It has no limit on the number of concurrent actions.
@@ -22,6 +24,16 @@ type Pool struct {
 	name string
 	// Depth is the maximum number of actions allowed to run concurrently.
 	depth int
+}
+
+// Name returns the pool name.
+func (p *Pool) Name() string {
+	return p.name
+}
+
+// Depth returns the depth of the pool.
+func (p *Pool) Depth() int {
+	return p.depth
 }
 
 func newPool(name string, depth int) *Pool {
@@ -69,6 +81,15 @@ func (s *State) addPool(pool *Pool) {
 func (s *State) LookupPool(poolName string) (*Pool, bool) {
 	p, ok := s.pools[poolName]
 	return p, ok
+}
+
+// Pools returns a map of pools
+func (s *State) Pools() map[string]*Pool {
+	m := make(map[string]*Pool)
+	for k, v := range s.pools {
+		m[k] = v
+	}
+	return m
 }
 
 func (s *State) addEdge(rule *Rule) *Edge {

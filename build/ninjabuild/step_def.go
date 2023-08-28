@@ -278,6 +278,9 @@ func (s *StepDef) Binding(name string) string {
 		return ""
 	case "timeout":
 		return s.rule.Timeout
+	case "pool":
+		pool := s.edge.Pool()
+		return pool.Name()
 	}
 	return s.edge.Binding(name)
 }

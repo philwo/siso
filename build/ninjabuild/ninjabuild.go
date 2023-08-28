@@ -287,3 +287,15 @@ func (g *Graph) RecordDepsLog(ctx context.Context, output string, mtime time.Tim
 func (g *Graph) InputDeps(ctx context.Context) map[string][]string {
 	return g.globals.stepConfig.InputDeps
 }
+
+// StepLimits returns a map of maximum number of concurrent steps by pool name.
+func (g *Graph) StepLimits(ctx context.Context) map[string]int {
+	m := make(map[string]int)
+	for k, v := range g.nstate.Pools() {
+		if v == nil || v.Depth() == 0 {
+			continue
+		}
+		m[k] = v.Depth()
+	}
+	return m
+}

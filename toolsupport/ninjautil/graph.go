@@ -154,6 +154,11 @@ func (e *Edge) Rule() *Rule {
 	return e.rule
 }
 
+// Pool returns a pool associated to the edge.
+func (e *Edge) Pool() *Pool {
+	return e.pool
+}
+
 // Inputs returns input nodes of the edge.
 func (e *Edge) Inputs() []*Node {
 	return e.inputs

@@ -35,6 +35,10 @@ func (g fakeGraph) InputDeps(ctx context.Context) map[string][]string {
 	return g.inputDeps
 }
 
+func (g fakeGraph) StepLimits(ctx context.Context) map[string]int {
+	return map[string]int{}
+}
+
 func TestDepsGCCFixCmdInputs(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("depsGCC is not used on windows")

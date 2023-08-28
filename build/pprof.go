@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 
 	"infra/build/siso/build/metadata"
 	"infra/build/siso/o11y/clog"
@@ -76,6 +77,11 @@ func (tp *tracePprof) Add(ctx context.Context, tc *trace.Context) {
 		case "rbe:input", "rbe:exec", "rbe:output":
 			bt := append([]string{span.Name, "rbe:worker", "serv:remoteexec"}, backtraces...)
 			tp.p.Add(span.Duration(), bt)
+		default:
+			if strings.HasPrefix(span.Name, "pool=") {
+				bt := append([]string{span.Name}, backtraces...)
+				tp.p.Add(span.Duration(), bt)
+			}
 		}
 	}
 }

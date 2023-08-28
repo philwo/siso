@@ -53,6 +53,10 @@ type Graph interface {
 	// path is exec root relative and label contains ':'.
 	// it's "input_deps" in Starlark config.
 	InputDeps(context.Context) map[string][]string
+
+	// StepLimits returns a map of maximum number of concurrent
+	// steps by pool name.
+	StepLimits(context.Context) map[string]int
 }
 
 // plan maintains which step to execute next.

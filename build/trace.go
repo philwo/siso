@@ -377,7 +377,11 @@ func (te *traceEvents) Add(ctx context.Context, tc *trace.Context) {
 			te.mu.Unlock()
 			obj = te.rbeWorkerSpanEvent(span, attr, workerID)
 		default:
-			continue
+			if strings.HasPrefix(span.Name, "serv:pool=") {
+				obj = te.runLocalSpanEvent(span, attr)
+			} else {
+				continue
+			}
 		}
 		te.q <- obj
 	}

@@ -42,6 +42,11 @@ func (b *Builder) runLocal(ctx context.Context, step *Step) error {
 	}
 	stateMessage := "local exec"
 	sema := b.localSema
+	pool := step.def.Binding("pool")
+	if s, ok := b.poolSemas[pool]; ok {
+		sema = s
+		stateMessage += " (pool=" + pool + ")"
+	}
 	phase := stepLocalRun
 	enableTrace := experiments.Enabled("file-access-trace", "enable file-access-trace")
 	switch {
