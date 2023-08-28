@@ -82,6 +82,7 @@ type ninjaCmdRun struct {
 
 	offline         bool
 	batch           bool
+	verbose         bool
 	dryRun          bool
 	clobber         bool
 	failuresAllowed int
@@ -651,6 +652,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		TraceJSON:            c.traceJSON,
 		Pprof:                c.buildPprof,
 		Clobber:              c.clobber,
+		Verbose:              c.verbose,
 		DryRun:               c.dryRun,
 		FailuresAllowed:      c.failuresAllowed,
 		KeepRSP:              c.debugMode.Keeprsp,
@@ -743,6 +745,8 @@ func (c *ninjaCmdRun) init() {
 		}
 	}
 	c.Flags.BoolVar(&c.batch, "batch", !ui.IsTerminal(), "batch mode. prefer thoughput over low latency for build failures.")
+	c.Flags.BoolVar(&c.verbose, "verbose", false, "show all command lines while building")
+	c.Flags.BoolVar(&c.verbose, "v", false, "show all command lines while building (alias of --verbose)")
 	c.Flags.BoolVar(&c.dryRun, "n", false, "dry run")
 	c.Flags.BoolVar(&c.clobber, "clobber", false, "clobber build")
 	c.Flags.IntVar(&c.failuresAllowed, "k", 1, "keep going until N jobs fail (0 means inifinity)")

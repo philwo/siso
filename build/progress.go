@@ -18,6 +18,7 @@ import (
 
 type progress struct {
 	started time.Time
+	verbose bool
 	mu      sync.Mutex
 	ts      time.Time
 
@@ -51,6 +52,7 @@ func (as *activeSteps) Pop() any {
 
 func (p *progress) start(ctx context.Context, b *Builder) {
 	p.started = time.Now()
+	p.verbose = b.verbose
 	p.done = make(chan struct{})
 	p.updateStopped = make(chan struct{})
 	go p.update(ctx, b)
@@ -91,7 +93,7 @@ func (p *progress) update(ctx context.Context, b *Builder) {
 				}
 			}
 			p.mu.Unlock()
-			if !ui.IsTerminal() {
+			if !ui.IsTerminal() || b.verbose {
 				continue
 			}
 			if si == nil || si.step == nil {
@@ -144,12 +146,24 @@ func (p *progress) step(ctx context.Context, b *Builder, step *Step, s string) {
 		}
 	}
 	p.mu.Unlock()
-	if ui.IsTerminal() && (time.Since(t) < 30*time.Millisecond || strings.HasPrefix(s, progressPrefixFinish)) {
+	if ui.IsTerminal() && !p.verbose && (time.Since(t) < 30*time.Millisecond || strings.HasPrefix(s, progressPrefixFinish)) {
 		return
 	}
 	stat := b.stats.stats()
 	var lines []string
-	if ui.IsTerminal() {
+	msg := s
+	switch {
+	case p.verbose:
+		if strings.HasPrefix(s, progressPrefixStart) && step != nil {
+			msg = fmt.Sprintf("%.02f%% %s %s",
+				float64(stat.Done)*100/float64(stat.Total),
+				ui.FormatDuration(time.Since(b.start)),
+				step.def.Binding("command"))
+			fmt.Println(msg)
+		} else if step == nil {
+			fmt.Println(msg)
+		}
+	case ui.IsTerminal():
 		runProgress := func(waits, servs int) string {
 			if waits > 0 {
 				return ui.SGR(ui.BackgroundRed, fmt.Sprintf("%d", waits+servs))
@@ -180,16 +194,17 @@ func (p *progress) step(ctx context.Context, b *Builder, step *Step, s string) {
 			stepsPerSec,
 			cacheHitRatio,
 			fallback))
+		fallthrough
+	default:
+		if step != nil {
+			msg = fmt.Sprintf("%.2f%% %s %s",
+				float64(stat.Done)*100/float64(stat.Total),
+				ui.FormatDuration(time.Since(b.start)),
+				s)
+		}
+		lines = append(lines, msg)
+		ui.Default.PrintLines(lines...)
 	}
-	msg := s
-	if step != nil {
-		msg = fmt.Sprintf("%.2f%% %s %s",
-			float64(stat.Done)*100/float64(stat.Total),
-			ui.FormatDuration(time.Since(b.start)),
-			s)
-	}
-	lines = append(lines, msg)
-	ui.Default.PrintLines(lines...)
 	p.mu.Lock()
 	p.ts = time.Now()
 	p.mu.Unlock()

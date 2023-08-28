@@ -105,6 +105,9 @@ type Options struct {
 	// Clobber forces to rebuild ignoring existing generated files.
 	Clobber bool
 
+	// Verbose shows all command lines while building rather than step description.
+	Verbose bool
+
 	// DryRun just prints the command to build, but does nothing.
 	DryRun bool
 
@@ -197,6 +200,7 @@ type Builder struct {
 	pprofUploader        *pprof.Uploader
 
 	clobber bool
+	verbose bool
 	dryRun  bool
 
 	failuresAllowed int
@@ -315,6 +319,7 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 		tracePprof:           newTracePprof(opts.Pprof),
 		pprofUploader:        opts.PprofUploader,
 		clobber:              opts.Clobber,
+		verbose:              opts.Verbose,
 		dryRun:               opts.DryRun,
 		failuresAllowed:      opts.FailuresAllowed,
 		keepRSP:              opts.KeepRSP,
@@ -721,8 +726,10 @@ loop:
 	wg.Wait()
 	close(errch)
 	err = <-errdone
-	// replace 2 progress lines.
-	ui.Default.PrintLines(fmt.Sprintf("%s finished: %v", name, err), "")
+	if !b.verbose {
+		// replace 2 progress lines.
+		ui.Default.PrintLines(fmt.Sprintf("%s finished: %v", name, err), "")
+	}
 	clog.Infof(ctx, "%s finished: %v", name, err)
 	return err
 }
