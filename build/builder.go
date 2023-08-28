@@ -571,7 +571,9 @@ loop:
 			done(err)
 			if err != nil {
 				clog.Infof(ctx, "err from errch: %v", err)
-				errs = append(errs, err)
+				if !errors.Is(err, context.Canceled) {
+					errs = append(errs, err)
+				}
 			}
 			numServs := b.stepSema.NumServs()
 			hasReady := b.plan.hasReady()
@@ -710,7 +712,9 @@ loop:
 	errdone := make(chan error)
 	go func() {
 		for e := range errch {
-			errs = append(errs, e)
+			if e != nil && !errors.Is(e, context.Canceled) {
+				errs = append(errs, e)
+			}
 		}
 		errdone <- errors.Join(errs...)
 	}()
