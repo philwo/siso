@@ -181,7 +181,7 @@ func (re *RemoteExec) processResult(ctx context.Context, action digest.Digest, c
 	}
 	entries := cmd.EntriesFromResult(ctx, cmd.HashFS.DataSource(), result)
 	clog.Infof(ctx, "output entries %d", len(entries))
-	err = cmd.HashFS.Update(ctx, cmd.ExecRoot, entries, cmd.Restat, now, cmd.CmdHash, action)
+	err = cmd.HashFS.Update(ctx, cmd.ExecRoot, entries, now, cmd.CmdHash, action)
 	if err != nil {
 		return err
 	}

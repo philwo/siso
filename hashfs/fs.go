@@ -517,8 +517,6 @@ func (hfs *HashFS) Forget(ctx context.Context, root string, inputs []string) {
 }
 
 // Entries gets merkletree entries for inputs at root.
-// For missing entries, it just ignores such inputs.
-// It will return when store error (e.g. symlink loop etc).
 func (hfs *HashFS) Entries(ctx context.Context, root string, inputs []string) ([]merkletree.Entry, error) {
 	ctx, span := trace.NewSpan(ctx, "fs-entries")
 	defer span.Close(nil)
@@ -642,48 +640,15 @@ func (hfs *HashFS) Entries(ctx context.Context, root string, inputs []string) ([
 }
 
 // Update updates cache information for entries under execRoot with mtime and cmdhash.
-// If restat=true and no change in entry, just update updatedTime but keep mtime for the entry.
-func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []merkletree.Entry, restat bool, mtime time.Time, cmdhash []byte, action digest.Digest) error {
+func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []merkletree.Entry, mtime time.Time, cmdhash []byte, action digest.Digest) error {
 	ctx, span := trace.NewSpan(ctx, "fs-update")
 	defer span.Close(nil)
 	hfs.clean = false
-	fileMtimes := make(map[string]time.Time)
-	updatedTime := mtime
-	if restat {
-		m := make(map[string]digest.Digest)
-		names := make([]string, 0, len(entries))
-		for _, ent := range entries {
-			names = append(names, ent.Name)
-			m[ent.Name] = ent.Data.Digest()
-		}
-		// ignore errors as if it doesn't exist
-		// since we'll overwrite such files soon.
-		ents, err := hfs.Entries(ctx, execRoot, names)
-		if err != nil {
-			clog.Warningf(ctx, "update restat entries %v", err)
-		} else {
-			for _, ent := range ents {
-				if m[ent.Name] != ent.Data.Digest() {
-					continue
-				}
-				fi, err := hfs.Stat(ctx, execRoot, ent.Name)
-				if err != nil {
-					clog.Warningf(ctx, "update restat stat %s: %v", ent.Name, err)
-				} else {
-					fileMtimes[ent.Name] = fi.ModTime()
-				}
-			}
-		}
-	}
 	for _, ent := range entries {
 		fname := filepath.Join(execRoot, ent.Name)
 		fname = filepath.ToSlash(fname)
 		switch {
 		case !ent.Data.IsZero():
-			fileMtime := mtime
-			if t, ok := fileMtimes[ent.Name]; ok {
-				fileMtime = t
-			}
 			lready := make(chan bool, 1)
 			lready <- true
 			mode := fs.FileMode(0644)
@@ -693,14 +658,14 @@ func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []merkle
 			e := &entry{
 				lready:  lready,
 				size:    ent.Data.Digest().SizeBytes,
-				mtime:   fileMtime,
+				mtime:   mtime,
 				mode:    mode,
 				cmdhash: cmdhash,
 				action:  action,
 				src:     ent.Data,
 				d:       ent.Data.Digest(),
 
-				updatedTime: updatedTime,
+				updatedTime: mtime,
 				isUpdated:   true,
 			}
 			err := hfs.dirStoreAndNotify(ctx, fname, e)
@@ -718,7 +683,7 @@ func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []merkle
 				action:  action,
 				target:  ent.Target,
 
-				updatedTime: updatedTime,
+				updatedTime: mtime,
 				isUpdated:   true,
 			}
 			err := hfs.dirStoreAndNotify(ctx, fname, e)
@@ -736,7 +701,7 @@ func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []merkle
 				action:    action,
 				directory: &directory{},
 
-				updatedTime: updatedTime,
+				updatedTime: mtime,
 				isUpdated:   true,
 			}
 			err := hfs.dirStoreAndNotify(ctx, fname, e)
