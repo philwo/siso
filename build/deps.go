@@ -139,6 +139,20 @@ func depsFixCmd(ctx context.Context, b *Builder, step *Step, deps []string) {
 func depsCmd(ctx context.Context, b *Builder, step *Step) error {
 	if step.useReclient() {
 		// no need to scan deps.
+		// but need to remove missing inputs from cmd.Inputs
+		// because we'll record header inputs for deps=msvc in deps log.
+		inputs := make([]string, 0, len(step.cmd.Inputs))
+		for _, in := range step.cmd.Inputs {
+			if _, err := b.hashFS.Stat(ctx, b.path.ExecRoot, in); err == nil {
+				inputs = append(inputs, in)
+			} else if log.V(1) {
+				clog.Infof(ctx, "remove missing inputs %s: %v", in, err)
+			}
+		}
+		if len(inputs) != len(step.cmd.Inputs) {
+			clog.Infof(ctx, "deps remove missing inputs %d -> %d", len(step.cmd.Inputs), len(inputs))
+			step.cmd.Inputs = inputs
+		}
 		return nil
 	}
 	ds, found := depsProcessors[step.cmd.Deps]

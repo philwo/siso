@@ -102,6 +102,35 @@ func setupBuild(ctx context.Context, t *testing.T, dir string) (build.Options, b
 	return opt, graph
 }
 
+func openDepsLog(ctx context.Context, t *testing.T, dir string) *ninjautil.DepsLog {
+	t.Helper()
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		err := os.Chdir(wd)
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+	err = os.Chdir(filepath.Join(dir, "out/siso"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	depsLog, err := ninjautil.NewDepsLog(ctx, ".siso_deps")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		err := depsLog.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+	return depsLog
+}
+
 func TestBuild_SwallowFaiulres(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
