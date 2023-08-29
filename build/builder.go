@@ -612,7 +612,7 @@ loop:
 			hasReady := b.plan.hasReady()
 			// no active steps and no ready steps?
 			stuck := numServs == 0 && !hasReady
-			if stuck {
+			if stuck && len(errs) > 0 {
 				errs = append([]error{errors.New("cannot make progress due to previous errors")}, errs...)
 			}
 			clog.Infof(ctx, "errs=%d numServs=%d hasReady=%t stuck=%t", len(errs), numServs, hasReady, stuck)
