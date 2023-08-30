@@ -170,9 +170,22 @@ func (p *progress) step(ctx context.Context, b *Builder, step *Step, s string) {
 			}
 			return fmt.Sprintf("%d", servs)
 		}
+		localWaits := b.localSema.NumWaits()
+		localServs := b.localSema.NumServs()
+		for _, p := range b.poolSemas {
+			localWaits += p.NumWaits()
+			localServs += p.NumServs()
+		}
+		localProgress := runProgress(localWaits, localServs)
 
-		localProgress := runProgress(b.localSema.NumWaits(), b.localSema.NumServs())
-		remoteProgress := runProgress(b.reproxySema.NumWaits()+b.rewrapSema.NumWaits()+b.remoteSema.NumWaits(), b.reproxySema.NumServs()+b.rewrapSema.NumServs()+b.remoteSema.NumServs())
+		remoteWaits := b.remoteSema.NumWaits()
+		remoteServs := b.remoteSema.NumServs()
+		remoteWaits += b.reproxySema.NumWaits()
+		remoteServs += b.reproxySema.NumWaits()
+		remoteWaits += b.rewrapSema.NumWaits()
+		remoteServs += b.rewrapSema.NumWaits()
+		remoteProgress := runProgress(remoteWaits, remoteServs)
+
 		var stepsPerSec string
 		if stat.Done-stat.Skipped > 0 {
 			stepsPerSec = fmt.Sprintf("%.1f/s ", float64(stat.Done-stat.Skipped)/time.Since(p.started).Seconds())
