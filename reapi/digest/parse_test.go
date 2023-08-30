@@ -37,6 +37,10 @@ func TestParse(t *testing.T) {
 				SizeBytes: 310,
 			},
 		},
+		{
+			name:  "empty-from-remote-apis-sdks",
+			input: "/0",
+		},
 	} {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {

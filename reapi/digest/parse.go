@@ -21,8 +21,6 @@ var digestPattern = regexp.MustCompile(`^([0-9a-fA-F]{64})/([0-9]+)$`)
 //   - hash/size_bytes
 //   - json representation of digest.
 //   - proto text representation of digest.
-//
-// TODO(b/266518906): move this utility to somewhere else for subcmd/{recall, fetch, cache}.
 func Parse(s string) (Digest, error) {
 	var d Digest
 	m := digestPattern.FindStringSubmatch(s)
@@ -33,6 +31,11 @@ func Parse(s string) (Digest, error) {
 		if err == nil {
 			return d, nil
 		}
+	}
+	// remote-apis-sdks emits "/0" for no digest.
+	// e.g. `action_digest:"/0"`
+	if s == "/0" {
+		return d, nil
 	}
 	err := json.Unmarshal([]byte(s), &d)
 	if err == nil {
