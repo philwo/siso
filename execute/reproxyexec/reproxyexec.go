@@ -18,7 +18,6 @@ import (
 	"github.com/bazelbuild/remote-apis-sdks/go/pkg/command"
 	"github.com/bazelbuild/remote-apis-sdks/go/pkg/retry"
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
-	log "github.com/golang/glog"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -174,15 +173,6 @@ func createRequest(ctx context.Context, cmd *execute.Cmd, execTimeout time.Durat
 		strategy = ppb.ExecutionStrategy_Value(res)
 	} else {
 		return nil, fmt.Errorf("invalid execution strategy %s", cmd.REProxyConfig.ExecStrategy)
-	}
-
-	// Manually override remote_local_fallback to remote.
-	// Local fallback should always use our logic, not reproxy.
-	if strategy == ppb.ExecutionStrategy_REMOTE_LOCAL_FALLBACK {
-		if log.V(1) {
-			clog.Infof(ctx, "overriding reproxy REMOTE_LOCAL_FALLBACK to REMOTE")
-		}
-		strategy = ppb.ExecutionStrategy_REMOTE
 	}
 
 	md := &ppb.Metadata{EventTimes: map[string]*cpb.TimeInterval{

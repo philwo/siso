@@ -8,8 +8,11 @@ import (
 	"context"
 	"time"
 
+	log "github.com/golang/glog"
+
 	"infra/build/siso/o11y/clog"
 	"infra/build/siso/o11y/trace"
+	ppb "infra/third_party/reclient/api/proxy"
 )
 
 func (b *Builder) runReproxy(ctx context.Context, step *Step) error {
@@ -24,10 +27,15 @@ func (b *Builder) runReproxy(ctx context.Context, step *Step) error {
 	if err != nil && !experiments.Enabled("ignore-missing-local-inputs", "step %s missing inputs: %v", step, err) {
 		return err
 	}
+	err = b.prepareLocalOutdirs(ctx, step)
+	if err != nil {
+		return err
+	}
 	err = b.reproxySema.Do(ctx, func(ctx context.Context) error {
 		started := time.Now()
 		clog.Infof(ctx, "step state: remote exec (via reproxy)")
 		step.setPhase(stepRemoteRun)
+		maybeDisableLocalFallback(ctx, step)
 		err := b.reproxyExec.Run(ctx, step.cmd)
 		step.setPhase(stepOutput)
 		if err == nil {
@@ -51,4 +59,18 @@ func (b *Builder) runReproxy(ctx context.Context, step *Step) error {
 		clog.Warningf(ctx, "failed to update deps: %v", err)
 	}
 	return err
+}
+
+func maybeDisableLocalFallback(ctx context.Context, step *Step) {
+	// Manually override remote_local_fallback to remote when falback is disabled.
+	// TODO: b/297807325 - Siso relies on Reclient metrics and monitoring at this moment.
+	// CompileErrorRatioAlert checks remote failure/local success case. So it
+	// needs to do local fallback on Reproxy side. However, all local executions
+	// need to be handled at Siso layer.
+	if experiments.Enabled("no-fallback", "") && step.cmd.REProxyConfig.ExecStrategy == ppb.ExecutionStrategy_REMOTE_LOCAL_FALLBACK.String() {
+		if log.V(1) {
+			clog.Infof(ctx, "overriding reproxy REMOTE_LOCAL_FALLBACK to REMOTE")
+		}
+		step.cmd.REProxyConfig.ExecStrategy = ppb.ExecutionStrategy_REMOTE.String()
+	}
 }
