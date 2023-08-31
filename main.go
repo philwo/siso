@@ -42,7 +42,6 @@ var (
 	blockprofRate int
 	mutexprofFrac int
 	traceFile     string
-	credHelper    string
 )
 
 const versionStr = "siso v0.0.11"

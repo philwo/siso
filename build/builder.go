@@ -141,7 +141,6 @@ type Builder struct {
 	projectID string
 	metadata  metadata.Metadata
 
-	w        io.Writer
 	progress progress
 
 	// path system used in the build.
