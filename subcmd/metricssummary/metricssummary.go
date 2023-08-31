@@ -92,14 +92,25 @@ func (c *run) run(ctx context.Context) error {
 		return err
 	}
 
-	// TODO: get correct totalTime
-	/*
-		var totalCPUTime, totalTime time.Duration
-		for _, m := range metrics {
-			totalCPUTime += time.Duration(m.Duration)
-			totalTime += time.Duration(m.WeightedDuration)
+	if len(metrics) == 0 {
+		return fmt.Errorf("no metrics data?")
+	}
+
+	// TODO(ukai): deduce wait time from the duration?
+
+	var totalTime time.Duration
+	var accumulatedDuration time.Duration
+	var m []build.StepMetric
+	for _, s := range metrics {
+		if s.StepID == "" {
+			// this is special entry for build metrics, not per step metrics.
+			totalTime = time.Duration(s.Duration)
+			continue
 		}
-	*/
+		m = append(m, s)
+		accumulatedDuration += time.Duration(s.Duration)
+	}
+	metrics = m
 
 	// Print the slowest build steps:
 	fmt.Println("    Longest build steps:")
@@ -113,7 +124,7 @@ func (c *run) run(ctx context.Context) error {
 		})
 	}
 	longCount := 10
-	m := metrics
+	m = metrics
 	if len(m) > longCount {
 		m = m[:longCount]
 	}
@@ -151,16 +162,16 @@ func (c *run) run(ctx context.Context) error {
 			s.Type,
 			ui.FormatDuration(s.Duration))
 	}
-	// TODO(ukai): correct total time in siso_metrics.json?
-	/*
-		fmt.Printf("    %s weighted time (%s elapsed time sum, %1.1fx parallelism)\n",
-			ui.FormatDuration(totalTime),
-			ui.FormatDuration(totalCPUTime),
-			float64(totalCPUTime)*1.0/totalTime.Seconds())
-		fmt.Printf("    %d build steps completed, average of %1.2f/s\n",
-			len(metrics),
-			float64(len(metrics))/totalTime.Seconds())
-	*/
+	if totalTime == 0 {
+		return nil
+	}
+	fmt.Printf("    %s weighted time (%s elapsed time sum, %1.1fx parallelism)\n",
+		ui.FormatDuration(totalTime),
+		ui.FormatDuration(accumulatedDuration),
+		accumulatedDuration.Seconds()/totalTime.Seconds())
+	fmt.Printf("    %d build steps completed, average of %1.2f/s\n",
+		len(metrics),
+		float64(len(metrics))/totalTime.Seconds())
 	return nil
 }
 
@@ -196,6 +207,9 @@ type aggregatedMetric struct {
 func aggregate(metrics []build.StepMetric, pats []string) ([]aggregatedMetric, error) {
 	am := make(map[string]aggregatedMetric)
 	for _, m := range metrics {
+		if m.StepID == "" {
+			continue
+		}
 		t, err := stepType(m, pats)
 		if err != nil {
 			return nil, err

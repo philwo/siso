@@ -289,6 +289,9 @@ build all: phony out1 out2 out3 out4 out5 out6 out7 out8 out9 out10 out11 out12
 		if err != nil {
 			t.Errorf("decode %v", err)
 		}
+		if m.StepID == "" {
+			continue
+		}
 		switch filepath.Base(m.Output) {
 		case "out1", "out2":
 			if !m.Err {
@@ -299,7 +302,7 @@ build all: phony out1 out2 out3 out4 out5 out6 out7 out8 out9 out10 out11 out12
 				t.Errorf("%s err=%t; want false", m.Output, m.Err)
 			}
 		default:
-			t.Errorf("%s unexpected", m.Output)
+			t.Errorf("unexpected output %q", m.Output)
 		}
 	}
 }

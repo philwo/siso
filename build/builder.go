@@ -705,12 +705,7 @@ loop:
 				//     jq --slurp 'sort_by(.duration) | reverse | .[] | select(.cached==false)'
 				step.metrics.Duration = IntervalMetric(duration)
 				step.metrics.Err = err != nil
-				mb, err := json.Marshal(step.metrics)
-				if err != nil {
-					clog.Warningf(ctx, "metrics marshal err: %v", err)
-				} else {
-					fmt.Fprintf(b.metricsJSONWriter, "%s\n", mb)
-				}
+				b.recordMetrics(ctx, step.metrics)
 			}
 
 			select {
@@ -760,8 +755,23 @@ loop:
 		// replace 2 progress lines.
 		ui.Default.PrintLines(fmt.Sprintf("%s finished: %v", name, err), "")
 	}
+	// metrics for full build session, without step_id etc.
+	var metrics StepMetric
+	metrics.BuildID = b.id
+	metrics.Duration = IntervalMetric(time.Since(started))
+	metrics.Err = err != nil
+	b.recordMetrics(ctx, metrics)
 	clog.Infof(ctx, "%s finished: %v", name, err)
 	return err
+}
+
+func (b *Builder) recordMetrics(ctx context.Context, m StepMetric) {
+	mb, err := json.Marshal(m)
+	if err != nil {
+		clog.Warningf(ctx, "metrics marshal err: %v", err)
+		return
+	}
+	fmt.Fprintf(b.metricsJSONWriter, "%s\n", mb)
 }
 
 // stepLogEntry logs step in parent access log of the step.
