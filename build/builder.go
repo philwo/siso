@@ -923,25 +923,20 @@ func (b *Builder) outputs(ctx context.Context, step *Step) error {
 
 // progressStepCacheHit shows progress of the cache hit step.
 func (b *Builder) progressStepCacheHit(ctx context.Context, step *Step) {
-	b.progress.step(ctx, b, step, "c "+step.cmd.Desc)
-}
-
-// progressStepSkipped shows progress of the skipped step.
-func (b *Builder) progressStepSkipped(ctx context.Context, step *Step) {
-	b.progress.step(ctx, b, step, "- "+step.cmd.Desc)
+	b.progress.step(ctx, b, step, progressPrefixCacheHit+step.cmd.Desc)
 }
 
 // progressStepStarted shows progress of the started step.
 func (b *Builder) progressStepStarted(ctx context.Context, step *Step) {
 	step.setPhase(stepStart)
 	step.startTime = time.Now()
-	b.progress.step(ctx, b, step, "S "+step.cmd.Desc)
+	b.progress.step(ctx, b, step, progressPrefixStart+step.cmd.Desc)
 }
 
 // progressStepFinished shows progress of the finished step.
 func (b *Builder) progressStepFinished(ctx context.Context, step *Step) {
 	step.setPhase(stepDone)
-	b.progress.step(ctx, b, step, "F "+step.cmd.Desc)
+	b.progress.step(ctx, b, step, progressPrefixFinish+step.cmd.Desc)
 }
 
 var errNotRelocatable = errors.New("request is not relocatable")

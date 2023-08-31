@@ -130,8 +130,9 @@ func (p *progress) report(format string, args ...any) {
 }
 
 const (
-	progressPrefixStart  = "S "
-	progressPrefixFinish = "F "
+	progressPrefixCacheHit = "c "
+	progressPrefixStart    = "S "
+	progressPrefixFinish   = "F "
 )
 
 func (p *progress) step(ctx context.Context, b *Builder, step *Step, s string) {
