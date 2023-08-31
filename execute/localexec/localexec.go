@@ -13,7 +13,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"syscall"
 	"time"
 
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
@@ -109,8 +108,10 @@ func run(ctx context.Context, cmd *execute.Cmd) (*rpb.ActionResult, error) {
 	}
 	e := time.Now()
 
+	code := exitCode(err)
+
 	result := &rpb.ActionResult{
-		ExitCode:  exitCode(err),
+		ExitCode:  code,
 		StdoutRaw: stdout.Bytes(),
 		StderrRaw: stderr.Bytes(),
 		ExecutionMetadata: &rpb.ExecutedActionMetadata{
@@ -122,7 +123,10 @@ func run(ctx context.Context, cmd *execute.Cmd) (*rpb.ActionResult, error) {
 
 	// TODO(b/273423470): track resource usage.
 
-	return result, nil
+	if code >= 0 {
+		err = nil
+	}
+	return result, err
 }
 
 func exitCode(err error) int32 {
@@ -131,12 +135,9 @@ func exitCode(err error) int32 {
 	}
 	var eerr *exec.ExitError
 	if !errors.As(err, &eerr) {
-		return 1
+		return -1
 	}
-	if w, ok := eerr.ProcessState.Sys().(syscall.WaitStatus); ok {
-		return int32(w.ExitStatus())
-	}
-	return 1
+	return int32(eerr.ProcessState.ExitCode())
 }
 
 // TraceEnabled returns whether file trace is enabled or not.

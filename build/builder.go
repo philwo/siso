@@ -745,6 +745,9 @@ loop:
 	errdone := make(chan error)
 	go func() {
 		for e := range errch {
+			if len(errs) >= b.failuresAllowed {
+				continue
+			}
 			if e != nil && !errors.Is(e, context.Canceled) {
 				errs = append(errs, e)
 			}
