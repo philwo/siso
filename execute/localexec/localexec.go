@@ -17,11 +17,9 @@ import (
 
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
 	log "github.com/golang/glog"
-	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"infra/build/siso/execute"
-	epb "infra/build/siso/execute/proto"
 	"infra/build/siso/o11y/clog"
 	"infra/build/siso/sync/semaphore"
 	"infra/build/siso/toolsupport/straceutil"
@@ -78,7 +76,6 @@ func run(ctx context.Context, cmd *execute.Cmd) (*rpb.ActionResult, error) {
 	c.Stderr = &stderr
 	s := time.Now()
 
-	var ru *epb.Rusage
 	var err error
 	if cmd.FileTrace != nil {
 		if !straceutil.Available(ctx) {
@@ -93,8 +90,6 @@ func run(ctx context.Context, cmd *execute.Cmd) (*rpb.ActionResult, error) {
 			err = c.Wait()
 		}
 		if err == nil {
-			ru = rusage(c)
-
 			cmd.FileTrace.Inputs, cmd.FileTrace.Outputs, err = st.PostProcess(ctx)
 			if err != nil {
 				err = fmt.Errorf("failed to postprocess: %w", err)
@@ -108,9 +103,6 @@ func run(ctx context.Context, cmd *execute.Cmd) (*rpb.ActionResult, error) {
 		})
 		if err == nil {
 			err = c.Wait()
-		}
-		if err == nil {
-			ru = rusage(c)
 		}
 		log.V(1).Infof("%s filetrace=false %v", cmd.ID, err)
 	}
@@ -127,14 +119,6 @@ func run(ctx context.Context, cmd *execute.Cmd) (*rpb.ActionResult, error) {
 			ExecutionStartTimestamp:     timestamppb.New(s),
 			ExecutionCompletedTimestamp: timestamppb.New(e),
 		},
-	}
-	if ru != nil {
-		p, err := anypb.New(ru)
-		if err != nil {
-			clog.Warningf(ctx, "pack rusage: %v", err)
-		} else {
-			result.ExecutionMetadata.AuxiliaryMetadata = append(result.ExecutionMetadata.AuxiliaryMetadata, p)
-		}
 	}
 
 	// TODO(b/273423470): track resource usage.
