@@ -37,10 +37,14 @@ const defaultStateFile = ".siso_fs_state"
 // defaultDigestXattr is default xattr for digest. http://shortn/_8GHggPD2vw
 const defaultDigestXattr = "google.digest.sha256"
 
+// OutputLocalFunc returns true if given fname needs to be on local disk.
+type OutputLocalFunc func(context.Context, string) bool
+
 // Option is an option for HashFS.
 type Option struct {
 	StateFile       string
 	DataSource      DataSource
+	OutputLocal     OutputLocalFunc
 	DigestXattrName string
 }
 
@@ -125,6 +129,7 @@ func fromDigest(d digest.Digest) *pb.Digest {
 // SetState sets states to the HashFS.
 func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 	start := time.Now()
+	outputLocal := hfs.opt.OutputLocal
 	var neq, nnew, nnotexist, nfail, ninvalidate atomic.Int64
 	var dirty atomic.Bool
 	eg, gctx := errgroup.WithContext(ctx)
@@ -157,6 +162,13 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 					clog.Infof(gctx, "not exist with no cmdhash: %s", ent.Name)
 					return nil
 				}
+				if outputLocal(ctx, ent.Name) {
+					// command output file that is needed on the disk doesn't exist on the disk.
+					// need to forget to trigger steps for the output. b/298523549
+					clog.Warningf(gctx, "not exist output-needed file: %s", ent.Name)
+					return nil
+				}
+
 				e, _ := newStateEntry(ent, time.Time{}, hfs.opt.DataSource, hfs.IOMetrics)
 				e.cmdhash = h
 				e.action = toDigest(ent.Action)
@@ -201,12 +213,19 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 				}
 			}
 			switch et {
-			case entryNoLocal: // never?
+			case entryNoLocal:
+				// it should not happen since we already checked it in `if errors.Is(err, os.ErrNotExist)` above.
 				nnotexist.Add(1)
 				dirty.Store(true)
 				if len(h) == 0 {
+					// file is a source input, not generated
 					return nil
 				}
+				if outputLocal(ctx, ent.Name) {
+					// file is a output file and needed on the disk
+					return nil
+				}
+
 				clog.Infof(gctx, "not exist %s %s cmdhash:%s", ftype, ent.Name, hex.EncodeToString(e.cmdhash))
 			case entryBeforeLocal:
 				ninvalidate.Add(1)

@@ -500,6 +500,25 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		cache:  cacheStore,
 		client: client,
 	}
+	switch c.outputLocalStrategy {
+	case "full":
+		c.fsopt.OutputLocal = func(context.Context, string) bool { return true }
+	case "greedy":
+		c.fsopt.OutputLocal = func(ctx context.Context, fname string) bool {
+			// Note: d. wil be downloaded to get deps anyway,
+			// but will not be written to disk.
+			switch filepath.Ext(fname) {
+			case ".o", ".obj", ".a", ".d", ".stamp":
+				return false
+			}
+			return true
+		}
+	case "minimum":
+		c.fsopt.OutputLocal = func(context.Context, string) bool { return false }
+	default:
+		return stats, fmt.Errorf("unknown output local strategy:%q. should be full/greedy/minimum", c.outputLocalStrategy)
+	}
+
 	hashFS, err := hashfs.New(ctx, *c.fsopt)
 	spin.Stop(err)
 	if err != nil {
@@ -602,25 +621,6 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	if c.traceJSON != "" {
 		rotateFiles(ctx, c.traceJSON)
 	}
-	var outputLocal func(context.Context, string) bool
-	switch c.outputLocalStrategy {
-	case "full":
-		outputLocal = func(context.Context, string) bool { return true }
-	case "greedy":
-		outputLocal = func(ctx context.Context, fname string) bool {
-			// Note: d. wil be downloaded to get deps anyway,
-			// but will not be written to disk.
-			switch filepath.Ext(fname) {
-			case ".o", ".obj", ".a", ".d", ".stamp":
-				return false
-			}
-			return true
-		}
-	case "minimum":
-		outputLocal = func(context.Context, string) bool { return false }
-	default:
-		return stats, fmt.Errorf("unknown output local strategy:%q. should be full/greedy/minimum", c.outputLocalStrategy)
-	}
 
 	spin.Start("loading/recompacting deps log")
 	err = eg.Wait()
@@ -640,7 +640,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		RECacheEnableRead:    c.reCacheEnableRead,
 		ReproxyAddr:          c.reproxyAddr,
 		ActionSalt:           actionSaltBytes,
-		OutputLocal:          outputLocal,
+		OutputLocal:          build.OutputLocalFunc(c.fsopt.OutputLocal),
 		Cache:                cache,
 		FailureSummaryWriter: failureSummaryWriter,
 		OutputLogWriter:      outputLogWriter,

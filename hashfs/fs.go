@@ -71,6 +71,9 @@ type HashFS struct {
 
 // New creates a HashFS.
 func New(ctx context.Context, opt Option) (*HashFS, error) {
+	if opt.OutputLocal == nil {
+		opt.OutputLocal = func(context.Context, string) bool { return false }
+	}
 	if opt.DataSource == nil {
 		opt.DataSource = noDataSource{}
 	}
