@@ -2,8 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// Package metricscmp is metricscmp subcommand to compare siso_metrics.json.
-package metricscmp
+package metricscmd
 
 import (
 	"context"
@@ -11,7 +10,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -22,9 +20,9 @@ import (
 	"infra/build/siso/build"
 )
 
-const usage = `compare siso_metrics.json.
+const cmpUsage = `compare siso_metrics.json.
 
- $ siso metricscmp -C <dir> [--format <format>] \
+ $ siso metrics cmp -C <dir> [--format <format>] \
    [--input_a siso_metrics.json] \
    [--input_b siso_metrics.json.0]
 
@@ -45,21 +43,20 @@ default output is diff.
 `
 
 // Cmd returns the Command for the `metricscmp` subcommand provided by this package.
-func Cmd() *subcommands.Command {
+func cmpCmd() *subcommands.Command {
 	return &subcommands.Command{
-		UsageLine: "metricscmp <args>...",
+		UsageLine: "cmp <args>...",
 		ShortDesc: "compare siso_metrics.json",
-		LongDesc:  usage,
-		Advanced:  true,
+		LongDesc:  cmpUsage,
 		CommandRun: func() subcommands.CommandRun {
-			c := &run{}
+			c := &cmpRun{}
 			c.init()
 			return c
 		},
 	}
 }
 
-type run struct {
+type cmpRun struct {
 	subcommands.CommandRunBase
 
 	dir            string
@@ -81,7 +78,7 @@ var formatKeys = func() []string {
 	return keys
 }()
 
-func (c *run) init() {
+func (c *cmpRun) init() {
 	c.Flags.StringVar(&c.dir, "C", ".", "ninja running directory")
 	c.Flags.StringVar(&c.inputA, "input_a", "siso_metrics.json", "target siso_metrics.json")
 	c.Flags.StringVar(&c.inputB, "input_b", "siso_metrics.json.0", "base siso_metrics.json")
@@ -89,13 +86,13 @@ func (c *run) init() {
 	c.Flags.StringVar(&c.format, "format", "diff", fmt.Sprintf("output format: %q", formatKeys))
 }
 
-func (c *run) Run(a subcommands.Application, args []string, env subcommands.Env) int {
+func (c *cmpRun) Run(a subcommands.Application, args []string, env subcommands.Env) int {
 	ctx := cli.GetContext(a, c, env)
 	err := c.run(ctx)
 	if err != nil {
 		switch {
 		case errors.Is(err, flag.ErrHelp):
-			fmt.Fprintf(os.Stderr, "%v\n%s\n", err, usage)
+			fmt.Fprintf(os.Stderr, "%v\n%s\n", err, cmpUsage)
 		default:
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		}
@@ -104,7 +101,7 @@ func (c *run) Run(a subcommands.Application, args []string, env subcommands.Env)
 	return 0
 }
 
-func (c *run) run(ctx context.Context) error {
+func (c *cmpRun) run(ctx context.Context) error {
 	output, ok := formats[c.format]
 	if !ok {
 		return fmt.Errorf("unknown format %q: known formats %q: %w", c.format, formatKeys, flag.ErrHelp)
@@ -167,28 +164,6 @@ func outputDiff(m []build.StepMetric) error {
 	}
 	fmt.Printf("%s\n", buf)
 	return nil
-}
-
-func loadMetrics(ctx context.Context, fname string) ([]build.StepMetric, error) {
-	f, err := os.Open(fname)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-	d := json.NewDecoder(f)
-	var metrics []build.StepMetric
-	for {
-		var m build.StepMetric
-		err := d.Decode(&m)
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return nil, fmt.Errorf("parse error in %s:%d: %w", fname, d.InputOffset(), err)
-		}
-		metrics = append(metrics, m)
-	}
-	return metrics, nil
 }
 
 func join(x, y []build.StepMetric) [][]build.StepMetric {

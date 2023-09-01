@@ -26,8 +26,7 @@ import (
 	"infra/build/siso/subcmd/authcheck"
 	"infra/build/siso/subcmd/fetch"
 	"infra/build/siso/subcmd/fscmd"
-	"infra/build/siso/subcmd/metricscmp"
-	"infra/build/siso/subcmd/metricssummary"
+	"infra/build/siso/subcmd/metricscmd"
 	"infra/build/siso/subcmd/ninja"
 	"infra/build/siso/subcmd/recall"
 	"infra/build/siso/subcmd/scandeps"
@@ -57,8 +56,7 @@ func getApplication(authOpts cred.Options) *cli.Application {
 			fscmd.Cmd(authOpts),
 			recall.Cmd(authOpts),
 			fetch.Cmd(authOpts),
-			metricscmp.Cmd(),
-			metricssummary.Cmd(),
+			metricscmd.Cmd(),
 			scandeps.Cmd(),
 			authcheck.Cmd(authOpts),
 

@@ -2,16 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// Package metricssummary is metricssummary subcommand to summarize siso_metrics.json.
-package metricssummary
+package metricscmd
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -25,9 +22,9 @@ import (
 	"infra/build/siso/ui"
 )
 
-const usage = `summarize siso_metrics.json
+const summaryUsage = `summarize siso_metrics.json
 
- $ siso metricssummary -C <dir> \
+ $ siso metrics summary -C <dir> \
     [--step_types <types>] \
     [--elapsed_time_sorting] \
     [--input siso_metrics.json]
@@ -36,22 +33,21 @@ summarize <dir>/.siso_metrics.json (--input)
 as depot_tools/post_ninja_build_summary.py does.
 `
 
-// Cmd returns the Command for the `metricssummary` subcommand provided by this package.
-func Cmd() *subcommands.Command {
+// summaryCmd returns the Command for the `metricssummary` subcommand provided by this package.
+func summaryCmd() *subcommands.Command {
 	return &subcommands.Command{
-		UsageLine: "metricssummary <args>...",
+		UsageLine: "summary <args>...",
 		ShortDesc: "summarize siso_metrics.json",
-		LongDesc:  usage,
-		Advanced:  true,
+		LongDesc:  summaryUsage,
 		CommandRun: func() subcommands.CommandRun {
-			c := &run{}
+			c := &summaryRun{}
 			c.init()
 			return c
 		},
 	}
 }
 
-type run struct {
+type summaryRun struct {
 	subcommands.CommandRunBase
 
 	dir                string
@@ -60,20 +56,20 @@ type run struct {
 	elapsedTimeSorting bool
 }
 
-func (c *run) init() {
+func (c *summaryRun) init() {
 	c.Flags.StringVar(&c.dir, "C", ".", "ninja running directory, where siso_metrics.json exists")
 	c.Flags.StringVar(&c.input, "input", "siso_metrics.json", "filename of siso_metrics.json to summarize")
 	c.Flags.StringVar(&c.stepTypes, "step_types", "", "semicolon separated glob patterns (go filepath.Match) for build-step grouping")
 	c.Flags.BoolVar(&c.elapsedTimeSorting, "elapsed_time_sorting", false, "Sort output by elapsed time instead of weighted time")
 }
 
-func (c *run) Run(a subcommands.Application, args []string, env subcommands.Env) int {
+func (c *summaryRun) Run(a subcommands.Application, args []string, env subcommands.Env) int {
 	ctx := cli.GetContext(a, c, env)
 	err := c.run(ctx)
 	if err != nil {
 		switch {
 		case errors.Is(err, flag.ErrHelp):
-			fmt.Fprintf(os.Stderr, "%v\n%s\n", err, usage)
+			fmt.Fprintf(os.Stderr, "%v\n%s\n", err, summaryUsage)
 		default:
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		}
@@ -82,7 +78,7 @@ func (c *run) Run(a subcommands.Application, args []string, env subcommands.Env)
 	return 0
 }
 
-func (c *run) run(ctx context.Context) error {
+func (c *summaryRun) run(ctx context.Context) error {
 	err := os.Chdir(c.dir)
 	if err != nil {
 		return err
@@ -173,28 +169,6 @@ func (c *run) run(ctx context.Context) error {
 		len(metrics),
 		float64(len(metrics))/totalTime.Seconds())
 	return nil
-}
-
-func loadMetrics(ctx context.Context, fname string) ([]build.StepMetric, error) {
-	f, err := os.Open(fname)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-	d := json.NewDecoder(f)
-	var metrics []build.StepMetric
-	for {
-		var m build.StepMetric
-		err := d.Decode(&m)
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return nil, fmt.Errorf("parse error in %s:%d: %w", fname, d.InputOffset(), err)
-		}
-		metrics = append(metrics, m)
-	}
-	return metrics, nil
 }
 
 type aggregatedMetric struct {
