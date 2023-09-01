@@ -34,12 +34,12 @@ func (i *IntervalMetric) UnmarshalJSON(b []byte) error {
 
 // StepMetric contains metrics about a build Step.
 type StepMetric struct {
-	BuildID string `json:"build_id"` // the unique id of the current build (trace)
-	StepID  string `json:"step_id"`  // the unique id of this step (top span)
+	BuildID string `json:"build_id,omitempty"` // the unique id of the current build (trace)
+	StepID  string `json:"step_id,omitempty"`  // the unique id of this step (top span)
 
-	Rule   string `json:"rule,omitempty"` // the rule name of the step
-	Action string `json:"action"`         // the action name of the step
-	Output string `json:"output"`         // the name of the first output file of the step
+	Rule   string `json:"rule,omitempty"`   // the rule name of the step
+	Action string `json:"action,omitempty"` // the action name of the step
+	Output string `json:"output,omitempty"` // the name of the first output file of the step
 
 	// The ID and name of the first output of the previous step.
 	// The "previous" step is defined as the last step that updated
@@ -53,11 +53,11 @@ type StepMetric struct {
 
 	// Ready is the time it took since build start until the action became
 	// ready for execution (= all inputs are available).
-	Ready IntervalMetric `json:"ready"`
+	Ready IntervalMetric `json:"ready,omitempty"`
 	// Start is the time it took until Siso's scheduler was ready to work
 	// on the step (concurrency limited by stepSema) and pass it to an
 	// execution strategy.
-	Start IntervalMetric `json:"start"`
+	Start IntervalMetric `json:"start,omitempty"`
 	// Duration is the time it took for the action to do its job, measured
 	// from start of execution until it exited.
 	Duration IntervalMetric `json:"duration"`
@@ -67,37 +67,39 @@ type StepMetric struct {
 	// parallel. It is calculated by summing up small slices of time (~100ms)
 	// while the action is running, where each slice's duration is divided by
 	// the number of concurrently running actions at that point in time.
-	WeightedDuration IntervalMetric `json:"weighted_duration"`
+	WeightedDuration IntervalMetric `json:"weighted_duration,omitempty"`
 
 	// The hash of the command-line of the build step.
-	CmdHash string `json:"cmdhash"`
+	CmdHash string `json:"cmdhash,omitempty"`
 	// The hash of the action proto of this build step.
-	Digest string `json:"digest"`
+	Digest string `json:"digest,omitempty"`
 
-	DepsLog     bool `json:"deps_log"`               // whether the action used the deps log.
+	DepsLog     bool `json:"deps_log,omitempty"`     // whether the action used the deps log.
 	DepsLogErr  bool `json:"deps_log_err,omitempty"` // whether the action failed with deps log.
 	ScandepsErr bool `json:"scandeps_err,omitempty"` // whether the action failed in scandeps.
 
-	IsRemote bool `json:"is_remote"` // whether the action ran remotely.
-	Cached   bool `json:"cached"`    // whether the action was a cache hit.
-	Fallback bool `json:"fallback"`  // whether the action failed remotely and was retried locally.
-	Err      bool `json:"err"`       // whether the action failed.
+	IsRemote bool `json:"is_remote,omitempty"` // whether the action ran remotely.
+	Cached   bool `json:"cached,omitempty"`    // whether the action was a cache hit.
+	Fallback bool `json:"fallback,omitempty"`  // whether the action failed remotely and was retried locally.
+	Err      bool `json:"err,omitempty"`       // whether the action failed.
 
 	// RunTime, QueueTime and ExecTime are measured by the execution
-	// strategies and
+	// strategies in executiion metadata of result.
 
 	// RunTime is the total duration of the action execution, including
 	// overhead such as uploading / downloading files.
-	RunTime IntervalMetric `json:"run"`
+	RunTime IntervalMetric `json:"run,omitempty"`
 	// QueueTime is the time it took until the worker could begin executing
 	// the action.
-	QueueTime IntervalMetric `json:"queue"`
+	// TODO: set in reproxy mode too
+	QueueTime IntervalMetric `json:"queue,omitempty"`
 	// ExecTime is the time measured from the execution strategy starting
 	// the process until the process exited.
-	ExecTime IntervalMetric `json:"exec"`
+	// TODO: set in reproxy mode too
+	ExecTime IntervalMetric `json:"exec,omitempty"`
 
-	Inputs  int `json:"inputs"`  // how many input files.
-	Outputs int `json:"outputs"` // how many output files.
+	Inputs  int `json:"inputs,omitempty"`  // how many input files.
+	Outputs int `json:"outputs,omitempty"` // how many output files.
 
 	skip bool // whether the step was skipped during the build.
 }

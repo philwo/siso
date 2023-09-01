@@ -663,7 +663,6 @@ loop:
 				"output0":     step.def.Outputs()[0],
 			}
 			logger.Log(logEntry)
-			step.metrics.BuildID = b.id
 			step.metrics.StepID = step.def.String()
 			step.metrics.Rule = step.def.RuleName()
 			step.metrics.Action = step.def.ActionName()
