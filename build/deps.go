@@ -137,6 +137,11 @@ func depsFixCmd(ctx context.Context, b *Builder, step *Step, deps []string) {
 }
 
 func depsCmd(ctx context.Context, b *Builder, step *Step) error {
+	started := time.Now()
+	defer func() {
+		step.metrics.DepsScanTime = IntervalMetric(time.Since(started))
+	}()
+
 	if step.useReclient() {
 		// no need to scan deps.
 		// but need to remove missing inputs from cmd.Inputs

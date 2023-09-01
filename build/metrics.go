@@ -83,8 +83,12 @@ type StepMetric struct {
 	Fallback bool `json:"fallback,omitempty"`  // whether the action failed remotely and was retried locally.
 	Err      bool `json:"err,omitempty"`       // whether the action failed.
 
+	// DepsScanTime is the time it took in calculating deps for cmd inputs.
+	// TODO: set in reproxy mode too
+	DepsScanTime IntervalMetric `json:"depsscan,omitempty"`
+
 	// RunTime, QueueTime and ExecTime are measured by the execution
-	// strategies in executiion metadata of result.
+	// strategies in execution metadata of result.
 
 	// RunTime is the total duration of the action execution, including
 	// overhead such as uploading / downloading files.
