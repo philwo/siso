@@ -14,13 +14,11 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"path"
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -52,20 +50,6 @@ import (
 const (
 	logLabelKeyID        = "id"
 	logLabelKeyBacktrace = "backtrace"
-)
-
-const (
-	// limit # of concurrent steps at most 1024 times of num cpus
-	// to protect from out of memory, or too many threads.
-	stepLimitFactor = 1024
-
-	// limit # of concurrent scandeps steps at most 4 times of num cpus
-	// to protect from out of memory, reduce contention
-	scanDepsLimitFactor = 4
-
-	// limit # of concurrent steps at most 80 times of num cpus
-	// to protect from out of memory, or DDoS to RE API.
-	remoteLimitFactor = 80
 )
 
 // chromium recipe module expects this string.
@@ -122,13 +106,8 @@ type Options struct {
 	// empty for normal build.
 	RebuildManifest string
 
-	// true for unit test. e.g. limit concurrency to 2, etc.
-	// otherwise, builder will start many steps, so hard to
-	// test !hasReady before b.failuresAllowed.
-	UnitTest bool
-
-	// RemoteLimit limits the number of remote actions that can run in parallel.
-	RemoteLimit int
+	// Limits specifies resource limits.
+	Limits Limits
 }
 
 var experiments Experiments
@@ -248,35 +227,18 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 	pe = reproxyexec.New(ctx, opts.ReproxyAddr)
 	experiments.ShowOnce()
 	numCPU := runtime.NumCPU()
-	stepLimit := stepLimitFactor * numCPU
-	scanDepsLimit := scanDepsLimitFactor * numCPU
-	localLimit := numCPU
-	var rewrapLimit, remoteLimit int
-	if opts.RemoteLimit > 0 {
-		rewrapLimit = opts.RemoteLimit
-		remoteLimit = opts.RemoteLimit
-	} else {
-		rewrapLimit = limitForREWrapper(ctx, numCPU)
-		remoteLimit = remoteLimitFactor * numCPU
+	if (opts.Limits == Limits{}) {
+		opts.Limits = DefaultLimits(ctx)
 	}
 	// on many cores machine, it would hit default max thread limit = 10000
 	// usually, it would require 1/3 threads of stepLimit (cache miss case?)
-	maxThreads := stepLimit / 3
+	maxThreads := opts.Limits.Step / 3
 	if maxThreads > 10000 {
 		debug.SetMaxThreads(maxThreads)
 	} else {
 		maxThreads = 10000
 	}
-	if opts.UnitTest {
-		logger.Warningf("UnitTest mode. limit to 2")
-		stepLimit = 2
-		scanDepsLimit = 2
-		localLimit = 2
-		rewrapLimit = 2
-		remoteLimit = 2
-	}
-	logger.Infof("numcpu=%d threads:%d - step limit=%d local limit=%d rewrap limit=%d remote limit=%d",
-		numCPU, maxThreads, stepLimit, localLimit, rewrapLimit, remoteLimit)
+	logger.Infof("numcpu=%d threads:%d - limits=%#v", numCPU, maxThreads, opts.Limits)
 	logger.Infof("correlated_invocations_id: %s", opts.JobID)
 	logger.Infof("tool_invocation_id: %s", opts.ID)
 
@@ -289,24 +251,24 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 		path:              opts.Path,
 		hashFS:            opts.HashFS,
 		graph:             graph,
-		stepSema:          semaphore.New("step", stepLimit),
-		preprocSema:       semaphore.New("preproc", stepLimit),
-		scanDepsSema:      semaphore.New("scandeps", scanDepsLimit),
+		stepSema:          semaphore.New("step", opts.Limits.Step),
+		preprocSema:       semaphore.New("preproc", opts.Limits.Preproc),
+		scanDepsSema:      semaphore.New("scandeps", opts.Limits.ScanDeps),
 		scanDeps:          scandeps.New(opts.HashFS, graph.InputDeps(ctx)),
-		localSema:         semaphore.New("localexec", localLimit),
+		localSema:         semaphore.New("localexec", opts.Limits.Local),
 		localExec:         le,
-		rewrapSema:        semaphore.New("rewrap", rewrapLimit),
-		remoteSema:        semaphore.New("remoteexec", remoteLimit),
+		rewrapSema:        semaphore.New("rewrap", opts.Limits.REWrap),
+		remoteSema:        semaphore.New("remoteexec", opts.Limits.Remote),
 		remoteExec:        re,
 		reCacheEnableRead: opts.RECacheEnableRead,
 		// reCacheEnableWrite: opts.RECacheEnableWrite,
 		reproxyExec: pe,
-		reproxySema: semaphore.New("reproxyexec", remoteLimit),
+		reproxySema: semaphore.New("reproxyexec", opts.Limits.Remote),
 		actionSalt:  opts.ActionSalt,
 		reapiclient: opts.REAPIClient,
 
 		outputLocal:          opts.OutputLocal,
-		cacheSema:            semaphore.New("cache", stepLimit),
+		cacheSema:            semaphore.New("cache", opts.Limits.Cache),
 		cache:                opts.Cache,
 		failureSummaryWriter: opts.FailureSummaryWriter,
 		outputLogWriter:      opts.OutputLogWriter,
@@ -333,46 +295,6 @@ func (b *Builder) Close() error {
 		return nil
 	}
 	return b.reproxyExec.Close()
-}
-
-func limitForREWrapper(ctx context.Context, numCPU int) int {
-	// same logic in depot_tools/autoninja.py
-	// https://chromium.googlesource.com/chromium/tools/depot_tools.git/+/54762c22175e17dce4f4eab18c5942c06e82478f/autoninja.py#166
-	const defaultCoreMultiplier = remoteLimitFactor
-	coreMultiplier := defaultCoreMultiplier
-	if v := os.Getenv("NINJA_CORE_MULTIPLIER"); v != "" {
-		p, err := strconv.Atoi(v)
-		if err != nil {
-			clog.Warningf(ctx, "wrong $NINJA_CORE_MULTIPLIER=%q; %v", v, err)
-		} else {
-			coreMultiplier = p
-		}
-	}
-	limit := numCPU * coreMultiplier
-	if v := os.Getenv("NINJA_CORE_LIMIT"); v != "" {
-		p, err := strconv.Atoi(v)
-		if err != nil {
-			clog.Warningf(ctx, "wrong $NINJA_CORE_LIMIT=%q; %v", v, err)
-		} else if limit > p {
-			limit = p
-		}
-	}
-	switch runtime.GOOS {
-	case "windows":
-		// on Windows, higher than 1000 does not improve build
-		// performance, but may cause namedpipe timeout
-		// b/70640154 b/223211029
-		if limit > 1000 {
-			limit = 1000
-		}
-	case "darwin":
-		// on macOS, higher than 800 causes 'Too many open files' error
-		// (crbug.com/936864).
-		if limit > 800 {
-			limit = 800
-		}
-	}
-	return limit
 }
 
 // Stats returns stats of the builder.

@@ -121,6 +121,7 @@ func setupBuild(ctx context.Context, t *testing.T, dir string, fsopt hashfs.Opti
 		HashFS:          hashFS,
 		Cache:           cache,
 		FailuresAllowed: 1,
+		Limits:          build.UnitTestLimits(ctx),
 	}
 	return opt, graph, func() {
 		for i := len(cleanups) - 1; i >= 0; i-- {
@@ -170,7 +171,6 @@ func TestBuild_SwallowFailures(t *testing.T) {
 	setupFiles(t, dir, t.Name(), nil)
 	opt, graph, cleanup := setupBuild(ctx, t, dir, hashfs.Option{})
 	t.Cleanup(cleanup)
-	opt.UnitTest = true
 	opt.FailuresAllowed = 3
 
 	b, err := build.New(ctx, graph, opt)
@@ -196,7 +196,6 @@ func TestBuild_SwallowFailuresLimit(t *testing.T) {
 	setupFiles(t, dir, t.Name(), nil)
 	opt, graph, cleanup := setupBuild(ctx, t, dir, hashfs.Option{})
 	t.Cleanup(cleanup)
-	opt.UnitTest = true
 	opt.FailuresAllowed = 11
 
 	b, err := build.New(ctx, graph, opt)
@@ -222,7 +221,6 @@ func TestBuild_KeepGoing(t *testing.T) {
 	setupFiles(t, dir, t.Name(), nil)
 	opt, graph, cleanup := setupBuild(ctx, t, dir, hashfs.Option{})
 	t.Cleanup(cleanup)
-	opt.UnitTest = true
 	opt.FailuresAllowed = 11
 	var metricsBuffer bytes.Buffer
 	opt.MetricsJSONWriter = &metricsBuffer

@@ -249,6 +249,11 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		return stats, flagError{err: err}
 	}
 
+	limits := build.DefaultLimits(ctx)
+	if c.remoteJobs > 0 {
+		limits.Remote = c.remoteJobs
+		limits.REWrap = c.remoteJobs
+	}
 	if c.ninjaJobs >= 0 {
 		fmt.Fprintf(os.Stderr, "-j is specified. but not supported. b/288829511\n")
 	}
@@ -656,7 +661,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		DryRun:               c.dryRun,
 		FailuresAllowed:      c.failuresAllowed,
 		KeepRSP:              c.debugMode.Keeprsp,
-		RemoteLimit:          c.remoteJobs,
+		Limits:               limits,
 	}
 	const failedTargetsFile = ".siso_failed_targets"
 	for {

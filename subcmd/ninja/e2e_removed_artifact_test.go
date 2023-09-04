@@ -27,7 +27,6 @@ func TestBuild_RemovedArtifact(t *testing.T) {
 			OutputLocal: func(context.Context, string) bool { return true },
 		})
 		defer cleanup()
-		opt.UnitTest = true
 
 		b, err := build.New(ctx, graph, opt)
 		if err != nil {
@@ -60,7 +59,6 @@ func TestBuild_RemovedArtifact(t *testing.T) {
 			OutputLocal: func(context.Context, string) bool { return true },
 		})
 		defer cleanup()
-		opt.UnitTest = true
 
 		b, err := build.New(ctx, graph, opt)
 		if err != nil {

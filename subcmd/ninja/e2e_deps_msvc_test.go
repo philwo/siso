@@ -31,7 +31,6 @@ func TestBuild_DepsMSVC(t *testing.T) {
 		setupFiles(t, dir, t.Name(), nil)
 		opt, graph, cleanup := setupBuild(ctx, t, dir, hashfs.Option{})
 		defer cleanup()
-		opt.UnitTest = true
 
 		b, err := build.New(ctx, graph, opt)
 		if err != nil {
@@ -66,7 +65,6 @@ func TestBuild_DepsMSVC(t *testing.T) {
 		setupFiles(t, dir, t.Name()+"_second", []string{"base/other.h"})
 		opt, graph, cleanup := setupBuild(ctx, t, dir, hashfs.Option{})
 		defer cleanup()
-		opt.UnitTest = true
 
 		b, err := build.New(ctx, graph, opt)
 		if err != nil {
@@ -178,7 +176,6 @@ Note: including file:   ../../base/other.h
 
 		opt, graph, cleanup := setupBuild(ctx, t, dir, hashfs.Option{})
 		defer cleanup()
-		opt.UnitTest = true
 		opt.ReproxyAddr = reproxyAddr
 
 		b, err := build.New(ctx, graph, opt)
@@ -239,7 +236,6 @@ Note: including file:   ../../base/other2.h
 
 		opt, graph, cleanup := setupBuild(ctx, t, dir, hashfs.Option{})
 		defer cleanup()
-		opt.UnitTest = true
 		opt.ReproxyAddr = reproxyAddr
 
 		b, err := build.New(ctx, graph, opt)
