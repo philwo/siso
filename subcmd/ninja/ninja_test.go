@@ -22,29 +22,45 @@ import (
 	"infra/build/siso/toolsupport/ninjautil"
 )
 
-func setupFiles(t *testing.T, dir string, files map[string]string) {
+func setupFiles(t *testing.T, dir, name string, deletes []string) {
 	t.Helper()
-	for k, v := range files {
-		fname := filepath.Join(dir, k)
-		dir := filepath.Dir(fname)
-		err := os.MkdirAll(dir, 0755)
+	root := filepath.Join("testdata", name)
+	err := filepath.Walk(root, func(pathname string, info fs.FileInfo, err error) error {
 		if err != nil {
-			t.Fatal(err)
+			return err
 		}
-		err = os.WriteFile(fname, []byte(v), 0644)
+		name, err := filepath.Rel(root, pathname)
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			return os.MkdirAll(filepath.Join(dir, name), 0755)
+		}
+		buf, err := os.ReadFile(pathname)
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(filepath.Join(dir, name), buf, info.Mode())
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range deletes {
+		err = os.Remove(filepath.Join(dir, name))
 		if err != nil {
 			t.Fatal(err)
 		}
 	}
 }
 
-func setupBuild(ctx context.Context, t *testing.T, dir string) (build.Options, build.Graph) {
+func setupBuild(ctx context.Context, t *testing.T, dir string, fsopt hashfs.Option) (build.Options, build.Graph, func()) {
 	t.Helper()
+	var cleanups []func()
 	wd, err := os.Getwd()
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() {
+	cleanups = append(cleanups, func() {
 		err := os.Chdir(wd)
 		if err != nil {
 			t.Fatal(err)
@@ -58,10 +74,16 @@ func setupBuild(ctx context.Context, t *testing.T, dir string) (build.Options, b
 	if err != nil {
 		t.Fatal(err)
 	}
-	hashFS, err := hashfs.New(ctx, hashfs.Option{})
+	hashFS, err := hashfs.New(ctx, fsopt)
 	if err != nil {
 		t.Fatal(err)
 	}
+	cleanups = append(cleanups, func() {
+		err := hashFS.Close(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
 	config, err := buildconfig.New(ctx, "@config//main.star", map[string]string{}, map[string]fs.FS{
 		"config":           os.DirFS(filepath.Join(dir, "build/config/siso")),
 		"config_overrides": os.DirFS(filepath.Join(dir, ".siso_remote")),
@@ -74,7 +96,7 @@ func setupBuild(ctx context.Context, t *testing.T, dir string) (build.Options, b
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() {
+	cleanups = append(cleanups, func() {
 		err := depsLog.Close()
 		if err != nil {
 			t.Fatal(err)
@@ -95,20 +117,26 @@ func setupBuild(ctx context.Context, t *testing.T, dir string) (build.Options, b
 		t.Fatal(err)
 	}
 	opt := build.Options{
-		Path:   path,
-		HashFS: hashFS,
-		Cache:  cache,
+		Path:            path,
+		HashFS:          hashFS,
+		Cache:           cache,
+		FailuresAllowed: 1,
 	}
-	return opt, graph
+	return opt, graph, func() {
+		for i := len(cleanups) - 1; i >= 0; i-- {
+			cleanups[i]()
+		}
+	}
 }
 
-func openDepsLog(ctx context.Context, t *testing.T, dir string) *ninjautil.DepsLog {
+func openDepsLog(ctx context.Context, t *testing.T, dir string) (*ninjautil.DepsLog, func()) {
 	t.Helper()
+	var cleanups []func()
 	wd, err := os.Getwd()
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() {
+	cleanups = append(cleanups, func() {
 		err := os.Chdir(wd)
 		if err != nil {
 			t.Fatal(err)
@@ -122,39 +150,26 @@ func openDepsLog(ctx context.Context, t *testing.T, dir string) *ninjautil.DepsL
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() {
+	cleanups = append(cleanups, func() {
 		err := depsLog.Close()
 		if err != nil {
 			t.Fatal(err)
 		}
 	})
-	return depsLog
+	return depsLog, func() {
+		for i := len(cleanups) - 1; i >= 0; i-- {
+			cleanups[i]()
+		}
+	}
 }
 
-func TestBuild_SwallowFaiulres(t *testing.T) {
+func TestBuild_SwallowFailures(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
 
-	setupFiles(t, dir, map[string]string{
-		"build/config/siso/main.star": `
-load("@builtin//struct.star", "module")
-def init(ctx):
-  return module(
-    "config",
-    step_config = "{}",
-    filegroups = {},
-    handlers = {},
-  )
-`,
-		"out/siso/build.ninja": `
-rule fail
-  command = fail
-build out1: fail
-build out2: fail
-build out3: fail
-build all: phony out1 out2 out3
-`})
-	opt, graph := setupBuild(ctx, t, dir)
+	setupFiles(t, dir, t.Name(), nil)
+	opt, graph, cleanup := setupBuild(ctx, t, dir, hashfs.Option{})
+	t.Cleanup(cleanup)
 	opt.UnitTest = true
 	opt.FailuresAllowed = 3
 
@@ -174,33 +189,13 @@ build all: phony out1 out2 out3
 	}
 }
 
-func TestBuild_SwallowFaiulresLimit(t *testing.T) {
+func TestBuild_SwallowFailuresLimit(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
 
-	setupFiles(t, dir, map[string]string{
-		"build/config/siso/main.star": `
-load("@builtin//struct.star", "module")
-def init(ctx):
-  return module(
-    "config",
-    step_config = "{}",
-    filegroups = {},
-    handlers = {},
-  )
-`,
-		"out/siso/build.ninja": `
-rule fail
-  command = fail
-build out1: fail
-build out2: fail
-build out3: fail
-build out4: fail
-build out5: fail
-build out6: fail
-build all: phony out1 out2 out3 out4 out5 out6
-`})
-	opt, graph := setupBuild(ctx, t, dir)
+	setupFiles(t, dir, t.Name(), nil)
+	opt, graph, cleanup := setupBuild(ctx, t, dir, hashfs.Option{})
+	t.Cleanup(cleanup)
 	opt.UnitTest = true
 	opt.FailuresAllowed = 11
 
@@ -224,42 +219,9 @@ func TestBuild_KeepGoing(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
 
-	setupFiles(t, dir, map[string]string{
-		"build/config/siso/main.star": `
-load("@builtin//struct.star", "module")
-def init(ctx):
-  return module(
-    "config",
-    step_config = "{}",
-    filegroups = {},
-    handlers = {},
-  )
-`,
-		"success.py": `
-import sys
-with open(sys.argv[1], "w") as f:
-  f.write("")
-`,
-		"out/siso/build.ninja": `
-rule success
-  command = python3 ../../success.py ${out}
-rule fail
-  command = fail
-build out1: fail
-build out2: fail
-build out3: success
-build out4: success
-build out5: success
-build out6: success
-build out7: success out1
-build out8: success out2
-build out9: success out3
-build out10: success out4
-build out11: success out5
-build out12: success out6
-build all: phony out1 out2 out3 out4 out5 out6 out7 out8 out9 out10 out11 out12
-`})
-	opt, graph := setupBuild(ctx, t, dir)
+	setupFiles(t, dir, t.Name(), nil)
+	opt, graph, cleanup := setupBuild(ctx, t, dir, hashfs.Option{})
+	t.Cleanup(cleanup)
 	opt.UnitTest = true
 	opt.FailuresAllowed = 11
 	var metricsBuffer bytes.Buffer

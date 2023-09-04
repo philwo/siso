@@ -6,7 +6,6 @@ package ninja
 
 import (
 	"context"
-	"infra/build/siso/build"
 	"net"
 	"os"
 	"path/filepath"
@@ -18,6 +17,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"infra/build/siso/build"
+	"infra/build/siso/hashfs"
 	pb "infra/third_party/reclient/api/proxy"
 )
 
@@ -25,43 +26,11 @@ func TestBuild_DepsMSVC(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
 
-	t.Run("first", func(t *testing.T) {
-		setupFiles(t, dir, map[string]string{
-			"build/config/siso/main.star": `
-load("@builtin//struct.star", "module")
-def init(ctx):
-  return module(
-    "config",
-    step_config = "{}",
-    filegroups = {},
-    handlers = {},
-  )
-`,
-			"out/siso/build.ninja": `
-rule cxx
-   command = python3 ../../third_party/llvm-build/Release+Asserts/bin/clang-cl.py /showIncludes:user /TP ${in} /Fo${out}
-   deps = msvc
-
-build foo.o: cxx ../../base/foo.cc
-build all: phony foo.o
-`,
-			"base/foo.cc": `
-#include "foo.h"
-`,
-			"base/foo.h": `
-#include "other.h"
-`,
-			"base/other.h": "",
-
-			"third_party/llvm-build/Release+Asserts/bin/clang-cl.py": `
-print("Note: including file: ../../base/foo.h")
-print("Note: including file:   ../../base/other.h")
-with open("foo.o", "w") as f:
-  f.write("")
-`,
-		})
-
-		opt, graph := setupBuild(ctx, t, dir)
+	func() {
+		t.Logf("first build")
+		setupFiles(t, dir, t.Name(), nil)
+		opt, graph, cleanup := setupBuild(ctx, t, dir, hashfs.Option{})
+		defer cleanup()
 		opt.UnitTest = true
 
 		b, err := build.New(ctx, graph, opt)
@@ -72,10 +41,12 @@ with open("foo.o", "w") as f:
 		if err != nil {
 			t.Fatalf(`b.Build(ctx, "build", "all")=%v; want nil err`, err)
 		}
-	})
+	}()
 
-	t.Run("first_check_deps", func(t *testing.T) {
-		depsLog := openDepsLog(ctx, t, dir)
+	func() {
+		t.Logf("first_check_deps")
+		depsLog, cleanup := openDepsLog(ctx, t, dir)
+		defer cleanup()
 		deps, mtime, err := depsLog.Get(ctx, "foo.o")
 		if err != nil {
 			t.Fatalf(`depsLog.Get(ctx, "foo.o")=%v, %v, %v; want nil err`, deps, mtime, err)
@@ -88,27 +59,13 @@ with open("foo.o", "w") as f:
 		if diff := cmp.Diff(want, deps); diff != "" {
 			t.Errorf("deps for foo.o: diff -want +got:\n%s", diff)
 		}
-	})
+	}()
 
-	t.Run("second", func(t *testing.T) {
-		setupFiles(t, dir, map[string]string{
-			"base/foo.h": `
-#include "other2.h"
-`,
-			"base/other2.h": "",
-
-			"third_party/llvm-build/Release+Asserts/bin/clang-cl.py": `
-print("Note: including file: ../../base/foo.h")
-print("Note: including file:   ../../base/other2.h")
-with open("foo.o", "w") as f:
-  f.write("")
-`,
-		})
-		err := os.Remove(filepath.Join(dir, "base/other.h"))
-		if err != nil {
-			t.Fatal(err)
-		}
-		opt, graph := setupBuild(ctx, t, dir)
+	func() {
+		t.Logf("second build")
+		setupFiles(t, dir, t.Name()+"_second", []string{"base/other.h"})
+		opt, graph, cleanup := setupBuild(ctx, t, dir, hashfs.Option{})
+		defer cleanup()
 		opt.UnitTest = true
 
 		b, err := build.New(ctx, graph, opt)
@@ -119,10 +76,12 @@ with open("foo.o", "w") as f:
 		if err != nil {
 			t.Fatalf(`b.Build(ctx, "build", "all")=%v; want nil err`, err)
 		}
-	})
+	}()
 
-	t.Run("second_check_deps", func(t *testing.T) {
-		depsLog := openDepsLog(ctx, t, dir)
+	func() {
+		t.Logf("second_check_deps")
+		depsLog, cleanup := openDepsLog(ctx, t, dir)
+		defer cleanup()
 		deps, mtime, err := depsLog.Get(ctx, "foo.o")
 		if err != nil {
 			t.Fatalf(`depsLog.Get(ctx, "foo.o")=%v, %v, %v; want nil err`, deps, mtime, err)
@@ -135,7 +94,7 @@ with open("foo.o", "w") as f:
 		if diff := cmp.Diff(want, deps); diff != "" {
 			t.Errorf("deps for foo.o: diff -want +got:\n%s", diff)
 		}
-	})
+	}()
 }
 
 type fakeReproxy struct {
@@ -155,19 +114,20 @@ func (f fakeReproxy) Shutdown(ctx context.Context, req *pb.ShutdownRequest) (*pb
 	return &pb.ShutdownResponse{}, nil
 }
 
-func setupFakeReproxy(ctx context.Context, t *testing.T, fake fakeReproxy) string {
+func setupFakeReproxy(ctx context.Context, t *testing.T, fake fakeReproxy) (string, func()) {
 	t.Helper()
+	var cleanups []func()
 
 	lis, err := net.Listen("tcp", "localhost:0")
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { lis.Close() })
+	cleanups = append(cleanups, func() { lis.Close() })
 
 	addr := lis.Addr().String()
 	t.Logf("fake reproxy at %s", addr)
 	os.Setenv("RBE_server_address", addr)
-	t.Cleanup(func() {
+	cleanups = append(cleanups, func() {
 		os.Unsetenv("RBE_server_address")
 	})
 
@@ -177,72 +137,21 @@ func setupFakeReproxy(ctx context.Context, t *testing.T, fake fakeReproxy) strin
 		err := serv.Serve(lis)
 		t.Logf("Serve finished: %v", err)
 	}()
-	return addr
+	return addr, func() {
+		for i := len(cleanups) - 1; i >= 0; i-- {
+			cleanups[i]()
+		}
+	}
 }
 
 func TestBuild_DepsMSVC_Reproxy(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
 
-	t.Run("first", func(t *testing.T) {
-		setupFiles(t, dir, map[string]string{
-			"build/config/siso/main.star": `
-load("@builtin//struct.star", "module")
-load("@builtin//encoding.star", "json")
-
-def __cxx(ctx, cmd):
-    reproxy_config = {
-      "platform": {"container-image": "gcr.io/xxx"},
-      "labels": {"type": "compile", "compiler": "clang-cl", "lang": "cpp"},
-      "exec_strategy": "remote",
-    }
-    print(json.encode(reproxy_config))
-    ctx.actions.fix(reproxy_config = json.encode(reproxy_config))
-
-__handlers = {
-  "cxx": __cxx,
-}
-
-def __step_config(ctx):
-   step_config = {}
-   step_config["rules"] = [
-     {
-       "name": "cxx",
-       "action": "cxx",
-       "handler": "cxx",
-       "debug": True,
-     },
-   ]
-   return step_config
-
-def init(ctx):
-  return module(
-    "config",
-    step_config = json.encode(__step_config(ctx)),
-    filegroups = {},
-    handlers = __handlers,
-  )
-`,
-			"out/siso/build.ninja": `
-rule cxx
-   command = ../../third_party/llvm-build/Release+Asserts/bin/clang-cl /showIncludes:user /TP ${in} /Fo${out}
-   deps = msvc
-
-build foo.o: cxx ../../base/foo.cc
-build all: phony foo.o
-`,
-			"base/foo.cc": `
-#include "foo.h"
-`,
-			"base/foo.h": `
-#include "other.h"
-`,
-			"base/other.h": "",
-
-			"third_party/llvm-build/Release+Asserts/bin/clang-cl": "",
-		})
-
-		reproxyAddr := setupFakeReproxy(ctx, t, fakeReproxy{
+	func() {
+		t.Logf("first build")
+		setupFiles(t, dir, t.Name(), nil)
+		reproxyAddr, recleanup := setupFakeReproxy(ctx, t, fakeReproxy{
 			runCommand: func(ctx context.Context, req *pb.RunRequest) (*pb.RunResponse, error) {
 				err := os.WriteFile(filepath.Join(dir, "out/siso/foo.o"), nil, 0644)
 				if err != nil {
@@ -265,8 +174,10 @@ Note: including file:   ../../base/other.h
 				}, nil
 			},
 		})
+		defer recleanup()
 
-		opt, graph := setupBuild(ctx, t, dir)
+		opt, graph, cleanup := setupBuild(ctx, t, dir, hashfs.Option{})
+		defer cleanup()
 		opt.UnitTest = true
 		opt.ReproxyAddr = reproxyAddr
 
@@ -278,10 +189,12 @@ Note: including file:   ../../base/other.h
 		if err != nil {
 			t.Fatalf(`b.Build(ctx, "build", "all")=%v; want nil err`, err)
 		}
-	})
+	}()
 
-	t.Run("first_check_deps", func(t *testing.T) {
-		depsLog := openDepsLog(ctx, t, dir)
+	func() {
+		t.Logf("first_check_deps")
+		depsLog, cleanup := openDepsLog(ctx, t, dir)
+		defer cleanup()
 		deps, mtime, err := depsLog.Get(ctx, "foo.o")
 		if err != nil {
 			t.Fatalf(`depsLog.Get(ctx, "foo.o")=%v, %v, %v; want nil err`, deps, mtime, err)
@@ -294,23 +207,12 @@ Note: including file:   ../../base/other.h
 		if diff := cmp.Diff(want, deps); diff != "" {
 			t.Errorf("deps for foo.o: diff -want +got:\n%s", diff)
 		}
-	})
+	}()
 
-	t.Run("second", func(t *testing.T) {
-		setupFiles(t, dir, map[string]string{
-			"base/foo.h": `
-#include "other2.h"
-`,
-			"base/other2.h": "",
-
-			"third_party/llvm-build/Release+Asserts/bin/clang-cl": "",
-		})
-		err := os.Remove(filepath.Join(dir, "base/other.h"))
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		reproxyAddr := setupFakeReproxy(ctx, t, fakeReproxy{
+	func() {
+		t.Logf("second build")
+		setupFiles(t, dir, t.Name()+"_second", []string{"base/other.h"})
+		reproxyAddr, recleanup := setupFakeReproxy(ctx, t, fakeReproxy{
 			runCommand: func(ctx context.Context, req *pb.RunRequest) (*pb.RunResponse, error) {
 				err := os.WriteFile(filepath.Join(dir, "out/siso/foo.o"), nil, 0644)
 				if err != nil {
@@ -333,8 +235,10 @@ Note: including file:   ../../base/other2.h
 				}, nil
 			},
 		})
+		defer recleanup()
 
-		opt, graph := setupBuild(ctx, t, dir)
+		opt, graph, cleanup := setupBuild(ctx, t, dir, hashfs.Option{})
+		defer cleanup()
 		opt.UnitTest = true
 		opt.ReproxyAddr = reproxyAddr
 
@@ -346,10 +250,12 @@ Note: including file:   ../../base/other2.h
 		if err != nil {
 			t.Fatalf(`b.Build(ctx, "build", "all")=%v; want nil err`, err)
 		}
-	})
+	}()
 
-	t.Run("second_check_deps", func(t *testing.T) {
-		depsLog := openDepsLog(ctx, t, dir)
+	func() {
+		t.Logf("second_check_deps")
+		depsLog, cleanup := openDepsLog(ctx, t, dir)
+		defer cleanup()
 		deps, mtime, err := depsLog.Get(ctx, "foo.o")
 		if err != nil {
 			t.Fatalf(`depsLog.Get(ctx, "foo.o")=%v, %v, %v; want nil err`, deps, mtime, err)
@@ -362,5 +268,5 @@ Note: including file:   ../../base/other2.h
 		if diff := cmp.Diff(want, deps); diff != "" {
 			t.Errorf("deps for foo.o: diff -want +got:\n%s", diff)
 		}
-	})
+	}()
 }
