@@ -9,6 +9,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"time"
+
+	epb "infra/build/siso/execute/proto"
 )
 
 // IntervalMetric is a time duration, but serialized as seconds in JSON.
@@ -105,6 +107,8 @@ type StepMetric struct {
 	Inputs  int `json:"inputs,omitempty"`  // how many input files.
 	Outputs int `json:"outputs,omitempty"` // how many output files.
 
+	MaxRSS int64 `json:"max_rss,omitempty"` // max rss in local cmd.
+
 	skip bool // whether the step was skipped during the build.
 }
 
@@ -123,4 +127,11 @@ func (m *StepMetric) done(ctx context.Context, step *Step) {
 		m.QueueTime = IntervalMetric(md.GetWorkerStartTimestamp().AsTime().Sub(md.GetQueuedTimestamp().AsTime()))
 	}
 	m.ExecTime = IntervalMetric(md.GetExecutionCompletedTimestamp().AsTime().Sub(md.GetExecutionStartTimestamp().AsTime()))
+	for _, any := range md.GetAuxiliaryMetadata() {
+		ru := &epb.Rusage{}
+		err := any.UnmarshalTo(ru)
+		if err == nil {
+			m.MaxRSS = ru.MaxRss
+		}
+	}
 }
