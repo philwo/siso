@@ -26,10 +26,18 @@ import (
 	"infra/build/siso/o11y/clog"
 	"infra/build/siso/o11y/trace"
 	"infra/build/siso/reapi/digest"
+	lpb "infra/third_party/reclient/api/log"
 	ppb "infra/third_party/reclient/api/proxy"
 )
 
 const (
+	// WorkerNameRemote is a worker name used in ActionResult.ExecutionMetadata for remote execution result.
+	WorkerNameRemote = "reproxy-remote"
+	// WorkerNameFallback is a worker name used in ActionResult.ExecutionMetadata for local fallback result.
+	WorkerNameFallback = "reproxy-fallback"
+	// WorkerNameRacingLocal is a worker name used in ActionResult.ExecutionMetadata for racing local result.
+	WorkerNameRacingLocal = "reproxy-racing-local"
+
 	// dialTimeout defines the timeout we'd like to use to dial reproxy.
 	dialTimeout = 3 * time.Minute
 	// defaultExecTimeout defines the default timeout to use for executions.
@@ -218,6 +226,9 @@ func processResponse(ctx context.Context, cmd *execute.Cmd, response *ppb.RunRes
 		return errors.New("no response")
 	}
 
+	// Log Reproxy's execution ID to associate it with Siso's command ID for debugging purposes.
+	clog.Infof(ctx, "RunResponse.ExecutionId=%s", response.GetExecutionId())
+
 	cached := response.GetResult().GetStatus() == cpb.CommandResultStatus_CACHE_HIT
 	if response.GetResult().GetExitCode() == 0 && err == nil {
 		clog.Infof(ctx, "exit=%d cache=%t", response.GetResult().GetExitCode(), cached)
@@ -231,9 +242,15 @@ func processResponse(ctx context.Context, cmd *execute.Cmd, response *ppb.RunRes
 		StdoutRaw: response.GetStdout(),
 		StderrRaw: response.GetStderr(),
 		// TODO(b/273407069): this is nowhere near a complete ExecutedActionMetadata. add extra info where siso needs it.
-		ExecutionMetadata: &rpb.ExecutedActionMetadata{
-			Worker: response.GetExecutionId(),
-		},
+		ExecutionMetadata: &rpb.ExecutedActionMetadata{},
+	}
+	cs := response.GetActionLog().GetCompletionStatus()
+	if cs == lpb.CompletionStatus_STATUS_LOCAL_FALLBACK {
+		result.ExecutionMetadata.Worker = WorkerNameFallback
+	} else if cs == lpb.CompletionStatus_STATUS_RACING_LOCAL {
+		result.ExecutionMetadata.Worker = WorkerNameRacingLocal
+	} else {
+		result.ExecutionMetadata.Worker = WorkerNameRemote
 	}
 
 	// any stdout/stderr is unexpected, write this out and stop if received.

@@ -11,6 +11,7 @@ import (
 
 	log "github.com/golang/glog"
 
+	"infra/build/siso/execute/reproxyexec"
 	"infra/build/siso/o11y/clog"
 	"infra/build/siso/o11y/trace"
 	ppb "infra/third_party/reclient/api/proxy"
@@ -39,10 +40,18 @@ func (b *Builder) runReproxy(ctx context.Context, step *Step) error {
 		maybeDisableLocalFallback(ctx, step)
 		err := b.reproxyExec.Run(ctx, step.cmd)
 		step.setPhase(stepOutput)
+		ar, cached := step.cmd.ActionResult()
 		if err == nil {
-			step.metrics.IsRemote = true
+			if ar.ExecutionMetadata.GetWorker() == reproxyexec.WorkerNameFallback {
+				step.metrics.Fallback = true
+				b.stats.localFallback(ctx)
+			} else if ar.ExecutionMetadata.GetWorker() == reproxyexec.WorkerNameRacingLocal {
+				// TODO: Siso may want to have `racing`flag in the step metrics.
+				b.stats.localDone(ctx, nil)
+			} else {
+				step.metrics.IsRemote = true
+			}
 		}
-		_, cached := step.cmd.ActionResult()
 		if cached {
 			b.stats.cacheHit(ctx)
 		} else {
