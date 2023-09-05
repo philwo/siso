@@ -6,6 +6,7 @@ package build
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	log "github.com/golang/glog"
@@ -67,7 +68,7 @@ func maybeDisableLocalFallback(ctx context.Context, step *Step) {
 	// CompileErrorRatioAlert checks remote failure/local success case. So it
 	// needs to do local fallback on Reproxy side. However, all local executions
 	// need to be handled at Siso layer.
-	if experiments.Enabled("no-fallback", "") && step.cmd.REProxyConfig.ExecStrategy == ppb.ExecutionStrategy_REMOTE_LOCAL_FALLBACK.String() {
+	if experiments.Enabled("no-fallback", "") && strings.ToUpper(step.cmd.REProxyConfig.ExecStrategy) == ppb.ExecutionStrategy_REMOTE_LOCAL_FALLBACK.String() {
 		if log.V(1) {
 			clog.Infof(ctx, "overriding reproxy REMOTE_LOCAL_FALLBACK to REMOTE")
 		}
