@@ -158,13 +158,32 @@ func (re *REProxyExec) Run(ctx context.Context, cmd *execute.Cmd) error {
 }
 
 func createRequest(ctx context.Context, cmd *execute.Cmd, execTimeout time.Duration) (*ppb.RunRequest, error) {
+	var inputs []string
+	// don't pass labels or err-file as inputs to reproxy
+	// e.g. cmd.REPRoxyConfig.Inputs may contains labels.
+	// https://chromium.googlesource.com/chromium/src/+/f640920f763cab187188ab3806fd1a2514068f68/build/config/siso/reproxy.star#245
+	checkInputs := func(in string) bool {
+		if strings.Contains(in, ":") {
+			return false
+		}
+		_, err := cmd.HashFS.Stat(ctx, cmd.ExecRoot, in)
+		return err == nil
+	}
+	for _, in := range cmd.REProxyConfig.Inputs {
+		if checkInputs(in) {
+			inputs = append(inputs, in)
+		}
+	}
+	// cmd.AllInputs are already checked
+	inputs = append(inputs, cmd.AllInputs()...)
+
 	c := &cpb.Command{
 		Identifiers: &cpb.Identifiers{
 			CommandId: cmd.ID,
 		},
 		ExecRoot: cmd.ExecRoot,
 		Input: &cpb.InputSpec{
-			Inputs: append(cmd.REProxyConfig.Inputs, cmd.AllInputs()...),
+			Inputs: inputs,
 		},
 		Output: &cpb.OutputSpec{
 			OutputFiles: cmd.AllOutputs(),
