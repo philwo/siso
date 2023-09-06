@@ -6,11 +6,16 @@ package build
 
 import (
 	"context"
+	"errors"
+	"io/fs"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	log "github.com/golang/glog"
 
+	"infra/build/siso/execute"
 	"infra/build/siso/execute/reproxyexec"
 	"infra/build/siso/o11y/clog"
 	"infra/build/siso/o11y/trace"
@@ -30,6 +35,10 @@ func (b *Builder) runReproxy(ctx context.Context, step *Step) error {
 		return err
 	}
 	err = b.prepareLocalOutdirs(ctx, step)
+	if err != nil {
+		return err
+	}
+	err = allowWriteOutputs(ctx, step.cmd)
 	if err != nil {
 		return err
 	}
@@ -69,6 +78,33 @@ func (b *Builder) runReproxy(ctx context.Context, step *Step) error {
 		clog.Warningf(ctx, "failed to update deps: %v", err)
 	}
 	return err
+}
+
+// allowWriteOutputs fixes the permissions of the output files if they are not writable.
+// TODO: b/299227633 - Remove this workaround after Reproxy fixes the write operation.
+func allowWriteOutputs(ctx context.Context, cmd *execute.Cmd) error {
+	ctx, span := trace.NewSpan(ctx, "allow-write-outputs")
+	defer span.Close(nil)
+	for _, out := range cmd.Outputs {
+		fname := filepath.Join(cmd.ExecRoot, out)
+		fi, err := os.Lstat(fname)
+		if errors.Is(err, fs.ErrNotExist) {
+			// Do nothing if the file doesn't exist.
+			continue
+		} else if err != nil {
+			// We don't know the filemode. So let it go.
+			clog.Warningf(ctx, "failed to stat %s: %v", fname, err)
+			continue
+		}
+		// The file needs to be writable. Otherwise writing the output file fails with permission denied.
+		if fi.Mode()&0200 == 0 {
+			err = os.Chmod(fname, fi.Mode()|0200)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func maybeDisableLocalFallback(ctx context.Context, step *Step) {
