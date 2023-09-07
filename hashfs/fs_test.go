@@ -966,3 +966,320 @@ func TestRefresh(t *testing.T) {
 		t.Fatalf("entry for %s exists", fullname)
 	}
 }
+
+var flushTestNames []string
+
+func init() {
+	flushTestNames = []string{
+		"empty-dir",
+		"subdir",
+		"subdir/empty-file",
+		"subdir/some-file",
+	}
+	if runtime.GOOS != "windows" {
+		flushTestNames = append(flushTestNames, "subdir/hardlink", "subdir/symlink")
+	}
+	flushTestNames = append(flushTestNames, "new-entry")
+}
+
+func setupForFlush(t *testing.T) (*hashfs.HashFS, string) {
+	t.Helper()
+	ctx := context.Background()
+
+	dir := t.TempDir()
+	dir, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dirname := filepath.Join(dir, "empty-dir")
+	err = os.MkdirAll(dirname, 0755)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dirname = filepath.Join(dir, "subdir")
+	err = os.MkdirAll(dirname, 0755)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fname := filepath.Join(dirname, "empty-file")
+	err = os.WriteFile(fname, nil, 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fname = filepath.Join(dirname, "some-file")
+	err = os.WriteFile(fname, []byte("some data"), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lfi, err := os.Lstat(fname)
+	if err != nil {
+		t.Fatal(err)
+	}
+	someFileMtime := lfi.ModTime()
+
+	if runtime.GOOS != "windows" {
+		lname := filepath.Join(dirname, "hardlink")
+		err = os.Link(fname, lname)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		lfi, err := os.Lstat(lname)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !someFileMtime.Equal(lfi.ModTime()) {
+			t.Fatalf("hardlink mtime %v != some-file mtime %v", lfi.ModTime(), someFileMtime)
+		}
+
+		sname := filepath.Join(dirname, "symlink")
+		err = os.Symlink(filepath.Base(fname), sname)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	hashFS, err := hashfs.New(ctx, hashfs.Option{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { hashFS.Close(ctx) })
+
+	for _, name := range flushTestNames {
+		_, err := hashFS.Stat(ctx, dir, name)
+		if name == "new-entry" {
+			if err == nil {
+				t.Errorf("Stat(ctx, dir, %q)=_, %v; want error", name, err)
+			}
+			continue
+		}
+		if err != nil {
+			t.Errorf("Stat(ctx, dir, %q)=_, %v; want nil err", name, err)
+		}
+	}
+	return hashFS, dir
+}
+
+func TestMkdirFlush(t *testing.T) {
+	ctx := context.Background()
+
+	for _, name := range flushTestNames {
+		t.Run(name, func(t *testing.T) {
+			hashFS, dir := setupForFlush(t)
+			err := hashFS.Mkdir(ctx, dir, name)
+			switch name {
+			case "empty-dir", "subdir", "new-entry":
+				if err != nil {
+					t.Fatalf("Mkdir(ctx, dir, %q)=%v; want nil err", name, err)
+				}
+			default:
+				if err == nil {
+					t.Fatalf("Mkdir(ctx, dir, %q)=%v; want not a directory err", name, err)
+				}
+				return
+			}
+			fi, err := hashFS.Stat(ctx, dir, name)
+			if err != nil {
+				t.Fatalf("Stat(ctx, dir, %q)=%v, %v; want nil err", name, fi, err)
+			}
+			mtime := fi.ModTime()
+			err = hashFS.Flush(ctx, dir, []string{name})
+			if err != nil {
+				t.Fatalf("Flush(ctx, dir, {%q})=%v; want nil err", name, err)
+			}
+			lfi, err := os.Lstat(filepath.Join(dir, name))
+			if err != nil {
+				t.Fatalf("Lstat(%q)=%v, %v; want nil err", name, lfi, err)
+			}
+			if !lfi.IsDir() {
+				t.Errorf("isdir=%t; want true", lfi.IsDir())
+			}
+			if !mtime.Equal(lfi.ModTime()) {
+				t.Errorf("mtime: hashfs=%v disk=%v", mtime, lfi.ModTime())
+			}
+		})
+	}
+}
+
+func TestWriteEmptyFlush(t *testing.T) {
+	ctx := context.Background()
+
+	for _, name := range flushTestNames {
+		t.Run(name, func(t *testing.T) {
+			hashFS, dir := setupForFlush(t)
+			now := time.Now()
+			err := hashFS.WriteFile(ctx, dir, name, nil, false, now, []byte("cmdhash"))
+			if err != nil {
+				t.Fatalf("WriteFile(ctx, dir, %q, nil, false, now, cmdhash)=%v; want nil err", name, err)
+			}
+			fi, err := hashFS.Stat(ctx, dir, name)
+			if err != nil {
+				t.Fatalf("Stat(ctx, dir, %q)=%v, %v; want nil err", name, fi, err)
+			}
+			mtime := fi.ModTime()
+			if !mtime.Equal(now) {
+				t.Errorf("mtime %v != %v", mtime, now)
+			}
+			err = hashFS.Flush(ctx, dir, []string{name})
+			switch name {
+			case "subdir":
+				if err == nil {
+					t.Fatalf("Flush(ctx, dir, {%q})=%v; want error", name, err)
+				}
+				return
+			default:
+				if err != nil {
+					t.Fatalf("Flush(ctx, dir, {%q})=%v; want nil err", name, err)
+				}
+			}
+			lfi, err := os.Lstat(filepath.Join(dir, name))
+			if err != nil {
+				t.Fatalf("Lstat(%q)=%v, %v; want nil err", name, lfi, err)
+			}
+			if !lfi.Mode().IsRegular() {
+				t.Errorf("isRegular=%t; want true", lfi.Mode().IsRegular())
+			}
+			if !mtime.Equal(lfi.ModTime()) {
+				t.Errorf("mtime: hashfs=%v disk=%v", mtime, lfi.ModTime())
+			}
+			if name == "hardlink" {
+				ofi, err := os.Lstat(filepath.Join(dir, "subdir/some-file"))
+				if err != nil {
+					t.Fatalf("Lstat(%q)=%v, %v; want nil err", "subdir/some-file", ofi, err)
+				}
+				if ofi.ModTime().Equal(lfi.ModTime()) {
+					t.Errorf("mtime hardlink changes some-file: %v", ofi.ModTime())
+				}
+			}
+		})
+	}
+}
+
+func TestWriteDataFlush(t *testing.T) {
+	ctx := context.Background()
+
+	for _, name := range flushTestNames {
+		t.Run(name, func(t *testing.T) {
+			hashFS, dir := setupForFlush(t)
+			now := time.Now()
+			err := hashFS.WriteFile(ctx, dir, name, []byte("new data"), false, now, []byte("new-cmd-hash"))
+			if err != nil {
+				t.Fatalf("WriteFile(ctx, dir, %q, data, false, now, cmdhash)=%v; want nil err", name, err)
+			}
+			fi, err := hashFS.Stat(ctx, dir, name)
+			if err != nil {
+				t.Fatalf("Stat(ctx, dir, %q)=%v, %v; want nil err", name, fi, err)
+			}
+			mtime := fi.ModTime()
+			if !mtime.Equal(now) {
+				t.Errorf("mtime %v != %v", mtime, now)
+			}
+			err = hashFS.Flush(ctx, dir, []string{name})
+			switch name {
+			case "subdir":
+				if err == nil {
+					t.Fatalf("Flush(ctx, dir, {%q})=%v; want error", name, err)
+				}
+				return
+			default:
+				if err != nil {
+					t.Fatalf("Flush(ctx, dir, {%q})=%v; want nil err", name, err)
+				}
+			}
+			lfi, err := os.Lstat(filepath.Join(dir, name))
+			if err != nil {
+				t.Fatalf("Lstat(%q)=%v, %v; want nil err", name, lfi, err)
+			}
+			if !lfi.Mode().IsRegular() {
+				t.Errorf("isRegular=%t; want true", lfi.Mode().IsRegular())
+			}
+			if !mtime.Equal(lfi.ModTime()) {
+				t.Errorf("mtime: hashfs=%v disk=%v", mtime, lfi.ModTime())
+			}
+			if name == "hardlink" {
+				ofi, err := os.Lstat(filepath.Join(dir, "subdir/some-file"))
+				if err != nil {
+					t.Fatalf("Lstat(%q)=%v, %v; want nil err", "subdir/some-file", ofi, err)
+				}
+				if ofi.ModTime().Equal(lfi.ModTime()) {
+					t.Errorf("mtime hardlink changes some-file: %v", ofi.ModTime())
+				}
+			}
+		})
+	}
+}
+
+func TestSymlinkFlush(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skipf("no symlink on windows")
+		return
+	}
+	ctx := context.Background()
+
+	for _, name := range flushTestNames {
+		t.Run(name, func(t *testing.T) {
+			hashFS, dir := setupForFlush(t)
+			target := filepath.Join(dir, "subdir/some-file")
+			now := time.Now()
+			err := hashFS.Symlink(ctx, dir, target, name, now, []byte("cmdhash"))
+			if err != nil {
+				t.Fatalf("Symlink(ctx, dir, %q, %q, now, cmdhash)=%v; want nil err", target, name, err)
+			}
+			fi, err := hashFS.Stat(ctx, dir, name)
+			if err != nil {
+				t.Fatalf("Stat(ctx, dir, %q)=%v, %v; want nil err", name, fi, err)
+			}
+			mtime := fi.ModTime()
+			if !mtime.Equal(now) {
+				t.Errorf("mtime %v != %v", mtime, now)
+			}
+			err = hashFS.Flush(ctx, dir, []string{name})
+			switch name {
+			case "subdir":
+				if err == nil {
+					t.Fatalf("Flush(ctx, dir, {%q})=%v; want error", name, err)
+				}
+				return
+			default:
+				if err != nil {
+					t.Fatalf("Flush(ctx, dir, {%q})=%v; want nil err", name, err)
+				}
+			}
+			lfi, err := os.Lstat(filepath.Join(dir, name))
+			if err != nil {
+				t.Fatalf("Lstat(%q)=%v, %v; want nil err", name, lfi, err)
+			}
+			if lfi.Mode().Type() != fs.ModeSymlink {
+				t.Errorf("mode.type=%s; want %s", lfi.Mode().Type(), fs.ModeSymlink)
+			}
+			// does not care mtime of symlink itself.
+			// TODO: check mtime of symlink?
+		})
+	}
+}
+
+func TestRemoveFlush(t *testing.T) {
+	ctx := context.Background()
+
+	for _, name := range flushTestNames {
+		t.Run(name, func(t *testing.T) {
+			hashFS, dir := setupForFlush(t)
+			err := hashFS.Remove(ctx, dir, name)
+			if err != nil {
+				t.Fatalf("Remove(ctx, dir, %q)=%v; want nil err", name, err)
+			}
+			fi, err := hashFS.Stat(ctx, dir, name)
+			if !errors.Is(err, fs.ErrNotExist) {
+				t.Fatalf("Stat(ctx, dir, %q)=%v, %v; want %v", name, fi, err, fs.ErrNotExist)
+			}
+			err = hashFS.Flush(ctx, dir, []string{name})
+			if err != nil {
+				t.Fatalf("Flush(ctx, dir, {%q})=%v; want nil err", name, err)
+			}
+			lfi, err := os.Lstat(filepath.Join(dir, name))
+			if !errors.Is(err, fs.ErrNotExist) {
+				t.Fatalf("Lstat(%q)=%v, %v; want %v", name, lfi, err, fs.ErrNotExist)
+			}
+		})
+	}
+}
