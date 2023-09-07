@@ -806,21 +806,9 @@ func (hfs *HashFS) Flush(ctx context.Context, execRoot string, files []string) e
 		select {
 		case need := <-e.lready:
 			if !need {
-				// need=false means file is already downloaded,
-				// or entry was constructed from local disk.
 				if log.V(1) {
 					clog.Infof(ctx, "flush %s local ready", fname)
 				}
-				e.mu.Lock()
-				if e.mtimeUpdated {
-					// mtime was updated after entry sets mtime from the local disk.
-					err := os.Chtimes(fname, time.Now(), e.mtime)
-					clog.Infof(ctx, "flush %s local ready mtime update: %v", fname, err)
-					if err == nil {
-						e.mtimeUpdated = false
-					}
-				}
-				e.mu.Unlock()
 				err := e.err
 				if errors.Is(err, fs.ErrNotExist) {
 					clog.Warningf(ctx, "flush %s local-ready: %v", fname, err)
@@ -883,8 +871,7 @@ type entry struct {
 
 	mu sync.RWMutex
 	// mtime of entry in hashfs.
-	mtime        time.Time
-	mtimeUpdated bool
+	mtime time.Time
 	// updatedTime is timestamp when the file has been updated
 	// by Update or UpdateFromLocal.
 	// need to distinguish from mtime for restat=1.
@@ -1105,13 +1092,9 @@ func (e *entry) flush(ctx context.Context, fname, xattrname string, m *iometrics
 			return nil
 		}
 		if isHardlink(fi) {
+			clog.Infof(ctx, "flush %s: remove hardlink", fname)
 			err = os.Remove(fname)
 			m.OpsDone(err)
-			clog.Infof(ctx, "flush %s: remove hardlink: %v", fname, err)
-		} else if !fi.Mode().IsRegular() {
-			err = os.Remove(fname)
-			m.OpsDone(err)
-			clog.Infof(ctx, "flush %s: remove non-regular %s: %v", fname, fi.Mode(), err)
 		} else {
 			var fileDigest digest.Digest
 			src := digest.LocalFileSource{Fname: fname, IOMetrics: m}
@@ -1343,7 +1326,6 @@ func (d *directory) storeEntry(ctx context.Context, fname string, e *entry) (*en
 
 				// update mtime and updatedTime.
 				ee.mu.Lock()
-				ee.mtimeUpdated = !ee.mtime.Equal(e.mtime)
 				ee.mtime = e.mtime
 				ee.updatedTime = e.updatedTime
 				ee.mu.Unlock()
