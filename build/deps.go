@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"time"
 
 	log "github.com/golang/glog"
@@ -81,6 +82,8 @@ func depsFastStep(ctx context.Context, b *Builder, step *Step) (*Step, error) {
 	return fastStep, nil
 }
 
+// depsExpandInputs expands step.cmd.Inputs.
+// result will not contain labels nor non-existing files.
 func depsExpandInputs(ctx context.Context, b *Builder, step *Step) {
 	ctx, span := trace.NewSpan(ctx, "deps-expand-inputs")
 	defer span.Close(nil)
@@ -102,6 +105,15 @@ func depsExpandInputs(ctx context.Context, b *Builder, step *Step) {
 				continue
 			}
 			seen[in] = true
+			// labels are expanded in expanded,
+			// so no need to preserve it in inputs.
+			if strings.Contains(in, ":") {
+				continue
+			}
+			if _, err := b.hashFS.Stat(ctx, b.path.ExecRoot, in); err != nil {
+				clog.Warningf(ctx, "deps stat error %s: %v", in, err)
+				continue
+			}
 			inputs = append(inputs, in)
 		}
 		for _, in := range expanded {

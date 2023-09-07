@@ -15,9 +15,10 @@ import (
 )
 
 type fakeStepDef struct {
-	actionName string
-	command    string
-	outputs    []string
+	actionName     string
+	command        string
+	outputs        []string
+	expandedInputs func(context.Context) []string
 }
 
 func (f fakeStepDef) String() string     { return fmt.Sprintf("%#v", f) }
@@ -47,7 +48,13 @@ func (fakeStepDef) ToolInputs(context.Context) []string             { return nil
 func (fakeStepDef) ExpandCaseSensitives(ctx context.Context, in []string) []string {
 	return in
 }
-func (fakeStepDef) ExpandedInputs(context.Context) []string    { return nil }
+func (f fakeStepDef) ExpandedInputs(ctx context.Context) []string {
+	if f.expandedInputs == nil {
+		return nil
+	}
+	return f.expandedInputs(ctx)
+}
+
 func (fakeStepDef) RemoteInputs() map[string]string            { return nil }
 func (fakeStepDef) REProxyConfig() *execute.REProxyConfig      { return &execute.REProxyConfig{} }
 func (fakeStepDef) Handle(context.Context, *execute.Cmd) error { return nil }
