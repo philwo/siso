@@ -60,8 +60,10 @@ type OutputLocalFunc func(context.Context, string) bool
 
 // Options is builder options.
 type Options struct {
-	JobID             string
-	ID                string
+	JobID     string
+	ID        string
+	StartTime time.Time
+
 	Metadata          metadata.Metadata
 	ProjectID         string
 	Path              *Path
@@ -196,6 +198,10 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 	if logger != nil {
 		logger.Formatter = logFormat
 	}
+	start := opts.StartTime
+	if start.IsZero() {
+		start = time.Now()
+	}
 	ew := opts.ExplainWriter
 	if ew == nil {
 		ew = io.Discard
@@ -250,6 +256,7 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 
 		path:              opts.Path,
 		hashFS:            opts.HashFS,
+		start:             start,
 		graph:             graph,
 		stepSema:          semaphore.New("step", opts.Limits.Step),
 		preprocSema:       semaphore.New("preproc", opts.Limits.Preproc),
@@ -398,7 +405,6 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 		clog.Infof(ctx, "limit %s -> %s=%d", k, name, v)
 	}
 
-	started := time.Now()
 	var mftime time.Time
 	if b.rebuildManifest != "" {
 		fi, err := b.hashFS.Stat(ctx, b.path.ExecRoot, filepath.Join(b.path.Dir, b.rebuildManifest))
@@ -418,15 +424,15 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 			if err != nil {
 				return
 			}
-			clog.Infof(ctx, "rebuild manifest %#v %s: %s->%s: %s", stat, b.rebuildManifest, mftime, fi.ModTime(), time.Since(started))
+			clog.Infof(ctx, "rebuild manifest %#v %s: %s->%s: %s", stat, b.rebuildManifest, mftime, fi.ModTime(), time.Since(b.start))
 			if fi.ModTime().After(mftime) || stat.Done != stat.Skipped {
-				ui.Default.PrintLines(fmt.Sprintf("%6s Regenerating ninja files\n", ui.FormatDuration(time.Since(started))))
+				ui.Default.PrintLines(fmt.Sprintf("%6s Regenerating ninja files\n", ui.FormatDuration(time.Since(b.start))))
 				err = ErrManifestModified
 				return
 			}
 			return
 		}
-		clog.Infof(ctx, "build %s: %v", time.Since(started), err)
+		clog.Infof(ctx, "build %s: %v", time.Since(b.start), err)
 		if stat.Skipped == stat.Total {
 			ui.Default.PrintLines(ninjaNoWorkToDo)
 			return
@@ -483,7 +489,6 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 		}
 
 	}(ctx)
-	b.start = time.Now()
 	pstat := b.plan.stats()
 	b.progress.report("[%d+%d] build start", pstat.npendings, pstat.nready)
 	clog.Infof(ctx, "build pendings=%d ready=%d", pstat.npendings, pstat.nready)
@@ -591,7 +596,7 @@ loop:
 			step.metrics.Output = step.def.Outputs()[0]
 			step.metrics.PrevStepID = step.prevStepID
 			step.metrics.PrevStepOut = step.prevStepOut
-			step.metrics.Ready = IntervalMetric(step.readyTime.Sub(started))
+			step.metrics.Ready = IntervalMetric(step.readyTime.Sub(b.start))
 			step.metrics.Start = IntervalMetric(stepStart.Sub(step.readyTime))
 
 			span.SetAttr("ready_time", time.Since(step.readyTime).Milliseconds())
@@ -679,7 +684,7 @@ loop:
 	// metrics for full build session, without step_id etc.
 	var metrics StepMetric
 	metrics.BuildID = b.id
-	metrics.Duration = IntervalMetric(time.Since(started))
+	metrics.Duration = IntervalMetric(time.Since(b.start))
 	metrics.Err = err != nil
 	b.recordMetrics(ctx, metrics)
 	clog.Infof(ctx, "%s finished: %v", name, err)

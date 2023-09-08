@@ -72,6 +72,7 @@ func Cmd(authOpts cred.Options) *subcommands.Command {
 type ninjaCmdRun struct {
 	subcommands.CommandRunBase
 	authOpts cred.Options
+	started  time.Time
 
 	// flag values
 	dir        string
@@ -135,7 +136,7 @@ type ninjaCmdRun struct {
 
 // Run runs the `ninja` subcommand.
 func (c *ninjaCmdRun) Run(a subcommands.Application, args []string, env subcommands.Env) int {
-	started := time.Now()
+	c.started = time.Now()
 	ctx := cli.GetContext(a, c, env)
 	err := parseFlagsFully(&c.Flags)
 	if err != nil {
@@ -143,7 +144,7 @@ func (c *ninjaCmdRun) Run(a subcommands.Application, args []string, env subcomma
 		return 2
 	}
 	stats, err := c.run(ctx)
-	d := time.Since(started)
+	d := time.Since(c.started)
 	sps := float64(stats.Done-stats.Skipped) / d.Seconds()
 	dur := ui.FormatDuration(d)
 	if err != nil {
@@ -180,7 +181,7 @@ func (c *ninjaCmdRun) Run(a subcommands.Application, args []string, env subcomma
 			if ui.IsTerminal() {
 				msgPrefix = ui.SGR(ui.BackgroundRed, msgPrefix)
 			}
-			fmt.Fprintf(os.Stderr, "%6s %s: %v\n", ui.FormatDuration(time.Since(started)), msgPrefix, err)
+			fmt.Fprintf(os.Stderr, "%6s %s: %v\n", ui.FormatDuration(time.Since(c.started)), msgPrefix, err)
 		}
 		return 1
 	}
@@ -637,6 +638,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	bopts := build.Options{
 		JobID:                c.jobID,
 		ID:                   buildID,
+		StartTime:            c.started,
 		ProjectID:            projectID,
 		Metadata:             config.Metadata,
 		Path:                 buildPath,

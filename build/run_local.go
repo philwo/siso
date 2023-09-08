@@ -77,6 +77,7 @@ func (b *Builder) runLocal(ctx context.Context, step *Step) error {
 		clog.Infof(ctx, "step state: %s", stateMessage)
 		step.setPhase(phase)
 		started := time.Now()
+		step.metrics.ActionStartTime = IntervalMetric(started.Sub(b.start))
 		err := b.localExec.Run(ctx, step.cmd)
 		dur = time.Since(started)
 		step.setPhase(stepOutput)

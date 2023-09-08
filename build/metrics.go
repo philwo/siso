@@ -61,7 +61,10 @@ type StepMetric struct {
 	// execution strategy.
 	Start IntervalMetric `json:"start,omitempty"`
 	// Duration is the time it took for the action to do its job, measured
-	// from start of execution until it exited.
+	// from start of work until it is completed.
+	// It includes siso-overhead (preproc etc) and command executon
+	// (RunTime).
+	// for full build metric, it's duration to process all scheduled steps.
 	Duration IntervalMetric `json:"duration"`
 
 	// WeightedDuration is an estimate of the "true duration" of the action
@@ -92,6 +95,9 @@ type StepMetric struct {
 	// RunTime, QueueTime and ExecTime are measured by the execution
 	// strategies in execution metadata of result.
 
+	// ActionStartTime is the time it took since build start until
+	// the action starts execution.
+	ActionStartTime IntervalMetric `json:"action_start,omitempty"`
 	// RunTime is the total duration of the action execution, including
 	// overhead such as uploading / downloading files.
 	RunTime IntervalMetric `json:"run,omitempty"`

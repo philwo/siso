@@ -44,6 +44,7 @@ func (b *Builder) runReproxy(ctx context.Context, step *Step) error {
 	}
 	err = b.reproxySema.Do(ctx, func(ctx context.Context) error {
 		started := time.Now()
+		step.metrics.ActionStartTime = IntervalMetric(started.Sub(b.start))
 		clog.Infof(ctx, "step state: remote exec (via reproxy)")
 		step.setPhase(stepRemoteRun)
 		maybeDisableLocalFallback(ctx, step)

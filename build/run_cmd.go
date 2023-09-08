@@ -24,6 +24,7 @@ func (b *Builder) runCmdWithCache(ctx context.Context, step *Step, allowLocalFal
 	if b.cache != nil && step.cmd.Pure && b.reCacheEnableRead && !step.useReclient() {
 		err := b.cacheSema.Do(ctx, func(ctx context.Context) error {
 			start := time.Now()
+			step.metrics.ActionStartTime = IntervalMetric(start.Sub(b.start))
 			err := b.cache.GetActionResult(ctx, step.cmd)
 			if err != nil {
 				return err

@@ -21,6 +21,7 @@ func (b *Builder) runRemote(ctx context.Context, step *Step) error {
 	clog.Infof(ctx, "run remote %s", step.cmd.Desc)
 	err := b.remoteSema.Do(ctx, func(ctx context.Context) error {
 		started := time.Now()
+		step.metrics.ActionStartTime = IntervalMetric(started.Sub(b.start))
 		ctx = reapi.NewContext(ctx, &rpb.RequestMetadata{
 			ActionId:                step.cmd.ID,
 			ToolInvocationId:        b.id,
