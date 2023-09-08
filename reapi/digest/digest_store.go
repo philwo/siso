@@ -36,6 +36,11 @@ func (s *Store) GetSource(digest Digest) (Source, bool) {
 	return v.source, true
 }
 
+// Delete deletes digest from the store.
+func (s *Store) Delete(digest Digest) {
+	delete(s.m, digest)
+}
+
 // Size returns the number of digests in the store.
 func (s *Store) Size() int {
 	if s == nil {

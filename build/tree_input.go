@@ -7,10 +7,12 @@ package build
 import (
 	"context"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	log "github.com/golang/glog"
 
@@ -54,7 +56,10 @@ func (b *Builder) treeInput(ctx context.Context, dir, labelSuffix string, expand
 	st := &subtree{}
 	v, _ := b.trees.LoadOrStore(dir, st)
 	st = v.(*subtree)
-	st.init(ctx, b, dir, files, expandFn)
+	err := st.init(ctx, b, dir, files, expandFn)
+	if err != nil {
+		return merkletree.TreeEntry{}, err
+	}
 	return merkletree.TreeEntry{
 		Name:   dir,
 		Digest: st.d,
@@ -64,9 +69,12 @@ func (b *Builder) treeInput(ctx context.Context, dir, labelSuffix string, expand
 type subtree struct {
 	once sync.Once
 	d    digest.Digest
+
+	mu  sync.Mutex
+	err error
 }
 
-func (st *subtree) init(ctx context.Context, b *Builder, dir string, files []string, expandFn func(context.Context, []string) []string) {
+func (st *subtree) init(ctx context.Context, b *Builder, dir string, files []string, expandFn func(context.Context, []string) []string) error {
 	st.once.Do(func() {
 		files = b.expandInputs(ctx, files)
 		if expandFn != nil {
@@ -83,6 +91,8 @@ func (st *subtree) init(ctx context.Context, b *Builder, dir string, files []str
 		ents, err := b.hashFS.Entries(ctx, filepath.Join(b.path.ExecRoot, dir), inputs)
 		if err != nil {
 			clog.Warningf(ctx, "failed to get subtree entries %s: %v", dir, err)
+			st.err = err
+			return
 		}
 		// keep digest in tree in st.ds
 		ds := digest.NewStore()
@@ -91,20 +101,62 @@ func (st *subtree) init(ctx context.Context, b *Builder, dir string, files []str
 			err := mt.Set(ent)
 			if err != nil {
 				clog.Warningf(ctx, "failed to set %v: %v", ent, err)
+				st.err = err
+				return
 			}
 		}
 		st.d, err = mt.Build(ctx)
 		if err != nil {
 			clog.Warningf(ctx, "failed to build subtree %s: %v", dir, err)
+			st.err = err
+			return
 		}
 		// now subtree's digest is ready to use, but
 		// file's digests in subtree may not exist in CAS,
-
-		n, err := b.reapiclient.UploadAll(ctx, ds)
-		if err != nil {
-			clog.Warningf(ctx, "failed to upload subtree data %s: %v", dir, err)
-		} else {
-			clog.Infof(ctx, "upload subtree data %s %d", dir, n)
+		// check subtree's root digest exist in CAS first.
+		// If so, we can assume subtree data exist in CAS.
+		// Otherwise, we need to upload subtree data to CAS.
+		rootDS := digest.NewStore()
+		data, ok := ds.Get(st.d)
+		if !ok {
+			clog.Warningf(ctx, "no tree root digest in store? %s", st.d)
+			st.err = fmt.Errorf("no tree root digst in store")
+			return
 		}
+		rootDS.Set(data)
+		ds.Delete(st.d)
+		missings, err := b.reapiclient.Missing(ctx, []digest.Digest{st.d})
+		fullUpload := func(ctx context.Context) {
+			started := time.Now()
+			// upload non-root digest first
+			n, err := b.reapiclient.UploadAll(ctx, ds)
+			if err != nil {
+				clog.Warningf(ctx, "failed to upload subtree data %s: %v", dir, err)
+				st.mu.Lock()
+				defer st.mu.Unlock()
+				st.err = err
+				return
+			}
+			// upload root digest last.
+			m, err := b.reapiclient.UploadAll(ctx, rootDS)
+			clog.Infof(ctx, "upload subtree data %s %d+%d in %s: %v", dir, n, m, time.Since(started), err)
+			st.mu.Lock()
+			defer st.mu.Unlock()
+			st.err = err
+		}
+		if err == nil && len(missings) == 0 {
+			clog.Infof(ctx, "subtree data is ready %s %s", dir, st.d)
+			go func() {
+				// make sure all data are uploaded in background.
+				ctx := context.WithoutCancel(ctx)
+				fullUpload(ctx)
+			}()
+			return
+		}
+		clog.Infof(ctx, "need to upload subtree data %s (missings=%d): %v", dir, len(missings), err)
+		fullUpload(ctx)
 	})
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	return st.err
 }
