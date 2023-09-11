@@ -1105,11 +1105,6 @@ func TestWriteEmptyFlush(t *testing.T) {
 	ctx := context.Background()
 
 	for _, name := range flushTestNames {
-		if name == "subdir" {
-			// TODO(b/299538191): fix TestWriteEmptyFlush/subdir flakiness.
-			// subdir test is flaky, but it would not be use case in real world, so just disable test now.
-			continue
-		}
 		t.Run(name, func(t *testing.T) {
 			hashFS, dir := setupForFlush(t)
 			now := time.Now()
@@ -1127,7 +1122,7 @@ func TestWriteEmptyFlush(t *testing.T) {
 			}
 			err = hashFS.Flush(ctx, dir, []string{name})
 			switch name {
-			case "subdir":
+			case "empty-dir", "subdir":
 				if err == nil {
 					t.Fatalf("Flush(ctx, dir, {%q})=%v; want error", name, err)
 				}
@@ -1181,7 +1176,7 @@ func TestWriteDataFlush(t *testing.T) {
 			}
 			err = hashFS.Flush(ctx, dir, []string{name})
 			switch name {
-			case "subdir":
+			case "empty-dir", "subdir":
 				if err == nil {
 					t.Fatalf("Flush(ctx, dir, {%q})=%v; want error", name, err)
 				}

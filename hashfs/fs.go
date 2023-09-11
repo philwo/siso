@@ -1075,7 +1075,9 @@ func (e *entry) flush(ctx context.Context, fname, xattrname string, m *iometrics
 		fi, err := os.Lstat(fname)
 		m.OpsDone(err)
 		if err == nil && fi.IsDir() && fi.ModTime().Equal(mtime) {
-			clog.Infof(ctx, "flush dir %s: already exist", fname)
+			if log.V(1) {
+				clog.Infof(ctx, "flush dir %s: already exist", fname)
+			}
 			return nil
 		}
 		err = os.MkdirAll(fname, 0755)
@@ -1099,6 +1101,15 @@ func (e *entry) flush(ctx context.Context, fname, xattrname string, m *iometrics
 	fi, err := os.Lstat(fname)
 	m.OpsDone(err)
 	if err == nil {
+		if fi.IsDir() {
+			err := &fs.PathError{
+				Op:   "flush",
+				Path: fname,
+				Err:  syscall.EISDIR,
+			}
+			clog.Warningf(ctx, "flush %s: %v", fname, err)
+			return err
+		}
 		if fi.Size() == d.SizeBytes && fi.ModTime().Equal(mtime) {
 			// TODO: check hash, mode?
 			clog.Infof(ctx, "flush %s: already exist", fname)
