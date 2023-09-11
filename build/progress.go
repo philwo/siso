@@ -156,8 +156,8 @@ func (p *progress) step(ctx context.Context, b *Builder, step *Step, s string) {
 	switch {
 	case p.verbose:
 		if strings.HasPrefix(s, progressPrefixStart) && step != nil {
-			msg = fmt.Sprintf("%.02f%% %s %s",
-				float64(stat.Done)*100/float64(stat.Total),
+			msg = fmt.Sprintf("[%d/%d] %s %s",
+				stat.Done-stat.Skipped, stat.Total-stat.Skipped,
 				ui.FormatDuration(time.Since(b.start)),
 				step.def.Binding("command"))
 			fmt.Println(msg)
@@ -211,8 +211,8 @@ func (p *progress) step(ctx context.Context, b *Builder, step *Step, s string) {
 		fallthrough
 	default:
 		if step != nil {
-			msg = fmt.Sprintf("%.2f%% %s %s",
-				float64(stat.Done)*100/float64(stat.Total),
+			msg = fmt.Sprintf("[%d/%d] %s %s",
+				stat.Done-stat.Skipped, stat.Total-stat.Skipped,
 				ui.FormatDuration(time.Since(b.start)),
 				s)
 		}
