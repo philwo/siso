@@ -39,9 +39,10 @@ type StepMetric struct {
 	BuildID string `json:"build_id,omitempty"` // the unique id of the current build (trace)
 	StepID  string `json:"step_id,omitempty"`  // the unique id of this step (top span)
 
-	Rule   string `json:"rule,omitempty"`   // the rule name of the step
-	Action string `json:"action,omitempty"` // the action name of the step
-	Output string `json:"output,omitempty"` // the name of the first output file of the step
+	Rule     string `json:"rule,omitempty"`      // the rule name of the step
+	Action   string `json:"action,omitempty"`    // the action name of the step
+	Output   string `json:"output,omitempty"`    // the name of the first output file of the step
+	GNTarget string `json:"gn_target,omitempty"` // inferred gn target
 
 	// The ID and name of the first output of the previous step.
 	// The "previous" step is defined as the last step that updated

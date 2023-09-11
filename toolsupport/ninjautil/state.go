@@ -177,6 +177,17 @@ func (s *State) DefaultNodes() ([]*Node, error) {
 	return s.RootNodes()
 }
 
+// PhonyNodes returns phony's output nodes.
+func (s *State) PhonyNodes() []*Node {
+	var phony []*Node
+	for _, e := range s.edges {
+		if e.IsPhony() {
+			phony = append(phony, e.Outputs()...)
+		}
+	}
+	return phony
+}
+
 // AddBinding adds bindings.
 func (s *State) AddBinding(name, value string) {
 	s.bindings.AddBinding(name, value)

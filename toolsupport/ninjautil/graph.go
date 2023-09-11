@@ -164,6 +164,12 @@ func (e *Edge) Inputs() []*Node {
 	return e.inputs
 }
 
+// Ins returns explicit input nodes (for $in) of the edge.
+func (e *Edge) Ins() []*Node {
+	n := len(e.inputs) - e.implicitDeps - e.orderOnlyDeps
+	return e.inputs[:n]
+}
+
 // TriggerInputs returns inputs nodes of the edge that would trigger
 // the edge command. i.e. not including order_only inputs.
 func (e *Edge) TriggerInputs() []*Node {

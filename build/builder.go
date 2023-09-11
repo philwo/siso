@@ -594,6 +594,7 @@ loop:
 			step.metrics.Rule = step.def.RuleName()
 			step.metrics.Action = step.def.ActionName()
 			step.metrics.Output = step.def.Outputs()[0]
+			step.metrics.GNTarget = step.def.Binding("gn_target")
 			step.metrics.PrevStepID = step.prevStepID
 			step.metrics.PrevStepOut = step.prevStepOut
 			step.metrics.Ready = IntervalMetric(step.readyTime.Sub(b.start))
@@ -613,6 +614,9 @@ loop:
 			span.SetAttr("output0", step.def.Outputs()[0])
 			if next := step.def.Next(); next != nil {
 				span.SetAttr("next_id", step.def.Next().String())
+			}
+			if step.metrics.GNTarget != "" {
+				span.SetAttr("gn_target", step.metrics.GNTarget)
 			}
 			span.SetAttr("backtraces", stepBacktraces(step))
 			err = b.runStep(sctx, step)

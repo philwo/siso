@@ -47,6 +47,36 @@ type globals struct {
 	accumulates    map[string][]string
 	caseSensitives map[string][]string
 	phony          map[string]bool
+
+	// edge will be associated with the gn target.
+	gnTargets map[*ninjautil.Edge]gnTarget
+}
+
+type gnTarget struct {
+	target string
+	rule   string
+	pref   int
+}
+
+var gnTargetsRulePrefs = []string{"phony", "stamp", "solink", "alink", "link"}
+
+// rulePref returns preference for gn targets of the rule.
+// 0 is most preferred. the bigger, the less preferred.
+// rule may have target arch prefix, so just use the last term separated by _.
+// e.g. "clang_newlib_x64_solink" -> pref of "solink".
+func rulePref(rule string) int {
+	r := strings.Split(rule, "_")
+	rule = r[len(r)-1]
+	for i, p := range gnTargetsRulePrefs {
+		if p == rule {
+			return i
+		}
+	}
+	return len(gnTargetsRulePrefs)
+}
+
+func (g gnTarget) String() string {
+	return g.target
 }
 
 // NewGraph creates new Graph from fname (usually "build.ninja") with stepConfig.
@@ -90,6 +120,7 @@ func NewGraph(ctx context.Context, fname string, config *buildconfig.Config, p *
 			accumulates:    make(map[string][]string),
 			caseSensitives: make(map[string][]string),
 			phony:          make(map[string]bool),
+			gnTargets:      make(map[*ninjautil.Edge]gnTarget),
 		},
 	}
 	err = graph.UpdateFilegroups(ctx)
@@ -176,12 +207,92 @@ func (g *Graph) load(ctx context.Context) error {
 	return nil
 }
 
-func (g *Graph) initGlobals() {
+func (g *Graph) initGlobals(ctx context.Context) {
 	// initialize caseSensitives.
 	for _, f := range g.globals.stepConfig.CaseSensitiveInputs {
 		cif := strings.ToLower(f)
 		g.globals.caseSensitives[cif] = append(g.globals.caseSensitives[cif], f)
 	}
+
+	// infer gn target.
+	// gn target will be node that is phony target and contains ":"
+	// in its name.
+	// e.g.
+	//
+	//   build base$:base: phony obj/base/libbase.a
+	//
+	//   build obj/base/libbase.a: alink obj/base/base/allocator_check.o ...
+	//   build obj/base/base/allocator_check.o: cxx ../../base/allocator/allocator_check.cc
+	//
+	// A edge generating the `target` (e.g. alink for `obj/base/libbase.a`)
+	// will have gn target `base:base`.
+	// Also explicit inputs of the edge also have the gn target.
+	// e.g. cxx for `obj/base/base/allocator_check.o` have `base:base`.
+	//
+	// If there are several paths from gn targets, choose based on
+	// rule's preference.
+	//
+	// e.g.
+	//   build v8/tools/wasm$:wami: phony ./wami
+	//
+	//   build ./wami: link obj/v8/tools/wasm/wami/module-inspector.o ..
+	//       ... obj/v8/v8_compiler/access-builder.o ..
+	//
+	//   build v8$:v8_compiler: phony obj/v8/v8_compiler.stamp
+	//   build obj/v8/v8_compiler.stamp: stamp obj/v8/v8_compiler/access-builder.o o ..
+	//
+	// link for ./wami:        gn target v8/tools/wasm:wami
+	// cxx for obj/v8/tools/wasm/wami/module-inspector.o:
+	//                         gn target v8/tools/wasm:wami
+	// stamp for obj/v8/v8_compiler.stamp:
+	//                         gn target v8:v8_compiler
+	// cxx for obj/v8/v8_compiler/access-builder.o:
+	//                         gn target v8:v8_compiler
+	//                         (prefer stamp over link)
+	started := time.Now()
+	nGNTargets := 0
+	for _, p := range g.nstate.PhonyNodes() {
+		target := p.Path()
+		if !strings.Contains(target, ":") {
+			continue
+		}
+		e, ok := p.InEdge()
+		if !ok {
+			continue
+		}
+		nGNTargets++
+		// gnTarget's phony inputs will use the gn target.
+		for _, n := range e.Ins() {
+			ne, ok := n.InEdge()
+			if !ok {
+				continue
+			}
+			g.globals.gnTargets[ne] = gnTarget{
+				target: target,
+				rule:   "phony",
+				pref:   0,
+			}
+
+			rule := ne.Rule().Name()
+			pref := rulePref(rule)
+			for _, cn := range ne.Ins() {
+				ce, ok := cn.InEdge()
+				if !ok {
+					continue
+				}
+				gt, ok := g.globals.gnTargets[ce]
+				if ok && gt.pref <= pref {
+					continue
+				}
+				g.globals.gnTargets[ce] = gnTarget{
+					target: target,
+					rule:   rule,
+					pref:   pref,
+				}
+			}
+		}
+	}
+	clog.Infof(ctx, "gn_targets=%d edges=%d in %s", nGNTargets, len(g.globals.gnTargets), time.Since(started))
 }
 
 func (g *Graph) init(ctx context.Context) error {
@@ -191,7 +302,7 @@ func (g *Graph) init(ctx context.Context) error {
 			g.initErr = err
 			return
 		}
-		g.initGlobals()
+		g.initGlobals(ctx)
 	})
 	return g.initErr
 }
