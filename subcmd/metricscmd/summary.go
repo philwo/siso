@@ -17,8 +17,6 @@ import (
 
 	"github.com/maruel/subcommands"
 	"go.chromium.org/luci/common/cli"
-
-	"infra/build/siso/ui"
 )
 
 const summaryUsage = `summarize siso_metrics.json
@@ -184,7 +182,7 @@ func (c *summaryRun) run(ctx context.Context) error {
 	// Warn if the sum of weighted times is off by more than half a second.
 	wdiff := length - accumulatedWeightedDuration
 	if wdiff.Abs() > 500*time.Millisecond {
-		fmt.Printf("Warning: Possible corrupt siso_metrics.json, result may be untrustworthy. length = %s, weidhted total = %s\n", ui.FormatDuration(length), ui.FormatDuration(accumulatedWeightedDuration))
+		fmt.Printf("Warning: Possible corrupt siso_metrics.json, result may be untrustworthy. length = %s, weidhted total = %s\n", formatDuration(length), formatDuration(accumulatedWeightedDuration))
 	}
 
 	// Print the slowest build steps:
@@ -203,11 +201,12 @@ func (c *summaryRun) run(ctx context.Context) error {
 	if len(topMetrics) > longCount {
 		topMetrics = topMetrics[:longCount]
 	}
-	for _, tm := range topMetrics {
+	for i := len(topMetrics) - 1; i >= 0; i-- {
+		tm := topMetrics[i]
 		fmt.Printf("      %8s weighted to build %s (%s elapsed time)\n",
-			ui.FormatDuration(time.Duration(tm.WeightedDuration())),
+			formatDuration(time.Duration(tm.WeightedDuration())),
 			relPath(c.dir, tm.Output),
-			ui.FormatDuration(tm.Duration()))
+			formatDuration(tm.Duration()))
 	}
 
 	// Sum up the time by file extension/type of the output file
@@ -230,19 +229,20 @@ func (c *summaryRun) run(ctx context.Context) error {
 	if len(am) > longCount {
 		am = am[:longCount]
 	}
-	for _, s := range am {
+	for i := len(am) - 1; i >= 0; i-- {
+		s := am[i]
 		fmt.Printf("      %8s weighted to generate %d %s files (%s elapsed time sum)\n",
-			ui.FormatDuration(s.WeightedDuration),
+			formatDuration(s.WeightedDuration),
 			s.Count,
 			s.Type,
-			ui.FormatDuration(s.Duration))
+			formatDuration(s.Duration))
 	}
 	if length == 0 {
 		return nil
 	}
 	fmt.Printf("    %s weighted time (%s elapsed time sum, %1.1fx parallelism)\n",
-		ui.FormatDuration(length),
-		ui.FormatDuration(accumulatedDuration),
+		formatDuration(length),
+		formatDuration(accumulatedDuration),
 		accumulatedDuration.Seconds()/length.Seconds())
 	fmt.Printf("    %d build steps completed, average of %1.2f/s\n",
 		len(metrics),
@@ -326,4 +326,8 @@ func stepType(metric *targetMetric, pats []string) (string, error) {
 		}
 	}
 	return filepath.Ext(metric.Output), nil
+}
+
+func formatDuration(d time.Duration) string {
+	return fmt.Sprintf("%.1fs", d.Seconds())
 }
