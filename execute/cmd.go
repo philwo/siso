@@ -233,6 +233,27 @@ func (c *Cmd) AllOutputs() []string {
 	return outputs
 }
 
+// RemoteArgs returns arguments to the remote command.
+// The original args are adjusted with RemoteWrapper, RemoteCommand, Platform.
+func (c *Cmd) RemoteArgs() ([]string, error) {
+	args := c.Args
+	if len(args) == 0 {
+		return nil, errors.New("0 args")
+	}
+	// Cross-compile Windows builds on Linux workers.
+	if runtime.GOOS == "windows" && c.Platform["OSFamily"] != "Windows" {
+		args[0] = filepath.ToSlash(args[0])
+	}
+	if c.RemoteWrapper != "" {
+		args = append([]string{c.RemoteWrapper}, args...)
+	}
+	if c.RemoteCommand != "" {
+		// Replace the first args. But don't modify the Cmd.Args for fallback.
+		args = append([]string{c.RemoteCommand}, args[1:]...)
+	}
+	return args, nil
+}
+
 // SetStdoutWriter sets w for stdout.
 func (c *Cmd) SetStdoutWriter(w io.Writer) {
 	c.stdoutWriter = w
@@ -545,21 +566,9 @@ func (c *Cmd) commandDigest(ctx context.Context, ds *digest.Store) (digest.Diges
 		}
 		outs = append(outs, filepath.ToSlash(rout))
 	}
-	if len(c.Args) == 0 {
-		return digest.Digest{}, errors.New("0 args")
-	}
-	args := c.Args
-
-	// Cross-compile Windows builds on Linux workers.
-	if runtime.GOOS == "windows" && c.Platform["OSFamily"] != "Windows" {
-		args[0] = filepath.ToSlash(args[0])
-	}
-	if c.RemoteWrapper != "" {
-		args = append([]string{c.RemoteWrapper}, args...)
-	}
-	if c.RemoteCommand != "" {
-		// Replace the first args. But don't modify the Cmd.Args for fallback.
-		args = append([]string{c.RemoteCommand}, args[1:]...)
+	args, err := c.RemoteArgs()
+	if err != nil {
+		return digest.Digest{}, err
 	}
 	dir := c.Dir
 	if c.CanonicalizeDir {

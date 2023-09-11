@@ -158,6 +158,11 @@ func (re *REProxyExec) Run(ctx context.Context, cmd *execute.Cmd) error {
 }
 
 func createRequest(ctx context.Context, cmd *execute.Cmd, execTimeout time.Duration) (*ppb.RunRequest, error) {
+	args, err := cmd.RemoteArgs()
+	if err != nil {
+		return nil, err
+	}
+
 	var inputs []string
 	// don't pass labels or err-file as inputs to reproxy
 	// e.g. cmd.REPRoxyConfig.Inputs may contains labels.
@@ -188,7 +193,7 @@ func createRequest(ctx context.Context, cmd *execute.Cmd, execTimeout time.Durat
 		Output: &cpb.OutputSpec{
 			OutputFiles: cmd.AllOutputs(),
 		},
-		Args:             cmd.Args,
+		Args:             args,
 		ExecutionTimeout: int32(execTimeout.Seconds()),
 		WorkingDirectory: cmd.Dir,
 		Platform:         cmd.REProxyConfig.Platform,
