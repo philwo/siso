@@ -18,7 +18,6 @@ import (
 	"github.com/maruel/subcommands"
 	"go.chromium.org/luci/common/cli"
 
-	"infra/build/siso/build"
 	"infra/build/siso/ui"
 )
 
@@ -27,6 +26,7 @@ const summaryUsage = `summarize siso_metrics.json
  $ siso metrics summary -C <dir> \
     [--step_types <types>] \
     [--elapsed_time_sorting] \
+    [--elapsed_time=run|step] \
     [--input siso_metrics.json]
 
 summarize <dir>/.siso_metrics.json (--input)
@@ -53,6 +53,7 @@ type summaryRun struct {
 	dir                string
 	input              string
 	stepTypes          string
+	elapsedTime        string
 	elapsedTimeSorting bool
 }
 
@@ -60,6 +61,7 @@ func (c *summaryRun) init() {
 	c.Flags.StringVar(&c.dir, "C", ".", "ninja running directory, where siso_metrics.json exists")
 	c.Flags.StringVar(&c.input, "input", "siso_metrics.json", "filename of siso_metrics.json to summarize")
 	c.Flags.StringVar(&c.stepTypes, "step_types", "", "semicolon separated glob patterns (go filepath.Match) for build-step grouping")
+	c.Flags.StringVar(&c.elapsedTime, "elapsed_time", "run", `metrics to use for elapsed time. "run" or "step". "run": time to run local command or call remote execution.  "step": full duration for the step, including preproc, waiting resource to run command etc.`)
 	c.Flags.BoolVar(&c.elapsedTimeSorting, "elapsed_time_sorting", false, "Sort output by elapsed time instead of weighted time")
 }
 
@@ -79,6 +81,12 @@ func (c *summaryRun) Run(a subcommands.Application, args []string, env subcomman
 }
 
 func (c *summaryRun) run(ctx context.Context) error {
+	switch c.elapsedTime {
+	case "run", "step":
+	default:
+		return fmt.Errorf(`wrong --elapsed_time=%s  "run" or "step". %w`, c.elapsedTime, flag.ErrHelp)
+	}
+
 	err := os.Chdir(c.dir)
 	if err != nil {
 		return err
@@ -94,46 +102,116 @@ func (c *summaryRun) run(ctx context.Context) error {
 
 	// TODO(ukai): deduce wait time from the duration?
 
-	var totalTime time.Duration
+	// same algorithm with post_build_ninja_summary.py
+	// https://chromium.googlesource.com/chromium/tools/depot_tools/+/80226254ea024e756b9ad5e8a39160405880cbb1/post_build_ninja_summary.py#214
 	var accumulatedDuration time.Duration
-	var m []build.StepMetric
+	var m []*targetMetric
+	var events []buildEvent
+	var earliest, latest time.Duration
 	for _, s := range metrics {
 		if s.StepID == "" {
 			// this is special entry for build metrics, not per step metrics.
-			totalTime = time.Duration(s.Duration)
 			continue
 		}
-		m = append(m, s)
-		accumulatedDuration += time.Duration(s.Duration)
+		var start, end time.Duration
+		switch c.elapsedTime {
+		case "run":
+			start = time.Duration(s.ActionStartTime)
+			end = start + time.Duration(s.RunTime)
+		case "step":
+			start = time.Duration(s.Ready) + time.Duration(s.Start)
+			end = start + time.Duration(s.Duration)
+		}
+		if start == 0 && end == 0 {
+			// handler only step (i.e. stamp, copy) doesn't have ActionStartTime/RunTime, so ignore such steps.
+			continue
+		}
+		if earliest == 0 || start < earliest {
+			earliest = start
+		}
+		if end > latest {
+			latest = end
+		}
+		target := &targetMetric{
+			Output: s.Output,
+			Start:  start,
+			End:    end,
+		}
+		m = append(m, target)
+		accumulatedDuration += target.Duration()
+		events = append(events, buildEvent{
+			ts:     target.Start,
+			event:  eventStart,
+			target: target,
+		}, buildEvent{
+			ts:     target.End,
+			event:  eventStop,
+			target: target,
+		})
 	}
-	metrics = m
+	if len(events) == 0 {
+		return fmt.Errorf("no metrics data?")
+	}
+	length := latest - earliest
+
+	// sort by time/event records
+	sort.Slice(events, func(i, j int) bool {
+		if events[i].ts < events[j].ts {
+			return true
+		}
+		return events[i].event < events[j].event
+	})
+	// current running task -> weighted time when the task started.
+	runningTasks := make(map[*targetMetric]time.Duration)
+	lastTime := events[0].ts
+	var lastWeightedTime time.Duration
+	var accumulatedWeightedDuration time.Duration
+	for _, ev := range events {
+		numRunning := len(runningTasks)
+		if numRunning > 0 {
+			lastWeightedTime += time.Duration(float64(ev.ts-lastTime) / float64(numRunning))
+		}
+		switch ev.event {
+		case eventStart:
+			runningTasks[ev.target] = lastWeightedTime
+		case eventStop:
+			ev.target.weighted = lastWeightedTime - runningTasks[ev.target]
+			accumulatedWeightedDuration += ev.target.weighted
+			delete(runningTasks, ev.target)
+		}
+		lastTime = ev.ts
+	}
+	// Warn if the sum of weighted times is off by more than half a second.
+	wdiff := length - accumulatedWeightedDuration
+	if wdiff.Abs() > 500*time.Millisecond {
+		fmt.Printf("Warning: Possible corrupt siso_metrics.json, result may be untrustworthy. length = %s, weidhted total = %s\n", ui.FormatDuration(length), ui.FormatDuration(accumulatedWeightedDuration))
+	}
 
 	// Print the slowest build steps:
 	fmt.Println("    Longest build steps:")
 	if c.elapsedTimeSorting {
-		sort.Slice(metrics, func(i, j int) bool {
-			return metrics[i].Duration > metrics[j].Duration
+		sort.Slice(m, func(i, j int) bool {
+			return m[i].Duration() > m[j].Duration()
 		})
 	} else {
-		sort.Slice(metrics, func(i, j int) bool {
-			return metrics[i].WeightedDuration > metrics[j].WeightedDuration
+		sort.Slice(m, func(i, j int) bool {
+			return m[i].WeightedDuration() > m[j].WeightedDuration()
 		})
 	}
 	longCount := 10
-	m = metrics
-	if len(m) > longCount {
-		m = m[:longCount]
+	topMetrics := m
+	if len(topMetrics) > longCount {
+		topMetrics = topMetrics[:longCount]
 	}
-	for _, s := range m {
+	for _, tm := range topMetrics {
 		fmt.Printf("      %8s weighted to build %s (%s elapsed time)\n",
-			ui.FormatDuration(time.Duration(s.WeightedDuration)),
-			relPath(c.dir, s.Output),
-			ui.FormatDuration(time.Duration(s.Duration)))
+			ui.FormatDuration(time.Duration(tm.WeightedDuration())),
+			relPath(c.dir, tm.Output),
+			ui.FormatDuration(tm.Duration()))
 	}
 
 	// Sum up the time by file extension/type of the output file
-	stepTypes := strings.Split(c.stepTypes, ";")
-	am, err := aggregate(metrics, stepTypes)
+	am, err := c.aggregate(m)
 	if err != nil {
 		return err
 	}
@@ -148,8 +226,9 @@ func (c *summaryRun) run(ctx context.Context) error {
 		})
 	}
 	// Print the slowest build target types:
-	if len(am) > longCount+len(stepTypes) {
-		am = am[:longCount+len(stepTypes)]
+	longCount += len(strings.Split(c.stepTypes, ";"))
+	if len(am) > longCount {
+		am = am[:longCount]
 	}
 	for _, s := range am {
 		fmt.Printf("      %8s weighted to generate %d %s files (%s elapsed time sum)\n",
@@ -158,17 +237,45 @@ func (c *summaryRun) run(ctx context.Context) error {
 			s.Type,
 			ui.FormatDuration(s.Duration))
 	}
-	if totalTime == 0 {
+	if length == 0 {
 		return nil
 	}
 	fmt.Printf("    %s weighted time (%s elapsed time sum, %1.1fx parallelism)\n",
-		ui.FormatDuration(totalTime),
+		ui.FormatDuration(length),
 		ui.FormatDuration(accumulatedDuration),
-		accumulatedDuration.Seconds()/totalTime.Seconds())
+		accumulatedDuration.Seconds()/length.Seconds())
 	fmt.Printf("    %d build steps completed, average of %1.2f/s\n",
 		len(metrics),
-		float64(len(metrics))/totalTime.Seconds())
+		float64(len(metrics))/length.Seconds())
 	return nil
+}
+
+type targetMetric struct {
+	Output   string
+	Start    time.Duration
+	End      time.Duration
+	weighted time.Duration
+}
+
+func (t targetMetric) Duration() time.Duration {
+	return t.End - t.Start
+}
+
+func (t targetMetric) WeightedDuration() time.Duration {
+	return t.weighted
+}
+
+type eventType int
+
+const (
+	eventStart eventType = iota
+	eventStop
+)
+
+type buildEvent struct {
+	ts     time.Duration
+	event  eventType
+	target *targetMetric
 }
 
 type aggregatedMetric struct {
@@ -178,12 +285,10 @@ type aggregatedMetric struct {
 	WeightedDuration time.Duration
 }
 
-func aggregate(metrics []build.StepMetric, pats []string) ([]aggregatedMetric, error) {
+func (c *summaryRun) aggregate(metrics []*targetMetric) ([]aggregatedMetric, error) {
+	pats := strings.Split(c.stepTypes, ";")
 	am := make(map[string]aggregatedMetric)
 	for _, m := range metrics {
-		if m.StepID == "" {
-			continue
-		}
 		t, err := stepType(m, pats)
 		if err != nil {
 			return nil, err
@@ -191,8 +296,8 @@ func aggregate(metrics []build.StepMetric, pats []string) ([]aggregatedMetric, e
 		a := am[t]
 		a.Type = t
 		a.Count++
-		a.Duration += time.Duration(m.Duration)
-		a.WeightedDuration += time.Duration(m.WeightedDuration)
+		a.Duration += m.Duration()
+		a.WeightedDuration += time.Duration(m.WeightedDuration())
 		am[t] = a
 	}
 	var ret []aggregatedMetric
@@ -210,7 +315,7 @@ func relPath(base, fname string) string {
 	return r
 }
 
-func stepType(metric build.StepMetric, pats []string) (string, error) {
+func stepType(metric *targetMetric, pats []string) (string, error) {
 	for _, p := range pats {
 		ok, err := filepath.Match(p, metric.Output)
 		if err != nil {
