@@ -171,6 +171,10 @@ func (p *progress) step(ctx context.Context, b *Builder, step *Step, s string) {
 			}
 			return fmt.Sprintf("%d", servs)
 		}
+		preprocWaits := b.preprocSema.NumWaits()
+		preprocServs := b.preprocSema.NumServs()
+		preprocProgress := runProgress(preprocWaits, preprocServs)
+
 		localWaits := b.localSema.NumWaits()
 		localServs := b.localSema.NumServs()
 		for _, p := range b.poolSemas {
@@ -201,8 +205,8 @@ func (p *progress) step(ctx context.Context, b *Builder, step *Step, s string) {
 		} else {
 			fallback = "0"
 		}
-		lines = append(lines, fmt.Sprintf("pre:%d local:%s remote:%s %s%sfallback:%s",
-			stat.Preproc,
+		lines = append(lines, fmt.Sprintf("pre:%s local:%s remote:%s %s%sfallback:%s",
+			preprocProgress,
 			localProgress,
 			remoteProgress,
 			stepsPerSec,

@@ -33,7 +33,6 @@ func (b *Builder) runCmdWithCache(ctx context.Context, step *Step, allowLocalFal
 			if err != nil {
 				return err
 			}
-			b.stats.cacheHit(ctx)
 			b.progressStepCacheHit(ctx, step)
 			step.metrics.Cached = true
 			step.metrics.RunTime = IntervalMetric(time.Since(start))
@@ -106,11 +105,13 @@ func (b *Builder) runCmd(ctx context.Context, step *Step, allowLocalFallback boo
 			clog.Errorf(ctx, "not relocatable: %v", err)
 			return err
 		}
-		b.stats.localFallback(ctx)
 		if experiments.Enabled("no-fallback", "remote-exec %s failed. no-fallback", step) {
 			return fmt.Errorf("remote-exec %s failed no-fallback: %w", step.cmd.ActionDigest(), err)
 		}
-		step.metrics.Fallback = true
+		if allowLocalFallback {
+			step.metrics.IsRemote = false
+			step.metrics.Fallback = true
+		}
 		msgs := cmdOutput(ctx, "FALLBACK", step.cmd, step.def.Binding("command"), step.def.RuleName(), err)
 		b.logOutput(ctx, msgs)
 	}

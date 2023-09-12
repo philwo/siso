@@ -84,8 +84,10 @@ type scheduler struct {
 	path   *Path
 	hashFS *hashfs.HashFS
 
-	plan  *plan
-	stats *stats
+	plan *plan
+
+	// number of steps scheduled.
+	total int
 
 	lastProgress time.Time
 	visited      int
@@ -207,7 +209,6 @@ func newScheduler(ctx context.Context, opt schedulerOption) *scheduler {
 			q:     make(chan *Step, 10000),
 			waits: make(map[string][]*Step),
 		},
-		stats:       &stats{},
 		enableTrace: opt.EnableTrace,
 	}
 }
@@ -257,7 +258,7 @@ func (s *scheduler) add(ctx context.Context, stepDef StepDef, waits []string) {
 		s.progressReport("schedule pending:%d+ready:%d (node:%d edge:%d)", npendings, nready, len(s.plan.m), s.visited)
 		s.lastProgress = time.Now()
 	}()
-	s.stats.incTotal()
+	s.total++
 	step := newStep(stepDef, waits)
 	if step.ReadyToRun("", "") {
 		clog.Infof(ctx, "step state: %s ready to run", step.String())

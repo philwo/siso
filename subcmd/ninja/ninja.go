@@ -948,6 +948,7 @@ func doBuild(ctx context.Context, graph *ninjabuild.Graph, bopts build.Options, 
 		dumpResourceUsageTable(ctx, semaTraces)
 	}
 	stats = b.Stats()
+	clog.Infof(ctx, "stats=%#v", stats)
 	if err != nil {
 		return stats, buildError{err: err}
 	}

@@ -370,7 +370,7 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 		return err
 	}
 	b.plan = sched.plan
-	b.stats = sched.stats
+	b.stats = newStats(sched.total)
 
 	stat := b.Stats()
 	if stat.Total == 0 {
@@ -635,7 +635,7 @@ loop:
 				step.metrics.Err = err != nil
 				b.recordMetrics(ctx, step.metrics)
 			}
-
+			b.stats.update(ctx, &step.metrics, step.def.IsPhony() || step.cmd.Pure)
 			select {
 			case <-ctx.Done():
 				return
@@ -921,7 +921,6 @@ func (b *Builder) phonyDone(ctx context.Context, step *Step) error {
 	if log.V(1) {
 		clog.Infof(ctx, "step phony %s", step)
 	}
-	b.stats.done(true)
 	b.plan.done(ctx, step, step.def.Outputs())
 	return nil
 }
@@ -963,7 +962,6 @@ func (b *Builder) done(ctx context.Context, step *Step) error {
 		}
 		outputs = append(outputs, out)
 	}
-	b.stats.done(step.cmd.Pure)
 	b.plan.done(ctx, step, outputs)
 	return nil
 }

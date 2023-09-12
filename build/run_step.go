@@ -56,7 +56,7 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 			err = fmt.Errorf("panic: %v: %s", r, buf)
 		}
 		if err != nil {
-			b.stats.fail()
+			step.metrics.Err = true
 		}
 	}()
 
@@ -65,7 +65,6 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 	}
 	// defer some initialization after mtimeCheck?
 	if step.def.IsPhony() {
-		b.stats.skipped(ctx)
 		step.metrics.skip = true
 		return b.phonyDone(ctx, step)
 	}
@@ -76,7 +75,6 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 
 	skip := b.checkUpToDate(ctx, step)
 	if skip {
-		b.stats.skipped(ctx)
 		step.metrics.skip = true
 		return b.done(ctx, step)
 	}
@@ -110,7 +108,7 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 			clog.Infof(ctx, "outputs[handler] %d", len(step.cmd.Outputs))
 			err = b.hashFS.Flush(ctx, step.cmd.ExecRoot, step.cmd.Outputs)
 			if err == nil {
-				b.stats.noExec(ctx)
+				step.metrics.NoExec = true
 				return b.done(ctx, step)
 			}
 			clog.Warningf(ctx, "handle step failure: %v", err)
@@ -139,9 +137,7 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 	}
 	step.setPhase(stepPreproc)
 	b.preprocSema.Do(ctx, func(ctx context.Context) error {
-		b.stats.preprocStart(ctx)
 		preprocCmd(ctx, b, step)
-		b.stats.preprocEnd(ctx)
 		return nil
 	})
 	err = b.runCmdWithCache(ctx, step, true)
@@ -181,7 +177,6 @@ func (b *Builder) tryFastStep(ctx context.Context, step, fastStep *Step) (bool, 
 	err := b.runCmdWithCache(fctx, fastStep, b.remoteExec == nil)
 	fastSpan.Close(nil)
 	if err == nil {
-		b.stats.fastDepsSuccess(ctx)
 		step.metrics = fastStep.metrics
 		step.metrics.DepsLog = true
 		msgs := cmdOutput(ctx, "SUCCESS:", fastStep.cmd, step.def.Binding("command"), step.def.RuleName(), nil)
@@ -206,7 +201,6 @@ func (b *Builder) tryFastStep(ctx context.Context, step, fastStep *Step) (bool, 
 		return true, err
 	}
 	step.metrics.DepsLogErr = true
-	b.stats.fastDepsFailed(ctx, err)
 	if experiments.Enabled("no-fast-deps-fallback", "fast-deps %s failed", step) {
 		return true, fmt.Errorf("fast-deps failed: %w", err)
 	}

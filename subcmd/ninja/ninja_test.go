@@ -239,7 +239,7 @@ func TestBuild_KeepGoing(t *testing.T) {
 	if got, want := stats.Fail, 2; got != want {
 		t.Errorf("stats.Fail=%d; want=%d", got, want)
 	}
-	if got, want := stats.Done, 8; got != want {
+	if got, want := stats.Done, 10; got != want {
 		t.Errorf("stats.Done=%d; want=%d", got, want)
 	}
 	dec := json.NewDecoder(bytes.NewReader(metricsBuffer.Bytes()))

@@ -51,21 +51,17 @@ func (b *Builder) runReproxy(ctx context.Context, step *Step) error {
 		err := b.reproxyExec.Run(ctx, step.cmd)
 		step.setPhase(stepOutput)
 		ar, cached := step.cmd.ActionResult()
-		if err == nil {
-			if ar.ExecutionMetadata.GetWorker() == reproxyexec.WorkerNameFallback {
-				step.metrics.Fallback = true
-				b.stats.localFallback(ctx)
-			} else if ar.ExecutionMetadata.GetWorker() == reproxyexec.WorkerNameRacingLocal {
-				// TODO: Siso may want to have `racing`flag in the step metrics.
-				b.stats.localDone(ctx, nil)
-			} else {
-				step.metrics.IsRemote = true
-			}
+		if ar.ExecutionMetadata.GetWorker() == reproxyexec.WorkerNameFallback {
+			step.metrics.IsLocal = true
+			step.metrics.Fallback = true
+		} else if ar.ExecutionMetadata.GetWorker() == reproxyexec.WorkerNameRacingLocal {
+			// TODO: Siso may want to have `racing`flag in the step metrics.
+			step.metrics.IsLocal = true
+		} else {
+			step.metrics.IsRemote = true
 		}
 		if cached {
-			b.stats.cacheHit(ctx)
-		} else {
-			b.stats.remoteDone(ctx, err) // use other stats for reproxy?
+			step.metrics.Cached = true
 		}
 		step.metrics.RunTime = IntervalMetric(time.Since(started))
 		step.metrics.done(ctx, step)

@@ -81,11 +81,10 @@ func (b *Builder) runLocal(ctx context.Context, step *Step) error {
 		err := b.localExec.Run(ctx, step.cmd)
 		dur = time.Since(started)
 		step.setPhase(stepOutput)
+		step.metrics.IsLocal = true
 		result, cached := step.cmd.ActionResult()
 		if cached {
-			b.stats.cacheHit(ctx)
-		} else {
-			b.stats.localDone(ctx, err)
+			step.metrics.Cached = true
 		}
 		if result != nil {
 			if result.ExecutionMetadata == nil {

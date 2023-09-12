@@ -84,7 +84,9 @@ type StepMetric struct {
 	DepsLogErr  bool `json:"deps_log_err,omitempty"` // whether the action failed with deps log.
 	ScandepsErr bool `json:"scandeps_err,omitempty"` // whether the action failed in scandeps.
 
-	IsRemote bool `json:"is_remote,omitempty"` // whether the action ran remotely.
+	NoExec   bool `json:"no_exec,omitempty"`   // whether the action didn't run any command (i.e. just use handler).
+	IsRemote bool `json:"is_remote,omitempty"` // whether the action uses remote result.
+	IsLocal  bool `json:"is_local,omitempty"`  // whether the action uses local result.
 	Cached   bool `json:"cached,omitempty"`    // whether the action was a cache hit.
 	Fallback bool `json:"fallback,omitempty"`  // whether the action failed remotely and was retried locally.
 	Err      bool `json:"err,omitempty"`       // whether the action failed.

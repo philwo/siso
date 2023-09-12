@@ -169,7 +169,6 @@ func (msvc depsMSVC) depsInputs(ctx context.Context, b *Builder, step *Step) ([]
 		return nil, err
 	}
 	step.metrics.ScandepsErr = true
-	b.stats.scanDepsFailed(ctx, err)
 	if !experiments.Enabled("scandeps-fallback", "scandeps failed, fallback to use `clang-cl /showIncludes`") {
 		return nil, err
 	}

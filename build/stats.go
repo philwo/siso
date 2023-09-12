@@ -6,114 +6,65 @@ package build
 
 import (
 	"context"
-	"sync/atomic"
-
-	log "github.com/golang/glog"
-
-	"infra/build/siso/o11y/clog"
+	"sync"
 )
 
 type stats struct {
-	ntotal           atomic.Int32
-	nskipped         atomic.Int32
-	nnoExec          atomic.Int32
-	nfastDepsSuccess atomic.Int32
-	nfastDepsFailed  atomic.Int32
-	nscanDepsFailed  atomic.Int32
-	npreproc         atomic.Int32
-	ncacheHit        atomic.Int32
-	nlocal           atomic.Int32
-	nremote          atomic.Int32
-	nlocalFallback   atomic.Int32
-	ndone            atomic.Int32
-	nfail            atomic.Int32
-	npure            atomic.Int32
+	mu sync.Mutex
+	s  Stats
 }
 
-func (s *stats) skipped(ctx context.Context) int {
-	if log.V(1) {
-		clog.Infof(ctx, "step state: skip")
+func newStats(total int) *stats {
+	return &stats{
+		s: Stats{
+			Total: total,
+		},
 	}
-	return int(s.nskipped.Add(1))
 }
 
-func (s *stats) noExec(ctx context.Context) {
-	if log.V(1) {
-		clog.Infof(ctx, "no exec")
+func (s *stats) update(ctx context.Context, m *StepMetric, pure bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.s.Done++
+	if m.skip {
+		s.s.Skipped++
 	}
-	s.nnoExec.Add(1)
-}
-
-func (s *stats) fastDepsSuccess(ctx context.Context) {
-	if log.V(1) {
-		clog.Infof(ctx, "fast deps success")
+	if m.DepsLog {
+		if !m.DepsLogErr {
+			s.s.FastDepsSuccess++
+		} else {
+			s.s.FastDepsFailed++
+		}
 	}
-	s.nfastDepsSuccess.Add(1)
-}
-
-func (s *stats) fastDepsFailed(ctx context.Context, err error) {
-	clog.Warningf(ctx, "fast deps failed: %v", err)
-	s.nfastDepsFailed.Add(1)
-}
-
-func (s *stats) scanDepsFailed(ctx context.Context, err error) {
-	clog.Warningf(ctx, "scandeps failed: %v", err)
-	s.nscanDepsFailed.Add(1)
-}
-
-func (s *stats) preprocStart(ctx context.Context) {
-	if log.V(1) {
-		clog.Infof(ctx, "step state: preproc start")
+	if m.ScandepsErr {
+		s.s.ScanDepsFailed++
 	}
-	s.npreproc.Add(1)
-}
-
-func (s *stats) preprocEnd(ctx context.Context) {
-	if log.V(1) {
-		clog.Infof(ctx, "step state: preproc end")
+	if m.Cached {
+		s.s.CacheHit++
 	}
-	s.npreproc.Add(-1)
-}
-
-func (s *stats) cacheHit(ctx context.Context) {
-	clog.Infof(ctx, "step state: cache hit")
-	s.ncacheHit.Add(1)
-}
-
-func (s *stats) remoteDone(ctx context.Context, err error) {
-	clog.Infof(ctx, "step state: remote done: %v", err)
-	s.nremote.Add(1)
-}
-
-func (s *stats) localFallback(ctx context.Context) {
-	clog.Warningf(ctx, "step state: localfallback")
-	s.nlocalFallback.Add(1)
-}
-
-func (s *stats) localDone(ctx context.Context, err error) {
-	clog.Infof(ctx, "step state: local done: %v", err)
-	s.nlocal.Add(1)
-}
-
-func (s *stats) done(pure bool) {
-	s.ndone.Add(1)
+	if m.NoExec {
+		s.s.NoExec++
+	}
+	if m.IsRemote {
+		s.s.Remote++
+	}
+	if m.IsLocal {
+		s.s.Local++
+	}
+	if m.Fallback {
+		s.s.LocalFallback++
+	}
+	if m.Err {
+		s.s.Fail++
+	}
 	if pure {
-		s.npure.Add(1)
+		s.s.Pure++
 	}
-}
-
-func (s *stats) fail() {
-	s.nfail.Add(1)
-}
-
-func (s *stats) incTotal() {
-	s.ntotal.Add(1)
 }
 
 // Stats keeps statistics about the build, such as the number of total, skipped or remote actions.
 type Stats struct {
-	Preproc         int // preprocessor actions
-	Done            int // completed actions, including skipped
+	Done            int // completed actions, including skipped, failed
 	Fail            int // failed actions
 	Pure            int // pure actions
 	Skipped         int // skipped actions, because they were still up-to-date
@@ -132,20 +83,8 @@ func (s *stats) stats() Stats {
 	if s == nil {
 		return Stats{}
 	}
-	return Stats{
-		Preproc:         int(s.npreproc.Load()),
-		Done:            int(s.ndone.Load()),
-		Fail:            int(s.nfail.Load()),
-		Pure:            int(s.npure.Load()),
-		Skipped:         int(s.nskipped.Load()),
-		NoExec:          int(s.nnoExec.Load()),
-		FastDepsSuccess: int(s.nfastDepsSuccess.Load()),
-		FastDepsFailed:  int(s.nfastDepsFailed.Load()),
-		ScanDepsFailed:  int(s.nscanDepsFailed.Load()),
-		CacheHit:        int(s.ncacheHit.Load()),
-		Local:           int(s.nlocal.Load()),
-		Remote:          int(s.nremote.Load()),
-		LocalFallback:   int(s.nlocalFallback.Load()),
-		Total:           int(s.ntotal.Load()),
-	}
+	s.mu.Lock()
+	stats := s.s
+	s.mu.Unlock()
+	return stats
 }
