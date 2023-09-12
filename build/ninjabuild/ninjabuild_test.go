@@ -123,19 +123,10 @@ build all: phony exe
 			want: []string{"out/siso/foo.o"},
 		},
 	} {
-		targets, err := g.Targets(ctx, tc.args...)
+		got, err := g.Targets(ctx, tc.args...)
 		if err != nil {
-			t.Errorf("g.Targets(ctx, %q)=%v, %v; want nil err", tc.args, targets, err)
+			t.Errorf("g.Targets(ctx, %q)=%v, %v; want nil err", tc.args, got, err)
 			continue
-		}
-		var got []string
-		for _, target := range targets {
-			p, err := g.TargetPath(target)
-			if err != nil {
-				t.Errorf("g.TargetPath(%v)=%v, %v; want nil err", target, p, err)
-				continue
-			}
-			got = append(got, p)
 		}
 		if diff := cmp.Diff(tc.want, got); diff != "" {
 			t.Errorf("g.Targets(ctx, %q) diff -want +got:\n%s", tc.args, diff)

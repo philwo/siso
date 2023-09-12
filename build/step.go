@@ -104,9 +104,7 @@ type StepDef interface {
 type Step struct {
 	def    StepDef
 	nwaits int
-	target Target
-
-	cmd *execute.Cmd
+	cmd    *execute.Cmd
 
 	readyTime     time.Time
 	prevStepID    string
@@ -139,11 +137,10 @@ func (s *stepState) Phase() stepPhase {
 	return s.phase
 }
 
-func newStep(stepDef StepDef, target Target, numWaits int) *Step {
+func newStep(stepDef StepDef, waits []string) *Step {
 	return &Step{
 		def:    stepDef,
-		target: target,
-		nwaits: numWaits,
+		nwaits: len(waits),
 		state:  &stepState{},
 	}
 }
@@ -155,17 +152,15 @@ func (s *Step) NumWaits() int {
 
 // ReadyToRun checks whether the step is ready to run
 // when prev step's out becomes ready.
-func (s *Step) ReadyToRun(prev *Step) bool {
-	if prev != nil {
+func (s *Step) ReadyToRun(prev, out string) bool {
+	if out != "" {
 		s.nwaits--
 	}
 	ready := s.nwaits == 0
 	if ready {
 		s.readyTime = time.Now()
-		if prev != nil {
-			s.prevStepID = prev.String()
-			s.prevStepOut = prev.def.Outputs()[0]
-		}
+		s.prevStepID = prev
+		s.prevStepOut = out
 	}
 	return ready
 }
