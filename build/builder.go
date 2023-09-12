@@ -564,8 +564,6 @@ loop:
 				select {
 				case <-ctx.Done():
 				case errch <- err:
-				default:
-					clog.Warningf(ctx, "failed to send err channel: %v", err)
 				}
 			}()
 			defer done(nil)
