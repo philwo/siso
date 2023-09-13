@@ -82,9 +82,6 @@ func (b *Builder) runCmd(ctx context.Context, step *Step, allowLocalFallback boo
 		var err error
 		if allowREProxy {
 			err = b.runReproxy(ctx, step)
-			// TODO: b/297807325 - Siso relies on Reproxy's local fallback for
-			// monitoring at this moment. So, Siso shouldn't try local fallback.
-			allowLocalFallback = false
 		} else {
 			err = b.runRemote(ctx, step)
 		}
@@ -97,6 +94,11 @@ func (b *Builder) runCmd(ctx context.Context, step *Step, allowLocalFallback boo
 		}
 		if errors.Is(err, reapi.ErrBadPlatformContainerImage) {
 			return err
+		}
+		if allowREProxy {
+			// TODO: b/297807325 - Siso relies on Reproxy's local fallback for
+			// monitoring at this moment. So, Siso shouldn't try local fallback.
+			return fmt.Errorf("reproxy error: %w", err)
 		}
 		if !allowLocalFallback {
 			return fmt.Errorf("no allow-localfallback: %w", err)

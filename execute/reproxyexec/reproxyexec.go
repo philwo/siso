@@ -149,8 +149,10 @@ func (re *REProxyExec) Run(ctx context.Context, cmd *execute.Cmd) error {
 		resp, err = proxy.RunCommand(ctx, req)
 		return err
 	})
-
-	err = processResponse(ctx, cmd, resp, err)
+	if err != nil {
+		return err
+	}
+	err = processResponse(ctx, cmd, resp)
 	if err != nil {
 		clog.Warningf(ctx, "Command failed for cmd %q: %v", cmd.Desc, err)
 	}
@@ -245,7 +247,7 @@ func createRequest(ctx context.Context, cmd *execute.Cmd, execTimeout time.Durat
 	}, nil
 }
 
-func processResponse(ctx context.Context, cmd *execute.Cmd, response *ppb.RunResponse, err error) error {
+func processResponse(ctx context.Context, cmd *execute.Cmd, response *ppb.RunResponse) error {
 	if response == nil {
 		return errors.New("no response")
 	}
@@ -254,10 +256,10 @@ func processResponse(ctx context.Context, cmd *execute.Cmd, response *ppb.RunRes
 	clog.Infof(ctx, "RunResponse.ExecutionId=%s", response.GetExecutionId())
 
 	cached := response.GetResult().GetStatus() == cpb.CommandResultStatus_CACHE_HIT
-	if response.GetResult().GetExitCode() == 0 && err == nil {
+	if response.GetResult().GetExitCode() == 0 {
 		clog.Infof(ctx, "exit=%d cache=%t", response.GetResult().GetExitCode(), cached)
 	} else {
-		clog.Warningf(ctx, "exit=%d cache=%t response=%v err:%v", response.GetResult().GetExitCode(), cached, response, err)
+		clog.Warningf(ctx, "exit=%d cache=%t response=%v", response.GetResult().GetExitCode(), cached, response)
 	}
 
 	// TODO(b/273407069): this is nowhere near a complete ActionResult. LogRecord has lots of info, add that info.
@@ -292,7 +294,7 @@ func processResponse(ctx context.Context, cmd *execute.Cmd, response *ppb.RunRes
 		cmd.SetActionDigest(dg)
 	}
 	cmd.SetActionResult(result, cached)
-	err = resultErr(response)
+	err := resultErr(response)
 	if err != nil {
 		return err
 	}
