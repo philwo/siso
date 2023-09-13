@@ -5,21 +5,23 @@
 package ninja
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"io/fs"
+	"net"
 	"os"
 	"path/filepath"
 	"testing"
 
-	"github.com/google/go-cmp/cmp"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"infra/build/siso/build"
 	"infra/build/siso/build/buildconfig"
 	"infra/build/siso/build/ninjabuild"
 	"infra/build/siso/hashfs"
 	"infra/build/siso/toolsupport/ninjautil"
+	pb "infra/third_party/reclient/api/proxy"
 )
 
 func setupFiles(t *testing.T, dir, name string, deletes []string) {
@@ -164,152 +166,49 @@ func openDepsLog(ctx context.Context, t *testing.T, dir string) (*ninjautil.Deps
 	}
 }
 
-func TestBuild_SwallowFailures(t *testing.T) {
-	ctx := context.Background()
-	dir := t.TempDir()
+type fakeReproxy struct {
+	pb.UnimplementedCommandsServer
 
-	setupFiles(t, dir, t.Name(), nil)
-	opt, graph, cleanup := setupBuild(ctx, t, dir, hashfs.Option{})
-	t.Cleanup(cleanup)
-	opt.FailuresAllowed = 3
+	runCommand func(context.Context, *pb.RunRequest) (*pb.RunResponse, error)
+}
 
-	b, err := build.New(ctx, graph, opt)
+func (f fakeReproxy) RunCommand(ctx context.Context, req *pb.RunRequest) (*pb.RunResponse, error) {
+	if f.runCommand == nil {
+		return nil, status.Error(codes.Unimplemented, "")
+	}
+	return f.runCommand(ctx, req)
+}
+
+func (f fakeReproxy) Shutdown(ctx context.Context, req *pb.ShutdownRequest) (*pb.ShutdownResponse, error) {
+	return &pb.ShutdownResponse{}, nil
+}
+
+func setupFakeReproxy(ctx context.Context, t *testing.T, fake fakeReproxy) (string, func()) {
+	t.Helper()
+	var cleanups []func()
+
+	lis, err := net.Listen("tcp", "localhost:0")
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = b.Build(ctx, "build", "all")
-	if err == nil {
-		t.Fatal(`b.Build(ctx, "build", "all")=nil, want err`)
-	}
+	cleanups = append(cleanups, func() { lis.Close() })
 
-	stats := b.Stats()
-	t.Logf("err %v; %#v", err, stats)
-	if got, want := stats.Fail, 3; got != want {
-		t.Errorf("stas.Fail=%d; want=%d", got, want)
-	}
-}
+	addr := lis.Addr().String()
+	t.Logf("fake reproxy at %s", addr)
+	os.Setenv("RBE_server_address", addr)
+	cleanups = append(cleanups, func() {
+		os.Unsetenv("RBE_server_address")
+	})
 
-func TestBuild_SwallowFailuresLimit(t *testing.T) {
-	ctx := context.Background()
-	dir := t.TempDir()
-
-	setupFiles(t, dir, t.Name(), nil)
-	opt, graph, cleanup := setupBuild(ctx, t, dir, hashfs.Option{})
-	t.Cleanup(cleanup)
-	opt.FailuresAllowed = 11
-
-	b, err := build.New(ctx, graph, opt)
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = b.Build(ctx, "build", "all")
-	if err == nil {
-		t.Fatal(`b.Build(ctx, "build", "all")=nil, want err`)
-	}
-
-	stats := b.Stats()
-	t.Logf("err %v; %#v", err, stats)
-	if got, want := stats.Fail, 6; got != want {
-		t.Errorf("stas.Fail=%d; want=%d", got, want)
-	}
-}
-
-func TestBuild_KeepGoing(t *testing.T) {
-	ctx := context.Background()
-	dir := t.TempDir()
-
-	setupFiles(t, dir, t.Name(), nil)
-	opt, graph, cleanup := setupBuild(ctx, t, dir, hashfs.Option{})
-	t.Cleanup(cleanup)
-	opt.FailuresAllowed = 11
-	var metricsBuffer bytes.Buffer
-	opt.MetricsJSONWriter = &metricsBuffer
-
-	b, err := build.New(ctx, graph, opt)
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = b.Build(ctx, "build", "all")
-	if err == nil {
-		t.Fatal(`b.Build(ctx, "build", "all")=nil, want err`)
-	}
-
-	stats := b.Stats()
-	t.Logf("err %v; %#v", err, stats)
-	if got, want := stats.Fail, 2; got != want {
-		t.Errorf("stats.Fail=%d; want=%d", got, want)
-	}
-	if got, want := stats.Done, 10; got != want {
-		t.Errorf("stats.Done=%d; want=%d", got, want)
-	}
-	dec := json.NewDecoder(bytes.NewReader(metricsBuffer.Bytes()))
-	for dec.More() {
-		var m build.StepMetric
-		err := dec.Decode(&m)
-		if err != nil {
-			t.Errorf("decode %v", err)
+	serv := grpc.NewServer()
+	pb.RegisterCommandsServer(serv, fake)
+	go func() {
+		err := serv.Serve(lis)
+		t.Logf("Serve finished: %v", err)
+	}()
+	return addr, func() {
+		for i := len(cleanups) - 1; i >= 0; i-- {
+			cleanups[i]()
 		}
-		if m.StepID == "" {
-			continue
-		}
-		switch filepath.Base(m.Output) {
-		case "out1", "out2":
-			if !m.Err {
-				t.Errorf("%s err=%t; want true", m.Output, m.Err)
-			}
-		case "out3", "out4", "out5", "out6", "out9", "out10", "out11", "out12":
-			if m.Err {
-				t.Errorf("%s err=%t; want false", m.Output, m.Err)
-			}
-		default:
-			t.Errorf("unexpected output %q", m.Output)
-		}
-	}
-}
-
-func TestParseFlagsFully(t *testing.T) {
-	for _, tc := range []struct {
-		name      string
-		args      []string
-		want      []string
-		wantDebug debugMode
-	}{
-		{
-			name: "simple",
-			args: []string{"-C", "out/siso"},
-			want: nil,
-		},
-		{
-			name: "target",
-			args: []string{"-C", "out/siso", "-project", "rbe-chrome-untrusted", "chrome"},
-			want: []string{"chrome"},
-		},
-		{
-			name: "after-flag",
-			args: []string{"-C", "out/siso", "-project", "rbe-chrome-untrusted", "chrome", "-d", "explain"},
-			want: []string{"chrome"},
-			wantDebug: debugMode{
-				Explain: true,
-			},
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			c := &ninjaCmdRun{}
-			c.init()
-			err := c.Flags.Parse(tc.args)
-			if err != nil {
-				t.Fatalf("flag parse %v; want nil err", err)
-			}
-			err = parseFlagsFully(&c.Flags)
-			if err != nil {
-				t.Fatalf("flag parse fully %v; want nil err", err)
-			}
-			if diff := cmp.Diff(tc.want, c.Flags.Args()); diff != "" {
-				t.Errorf("args diff -want +got:\n%s", diff)
-			}
-			if diff := cmp.Diff(tc.wantDebug, c.debugMode); diff != "" {
-				t.Errorf("debugMode diff -want +got:\n%s", diff)
-			}
-		})
 	}
 }
