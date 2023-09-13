@@ -7,21 +7,15 @@ package ninja
 import (
 	"context"
 	"io/fs"
-	"net"
 	"os"
 	"path/filepath"
 	"testing"
-
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 
 	"infra/build/siso/build"
 	"infra/build/siso/build/buildconfig"
 	"infra/build/siso/build/ninjabuild"
 	"infra/build/siso/hashfs"
 	"infra/build/siso/toolsupport/ninjautil"
-	pb "infra/third_party/reclient/api/proxy"
 )
 
 func setupFiles(t *testing.T, dir, name string, deletes []string) {
@@ -160,53 +154,6 @@ func openDepsLog(ctx context.Context, t *testing.T, dir string) (*ninjautil.Deps
 		}
 	})
 	return depsLog, func() {
-		for i := len(cleanups) - 1; i >= 0; i-- {
-			cleanups[i]()
-		}
-	}
-}
-
-type fakeReproxy struct {
-	pb.UnimplementedCommandsServer
-
-	runCommand func(context.Context, *pb.RunRequest) (*pb.RunResponse, error)
-}
-
-func (f fakeReproxy) RunCommand(ctx context.Context, req *pb.RunRequest) (*pb.RunResponse, error) {
-	if f.runCommand == nil {
-		return nil, status.Error(codes.Unimplemented, "")
-	}
-	return f.runCommand(ctx, req)
-}
-
-func (f fakeReproxy) Shutdown(ctx context.Context, req *pb.ShutdownRequest) (*pb.ShutdownResponse, error) {
-	return &pb.ShutdownResponse{}, nil
-}
-
-func setupFakeReproxy(ctx context.Context, t *testing.T, fake fakeReproxy) (string, func()) {
-	t.Helper()
-	var cleanups []func()
-
-	lis, err := net.Listen("tcp", "localhost:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	cleanups = append(cleanups, func() { lis.Close() })
-
-	addr := lis.Addr().String()
-	t.Logf("fake reproxy at %s", addr)
-	os.Setenv("RBE_server_address", addr)
-	cleanups = append(cleanups, func() {
-		os.Unsetenv("RBE_server_address")
-	})
-
-	serv := grpc.NewServer()
-	pb.RegisterCommandsServer(serv, fake)
-	go func() {
-		err := serv.Serve(lis)
-		t.Logf("Serve finished: %v", err)
-	}()
-	return addr, func() {
 		for i := len(cleanups) - 1; i >= 0; i-- {
 			cleanups[i]()
 		}

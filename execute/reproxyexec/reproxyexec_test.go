@@ -6,62 +6,18 @@ package reproxyexec
 
 import (
 	"context"
-	"infra/build/siso/hashfs"
-	"net"
 	"os"
 	"path/filepath"
 	"testing"
 
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	"infra/build/siso/execute"
+	"infra/build/siso/execute/reproxyexec/reproxytest"
+	"infra/build/siso/hashfs"
 	ppb "infra/third_party/reclient/api/proxy"
 )
-
-type fakeReproxy struct {
-	ppb.UnimplementedCommandsServer
-
-	runCommand func(context.Context, *ppb.RunRequest) (*ppb.RunResponse, error)
-}
-
-func (f fakeReproxy) RunCommand(ctx context.Context, req *ppb.RunRequest) (*ppb.RunResponse, error) {
-	if f.runCommand == nil {
-		return nil, status.Error(codes.Unimplemented, "")
-	}
-	return f.runCommand(ctx, req)
-}
-
-func setupFakeReproxy(ctx context.Context, t *testing.T, fake fakeReproxy) (string, func()) {
-	t.Helper()
-	var cleanups []func()
-
-	lis, err := net.Listen("tcp", "localhost:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	cleanups = append(cleanups, func() { lis.Close() })
-
-	addr := lis.Addr().String()
-	t.Logf("fake reproxy at %s", addr)
-	os.Setenv("RBE_server_address", addr)
-	cleanups = append(cleanups, func() {
-		os.Unsetenv("RBE_server_address")
-	})
-
-	serv := grpc.NewServer()
-	ppb.RegisterCommandsServer(serv, fake)
-	go func() {
-		err := serv.Serve(lis)
-		t.Logf("Serve finished: %v", err)
-	}()
-	return addr, func() {
-		for i := len(cleanups) - 1; i >= 0; i-- {
-			cleanups[i]()
-		}
-	}
-}
 
 func TestRun_Unauthenticated(t *testing.T) {
 	ctx := context.Background()
@@ -94,14 +50,14 @@ func TestRun_Unauthenticated(t *testing.T) {
 	setupFile("third_party/llvm-build/Release+Asserts/bin/clang++")
 	setupDir("out/siso/obj/base")
 
-	addr, cleanup := setupFakeReproxy(ctx, t, fakeReproxy{
-		runCommand: func(ctx context.Context, req *ppb.RunRequest) (*ppb.RunResponse, error) {
+	s := reproxytest.NewServer(ctx, t, reproxytest.Fake{
+		RunCommandFunc: func(ctx context.Context, req *ppb.RunRequest) (*ppb.RunResponse, error) {
 			return &ppb.RunResponse{}, status.Error(codes.Unauthenticated, "Unable to authenticate with RBE")
 		},
 	})
-	defer cleanup()
+	t.Cleanup(s.Close)
 	re := REProxyExec{
-		connAddress: addr,
+		connAddress: s.Addr(),
 	}
 
 	err = re.Run(ctx, &execute.Cmd{

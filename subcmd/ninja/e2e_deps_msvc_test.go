@@ -14,6 +14,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 
 	"infra/build/siso/build"
+	"infra/build/siso/execute/reproxyexec/reproxytest"
 	"infra/build/siso/hashfs"
 	pb "infra/third_party/reclient/api/proxy"
 )
@@ -98,8 +99,8 @@ func TestBuild_DepsMSVC_Reproxy(t *testing.T) {
 	func() {
 		t.Logf("first build")
 		setupFiles(t, dir, t.Name(), nil)
-		reproxyAddr, recleanup := setupFakeReproxy(ctx, t, fakeReproxy{
-			runCommand: func(ctx context.Context, req *pb.RunRequest) (*pb.RunResponse, error) {
+		s := reproxytest.NewServer(ctx, t, reproxytest.Fake{
+			RunCommandFunc: func(ctx context.Context, req *pb.RunRequest) (*pb.RunResponse, error) {
 				err := os.WriteFile(filepath.Join(dir, "out/siso/foo.o"), nil, 0644)
 				if err != nil {
 					return &pb.RunResponse{
@@ -121,11 +122,11 @@ Note: including file:   ../../base/other.h
 				}, nil
 			},
 		})
-		defer recleanup()
+		defer s.Close()
 
 		opt, graph, cleanup := setupBuild(ctx, t, dir, hashfs.Option{})
 		defer cleanup()
-		opt.ReproxyAddr = reproxyAddr
+		opt.ReproxyAddr = s.Addr()
 
 		b, err := build.New(ctx, graph, opt)
 		if err != nil {
@@ -158,8 +159,8 @@ Note: including file:   ../../base/other.h
 	func() {
 		t.Logf("second build")
 		setupFiles(t, dir, t.Name()+"_second", []string{"base/other.h"})
-		reproxyAddr, recleanup := setupFakeReproxy(ctx, t, fakeReproxy{
-			runCommand: func(ctx context.Context, req *pb.RunRequest) (*pb.RunResponse, error) {
+		s := reproxytest.NewServer(ctx, t, reproxytest.Fake{
+			RunCommandFunc: func(ctx context.Context, req *pb.RunRequest) (*pb.RunResponse, error) {
 				err := os.WriteFile(filepath.Join(dir, "out/siso/foo.o"), nil, 0644)
 				if err != nil {
 					return &pb.RunResponse{
@@ -181,11 +182,11 @@ Note: including file:   ../../base/other2.h
 				}, nil
 			},
 		})
-		defer recleanup()
+		defer s.Close()
 
 		opt, graph, cleanup := setupBuild(ctx, t, dir, hashfs.Option{})
 		defer cleanup()
-		opt.ReproxyAddr = reproxyAddr
+		opt.ReproxyAddr = s.Addr()
 
 		b, err := build.New(ctx, graph, opt)
 		if err != nil {
