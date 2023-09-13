@@ -102,7 +102,7 @@ func DefaultLimits(ctx context.Context) Limits {
 				clog.Warningf(ctx, "unknown limits name %q", k)
 				continue
 			}
-			ui.Default.PrintLines(ui.SGR(ui.Red, fmt.Sprintf("use SISO_LIMITS=%s=%d\n", k, n)))
+			ui.Default.PrintLines(ui.SGR(ui.Yellow, fmt.Sprintf("use SISO_LIMITS=%s=%d\n", k, n)))
 		}
 	})
 	return defaultLimits

@@ -68,6 +68,7 @@ func (e *Experiments) ShowOnce() {
 	e.once.Do(func() {
 		s := e.String()
 		if s != "" {
+			s = ui.SGR(ui.Yellow, s)
 			ui.Default.PrintLines(s)
 		}
 	})
