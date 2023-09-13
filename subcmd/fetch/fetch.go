@@ -30,7 +30,8 @@ const usage = `fetch contents from CAS.
 Print contents to stdout, or extract in <dir> for -type dir-extract.
 
  $ siso fetch -project <project> -reapi_instnace <instnace> \
-          [-type <type>] <digest> [<dir>]
+          [-type <type>] \
+          <digest> [<dir>]
 
 <type> is
   raw: raw content
@@ -138,8 +139,18 @@ func (c *run) run(ctx context.Context) error {
 			dir = c.Flags.Arg(1)
 		}
 		fmt.Printf("extract %s to %s\n", d, dir)
+
+		b, err := client.Get(ctx, d, d.String())
+		if err != nil {
+			return err
+		}
+		pmsg := &rpb.Directory{}
+		err = c.protoUnmarshal(b, pmsg)
+		if err != nil {
+			return fmt.Errorf("failed to unmarshal %s as %T: %v", d, pmsg, err)
+		}
 		exporter := exporter.New(client)
-		err := exporter.Export(ctx, dir, d)
+		err = exporter.Export(ctx, dir, d)
 		if err != nil {
 			return err
 		}
@@ -161,10 +172,22 @@ func (c *run) run(ctx context.Context) error {
 		}
 		return nil
 	}
-	err = proto.Unmarshal(b, pmsg)
+	err = c.protoUnmarshal(b, pmsg)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal %s as %T: %v", d, pmsg, err)
 	}
 	fmt.Println(pmsg)
+	return nil
+}
+
+func (c *run) protoUnmarshal(b []byte, msg proto.Message) error {
+	err := proto.Unmarshal(b, msg)
+	if err != nil {
+		return err
+	}
+	unknown := msg.ProtoReflect().GetUnknown()
+	if len(unknown) > 0 {
+		return fmt.Errorf("unknown fields in marshaled proto: %v", msg)
+	}
 	return nil
 }
