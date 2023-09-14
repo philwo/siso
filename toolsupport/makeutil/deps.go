@@ -11,9 +11,9 @@ import (
 	"io/fs"
 	"strings"
 
-	"infra/build/siso/o11y/clog"
-
 	log "github.com/golang/glog"
+
+	"infra/build/siso/o11y/clog"
 )
 
 // ParseDepsFile parses *.d file in fname on fsys.

@@ -5,9 +5,10 @@
 package ui_test
 
 import (
-	"infra/build/siso/ui"
 	"testing"
 	"time"
+
+	"infra/build/siso/ui"
 )
 
 func TestFormatDuration(t *testing.T) {

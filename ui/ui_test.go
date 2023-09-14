@@ -5,8 +5,9 @@
 package ui_test
 
 import (
-	"infra/build/siso/ui"
 	"testing"
+
+	"infra/build/siso/ui"
 )
 
 func TestStripANSIEscapeCodes(t *testing.T) {

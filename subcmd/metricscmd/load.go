@@ -8,9 +8,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"infra/build/siso/build"
 	"io"
 	"os"
+
+	"infra/build/siso/build"
 )
 
 func loadMetrics(ctx context.Context, fname string) ([]build.StepMetric, error) {
