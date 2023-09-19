@@ -881,7 +881,7 @@ type entry struct {
 	src digest.Source
 	buf []byte // from WriteFile.
 
-	mu sync.RWMutex
+	mu sync.Mutex
 	// mtime of entry in hashfs.
 	mtime        time.Time
 	mtimeUpdated bool
