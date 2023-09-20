@@ -186,9 +186,9 @@ func (p *progress) step(ctx context.Context, b *Builder, step *Step, s string) {
 		remoteWaits := b.remoteSema.NumWaits()
 		remoteServs := b.remoteSema.NumServs()
 		remoteWaits += b.reproxySema.NumWaits()
-		remoteServs += b.reproxySema.NumWaits()
+		remoteServs += b.reproxySema.NumServs()
 		remoteWaits += b.rewrapSema.NumWaits()
-		remoteServs += b.rewrapSema.NumWaits()
+		remoteServs += b.rewrapSema.NumServs()
 		remoteProgress := runProgress(remoteWaits, remoteServs)
 
 		var stepsPerSec string
