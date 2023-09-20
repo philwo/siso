@@ -352,7 +352,9 @@ func (c *Cmd) Digest(ctx context.Context, ds *digest.Store) (digest.Digest, erro
 
 	var timeout *durationpb.Duration
 	if c.Timeout > 0 {
-		timeout = durationpb.New(c.Timeout)
+		// Set Timeout*2 to expect cache hit for long command.
+		// but prevent from keeping RBE worker busy.
+		timeout = durationpb.New(c.Timeout * 2)
 	}
 
 	action, err := digest.FromProtoMessage(&rpb.Action{

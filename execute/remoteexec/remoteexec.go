@@ -60,6 +60,11 @@ func (re *RemoteExec) prepareInputs(ctx context.Context, cmd *execute.Cmd) (dige
 
 // Run runs a cmd.
 func (re *RemoteExec) Run(ctx context.Context, cmd *execute.Cmd) error {
+	if cmd.Timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, cmd.Timeout)
+		defer cancel()
+	}
 	ctx, span := trace.NewSpan(ctx, "remote-exec")
 	defer span.Close(nil)
 	actionDigest, err := re.prepareInputs(ctx, cmd)

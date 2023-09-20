@@ -194,7 +194,9 @@ type StepRule struct {
 	// REProxyConfig specifies configuration options for using reproxy.
 	REProxyConfig *execute.REProxyConfig `json:"reproxy_config,omitempty"`
 
-	// Timeout specifies time duration for the step.
+	// Timeout specifies time duration for the remote execution call of the step.
+	// Timeout*2 will be set to remote action's timeout to
+	// expect cache hit for long command execution.
 	Timeout string `json:"timeout,omitempty"` // duration format
 
 	// Handler name.
