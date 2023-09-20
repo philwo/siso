@@ -152,7 +152,7 @@ func (c *run) run(ctx context.Context) error {
 		exporter := exporter.New(client)
 		err = exporter.Export(ctx, dir, d)
 		if err != nil {
-			return err
+			return fmt.Errorf("error from exporter.Export: %w", err)
 		}
 		return nil
 	default:
@@ -163,7 +163,7 @@ func (c *run) run(ctx context.Context) error {
 	}
 	b, err := client.Get(ctx, d, d.String())
 	if err != nil {
-		return err
+		return fmt.Errorf("error from client.Get: %w", err)
 	}
 	if pmsg == nil {
 		_, err = os.Stdout.Write(b)

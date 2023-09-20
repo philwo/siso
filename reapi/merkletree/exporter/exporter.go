@@ -7,13 +7,10 @@ package exporter
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
 	"golang.org/x/sync/errgroup"
@@ -56,7 +53,7 @@ func (e *Exporter) Export(ctx context.Context, dir string, d digest.Digest) erro
 
 func (e *Exporter) exportDir(ctx context.Context, dir string, d digest.Digest) error {
 	clog.Infof(ctx, "export dir: %s %s", dir, d)
-	err := mkdirAll(dir)
+	err := os.MkdirAll(dir, 0755)
 	if err != nil {
 		return err
 	}
@@ -111,23 +108,4 @@ func (e *Exporter) exportFile(ctx context.Context, fname string, d digest.Digest
 		return err
 	}
 	return os.Chmod(fname, mode)
-}
-
-// mkdirAll creates all mkdir ignoring umask.
-func mkdirAll(dir string) error {
-	elems := strings.Split(filepath.Clean(dir), string(filepath.Separator))
-	var dirs []string
-	for _, elem := range elems {
-		dirs = append(dirs, elem)
-		d := filepath.Join(dirs...)
-		err := os.Mkdir(d, 0755)
-		if err != nil && !errors.Is(err, fs.ErrExist) {
-			return err
-		}
-		err = os.Chmod(d, 0755)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
 }
