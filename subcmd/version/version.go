@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/maruel/subcommands"
+
 	"go.chromium.org/luci/cipd/version"
 	"go.chromium.org/luci/common/cli"
 	"go.chromium.org/luci/hardcoded/chromeinfra"

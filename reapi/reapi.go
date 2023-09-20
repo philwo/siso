@@ -17,12 +17,13 @@ import (
 	"github.com/bazelbuild/remote-apis-sdks/go/pkg/balancer"
 	configpb "github.com/bazelbuild/remote-apis-sdks/go/pkg/balancer/proto"
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
-	"go.chromium.org/luci/cipd/version"
 	"golang.org/x/sync/singleflight"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/proto"
+
+	"go.chromium.org/luci/cipd/version"
 
 	"infra/build/siso/auth/cred"
 	"infra/build/siso/o11y/clog"

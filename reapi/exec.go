@@ -13,12 +13,13 @@ import (
 
 	"cloud.google.com/go/longrunning/autogen/longrunningpb"
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
-	"go.chromium.org/luci/common/retry"
 	spb "google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
+
+	"go.chromium.org/luci/common/retry"
 
 	"infra/build/siso/o11y/clog"
 )

@@ -15,10 +15,11 @@ import (
 
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
 	"github.com/maruel/subcommands"
+	"google.golang.org/protobuf/proto"
+
 	"go.chromium.org/luci/auth"
 	"go.chromium.org/luci/common/cli"
 	"go.chromium.org/luci/common/system/signals"
-	"google.golang.org/protobuf/proto"
 
 	"infra/build/siso/auth/cred"
 	"infra/build/siso/reapi"

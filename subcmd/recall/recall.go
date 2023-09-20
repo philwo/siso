@@ -21,14 +21,15 @@ import (
 	log "github.com/golang/glog"
 	"github.com/google/uuid"
 	"github.com/maruel/subcommands"
-	"go.chromium.org/luci/auth"
-	"go.chromium.org/luci/common/cli"
-	"go.chromium.org/luci/common/system/signals"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/prototext"
 	"google.golang.org/protobuf/proto"
 	tspb "google.golang.org/protobuf/types/known/timestamppb"
+
+	"go.chromium.org/luci/auth"
+	"go.chromium.org/luci/common/cli"
+	"go.chromium.org/luci/common/system/signals"
 
 	"infra/build/siso/auth/cred"
 	"infra/build/siso/reapi"

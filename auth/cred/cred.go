@@ -9,13 +9,14 @@ import (
 	"context"
 	"crypto/tls"
 
-	"go.chromium.org/luci/auth"
-	"go.chromium.org/luci/hardcoded/chromeinfra"
 	"golang.org/x/oauth2"
 	"google.golang.org/api/option"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/oauth"
+
+	"go.chromium.org/luci/auth"
+	"go.chromium.org/luci/hardcoded/chromeinfra"
 
 	"infra/build/siso/o11y/clog"
 )

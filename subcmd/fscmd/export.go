@@ -10,8 +10,9 @@ import (
 	"os"
 
 	"github.com/maruel/subcommands"
-	"go.chromium.org/luci/common/cli"
 	"google.golang.org/protobuf/encoding/prototext"
+
+	"go.chromium.org/luci/common/cli"
 
 	"infra/build/siso/hashfs"
 )
