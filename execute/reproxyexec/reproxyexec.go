@@ -42,6 +42,8 @@ const (
 	dialTimeout = 3 * time.Minute
 	// defaultExecTimeout defines the default timeout to use for executions.
 	defaultExecTimeout = time.Hour
+	// defaultReclientTimeout defines the default timeout to use for reproxy request.
+	defaultReclientTimeout = time.Hour
 	// grpcMaxMsgSize is the max value of gRPC response that can be received by the client (in bytes).
 	grpcMaxMsgSize = 1024 * 1024 * 32 // 32MB (default is 4MB)
 	// wrapperOverheadKey is the key for the wrapper overhead metric passed to the proxy.
@@ -118,12 +120,23 @@ func (re *REProxyExec) Run(ctx context.Context, cmd *execute.Cmd) error {
 	if cmd.REProxyConfig.ExecTimeout != "" {
 		parsed, err := time.ParseDuration(cmd.REProxyConfig.ExecTimeout)
 		if err != nil {
-			return fmt.Errorf("failed to parse timeout %q: %w", cmd.REProxyConfig.ExecTimeout, err)
+			return fmt.Errorf("failed to parse exec_timeout %q: %w", cmd.REProxyConfig.ExecTimeout, err)
 		}
 		if parsed == 0 {
-			return fmt.Errorf("0 is not a valid REProxy timeout")
+			return fmt.Errorf("0 is not a valid REProxy exec_timeout")
 		}
 		execTimeout = parsed
+	}
+	reclientTimeout := defaultReclientTimeout
+	if cmd.REProxyConfig.ReclientTimeout != "" {
+		parsed, err := time.ParseDuration(cmd.REProxyConfig.ReclientTimeout)
+		if err != nil {
+			return fmt.Errorf("failed to parse reclient_timeout %q: %w", cmd.REProxyConfig.ReclientTimeout, err)
+		}
+		if parsed == 0 {
+			return fmt.Errorf("0 is not a valid REProxy reclient_timeout")
+		}
+		reclientTimeout = parsed
 	}
 
 	// Dial reproxy if no connection, ensure same address is used for subsequent calls.
@@ -140,7 +153,7 @@ func (re *REProxyExec) Run(ctx context.Context, cmd *execute.Cmd) error {
 	// Create REProxy client and send the request with backoff configuration above.
 	// (No timeout applied due to use of backoff with maximum attempts allowed.)
 	proxy := ppb.NewCommandsClient(re.conn)
-	req, err := createRequest(ctx, cmd, execTimeout)
+	req, err := createRequest(ctx, cmd, execTimeout, reclientTimeout)
 	if err != nil {
 		return err
 	}
@@ -159,7 +172,7 @@ func (re *REProxyExec) Run(ctx context.Context, cmd *execute.Cmd) error {
 	return err
 }
 
-func createRequest(ctx context.Context, cmd *execute.Cmd, execTimeout time.Duration) (*ppb.RunRequest, error) {
+func createRequest(ctx context.Context, cmd *execute.Cmd, execTimeout, reclientTimeout time.Duration) (*ppb.RunRequest, error) {
 	args, err := cmd.RemoteArgs()
 	if err != nil {
 		return nil, err
@@ -222,7 +235,7 @@ func createRequest(ctx context.Context, cmd *execute.Cmd, execTimeout time.Durat
 			CompareWithLocal:  false,
 			NumLocalReruns:    0,
 			NumRemoteReruns:   0,
-			ReclientTimeout:   int32(time.Hour.Seconds()),
+			ReclientTimeout:   int32(reclientTimeout.Seconds()),
 			RemoteExecutionOptions: &ppb.RemoteExecutionOptions{
 				AcceptCached:                 !cmd.SkipCacheLookup,
 				DoNotCache:                   cmd.DoNotCache,

@@ -44,7 +44,8 @@ type REProxyConfig struct {
 	CanonicalizeWorkingDir bool              `json:"canonicalize_working_dir,omitempty"`
 	DownloadOutputs        bool              `json:"download_outputs,omitempty"`
 	ExecStrategy           string            `json:"exec_strategy,omitempty"`
-	ExecTimeout            string            `json:"exec_timeout,omitempty"` // duration format
+	ExecTimeout            string            `json:"exec_timeout,omitempty"`     // duration format
+	ReclientTimeout        string            `json:"reclient_timeout,omitempty"` // duration format
 	Inputs                 []string          `json:"inputs,omitempty"`
 	Labels                 map[string]string `json:"labels,omitempty"`
 	Platform               map[string]string `json:"platform,omitempty"`
