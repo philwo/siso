@@ -357,7 +357,15 @@ func newCmd(ctx context.Context, b *Builder, stepDef StepDef) *execute.Cmd {
 		Timeout:         stepTimeout(ctx, stepDef.Binding("timeout")),
 		ActionSalt:      b.actionSalt,
 	}
-	if experiments.Enabled("gvisor", "Force gVisor") {
+	if stepDef.Binding("pool") == "console" {
+		// pool=console needs to attach stdin/stdout/stderr
+		// so run locally.
+		cmd.Platform = nil
+		cmd.RemoteWrapper = ""
+		cmd.RemoteCommand = ""
+		cmd.RemoteInputs = nil
+		cmd.REProxyConfig = nil
+	} else if experiments.Enabled("gvisor", "Force gVisor") {
 		if len(cmd.Platform) == 0 {
 			cmd.Platform = map[string]string{}
 		}

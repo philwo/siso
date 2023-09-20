@@ -6,10 +6,11 @@
 package localexec
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
@@ -46,8 +47,6 @@ func (LocalExec) Run(ctx context.Context, cmd *execute.Cmd) (err error) {
 	if err != nil {
 		return err
 	}
-	cmd.StdoutWriter().Write(res.StdoutRaw)
-	cmd.StderrWriter().Write(res.StderrRaw)
 	cmd.SetActionResult(res, false)
 
 	clog.Infof(ctx, "exit=%d stdout=%d stderr=%d metadata=%s", res.ExitCode, len(res.StdoutRaw), len(res.StderrRaw), res.ExecutionMetadata)
@@ -73,9 +72,13 @@ func run(ctx context.Context, cmd *execute.Cmd) (*rpb.ActionResult, error) {
 	c := exec.CommandContext(ctx, cmd.Args[0], cmd.Args[1:]...)
 	c.Env = cmd.Env
 	c.Dir = filepath.Join(cmd.ExecRoot, cmd.Dir)
-	var stdout, stderr bytes.Buffer
-	c.Stdout = &stdout
-	c.Stderr = &stderr
+	c.Stdout = cmd.StdoutWriter()
+	c.Stderr = cmd.StderrWriter()
+	if cmd.Console {
+		c.Stdin = os.Stdin
+		c.Stdout = io.MultiWriter(os.Stdout, c.Stdout)
+		c.Stderr = io.MultiWriter(os.Stderr, c.Stderr)
+	}
 	s := time.Now()
 
 	var ru *epb.Rusage
@@ -120,8 +123,8 @@ func run(ctx context.Context, cmd *execute.Cmd) (*rpb.ActionResult, error) {
 
 	result := &rpb.ActionResult{
 		ExitCode:  code,
-		StdoutRaw: stdout.Bytes(),
-		StderrRaw: stderr.Bytes(),
+		StdoutRaw: cmd.Stdout(),
+		StderrRaw: cmd.Stderr(),
 		ExecutionMetadata: &rpb.ExecutedActionMetadata{
 			Worker:                      WorkerName,
 			ExecutionStartTimestamp:     timestamppb.New(s),

@@ -10,7 +10,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -197,7 +196,10 @@ type Cmd struct {
 	// FileTrace is a FileTrace info if enabled.
 	FileTrace *FileTrace
 
-	stdoutWriter, stderrWriter io.Writer
+	// Console indicates the command attaches stdin/stdout/stderr when
+	// running.  localexec only.
+	Console bool
+
 	stdoutBuffer, stderrBuffer *bytes.Buffer
 
 	actionDigest digest.Digest
@@ -255,38 +257,22 @@ func (c *Cmd) RemoteArgs() ([]string, error) {
 	return args, nil
 }
 
-// SetStdoutWriter sets w for stdout.
-func (c *Cmd) SetStdoutWriter(w io.Writer) {
-	c.stdoutWriter = w
-}
-
-// SetStderrWriter sets w for stderr.
-func (c *Cmd) SetStderrWriter(w io.Writer) {
-	c.stderrWriter = w
-}
-
 // StdoutWriter returns a writer set for stdout.
-func (c *Cmd) StdoutWriter() io.Writer {
+func (c *Cmd) StdoutWriter() *bytes.Buffer {
 	if c.stdoutBuffer == nil {
 		c.stdoutBuffer = new(bytes.Buffer)
 	}
 	c.stdoutBuffer.Reset()
-	if c.stdoutWriter == nil {
-		return c.stdoutBuffer
-	}
-	return io.MultiWriter(c.stdoutWriter, c.stdoutBuffer)
+	return c.stdoutBuffer
 }
 
 // StderrWriter returns a writer set for stderr.
-func (c *Cmd) StderrWriter() io.Writer {
+func (c *Cmd) StderrWriter() *bytes.Buffer {
 	if c.stderrBuffer == nil {
 		c.stderrBuffer = new(bytes.Buffer)
 	}
 	c.stderrBuffer.Reset()
-	if c.stderrWriter == nil {
-		return c.stderrBuffer
-	}
-	return io.MultiWriter(c.stderrWriter, c.stderrBuffer)
+	return c.stderrBuffer
 }
 
 // Stdout returns stdout output of the cmd.

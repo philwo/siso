@@ -43,6 +43,7 @@ func (b *Builder) runLocal(ctx context.Context, step *Step) error {
 	stateMessage := "local exec"
 	sema := b.localSema
 	pool := step.def.Binding("pool")
+	step.cmd.Console = pool == "console"
 	if s, ok := b.poolSemas[pool]; ok {
 		sema = s
 		stateMessage += " (pool=" + pool + ")"

@@ -115,7 +115,7 @@ func (b *Builder) runCmd(ctx context.Context, step *Step, allowLocalFallback boo
 			step.metrics.Fallback = true
 		}
 		msgs := cmdOutput(ctx, "FALLBACK", step.cmd, step.def.Binding("command"), step.def.RuleName(), err)
-		b.logOutput(ctx, msgs)
+		b.logOutput(ctx, msgs, false)
 	}
 	if !allowLocalFallback {
 		return errors.New("no allow-localfallback")

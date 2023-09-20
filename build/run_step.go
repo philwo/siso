@@ -96,7 +96,7 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 	if err != nil {
 		if !experiments.Enabled("keep-going-handle-error", "handle %s failed: %v", step, err) {
 			msgs := cmdOutput(ctx, "FAILED[handle]:", step.cmd, step.def.Binding("command"), step.def.RuleName(), err)
-			b.logOutput(ctx, msgs)
+			b.logOutput(ctx, msgs, step.cmd.Console)
 			clog.Warningf(ctx, "Failed to exec(handle): %v", err)
 			return fmt.Errorf("failed to run handler for %s: %w", step, err)
 		}
@@ -118,7 +118,7 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 	err = b.setupRSP(ctx, step)
 	if err != nil {
 		msgs := cmdOutput(ctx, "FAILED[rsp]:", step.cmd, step.def.Binding("command"), step.def.RuleName(), err)
-		b.logOutput(ctx, msgs)
+		b.logOutput(ctx, msgs, step.cmd.Console)
 		return fmt.Errorf("failed to setup rsp: %s: %w", step, err)
 	}
 	defer func() {
@@ -145,7 +145,7 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 	if err != nil {
 		if !errors.Is(err, context.Canceled) {
 			msgs := cmdOutput(ctx, "FAILED:", step.cmd, step.def.Binding("command"), step.def.RuleName(), err)
-			b.logOutput(ctx, msgs)
+			b.logOutput(ctx, msgs, step.cmd.Console)
 		}
 		return StepError{
 			Target: b.path.MustToWD(step.cmd.Outputs[0]),
@@ -155,7 +155,7 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 
 	msgs := cmdOutput(ctx, "SUCCESS:", step.cmd, step.def.Binding("command"), step.def.RuleName(), nil)
 	if len(msgs) > 0 {
-		b.logOutput(ctx, msgs)
+		b.logOutput(ctx, msgs, step.cmd.Console)
 		if experiments.Enabled("fail-on-stdouterr", "step %s emit stdout/stderr", step) {
 			return fmt.Errorf("%s emit stdout/stderr", step)
 		}
@@ -182,7 +182,7 @@ func (b *Builder) tryFastStep(ctx context.Context, step, fastStep *Step) (bool, 
 		msgs := cmdOutput(ctx, "SUCCESS:", fastStep.cmd, step.def.Binding("command"), step.def.RuleName(), nil)
 		clog.Infof(ctx, "fast done err=%v", err)
 		if len(msgs) > 0 {
-			b.logOutput(ctx, msgs)
+			b.logOutput(ctx, msgs, step.cmd.Console)
 			if experiments.Enabled("fail-on-stdouterr", "step %s emit stdout/stderr", step) {
 				return true, fmt.Errorf("%s emit stdout/stderr", step)
 			}
@@ -197,7 +197,7 @@ func (b *Builder) tryFastStep(ctx context.Context, step, fastStep *Step) (bool, 
 		// platform container image are not available
 		// on RBE worker.
 		msgs := cmdOutput(ctx, "FAILED[badContainer]:", fastStep.cmd, step.def.Binding("command"), fastStep.def.RuleName(), err)
-		b.logOutput(ctx, msgs)
+		b.logOutput(ctx, msgs, step.cmd.Console)
 		return true, err
 	}
 	step.metrics.DepsLogErr = true
@@ -254,7 +254,7 @@ func cmdOutput(ctx context.Context, result string, cmd *execute.Cmd, cmdline, ru
 
 }
 
-func (b *Builder) logOutput(ctx context.Context, msgs []string) {
+func (b *Builder) logOutput(ctx context.Context, msgs []string, console bool) {
 	if len(msgs) == 0 {
 		return
 	}
@@ -274,8 +274,11 @@ func (b *Builder) logOutput(ctx context.Context, msgs []string) {
 		}
 		for _, msg := range msgs {
 			switch {
-			case strings.HasPrefix(msg, "err:") || strings.HasPrefix(msg, "stdout:") || strings.HasPrefix(msg, "stderr:"):
-				fmt.Fprint(&sb, msg)
+			case strings.HasPrefix(msg, "err:"):
+			case strings.HasPrefix(msg, "stdout:"), strings.HasPrefix(msg, "stderr:"):
+				if !console {
+					fmt.Fprint(&sb, msg)
+				}
 			}
 		}
 		out := sb.String()
@@ -287,6 +290,17 @@ func (b *Builder) logOutput(ctx context.Context, msgs []string) {
 	}
 	if strings.HasPrefix(msgs[0], "FALLBACK") {
 		return
+	}
+	if console {
+		var nmsgs []string
+		for _, msg := range msgs {
+			switch {
+			case strings.HasPrefix(msg, "stdout:"), strings.HasPrefix(msg, "stderr:"):
+				continue
+			}
+			nmsgs = append(nmsgs, msg)
+		}
+		msgs = nmsgs
 	}
 	ui.Default.PrintLines(append([]string{"\n", "\n"}, msgs...)...)
 }
