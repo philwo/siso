@@ -11,6 +11,7 @@ import (
 	"time"
 
 	epb "infra/build/siso/execute/proto"
+	"infra/build/siso/o11y/clog"
 )
 
 // IntervalMetric is a time duration, but serialized as seconds in JSON.
@@ -131,6 +132,7 @@ func (m *StepMetric) done(ctx context.Context, step *Step) {
 
 	result, cached := step.cmd.ActionResult()
 	m.Cached = cached
+	clog.Infof(ctx, "cached=%t", cached)
 	md := result.GetExecutionMetadata()
 	if !m.Cached {
 		m.QueueTime = IntervalMetric(md.GetWorkerStartTimestamp().AsTime().Sub(md.GetQueuedTimestamp().AsTime()))

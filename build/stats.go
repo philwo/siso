@@ -7,6 +7,8 @@ package build
 import (
 	"context"
 	"sync"
+
+	"infra/build/siso/o11y/clog"
 )
 
 type stats struct {
@@ -26,9 +28,32 @@ func (s *stats) update(ctx context.Context, m *StepMetric, pure bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.s.Done++
-	if m.skip {
+	// done step should be one of the followings.
+	// note: metrics may have Cached+IsRemote, if
+	// remote exec called and got cache, rather than
+	// just get cache by GetActionResult.
+	switch {
+	case m.skip:
 		s.s.Skipped++
+	case m.NoExec:
+		s.s.NoExec++
+	case m.Cached:
+		s.s.CacheHit++
+	case m.IsRemote:
+		s.s.Remote++
+	case m.IsLocal:
+		s.s.Local++
+	default:
+		clog.Warningf(ctx, "unexpected metrics? %#v", m)
 	}
+
+	if m.Fallback {
+		s.s.LocalFallback++
+	}
+	if m.Err {
+		s.s.Fail++
+	}
+
 	if m.DepsLog {
 		if !m.DepsLogErr {
 			s.s.FastDepsSuccess++
@@ -38,24 +63,6 @@ func (s *stats) update(ctx context.Context, m *StepMetric, pure bool) {
 	}
 	if m.ScandepsErr {
 		s.s.ScanDepsFailed++
-	}
-	if m.Cached {
-		s.s.CacheHit++
-	}
-	if m.NoExec {
-		s.s.NoExec++
-	}
-	if m.IsRemote {
-		s.s.Remote++
-	}
-	if m.IsLocal {
-		s.s.Local++
-	}
-	if m.Fallback {
-		s.s.LocalFallback++
-	}
-	if m.Err {
-		s.s.Fail++
 	}
 	if pure {
 		s.s.Pure++
