@@ -50,17 +50,17 @@ You may modify *.txt or files in root/.
 From in the <dir>,
  - To issue remote exec call to run the command.
 
- $ siso recall -project <project> -reapi_instance <instnace> \
+ $ siso recall -project <project> -reapi_instance <instance> \
 	    <dir>
 
  - To re-run the command on a remote worker without fetching cache.
 
- $ siso recall -project <project> -reapi_instance <instnace> -re_cache_enable_read=false \
+ $ siso recall -project <project> -reapi_instance <instance> -re_cache_enable_read=false \
 	    <dir>
 
  - To use local docker to run the command.
 
- $ siso recall <dir>
+ $ siso recall [-local] <dir>
 `
 
 // Cmd returns the Command for the `recall` subcommand provided by this package.
@@ -87,11 +87,21 @@ type run struct {
 	reopt             *reapi.Option
 	executeRequestStr string
 	reCacheEnableRead bool
+	cpuLimit          string
+	memLimit          string
+	hddMode           bool
+	local             bool
+	stats             bool
 }
 
 func (c *run) init() {
 	c.Flags.StringVar(&c.projectID, "project", os.Getenv("SISO_PROJECT"), "cloud project ID. can be set by $SISO_PROJECT")
 	c.Flags.BoolVar(&c.reCacheEnableRead, "re_cache_enable_read", true, "remote exec cache enable read")
+	c.Flags.StringVar(&c.cpuLimit, "cpus", "", "how much of the available CPU resources the action can use (e.g. '1.5' for at most one and a half of the CPUs)")
+	c.Flags.StringVar(&c.memLimit, "memory", "", "the maximum amount of memory the action can use (e.g. 512m or 2g)")
+	c.Flags.BoolVar(&c.hddMode, "hdd", false, "run the action with slowed down I/O that resembles a hard-disk with 12MB/s throughput, 75 read IOPS and 150 write IOPS")
+	c.Flags.BoolVar(&c.local, "local", false, "force running the action locally using Docker, even if REAPI is configured")
+	c.Flags.BoolVar(&c.stats, "stats", false, "run the command under /usr/bin/time and print detailed resource stats after execution (note: this may fail if the container glibc is incompatible with the host)")
 	c.reopt = new(reapi.Option)
 	envs := map[string]string{
 		"SISO_REAPI_ADDRESS":  os.Getenv("SISO_REAPI_ADDRESS"),
@@ -146,7 +156,7 @@ func (c *run) run(ctx context.Context) error {
 			return err
 		}
 		executeReq.SkipCacheLookup = !c.reCacheEnableRead
-		return call(ctx, *c.reopt, credential, executeReq)
+		return c.call(ctx, *c.reopt, credential, executeReq)
 	}
 	client, err := reapi.New(ctx, credential, *c.reopt)
 	if err != nil {
@@ -207,15 +217,15 @@ func (c *run) run(ctx context.Context) error {
 
 }
 
-func call(ctx context.Context, reopt reapi.Option, credential cred.Cred, executeReq *rpb.ExecuteRequest) error {
+func (c *run) call(ctx context.Context, reopt reapi.Option, credential cred.Cred, executeReq *rpb.ExecuteRequest) error {
 	_, err := os.Stat("command.txt")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		return flag.ErrHelp
 	}
 
-	if !reopt.IsValid() {
-		return callLocal(ctx)
+	if c.local || !reopt.IsValid() {
+		return c.callLocal(ctx)
 	}
 	client, err := reapi.New(ctx, credential, reopt)
 	if err != nil {
@@ -364,7 +374,7 @@ func loadTextProto(fname string, p proto.Message) error {
 	return nil
 }
 
-func callLocal(ctx context.Context) error {
+func (c *run) callLocal(ctx context.Context) error {
 	command := &rpb.Command{}
 	err := loadTextProto("command.txt", command)
 	if err != nil {
@@ -424,7 +434,46 @@ func callLocal(ctx context.Context) error {
 		}
 		cmdline = append(cmdline, "--user", uid)
 	}
+
+	// Limit CPU resources if requested.
+	if c.cpuLimit != "" {
+		cmdline = append(cmdline, "--cpus="+c.cpuLimit)
+	}
+
+	// Limit memory if requested.
+	if c.memLimit != "" {
+		cmdline = append(cmdline, "--memory="+c.memLimit)
+	}
+
+	// Limit I/O performance if requested.
+	if c.hddMode {
+		// Find physical device for the working directory.
+		deviceBytes, err := exec.CommandContext(ctx, "findmnt", "-no", "source", "-T", root).Output()
+		if err != nil {
+			return err
+		}
+		device := strings.TrimSpace(string(deviceBytes))
+
+		// Simulate the performance of a 100GB pd-standard disk.
+		// https://cloud.google.com/compute/docs/disks/performance#zonal-persistent-disks
+		cmdline = append(cmdline, "--device-read-iops", device+":75")
+		cmdline = append(cmdline, "--device-write-iops", device+":150")
+		cmdline = append(cmdline, "--device-read-bps", device+":12mb")
+		cmdline = append(cmdline, "--device-write-bps", device+":12mb")
+	}
+
+	// We cannot assume that the container ships a copy of /usr/bin/time, so let's just mount
+	// the one from the current system into the container.
+	if c.stats {
+		cmdline = append(cmdline, "-v", "/usr/bin/time:/usr/bin/time")
+	}
+
 	cmdline = append(cmdline, strings.TrimPrefix(platformProperty(p, "container-image"), "docker://"))
+
+	if c.stats {
+		cmdline = append(cmdline, "/usr/bin/time", "-v")
+	}
+
 	cmdline = append(cmdline, command.Arguments...)
 	fmt.Println(cmdline)
 	cmd := exec.CommandContext(ctx, cmdline[0], cmdline[1:]...)
