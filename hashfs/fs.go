@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"sync"
 	"syscall"
@@ -728,6 +729,8 @@ func (hfs *HashFS) UpdateFromLocal(ctx context.Context, root string, inputs []st
 	ctx, span := trace.NewSpan(ctx, "fs-update-local")
 	defer span.Close(nil)
 	hfs.Forget(ctx, root, inputs)
+	// sort inputs, so check dir containing files first. b/300385880
+	sort.Strings(inputs)
 	for _, fname := range inputs {
 		fullname := filepath.Join(root, fname)
 		fullname = filepath.ToSlash(fullname)

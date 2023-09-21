@@ -652,6 +652,81 @@ func TestUpdateFromLocal_Restat(t *testing.T) {
 	}
 }
 
+func TestUpdateFromLocal_Dir(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	dir, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	opt := hashfs.Option{}
+	hfs, err := hashfs.New(ctx, opt)
+	if err != nil {
+		t.Fatalf("New=%v", err)
+	}
+	defer func() {
+		if hfs == nil {
+			return
+		}
+		err := hfs.Close(ctx)
+		if err != nil {
+			t.Fatalf("hfs.Close=%v", err)
+		}
+	}()
+
+	outname := "out/siso/gen/foo.stamp"
+	outdirname := "out/siso/gen"
+	setupFiles(t, dir, map[string]string{
+		outname: "",
+	})
+	h := sha256.New()
+	h.Write([]byte("command line"))
+	cmdhash := h.Sum(nil)
+	now := time.Now()
+	err = hfs.UpdateFromLocal(ctx, dir, []string{outname, outdirname}, false, now, cmdhash)
+	if err != nil {
+		t.Errorf("UpdateFromLocal(ctx, %q, {%q, %q}, %v, cmdhash)=%v; want nil err", dir, outname, outdirname, now, err)
+	}
+
+	// make sure outdirname not clobber outname entry.
+	fi, err := hfs.Stat(ctx, dir, outname)
+	if err != nil {
+		t.Fatalf("Stat(ctx, %q, %q)=_, %v; want nil err", dir, outname, err)
+	}
+	if !fi.IsUpdated() {
+		t.Errorf("fi.IsUpdated()=%t; want true", fi.IsUpdated())
+	}
+	if !bytes.Equal(cmdhash, fi.CmdHash()) {
+		t.Errorf("fi.CmdHash=%q; want=%q", fi.CmdHash(), cmdhash)
+	}
+	m := hashfs.StateMap(hfs.State(ctx))
+	hfs = nil
+	fullname := filepath.Join(dir, outname)
+	e, ok := m[fullname]
+	if !ok {
+		var keys []string
+		for k := range m {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		t.Fatalf("entry for %s not found: %q", fullname, keys)
+	}
+	if e.Id.ModTime != now.UnixNano() {
+		t.Errorf("entry modtime=%d want=%d", e.Id.ModTime, now.UnixNano())
+	}
+	if !bytes.Equal(e.CmdHash, cmdhash) {
+		t.Errorf("entry cmdhash=%q want=%q", hex.EncodeToString(e.CmdHash), hex.EncodeToString(cmdhash))
+	}
+	lfi, err := os.Lstat(fullname)
+	if err != nil {
+		t.Fatalf("lstat(%q)=%v; want nil", fullname, err)
+	}
+	if e.Id.ModTime != lfi.ModTime().UnixNano() {
+		t.Errorf("entry modtime=%d lfi=%d", e.Id.ModTime, lfi.ModTime().UnixNano())
+	}
+}
+
 func TestSymlinkDir(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("no symlink test on windows")
