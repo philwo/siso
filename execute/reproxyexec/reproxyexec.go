@@ -101,11 +101,6 @@ func (re *REProxyExec) Enabled() bool {
 
 // Run runs a cmd.
 func (re *REProxyExec) Run(ctx context.Context, cmd *execute.Cmd) error {
-	if cmd.Timeout > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, cmd.Timeout)
-		defer cancel()
-	}
 	ctx, span := trace.NewSpan(ctx, "reproxy-exec")
 	defer span.Close(nil)
 
