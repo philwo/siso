@@ -578,11 +578,12 @@ loop:
 			})
 			logger := clog.FromContext(sctx)
 			logger.Formatter = logFormat
-			logEntry := logger.Entry(logging.Info, step.def.Binding("description"))
+			description := stepDescription(step.def)
+			logEntry := logger.Entry(logging.Info, description)
 			logEntry.Labels = map[string]string{
 				"id":          step.def.String(),
 				"command":     step.def.Binding("command"),
-				"description": step.def.Binding("description"),
+				"description": description,
 				"action":      step.def.ActionName(),
 				"span_name":   spanName,
 				"output0":     step.def.Outputs()[0],
@@ -606,7 +607,7 @@ loop:
 			span.SetAttr("build_id", b.id)
 			span.SetAttr("id", step.def.String())
 			span.SetAttr("command", step.def.Binding("command"))
-			span.SetAttr("description", step.def.Binding("description"))
+			span.SetAttr("description", description)
 			span.SetAttr("action", step.def.ActionName())
 			span.SetAttr("span_name", spanName)
 			span.SetAttr("output0", step.def.Outputs()[0])
@@ -705,7 +706,7 @@ func (b *Builder) recordMetrics(ctx context.Context, m StepMetric) {
 // stepLogEntry logs step in parent access log of the step.
 func stepLogEntry(ctx context.Context, logger *clog.Logger, step *Step, duration time.Duration, err error) {
 	httpStatus := http.StatusOK
-	logEntry := logger.Entry(logging.Info, fmt.Sprintf("%s -> %v", step.def.Binding("description"), err))
+	logEntry := logger.Entry(logging.Info, fmt.Sprintf("%s -> %v", stepDescription(step.def), err))
 	if isCanceled(ctx, err) {
 		logEntry.Severity = logging.Warning
 		// https://cloud.google.com/apis/design/errors#handling_errors
