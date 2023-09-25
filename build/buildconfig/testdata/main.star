@@ -7,6 +7,8 @@ load("@builtin//encoding.star", "json")
 load("@builtin//runtime.star", "runtime")
 load("@builtin//struct.star", "module")
 load("./linux.star", chromium_linux = "chromium")
+load("./mac.star", chromium_mac = "chromium")
+load("./windows.star", chromium_windows = "chromium")
 
 def init(ctx):
     print("runtime: os:%s arch:%s run:%d" % (
@@ -16,7 +18,8 @@ def init(ctx):
     ))
     host = {
         "linux": chromium_linux,
-        # add mac, windows
+        "darwin": chromium_mac,
+        "windows": chromium_windows,
     }[runtime.os]
     return module(
         "config",

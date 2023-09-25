@@ -7,7 +7,15 @@ load("@builtin//struct.star", "module")
 
 __filegroups = {}
 
-__handlers = {}
+def __handler_foo(ctx, cmd):
+    if "foo" not in ctx.flags.get("config", "").split(","):
+        fail("foo is not set in -config flag.")
+    if ctx.metadata.get("foo") != "bar":
+        fail("metadata[\"foo\"] is not \"bar\"")
+
+__handlers = {
+    "handler_foo": __handler_foo,
+}
 
 def __step_config(ctx):
     step_config = {}
@@ -42,6 +50,7 @@ def __step_config(ctx):
             "remote": True,
         },
     ]
+    ctx.actions.metadata("foo", "bar")
     return step_config
 
 chromium = module(

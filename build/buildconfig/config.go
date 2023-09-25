@@ -209,8 +209,10 @@ func (cfg *Config) Handle(ctx context.Context, handler string, bpath *build.Path
 	}
 
 	hctx := starlarkstruct.FromStringDict(starlark.String("ctx"), map[string]starlark.Value{
-		"actions": starCmdActions(ctx, cmd),
-		"fs":      starFS(ctx, cmd.HashFS.FileSystem(ctx, cmd.ExecRoot), bpath, cfg.fscache),
+		"actions":  starCmdActions(ctx, cmd),
+		"metadata": starMetadata(cfg.Metadata),
+		"flags":    starFlags(cfg.flags),
+		"fs":       starFS(ctx, cmd.HashFS.FileSystem(ctx, cmd.ExecRoot), bpath, cfg.fscache),
 	})
 	if log.V(1) {
 		clog.Infof(ctx, "hctx: %v", hctx)
