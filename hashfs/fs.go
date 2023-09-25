@@ -453,7 +453,7 @@ func (hfs *HashFS) Copy(ctx context.Context, root, src, dst string, mtime time.T
 }
 
 // Mkdir makes a directory at root/dirname.
-func (hfs *HashFS) Mkdir(ctx context.Context, root, dirname string) error {
+func (hfs *HashFS) Mkdir(ctx context.Context, root, dirname string, cmdhash []byte) error {
 	if log.V(1) {
 		clog.Infof(ctx, "mkdir @%s %s", root, dirname)
 	}
@@ -485,6 +485,7 @@ func (hfs *HashFS) Mkdir(ctx context.Context, root, dirname string) error {
 		lready:    lready,
 		mtime:     mtime,
 		mode:      0644 | fs.ModeDir,
+		cmdhash:   cmdhash,
 		directory: &directory{},
 	}
 	err = hfs.dirStoreAndNotify(ctx, dirname, e)

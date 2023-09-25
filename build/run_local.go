@@ -150,7 +150,7 @@ func (b *Builder) prepareLocalOutdirs(ctx context.Context, step *Step) error {
 			continue
 		}
 		clog.Infof(ctx, "prepare outdirs %s", outdir)
-		err := b.hashFS.Mkdir(ctx, b.path.ExecRoot, outdir)
+		err := b.hashFS.Mkdir(ctx, b.path.ExecRoot, outdir, nil)
 		if err != nil {
 			return fmt.Errorf("prepare outdirs %s: %w", outdir, err)
 		}

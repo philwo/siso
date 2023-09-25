@@ -190,7 +190,7 @@ func actionsCopyRecursively(ctx context.Context, cmd *execute.Cmd, src, dst stri
 		return err
 	}
 	if fi.IsDir() {
-		err := cmd.HashFS.Mkdir(ctx, cmd.ExecRoot, dst)
+		err := cmd.HashFS.Mkdir(ctx, cmd.ExecRoot, dst, cmd.CmdHash)
 		if err != nil {
 			return err
 		}

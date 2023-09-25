@@ -239,7 +239,7 @@ func TestMkdir(t *testing.T) {
 		t.Fatalf("hashfs.Stat(ctx, %q, %q)=_, nil; want err", dir, "out/siso/gen/v8/include")
 	}
 
-	err = hashFS.Mkdir(ctx, dir, "out/siso/gen/v8/include/inspector")
+	err = hashFS.Mkdir(ctx, dir, "out/siso/gen/v8/include/inspector", nil)
 	if err != nil {
 		t.Errorf("hashfs.Mkdir(ctx, %q, %q)=%v; want nil err", dir, "out/siso/gen/v8/include/inspector", err)
 	}
@@ -265,7 +265,7 @@ func TestMkdir(t *testing.T) {
 	t.Logf("out/siso/gen/v8/include/inspector mtime: %s", mtimeInspector)
 
 	t.Logf("mkdir again. mtime preserved %s", time.Now())
-	err = hashFS.Mkdir(ctx, dir, "out/siso/gen/v8/include/inspector")
+	err = hashFS.Mkdir(ctx, dir, "out/siso/gen/v8/include/inspector", nil)
 	if err != nil {
 		t.Errorf("hashfs.Mkdir(ctx, %q, %q)=%v; want nil err", dir, "out/siso/gen/v8/include/inspector", err)
 	}
@@ -1161,7 +1161,7 @@ func TestMkdirFlush(t *testing.T) {
 	for _, name := range flushTestNames {
 		t.Run(name, func(t *testing.T) {
 			hashFS, dir := setupForFlush(t)
-			err := hashFS.Mkdir(ctx, dir, name)
+			err := hashFS.Mkdir(ctx, dir, name, nil)
 			switch name {
 			case "empty-dir", "subdir", "new-entry":
 				if err != nil {
