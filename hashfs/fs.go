@@ -1259,11 +1259,11 @@ func (d *directory) lookupEntry(ctx context.Context, fname string) (*entry, *dir
 		pe.n++
 		subdir, target, ok := resolveNextDir(ctx, d, lookupNextDir, pe, elem, fname)
 		if subdir == nil {
-			if !ok {
-				return nil, nil, "", false
-			}
 			if target != "" {
 				return nil, nil, target, false
+			}
+			if !ok {
+				return nil, nil, "", false
 			}
 		}
 		d = subdir
@@ -1382,7 +1382,7 @@ func (d *directory) storeEntry(ctx context.Context, fname string, e *entry) (*en
 			return nil, resolved, nil
 		}
 		if !ok {
-			return nil, "", fmt.Errorf("store resolv next dir failed: %s", pe.origFname)
+			return nil, "", fmt.Errorf("store resolv next dir %s failed: %s", elem, pe.origFname)
 		}
 		d = subdir
 	}
@@ -1401,11 +1401,6 @@ func resolveNextDir(ctx context.Context, d *directory, next func(context.Context
 	for i = 0; i < maxSymlinks; i++ {
 		nextDir, target, ok := next(ctx, d, pe, elem)
 		if target != "" {
-			if !strings.Contains(target, "/") {
-				elem = target
-				continue
-			}
-
 			if len(pe.elems) != pe.n {
 				// reconstruct elems for lookup
 				pe.elems = make([]string, 0, pe.n+1)
@@ -1413,7 +1408,7 @@ func resolveNextDir(ctx context.Context, d *directory, next func(context.Context
 					pe.elems = append(pe.elems, "/")
 				}
 				s := pe.origFname
-				for i := 0; i < pe.n-1; i++ {
+				for j := 0; j < pe.n-1; j++ {
 					s = strings.TrimPrefix(s, "/")
 					elem, rest, _ := strings.Cut(s, "/")
 					pe.elems = append(pe.elems, elem)
@@ -1428,6 +1423,9 @@ func resolveNextDir(ctx context.Context, d *directory, next func(context.Context
 			pe.elems[len(pe.elems)-1] = target
 			pe.elems = append(pe.elems, rest)
 			resolved := filepath.ToSlash(filepath.Join(pe.elems...))
+			if log.V(1) {
+				clog.Infof(ctx, "resolve symlink -> %s", resolved)
+			}
 			return nil, resolved, false
 		}
 
@@ -1437,6 +1435,12 @@ func resolveNextDir(ctx context.Context, d *directory, next func(context.Context
 		if nextDir != nil {
 			return nextDir, "", true
 		}
+		if log.V(1) {
+			clog.Infof(ctx, "next %s %d", elem, i)
+		}
+	}
+	if log.V(1) {
+		clog.Warningf(ctx, "resolve loop?")
 	}
 	return nil, "", false
 }
@@ -1480,6 +1484,9 @@ func nextDir(ctx context.Context, d *directory, pe pathElements, elem string) (*
 				clog.Infof(ctx, "store %s subdir0 %s -> %s (%v)", lv.origFname, lv.elem, lv.d, lv.dent)
 			}
 			if subdir == nil && target == "" {
+				if log.V(9) {
+					clog.Infof(ctx, "store %s no dir, no symlink", pe.origFname)
+				}
 				return nil, "", false
 			}
 			return subdir, target, true
@@ -1508,10 +1515,12 @@ func nextDir(ctx context.Context, d *directory, pe pathElements, elem string) (*
 		case dfi.Mode().Type() == fs.ModeSymlink:
 			target, err := os.Readlink(fullname)
 			if err != nil {
+				clog.Warningf(ctx, "readlink %s: %v", fullname, err)
 				return nil, "", false
 			}
 			return nil, target, true
 		default:
+			clog.Warningf(ctx, "unexpected mode %s: %s", fullname, dfi.Mode().Type())
 			return nil, "", false
 		}
 	}
@@ -1546,6 +1555,7 @@ func nextDir(ctx context.Context, d *directory, pe pathElements, elem string) (*
 	}
 	d = subdir
 	if d == nil && target == "" {
+		clog.Warningf(ctx, "store %s no dir, no symlink", pe.origFname)
 		return nil, "", false
 	}
 	return d, target, true

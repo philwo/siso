@@ -817,12 +817,32 @@ func TestSymlinkDir(t *testing.T) {
 				if !fi.Mode().IsRegular() {
 					t.Errorf("hfs.Stat(ctx, dir, %q) mode=%s; want regular", tc.realfile, fi.Mode())
 				}
-				fi, err = hfs.Stat(ctx, dir, tc.realfile)
+				fi, err = hfs.Stat(ctx, dir, tc.symlinkedfile)
 				if err != nil {
 					t.Fatal(err)
 				}
 				if !fi.Mode().IsRegular() {
-					t.Errorf("hfs.Stat(ctx, dir, %q) mode=%s; want regular", tc.realfile, fi.Mode())
+					t.Errorf("hfs.Stat(ctx, dir, %q) mode=%s; want regular", tc.symlinkedfile, fi.Mode())
+				}
+			})
+
+			t.Run("SymlinkFileFirst", func(t *testing.T) {
+				hfs, err := hashfs.New(ctx, hashfs.Option{})
+				if err != nil {
+					t.Fatal(err)
+				}
+				t.Cleanup(func() {
+					err := hfs.Close(ctx)
+					if err != nil {
+						t.Fatal(err)
+					}
+				})
+				fi, err := hfs.Stat(ctx, dir, tc.symlinkedfile)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !fi.Mode().IsRegular() {
+					t.Errorf("hfs.Stat(ctx, dir, %q) mode=%s; want regular", tc.symlinkedfile, fi.Mode())
 				}
 			})
 
