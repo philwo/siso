@@ -1383,7 +1383,7 @@ func (d *directory) storeEntry(ctx context.Context, fname string, e *entry) (*en
 			return nil, resolved, nil
 		}
 		if !ok {
-			return nil, "", fmt.Errorf("store resolv next dir %s failed: %s", elem, pe.origFname)
+			return nil, "", fmt.Errorf("store resolve next dir %s failed: %s", elem, pe.origFname)
 		}
 		d = subdir
 	}
@@ -1420,6 +1420,13 @@ func resolveNextDir(ctx context.Context, d *directory, next func(context.Context
 					pe.elems[0] += `\`
 				}
 				pe.elems = append(pe.elems, elem)
+			}
+			if filepath.IsAbs(target) {
+				resolved := filepath.ToSlash(filepath.Join(target, rest))
+				if log.V(1) {
+					clog.Infof(ctx, "resolve symlink -> %s", resolved)
+				}
+				return nil, resolved, false
 			}
 			pe.elems[len(pe.elems)-1] = target
 			pe.elems = append(pe.elems, rest)
