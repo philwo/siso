@@ -39,26 +39,32 @@ func ParseDeps(b []byte) []string {
 	// <input> is space separated
 	// '\'+newline is space
 	// '\'+space is escaped space (not separator)
+	s := b
 	var token string
-	// skip until ':'
-	i := bytes.IndexByte(b, ':')
-	if i < 0 {
-		return nil
-	}
-	// collect inputs
-	var inputs []string
 	seen := make(map[string]bool)
-	for s := b[i+1:]; len(s) > 0; {
-		token, s = nextToken(s)
-		token = strings.TrimSuffix(token, ":")
-		if token == "" {
-			continue
+	var inputs []string
+depLines:
+	for len(s) > 0 {
+		// skip outputs until ':'
+		i := bytes.IndexByte(s, ':')
+		if i < 0 {
+			break
 		}
-		if seen[token] {
-			continue
+		// collect inputs
+		for s = s[i+1:]; len(s) > 0; {
+			token, s = nextToken(s)
+			if token == "" {
+				continue
+			}
+			if token == "\n" {
+				continue depLines
+			}
+			if seen[token] {
+				continue
+			}
+			seen[token] = true
+			inputs = append(inputs, token)
 		}
-		seen[token] = true
-		inputs = append(inputs, token)
 	}
 	return inputs
 }
@@ -77,7 +83,9 @@ skipSpaces:
 			continue
 		}
 		switch s[i] {
-		case ' ', '\t', '\n', '\r':
+		case '\n':
+			return "\n", s[i+1:]
+		case ' ', '\t', '\r':
 			continue
 		default:
 			s = s[i:]
@@ -93,7 +101,7 @@ skipSpaces:
 				sb.WriteByte(s[i])
 			case '\r', '\n':
 				// '\'+newline is space
-				return sb.String(), s[i+1:]
+				return sb.String(), s[i-1:]
 			default:
 				sb.WriteByte('\\')
 				sb.WriteByte(s[i])
@@ -102,7 +110,7 @@ skipSpaces:
 		}
 		switch s[i] {
 		case ' ', '\t', '\n', '\r':
-			return sb.String(), s[i+1:]
+			return sb.String(), s[i:]
 		}
 		sb.WriteByte(s[i])
 	}

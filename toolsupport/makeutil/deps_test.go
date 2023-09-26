@@ -61,6 +61,16 @@ func TestParseDeps(t *testing.T) {
 				"../../third_party/rust/unicode_ident/v1/crate/src/tables.rs",
 			},
 		},
+		{
+			name: "swift-multi",
+			depsfile: []byte(`obj/ios/chrome/browser/shared/ui/util/util_swift/UIView+WindowCoordinates.o : ../../ios/chrome/browser/shared/ui/util/UIView+WindowCoordinates.swift ../../ios/chrome/browser/shared/ui/util/UIView+WindowObserving.swift
+obj/ios/chrome/browser/shared/ui/util/util_swift/UIView+WindowObserving.o : ../../ios/chrome/browser/shared/ui/util/UIView+WindowCoordinates.swift ../../ios/chrome/browser/shared/ui/util/UIView+WindowObserving.swift
+`),
+			want: []string{
+				"../../ios/chrome/browser/shared/ui/util/UIView+WindowCoordinates.swift",
+				"../../ios/chrome/browser/shared/ui/util/UIView+WindowObserving.swift",
+			},
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got := ParseDeps(tc.depsfile)
