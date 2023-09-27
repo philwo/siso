@@ -827,6 +827,112 @@ func TestUpdateFromLocal_AbsSymlink(t *testing.T) {
 	}
 }
 
+func TestUpdateFromLocal_NonLocalSymlink(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("no symlink test on windows")
+		return
+	}
+	ctx := context.Background()
+	dir := t.TempDir()
+	dir, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir2 := t.TempDir()
+	dir2, err = filepath.EvalSymlinks(dir2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	setupSymlink := func(t *testing.T, fname, target string) {
+		t.Helper()
+		fullname := filepath.Join(dir, fname)
+		err := os.MkdirAll(filepath.Dir(fullname), 0755)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Logf("symlink %s -> %s", fullname, target)
+		err = os.Symlink(target, fullname)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	setupFile := func(t *testing.T, fname, content string) {
+		t.Helper()
+		fullname := filepath.Join(dir2, fname)
+		err := os.MkdirAll(filepath.Dir(fullname), 0755)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Logf("writefile %s", fullname)
+		err = os.WriteFile(fullname, []byte(content), 0644)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	setupFile(t, "cache/xcode/x.app/Info.plist", "")
+	target := filepath.Join(dir2, "cache/xcode")
+	relPath, err := filepath.Rel(filepath.Join(dir, "out/siso/sdk"), target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("symlink relpath: %s", relPath)
+	setupSymlink(t, "out/siso/sdk/xcode_links", relPath)
+	opt := hashfs.Option{}
+	hfs, err := hashfs.New(ctx, opt)
+	if err != nil {
+		t.Fatalf("New=%v", err)
+	}
+	defer func() {
+		if hfs == nil {
+			return
+		}
+		err := hfs.Close(ctx)
+		if err != nil {
+			t.Fatalf("hfs.Close=%v", err)
+		}
+	}()
+
+	outname := "out/siso/sdk/xcode_links/x.app/Info.plist"
+	h := sha256.New()
+	h.Write([]byte("command line"))
+	cmdhash := h.Sum(nil)
+	now := time.Now()
+	err = hfs.UpdateFromLocal(ctx, dir, []string{outname}, true, now, cmdhash)
+	if err != nil {
+		t.Errorf("UpdateFromLocal(ctx, %q, {%q}, %v, cmdhash)=%v, want nil err", dir, outname, now, err)
+	}
+	fi, err := hfs.Stat(ctx, dir, outname)
+	if err != nil {
+		t.Fatalf("Stat(ctx, %q, %q)=_, %v; want nil err", dir, outname, err)
+	}
+	if fi.IsUpdated() {
+		// restat=true, so no update
+		t.Errorf("fi.IsUpdated()=%t; want false", fi.IsUpdated())
+	}
+	if !bytes.Equal(cmdhash, fi.CmdHash()) {
+		t.Errorf("fi.CmdHash=%q; want=%q", fi.CmdHash(), cmdhash)
+	}
+	m := hashfs.StateMap(hfs.State(ctx))
+	hfs = nil
+	realfullname := filepath.Join(dir2, "cache/xcode/x.app/Info.plist")
+	e, ok := m[realfullname]
+	if !ok {
+		var keys []string
+		for k := range m {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		t.Fatalf("entry for %s not found: %q", realfullname, keys)
+	}
+	if e.Id.ModTime != fi.ModTime().UnixNano() {
+		t.Errorf("entry modtime=%d want=%d", e.Id.ModTime, fi.ModTime().UnixNano())
+	}
+	if !bytes.Equal(e.CmdHash, cmdhash) {
+		t.Errorf("entry cmdhash=%q want=%q", hex.EncodeToString(e.CmdHash), hex.EncodeToString(cmdhash))
+	}
+}
+
 func TestSymlinkDir(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("no symlink test on windows")

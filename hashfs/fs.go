@@ -86,7 +86,7 @@ func New(ctx context.Context, opt Option) (*HashFS, error) {
 	}
 	fsys := &HashFS{
 		opt:       opt,
-		directory: &directory{},
+		directory: &directory{isRoot: true},
 		IOMetrics: iometrics.New("fs"),
 
 		digester: digester{
@@ -193,7 +193,10 @@ func (hfs *HashFS) dirLookup(ctx context.Context, root, fname string) (*entry, *
 		return e, dir, true
 	}
 	if resolved != "" {
-		resolvedName := filepath.ToSlash(filepath.Join(root, resolved))
+		resolvedName := resolved
+		if !filepath.IsAbs(resolved) {
+			resolvedName = filepath.ToSlash(filepath.Join(root, resolved))
+		}
 		return hfs.directory.lookup(ctx, resolvedName)
 	}
 	return nil, nil, false
@@ -233,6 +236,9 @@ func (hfs *HashFS) Stat(ctx context.Context, root, fname string) (FileInfo, erro
 	var err error
 	if dir != nil {
 		e, err = dir.store(ctx, filepath.Base(fname), e)
+		if errors.Is(err, errRootSymlink) {
+			e, err = hfs.directory.store(ctx, fname, e)
+		}
 	} else {
 		e, err = hfs.directory.store(ctx, fname, e)
 	}
@@ -1210,6 +1216,9 @@ type directory struct {
 	mtime time.Time
 	// m is a map of file in a directory's basename to *entry.
 	m sync.Map
+
+	// isRoot is true if its' the root directory of the hashfs.
+	isRoot bool
 }
 
 func (d *directory) String() string {
@@ -1233,6 +1242,7 @@ type pathElements struct {
 }
 
 func (d *directory) lookup(ctx context.Context, fname string) (*entry, *directory, bool) {
+	// expect d.isRoot == true
 	var i int
 	for i = 0; i < maxSymlinks; i++ {
 		e, dir, resolved, ok := d.lookupEntry(ctx, fname)
@@ -1240,6 +1250,9 @@ func (d *directory) lookup(ctx context.Context, fname string) (*entry, *director
 			return e, dir, ok
 		}
 		if resolved != "" {
+			if !d.isRoot {
+				clog.Warningf(ctx, "hashfs directory lookup must be called from root directory")
+			}
 			fname = resolved
 			continue
 		}
@@ -1282,11 +1295,21 @@ func (d *directory) lookupEntry(ctx context.Context, fname string) (*entry, *dir
 	return nil, nil, "", false
 }
 
+var errRootSymlink = errors.New("symlink resolved from root")
+
 func (d *directory) store(ctx context.Context, fname string, e *entry) (*entry, error) {
 	var i int
 	for i = 0; i < maxSymlinks; i++ {
 		ent, resolved, err := d.storeEntry(ctx, fname, e)
 		if resolved != "" {
+			if !d.isRoot {
+				if filepath.IsAbs(resolved) {
+					return nil, fmt.Errorf("root symlink %s: %w", resolved, errRootSymlink)
+				}
+				if !filepath.IsLocal(resolved) {
+					return nil, fmt.Errorf("non local symlink %s: %w", resolved, errRootSymlink)
+				}
+			}
 			fname = resolved
 			continue
 		}
@@ -1400,7 +1423,6 @@ func (d *directory) storeEntry(ctx context.Context, fname string, e *entry) (*en
 // resolveNextDir resolves a dir named `elem` by calling `next`.
 // `next` will return *directory if `elem` entry is directory.
 // `next` will return string if `elem` entry is symlink.
-// resolveNextDir will resolve simple symlnk (i.e. symlink is just base name).
 // resolveNextDir returns directory if resolved `elem` is directory.
 // resolveNextDir returns resolved path name as string if resolved `elem` is symlink.
 func resolveNextDir(ctx context.Context, d *directory, next func(context.Context, *directory, pathElements, string) (*directory, string, bool), pe pathElements, elem, rest string) (*directory, string, bool) {
