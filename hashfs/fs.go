@@ -1086,7 +1086,13 @@ func (e *entry) flush(ctx context.Context, fname, xattrname string, m *iometrics
 		}
 		err = os.MkdirAll(fname, 0755)
 		m.OpsDone(err)
-		clog.Infof(ctx, "flush dir %s: %v", fname, err)
+		if err != nil {
+			clog.Infof(ctx, "flush dir %s: %v", fname, err)
+		} else {
+			err = os.Chtimes(fname, time.Now(), mtime)
+			m.OpsDone(err)
+			clog.Infof(ctx, "flush dir chtime %s %v: %v", fname, mtime, err)
+		}
 		return err
 	case d.IsZero() && e.target != "":
 		err := os.Symlink(e.target, fname)

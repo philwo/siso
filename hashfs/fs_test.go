@@ -1296,6 +1296,67 @@ func TestMkdirFlush(t *testing.T) {
 	}
 }
 
+func TestMkdirFlush_mtime(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	dir, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	hfs, err := hashfs.New(ctx, hashfs.Option{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		err := hfs.Close(ctx)
+		if err != nil {
+			t.Errorf("hfs.Close=%v", err)
+		}
+	})
+
+	h := sha256.New()
+	h.Write([]byte("command line"))
+	cmdhash := h.Sum(nil)
+	dirname := "out/siso/ios/build/bots/scripts"
+	err = hfs.Mkdir(ctx, dir, dirname, cmdhash)
+	if err != nil {
+		t.Fatalf("mkdir(ctx, %q, %q, %q)=%v; want nil err", dir, dirname, cmdhash, err)
+	}
+	fi, err := hfs.Stat(ctx, dir, dirname)
+	if err != nil {
+		t.Fatalf("stat(ctx, %q, %q)=_, %v; want nil err", dir, dirname, err)
+	}
+	time.Sleep(100 * time.Millisecond)
+	now := time.Now()
+	if now.Equal(fi.ModTime()) {
+		t.Errorf("now=%v should not equal to mtime=%v", now, fi.ModTime())
+	}
+	fullpath := filepath.Join(dir, dirname)
+	err = os.Chtimes(fullpath, now, now)
+	if err != nil {
+		t.Errorf("os.Chtimes(%s, %v, %v)=%v; want nil err", fullpath, now, now, err)
+	}
+	lfi, err := os.Lstat(fullpath)
+	if err != nil {
+		t.Errorf("os.Lstat(%s)=_, %v; want nil err", fullpath, err)
+	}
+	if fi.ModTime().Equal(lfi.ModTime()) {
+		t.Errorf("fi.mtime=%v should not equal to lfi.modtime=%v", fi.ModTime(), lfi.ModTime())
+	}
+	err = hfs.Flush(ctx, dir, []string{dirname})
+	if err != nil {
+		t.Errorf("flush(ctx, %q, {%q})=%v; want nil err", dir, dirname, err)
+	}
+	lfi, err = os.Lstat(fullpath)
+	if err != nil {
+		t.Errorf("os.Lstat(%s)=_, %v; want nil err", fullpath, err)
+	}
+	if !fi.ModTime().Equal(lfi.ModTime()) {
+		t.Errorf("fi.mtime=%v should be equal to lfi.modtime=%v", fi.ModTime(), lfi.ModTime())
+	}
+}
+
 func TestWriteEmptyFlush(t *testing.T) {
 	ctx := context.Background()
 
