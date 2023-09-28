@@ -478,6 +478,59 @@ func TestStat_IntermediateDir(t *testing.T) {
 	}
 }
 
+func TestStat_Dir(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	dir, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	opt := hashfs.Option{}
+	hfs, err := hashfs.New(ctx, opt)
+	if err != nil {
+		t.Fatalf("New=%v", err)
+	}
+	defer func() {
+		err := hfs.Close(ctx)
+		if err != nil {
+			t.Fatalf("hfs.Close=%v", err)
+		}
+	}()
+	dirname := "out/siso/ios_cwt_chromedriver_tests_module.xctest"
+	cmdhash := sha256.Sum256([]byte("command line"))
+	err = hfs.Mkdir(ctx, dir, dirname, cmdhash[:])
+	if err != nil {
+		t.Errorf("Mkdir(ctx, %q, %q, %q)=%v; want nil err", dir, dirname, cmdhash, err)
+	}
+	fi, err := hfs.Stat(ctx, dir, dirname)
+	if err != nil {
+		t.Fatalf("Stat(ctx, %q, %q)=_, %v; want nil err", dir, dirname, err)
+	}
+	mtime := fi.ModTime()
+	t.Logf("dir=%s mtime=%s", dirname, mtime)
+	time.Sleep(100 * time.Millisecond)
+	fname := filepath.Join(dir, dirname, "somefile")
+	err = os.WriteFile(fname, nil, 0644)
+	if err != nil {
+		t.Fatalf("WriteFile(%q, nil, 0644)=%v; want nil err", fname, err)
+	}
+	fulldirname := filepath.Join(dir, dirname)
+	lfi, err := os.Lstat(fulldirname)
+	if err != nil {
+		t.Fatalf("Lstat(%q)=_, %v; want nil err", fulldirname, err)
+	}
+	if lfi.ModTime().Equal(fi.ModTime()) {
+		t.Errorf("local mtime=%v should not equal to old hfs mtime=%v", lfi.ModTime(), fi.ModTime())
+	}
+	fi, err = hfs.Stat(ctx, dir, dirname)
+	if err != nil {
+		t.Fatalf("Stat(ctx, %q, %q)=_, %v; want nil err", dir, dirname, err)
+	}
+	if !lfi.ModTime().Equal(fi.ModTime()) {
+		t.Errorf("fi.ModTime()=%v; want %v", fi.ModTime(), lfi.ModTime())
+	}
+}
+
 func TestUpdateFromLocal(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
