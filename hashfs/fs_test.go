@@ -743,7 +743,7 @@ func TestUpdateFromLocal_AbsSymlink(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	setupSymlink := func(t *testing.T, fname, target string) {
+	setupSymlink := func(t *testing.T, fname, target string) string {
 		t.Helper()
 		fullname := filepath.Join(dir, fname)
 		err := os.MkdirAll(filepath.Dir(fullname), 0755)
@@ -755,8 +755,9 @@ func TestUpdateFromLocal_AbsSymlink(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		return fullname
 	}
-	setupFile := func(t *testing.T, fname, content string) {
+	setupFile := func(t *testing.T, fname, content string) string {
 		t.Helper()
 		fullname := filepath.Join(dir2, fname)
 		err := os.MkdirAll(filepath.Dir(fullname), 0755)
@@ -768,10 +769,12 @@ func TestUpdateFromLocal_AbsSymlink(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		return fullname
 	}
 
-	setupFile(t, "cache/xcode/x.app/Info.plist", "")
-	setupSymlink(t, "out/siso/sdk/xcode_links", filepath.Join(dir2, "cache/xcode"))
+	realfullname := setupFile(t, "cache/xcode/x.app/Info.plist", "")
+	symlinkTarget := filepath.Join(dir2, "cache/xcode")
+	symlinkname := setupSymlink(t, "out/siso/sdk/xcode_links", symlinkTarget)
 	opt := hashfs.Option{}
 	hfs, err := hashfs.New(ctx, opt)
 	if err != nil {
@@ -796,6 +799,7 @@ func TestUpdateFromLocal_AbsSymlink(t *testing.T) {
 	if err != nil {
 		t.Errorf("UpdateFromLocal(ctx, %q, {%q}, %v, cmdhash)=%v, want nil err", dir, outname, now, err)
 	}
+	stats := hfs.IOMetrics.Stats()
 	fi, err := hfs.Stat(ctx, dir, outname)
 	if err != nil {
 		t.Fatalf("Stat(ctx, %q, %q)=_, %v; want nil err", dir, outname, err)
@@ -807,9 +811,16 @@ func TestUpdateFromLocal_AbsSymlink(t *testing.T) {
 	if !bytes.Equal(cmdhash, fi.CmdHash()) {
 		t.Errorf("fi.CmdHash=%q; want=%q", fi.CmdHash(), cmdhash)
 	}
+	if !now.Equal(fi.UpdatedTime()) {
+		t.Errorf("fi.UpdatedTime=%v; want=%v", fi.UpdatedTime(), now)
+	}
+	nstats := hfs.IOMetrics.Stats()
+	if stats != nstats {
+		t.Errorf("Stat access fs? old=%#v new=%#v", stats, nstats)
+	}
+
 	m := hashfs.StateMap(hfs.State(ctx))
 	hfs = nil
-	realfullname := filepath.Join(dir2, "cache/xcode/x.app/Info.plist")
 	e, ok := m[realfullname]
 	if !ok {
 		var keys []string
@@ -825,6 +836,22 @@ func TestUpdateFromLocal_AbsSymlink(t *testing.T) {
 	if !bytes.Equal(e.CmdHash, cmdhash) {
 		t.Errorf("entry cmdhash=%q want=%q", hex.EncodeToString(e.CmdHash), hex.EncodeToString(cmdhash))
 	}
+	if e.UpdatedTime != now.UnixNano() {
+		t.Errorf("entry updated_time=%v; want=%v", e.UpdatedTime, now.UnixNano())
+	}
+	e, ok = m[symlinkname]
+	if !ok {
+		var keys []string
+		for k := range m {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		t.Fatalf("symlnk entry for %s not found: %q", symlinkname, keys)
+	}
+	if e.Target != symlinkTarget {
+		t.Errorf("target=%q; want=%q", e.Target, symlinkTarget)
+	}
+
 }
 
 func TestUpdateFromLocal_NonLocalSymlink(t *testing.T) {
@@ -843,7 +870,7 @@ func TestUpdateFromLocal_NonLocalSymlink(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	setupSymlink := func(t *testing.T, fname, target string) {
+	setupSymlink := func(t *testing.T, fname, target string) string {
 		t.Helper()
 		fullname := filepath.Join(dir, fname)
 		err := os.MkdirAll(filepath.Dir(fullname), 0755)
@@ -855,8 +882,9 @@ func TestUpdateFromLocal_NonLocalSymlink(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		return fullname
 	}
-	setupFile := func(t *testing.T, fname, content string) {
+	setupFile := func(t *testing.T, fname, content string) string {
 		t.Helper()
 		fullname := filepath.Join(dir2, fname)
 		err := os.MkdirAll(filepath.Dir(fullname), 0755)
@@ -868,16 +896,17 @@ func TestUpdateFromLocal_NonLocalSymlink(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		return fullname
 	}
 
-	setupFile(t, "cache/xcode/x.app/Info.plist", "")
+	realfullname := setupFile(t, "cache/xcode/x.app/Info.plist", "")
 	target := filepath.Join(dir2, "cache/xcode")
-	relPath, err := filepath.Rel(filepath.Join(dir, "out/siso/sdk"), target)
+	symlinkTarget, err := filepath.Rel(filepath.Join(dir, "out/siso/sdk"), target)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Logf("symlink relpath: %s", relPath)
-	setupSymlink(t, "out/siso/sdk/xcode_links", relPath)
+	t.Logf("symlink relpath: %s", symlinkTarget)
+	symlinkname := setupSymlink(t, "out/siso/sdk/xcode_links", symlinkTarget)
 	opt := hashfs.Option{}
 	hfs, err := hashfs.New(ctx, opt)
 	if err != nil {
@@ -906,6 +935,7 @@ func TestUpdateFromLocal_NonLocalSymlink(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Stat(ctx, %q, %q)=_, %v; want nil err", dir, outname, err)
 	}
+	stats := hfs.IOMetrics.Stats()
 	if fi.IsUpdated() {
 		// restat=true, so no update
 		t.Errorf("fi.IsUpdated()=%t; want false", fi.IsUpdated())
@@ -913,9 +943,15 @@ func TestUpdateFromLocal_NonLocalSymlink(t *testing.T) {
 	if !bytes.Equal(cmdhash, fi.CmdHash()) {
 		t.Errorf("fi.CmdHash=%q; want=%q", fi.CmdHash(), cmdhash)
 	}
+	if !now.Equal(fi.UpdatedTime()) {
+		t.Errorf("fi.UpdatedTime=%v; want=%v", fi.UpdatedTime(), now)
+	}
+	nstats := hfs.IOMetrics.Stats()
+	if stats != nstats {
+		t.Errorf("Stat access fs? old=%#v new=%#v", stats, nstats)
+	}
 	m := hashfs.StateMap(hfs.State(ctx))
 	hfs = nil
-	realfullname := filepath.Join(dir2, "cache/xcode/x.app/Info.plist")
 	e, ok := m[realfullname]
 	if !ok {
 		var keys []string
@@ -931,6 +967,22 @@ func TestUpdateFromLocal_NonLocalSymlink(t *testing.T) {
 	if !bytes.Equal(e.CmdHash, cmdhash) {
 		t.Errorf("entry cmdhash=%q want=%q", hex.EncodeToString(e.CmdHash), hex.EncodeToString(cmdhash))
 	}
+	if e.UpdatedTime != now.UnixNano() {
+		t.Errorf("entry updated_time=%v; want=%v", e.UpdatedTime, now.UnixNano())
+	}
+	e, ok = m[symlinkname]
+	if !ok {
+		var keys []string
+		for k := range m {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		t.Fatalf("symlnk entry for %s not found: %q", symlinkname, keys)
+	}
+	if e.Target != symlinkTarget {
+		t.Errorf("target=%q; want=%q", e.Target, symlinkTarget)
+	}
+
 }
 
 func TestSymlinkDir(t *testing.T) {

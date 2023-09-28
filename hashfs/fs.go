@@ -1389,7 +1389,9 @@ func (d *directory) storeEntry(ctx context.Context, fname string, e *entry) (*en
 				ee.mu.Lock()
 				ee.mtimeUpdated = !ee.mtime.Equal(e.mtime)
 				ee.mtime = e.mtime
-				ee.updatedTime = e.updatedTime
+				if ee.updatedTime.Before(e.updatedTime) {
+					ee.updatedTime = e.updatedTime
+				}
 				ee.mu.Unlock()
 				return ee, "", nil
 			}
@@ -1553,6 +1555,22 @@ func nextDir(ctx context.Context, d *directory, pe pathElements, elem string) (*
 			if err != nil {
 				clog.Warningf(ctx, "readlink %s: %v", fullname, err)
 				return nil, "", false
+			}
+			lready := make(chan bool, 1)
+			lready <- true
+			newDent := &entry{
+				lready: lready,
+				mode:   0644 | fs.ModeSymlink,
+				mtime:  mtime,
+				target: target,
+			}
+			dent := newDent
+			v, ok := d.m.LoadOrStore(elem, dent)
+			if ok {
+				dent = v.(*entry)
+			}
+			if dent.mode != newDent.mode || dent.target != newDent.target {
+				clog.Warningf(ctx, "store %s symlink dir: race? store %s %s / loaded %s %s", pe.origFname, newDent.mode, newDent.target, dent.mode, dent.target)
 			}
 			return nil, target, true
 		default:
