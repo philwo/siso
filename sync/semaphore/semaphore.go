@@ -81,7 +81,7 @@ func (s *Semaphore) WaitAcquire(ctx context.Context) (context.Context, func(erro
 			s.ch <- tid
 		}, nil
 	case <-ctx.Done():
-		return ctx, func(error) {}, ctx.Err()
+		return ctx, func(error) {}, context.Cause(ctx)
 	}
 }
 

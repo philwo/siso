@@ -425,8 +425,8 @@ func (p *ManifestParser) parseFileInclude(ctx context.Context, newScope bool) er
 
 	select {
 	case <-ctx.Done():
-		clog.Warningf(ctx, "interrupted in ninja build parser: %v", ctx.Err())
-		return fmt.Errorf("interrupted in ninja builder parser: %w", ctx.Err())
+		clog.Warningf(ctx, "interrupted in ninja build parser: %v", context.Cause(ctx))
+		return fmt.Errorf("interrupted in ninja builder parser: %w", context.Cause(ctx))
 	default:
 	}
 	start := time.Now()

@@ -141,7 +141,7 @@ func (fsys *filesystem) ReadDir(ctx context.Context, execRoot, dname string) (*s
 	}
 	select {
 	case <-ctx.Done():
-		return nil, fmt.Errorf("readdirnames[wait]: %w", ctx.Err())
+		return nil, fmt.Errorf("readdirnames[wait]: %w", context.Cause(ctx))
 	case <-dc.ready:
 	}
 	if dc.err != nil {

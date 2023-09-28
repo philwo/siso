@@ -114,11 +114,11 @@ retryLoop:
 		}
 		select {
 		case <-pctx.Done():
-			clog.Warningf(pctx, "pctx done: %v", pctx.Err())
+			clog.Warningf(pctx, "pctx done: %v", context.Cause(pctx))
 			break retryLoop
 		default:
 			if unknownErr {
-				clog.Infof(pctx, "pctx is not done: ctx=%v: %v", ctx.Err(), err)
+				clog.Infof(pctx, "pctx is not done: ctx=%v: %v", context.Cause(ctx), err)
 			}
 		}
 		if status.Code(err) == codes.DeadlineExceeded {
@@ -139,7 +139,7 @@ retryLoop:
 		clog.Infof(pctx, "backoff %s for %v", delay, err)
 		select {
 		case <-pctx.Done():
-			return opName, resp, pctx.Err()
+			return opName, resp, context.Cause(pctx)
 		case <-time.After(delay):
 		}
 	}

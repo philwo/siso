@@ -140,8 +140,9 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 			if i%1000 == 0 {
 				select {
 				case <-gctx.Done():
-					clog.Errorf(gctx, "interrupted in fs.SetState: %v", gctx.Err())
-					return gctx.Err()
+					err := context.Cause(gctx)
+					clog.Errorf(gctx, "interrupted in fs.SetState: %v", err)
+					return err
 				default:
 				}
 			}

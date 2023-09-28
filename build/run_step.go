@@ -82,7 +82,7 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 	if b.dryRun {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return context.Cause(ctx)
 		default:
 		}
 		fmt.Printf("%s\n", step.def.Binding("command"))

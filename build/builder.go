@@ -549,10 +549,10 @@ loop:
 			continue
 		case <-ctx.Done():
 			clog.Infof(ctx, "context done")
-			done(ctx.Err())
+			done(context.Cause(ctx))
 			cancel()
 			b.plan.dump(ctx)
-			return ctx.Err()
+			return context.Cause(ctx)
 		}
 		b.plan.pushReady()
 		wg.Add(1)

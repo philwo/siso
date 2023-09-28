@@ -242,9 +242,16 @@ func (f flagError) Error() string {
 
 var errNothingToDo = errors.New("nothing to do")
 
+type errInterrupted struct{}
+
+func (errInterrupted) Error() string        { return "interrupt by signal" }
+func (errInterrupted) Is(target error) bool { return target == context.Canceled }
+
 func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
-	ctx, cancel := context.WithCancel(ctx)
-	defer signals.HandleInterrupt(cancel)()
+	ctx, cancel := context.WithCancelCause(ctx)
+	defer signals.HandleInterrupt(func() {
+		cancel(errInterrupted{})
+	})()
 
 	err = c.debugMode.check()
 	if err != nil {

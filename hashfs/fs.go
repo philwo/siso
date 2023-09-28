@@ -842,7 +842,7 @@ func (hfs *HashFS) Flush(ctx context.Context, execRoot string, files []string) e
 				continue
 			}
 		case <-ctx.Done():
-			return fmt.Errorf("flush %s: %w", fname, ctx.Err())
+			return fmt.Errorf("flush %s: %w", fname, context.Cause(ctx))
 		}
 		hfs.digester.compute(ctx, fname, e)
 		ctx, done, err := FlushSemaphore.WaitAcquire(ctx)

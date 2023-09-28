@@ -155,7 +155,7 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target s
 	next = newStep
 	select {
 	case <-ctx.Done():
-		return fmt.Errorf("interrupted in schedule: %w", ctx.Err())
+		return fmt.Errorf("interrupted in schedule: %w", context.Cause(ctx))
 	default:
 	}
 	// to suppress duplicates

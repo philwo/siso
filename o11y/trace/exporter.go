@@ -80,7 +80,7 @@ func NewExporter(ctx context.Context, opts Options) (*Exporter, error) {
 					clog.Warningf(ctx, "failed to export spans: %v\n%v", err, batch)
 				}
 			case <-ctx.Done():
-				clog.Infof(ctx, "trace exporter finishes: %v", ctx.Err())
+				clog.Infof(ctx, "trace exporter finishes: %v", context.Cause(ctx))
 				return
 			}
 		}
