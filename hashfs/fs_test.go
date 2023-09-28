@@ -819,6 +819,23 @@ func TestUpdateFromLocal_AbsSymlink(t *testing.T) {
 		t.Errorf("Stat access fs? old=%#v new=%#v", stats, nstats)
 	}
 
+	t.Logf("refresh")
+	err = hfs.Refresh(ctx, dir)
+	if err != nil {
+		t.Errorf("Refresh(ctx,%q)=%v; want nil err", dir, err)
+	}
+	fi, err = hfs.Stat(ctx, dir, outname)
+	if err != nil {
+		t.Fatalf("Stat(ctx, %q, %q)=_, %v; want nil err", dir, outname, err)
+	}
+	if fi.IsUpdated() {
+		// restat=true, so no update
+		t.Errorf("fi.IsUpdated()=%t; want false", fi.IsUpdated())
+	}
+	if !bytes.Equal(cmdhash, fi.CmdHash()) {
+		t.Errorf("fi.CmdHash=%q; want=%q", fi.CmdHash(), cmdhash)
+	}
+
 	m := hashfs.StateMap(hfs.State(ctx))
 	hfs = nil
 	e, ok := m[realfullname]
@@ -851,7 +868,6 @@ func TestUpdateFromLocal_AbsSymlink(t *testing.T) {
 	if e.Target != symlinkTarget {
 		t.Errorf("target=%q; want=%q", e.Target, symlinkTarget)
 	}
-
 }
 
 func TestUpdateFromLocal_NonLocalSymlink(t *testing.T) {
@@ -950,6 +966,24 @@ func TestUpdateFromLocal_NonLocalSymlink(t *testing.T) {
 	if stats != nstats {
 		t.Errorf("Stat access fs? old=%#v new=%#v", stats, nstats)
 	}
+	t.Logf("refresh")
+	err = hfs.Refresh(ctx, dir)
+	if err != nil {
+		t.Errorf("Refresh(ctx,%q)=%v; want nil err", dir, err)
+	}
+
+	fi, err = hfs.Stat(ctx, dir, outname)
+	if err != nil {
+		t.Fatalf("Stat(ctx, %q, %q)=_, %v; want nil err", dir, outname, err)
+	}
+	if fi.IsUpdated() {
+		// restat=true, so no update
+		t.Errorf("fi.IsUpdated()=%t; want false", fi.IsUpdated())
+	}
+	if !bytes.Equal(cmdhash, fi.CmdHash()) {
+		t.Errorf("fi.CmdHash=%q; want=%q", fi.CmdHash(), cmdhash)
+	}
+
 	m := hashfs.StateMap(hfs.State(ctx))
 	hfs = nil
 	e, ok := m[realfullname]
