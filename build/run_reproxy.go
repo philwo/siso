@@ -55,6 +55,9 @@ func (b *Builder) runReproxy(ctx context.Context, step *Step) error {
 		case reproxyexec.WorkerNameFallback:
 			step.metrics.IsLocal = true
 			step.metrics.Fallback = true
+			// TODO(b/299233189): add remote stdout/stderr for fallback
+			msgs := cmdOutput(ctx, "FALLBACK", step.cmd, step.def.Binding("command"), step.def.RuleName(), errors.New("fallback in reproxy"))
+			b.logOutput(ctx, msgs, false)
 		case reproxyexec.WorkerNameRacingLocal:
 			// TODO: Siso may want to have `racing`flag in the step metrics.
 			step.metrics.IsLocal = true
