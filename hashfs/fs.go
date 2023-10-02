@@ -1105,10 +1105,10 @@ func (e *entry) flush(ctx context.Context, fname, xattrname string, m *iometrics
 	defer close(e.lready)
 
 	if errors.Is(e.err, fs.ErrNotExist) {
-		err := os.RemoveAll(fname)
+		err := os.Remove(fname)
 		m.OpsDone(err)
 		clog.Infof(ctx, "flush remove %s: %v", fname, err)
-		return nil
+		return err
 	}
 	d := e.digest()
 	mtime := e.getMtime()

@@ -18,6 +18,7 @@ import (
 	"runtime"
 	"sort"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
@@ -1779,6 +1780,12 @@ func TestRemoveFlush(t *testing.T) {
 				t.Fatalf("Stat(ctx, dir, %q)=%v, %v; want %v", name, fi, err, fs.ErrNotExist)
 			}
 			err = hashFS.Flush(ctx, dir, []string{name})
+			if name == "subdir" {
+				if err == nil {
+					t.Errorf("Flush(ctx, dir, {%q})=%v; want %v", name, err, syscall.ENOTEMPTY)
+				}
+				return
+			}
 			if err != nil {
 				t.Fatalf("Flush(ctx, dir, {%q})=%v; want nil err", name, err)
 			}
