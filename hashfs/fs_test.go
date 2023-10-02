@@ -264,7 +264,12 @@ func TestMkdir(t *testing.T) {
 	}
 	t.Logf("out/siso/gen/v8/include/inspector mtime: %s", mtimeInspector)
 
-	t.Logf("mkdir again. mtime preserved %s", time.Now())
+	time.Sleep(100 * time.Millisecond)
+	now := time.Now()
+	if now.Equal(mtimeInspector) {
+		t.Errorf("mtime inspector=%v; now=%v", mtimeInspector, now)
+	}
+	t.Logf("mkdir again. mtime should be updated %s", now)
 	err = hashFS.Mkdir(ctx, dir, "out/siso/gen/v8/include/inspector", nil)
 	if err != nil {
 		t.Errorf("hashfs.Mkdir(ctx, %q, %q)=%v; want nil err", dir, "out/siso/gen/v8/include/inspector", err)
@@ -282,8 +287,8 @@ func TestMkdir(t *testing.T) {
 	if err != nil || !fi.IsDir() {
 		t.Errorf("hashfs.Stat(ctx, %q, %q)=%v, %v; want dir, nil err", dir, "out/siso/gen/v8/include/inspector", fi, err)
 	}
-	if !fi.ModTime().Equal(mtimeInspector) {
-		t.Errorf("%q mtime: %s -> %s", "out/siso/gen/v8/include/inspector", mtimeInspector, fi.ModTime())
+	if fi.ModTime().Before(now) {
+		t.Errorf("%q after %s mtime: %s -> %s", "out/siso/gen/v8/include/inspector", now, mtimeInspector, fi.ModTime())
 	}
 }
 

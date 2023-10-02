@@ -497,10 +497,11 @@ func (hfs *HashFS) Mkdir(ctx context.Context, root, dirname string, cmdhash []by
 	dirname = filepath.ToSlash(dirname)
 	fi, err := os.Lstat(dirname)
 	hfs.IOMetrics.OpsDone(err)
-	var mtime time.Time
+	mtime := time.Now()
 	if err == nil && fi.IsDir() {
-		// already exists
-		mtime = fi.ModTime()
+		err := os.Chtimes(dirname, time.Now(), mtime)
+		hfs.IOMetrics.OpsDone(err)
+		clog.Warningf(ctx, "failed to set dir mtime %s: %v", dirname, mtime)
 	} else {
 		err := os.MkdirAll(dirname, 0755)
 		hfs.IOMetrics.OpsDone(err)
@@ -511,17 +512,20 @@ func (hfs *HashFS) Mkdir(ctx context.Context, root, dirname string, cmdhash []by
 		if err != nil {
 			return err
 		}
-		mtime = fi.ModTime()
+		if mtime.Before(fi.ModTime()) {
+			mtime = fi.ModTime()
+		}
 	}
 	lready := make(chan bool, 1)
 	lready <- true
 
 	e := &entry{
-		lready:    lready,
-		mtime:     mtime,
-		mode:      0644 | fs.ModeDir,
-		cmdhash:   cmdhash,
-		directory: &directory{},
+		lready:      lready,
+		mtime:       mtime,
+		mode:        0644 | fs.ModeDir,
+		cmdhash:     cmdhash,
+		directory:   &directory{},
+		updatedTime: time.Now(),
 	}
 	err = hfs.dirStoreAndNotify(ctx, dirname, e)
 	clog.Infof(ctx, "mkdir %s %s: %v", dirname, mtime, err)
@@ -1422,6 +1426,12 @@ func (d *directory) storeEntry(ctx context.Context, fname string, e *entry) (*en
 					ee.updatedTime = e.updatedTime
 				}
 				ee.mu.Unlock()
+				lv := struct {
+					origFname   string
+					mtime       time.Time
+					updatedTime time.Time
+				}{pe.origFname, ee.getMtime(), ee.getUpdatedTime()}
+				clog.Infof(ctx, "store %s: mtime updated %v %v", lv.origFname, lv.mtime, lv.updatedTime)
 				return ee, "", nil
 			}
 			// e should be new value for fname.
