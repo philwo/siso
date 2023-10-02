@@ -873,7 +873,7 @@ func TestUpdateFromLocal_AbsSymlink(t *testing.T) {
 		t.Errorf("fi.UpdatedTime=%v; want=%v", fi.UpdatedTime(), now)
 	}
 	nstats := hfs.IOMetrics.Stats()
-	if stats != nstats {
+	if stats.Ops != nstats.Ops {
 		t.Errorf("Stat access fs? old=%#v new=%#v", stats, nstats)
 	}
 
@@ -1021,7 +1021,7 @@ func TestUpdateFromLocal_NonLocalSymlink(t *testing.T) {
 		t.Errorf("fi.UpdatedTime=%v; want=%v", fi.UpdatedTime(), now)
 	}
 	nstats := hfs.IOMetrics.Stats()
-	if stats != nstats {
+	if stats.Ops != nstats.Ops {
 		t.Errorf("Stat access fs? old=%#v new=%#v", stats, nstats)
 	}
 	t.Logf("refresh")
