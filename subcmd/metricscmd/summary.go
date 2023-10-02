@@ -183,7 +183,7 @@ func (c *summaryRun) run(ctx context.Context) error {
 	// Warn if the sum of weighted times is off by more than half a second.
 	wdiff := length - accumulatedWeightedDuration
 	if wdiff.Abs() > 500*time.Millisecond {
-		fmt.Printf("Warning: Possible corrupt siso_metrics.json, result may be untrustworthy. length = %s, weidhted total = %s\n", formatDuration(length), formatDuration(accumulatedWeightedDuration))
+		fmt.Printf("Warning: Possible corrupt siso_metrics.json, result may be untrustworthy. length = %s, weighted total = %s\n", formatDuration(length), formatDuration(accumulatedWeightedDuration))
 	}
 
 	// Print the slowest build steps:

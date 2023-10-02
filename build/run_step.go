@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"runtime"
 	"strings"
+	"time"
 
 	log "github.com/golang/glog"
 
@@ -92,7 +93,8 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 	b.progressStepStarted(ctx, step)
 	defer b.progressStepFinished(ctx, step)
 	depsExpandInputs(ctx, b, step)
-	err = b.handleStep(ctx, step)
+
+	exited, err := b.handleStep(ctx, step)
 	if err != nil {
 		if !experiments.Enabled("keep-going-handle-error", "handle %s failed: %v", step, err) {
 			msgs := cmdOutput(ctx, "FAILED[handle]:", step.cmd, step.def.Binding("command"), step.def.RuleName(), err)
@@ -100,19 +102,15 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 			clog.Warningf(ctx, "Failed to exec(handle): %v", err)
 			return fmt.Errorf("failed to run handler for %s: %w", step, err)
 		}
-	} else {
-		result, _ := step.cmd.ActionResult()
-		if result != nil {
-			// store handler generated outputs to local disk.
-			// better to upload to CAS, or store in fs_state?
-			clog.Infof(ctx, "outputs[handler] %d", len(step.cmd.Outputs))
-			err = b.hashFS.Flush(ctx, step.cmd.ExecRoot, step.cmd.Outputs)
-			if err == nil {
-				step.metrics.NoExec = true
-				return b.done(ctx, step)
-			}
-			clog.Warningf(ctx, "handle step failure: %v", err)
+	} else if exited {
+		// store handler generated outputs to local disk.
+		// better to upload to CAS, or store in fs_state?
+		clog.Infof(ctx, "outputs[handler] %d", len(step.cmd.Outputs))
+		err = b.hashFS.Flush(ctx, step.cmd.ExecRoot, step.cmd.Outputs)
+		if err == nil {
+			return b.done(ctx, step)
 		}
+		clog.Warningf(ctx, "handle step failure: %v", err)
 	}
 
 	err = b.setupRSP(ctx, step)
@@ -163,10 +161,22 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 	return b.done(ctx, step)
 }
 
-func (b *Builder) handleStep(ctx context.Context, step *Step) error {
+func (b *Builder) handleStep(ctx context.Context, step *Step) (bool, error) {
 	ctx, span := trace.NewSpan(ctx, "handle-step")
 	defer span.Close(nil)
-	return step.def.Handle(ctx, step.cmd)
+	started := time.Now()
+	err := step.def.Handle(ctx, step.cmd)
+	if err != nil {
+		return false, err
+	}
+	result, _ := step.cmd.ActionResult()
+	exited := result != nil
+	if exited {
+		step.metrics.ActionStartTime = IntervalMetric(started.Sub(b.start))
+		step.metrics.RunTime = IntervalMetric(time.Since(started))
+		step.metrics.NoExec = true
+	}
+	return exited, nil
 }
 
 func (b *Builder) tryFastStep(ctx context.Context, step, fastStep *Step) (bool, error) {
