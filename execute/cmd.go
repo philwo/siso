@@ -42,6 +42,7 @@ type FileTrace struct {
 type REProxyConfig struct {
 	CanonicalizeWorkingDir bool              `json:"canonicalize_working_dir,omitempty"`
 	DownloadOutputs        bool              `json:"download_outputs,omitempty"`
+	PreserveSymlinks       bool              `json:"preserve_symlinks,omitempty"`
 	ExecStrategy           string            `json:"exec_strategy,omitempty"`
 	ExecTimeout            string            `json:"exec_timeout,omitempty"`     // duration format
 	ReclientTimeout        string            `json:"reclient_timeout,omitempty"` // duration format

@@ -213,6 +213,9 @@ func createRequest(ctx context.Context, cmd *execute.Cmd, execTimeout, reclientT
 		WorkingDirectory: cmd.Dir,
 		Platform:         cmd.REProxyConfig.Platform,
 	}
+	if cmd.REProxyConfig.PreserveSymlinks {
+		c.Input.SymlinkBehavior = cpb.SymlinkBehaviorType_PRESERVE
+	}
 
 	// Use exec strategy if found, otherwise fallback to unspecified.
 	strategy := ppb.ExecutionStrategy_UNSPECIFIED
