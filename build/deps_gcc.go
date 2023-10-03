@@ -10,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"path"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -160,54 +159,19 @@ func (gcc depsGCC) DepsCmd(ctx context.Context, b *Builder, step *Step) ([]strin
 
 func (gcc depsGCC) depsInputs(ctx context.Context, b *Builder, step *Step) ([]string, error) {
 	ins, err := gcc.scandeps(ctx, b, step)
-	if err == nil {
-		return ins, nil
-	}
-	if errors.Is(err, context.Canceled) {
-		return nil, err
-	}
-	step.metrics.ScandepsErr = true
-	if !experiments.Enabled("scandeps-fallback", "scandeps failed, fallback to use `clang -M`") {
-		return nil, err
-	}
-	// TODO(b/289142353): drop `clang -M` support?
-	cwd := b.path.AbsFromWD(".")
-	err = b.prepareLocalInputs(ctx, step)
 	if err != nil {
-		return nil, fmt.Errorf("prepare for gcc deps: %w", err)
-	}
-	dargs := step.cmd.DepsArgs
-	if len(dargs) == 0 {
-		dargs = gccutil.DepsArgs(step.cmd.Args)
-	}
-	ins, err = gccutil.Deps(ctx, dargs, nil, cwd)
-	if err != nil {
+		if !errors.Is(err, context.Canceled) {
+			step.metrics.ScandepsErr = true
+		}
 		return nil, err
 	}
-	var inputs []string
-	for _, in := range ins {
-		// TODO: need to preserve intermediate dirs
-		// e.g.
-		//  /usr/local/google/home/ukai/src/chromium/src/native_client/toolchain/linux_x86/nacl_x86_glibc/bin/../lib/gcc/x86_64-nacl/4.4.3/../../../../x86_64-nacl/include/stdint.h
-		inpath := b.path.MustFromWD(in)
-		fi, err := b.hashFS.Stat(ctx, b.path.ExecRoot, inpath)
-		if err != nil {
-			clog.Warningf(ctx, "missing inputs? %s: %v", inpath, err)
-			continue
-		}
-		inputs = append(inputs, inpath)
-		if target := fi.Target(); target != "" {
-			inputs = append(inputs, b.path.MustFromWD(filepath.Join(filepath.Dir(in), target)))
-		}
-	}
-	return inputs, nil
+	return ins, nil
 }
 
 func (depsGCC) scandeps(ctx context.Context, b *Builder, step *Step) ([]string, error) {
 	var ins []string
 	err := b.scanDepsSema.Do(ctx, func(ctx context.Context) error {
 		var err error
-		// need to use DepsArgs?
 		files, dirs, sysroots, defines, err := gccutil.ScanDepsParams(ctx, step.cmd.Args, step.cmd.Env)
 		if err != nil {
 			return err

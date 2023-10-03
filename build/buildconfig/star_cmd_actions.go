@@ -22,7 +22,7 @@ import (
 
 // starCmdActions returns actions, which contains
 //
-//	fix(inputs, tool_inputs, outputs, deps_args): fix the cmd.
+//	fix(inputs, tool_inputs, outputs): fix the cmd.
 //	write(fname, content, is_executable): write a file.
 //	copy(src, dst, recursive): copy a file or a dir.
 //	symlink(target, linkpath): create a symlink.
@@ -61,8 +61,8 @@ func (starCmdValue) Freeze()               {}
 func (starCmdValue) Truth() starlark.Bool  { return starlark.True }
 func (starCmdValue) Hash() (uint32, error) { return 0, errors.New("execute.Cmd is not hashable") }
 
-// Starlark function `actions.fix(inputs, tool_inputs, outputs, args, deps_args, reproxy_config)`
-// to fix the command's inputs/outputs/args/deps_args in the context.
+// Starlark function `actions.fix(inputs, tool_inputs, outputs, args, reproxy_config)`
+// to fix the command's inputs/outputs/args in the context.
 func starActionsFix(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	log.V(1).Infof("actions.fix args=%s kwargs=%s", args, kwargs)
 	c, ok := fn.Receiver().(starCmdValue)
@@ -70,14 +70,13 @@ func starActionsFix(thread *starlark.Thread, fn *starlark.Builtin, args starlark
 		return starlark.None, fmt.Errorf("unexpected receiver: %v", fn.Receiver())
 	}
 	var inputsValue, toolInputsValue, outputsValue starlark.Value
-	var cmdArgsValue, depsArgsValue starlark.Value
+	var cmdArgsValue starlark.Value
 	var reproxyConfigValue starlark.Value
 	err := starlark.UnpackArgs("fix", args, kwargs,
 		"inputs?", &inputsValue,
 		"tool_inputs?", &toolInputsValue,
 		"outputs?", &outputsValue,
 		"args?", &cmdArgsValue,
-		"deps_args?", &depsArgsValue,
 		"reproxy_config?", &reproxyConfigValue)
 	if err != nil {
 		return starlark.None, err
@@ -101,15 +100,9 @@ func starActionsFix(thread *starlark.Thread, fn *starlark.Builtin, args starlark
 			return starlark.None, err
 		}
 	}
-	var cmdArgs, depsArgs []string
+	var cmdArgs []string
 	if cmdArgsValue != nil && cmdArgsValue != starlark.None {
 		cmdArgs, err = unpackList(cmdArgsValue)
-		if err != nil {
-			return starlark.None, err
-		}
-	}
-	if depsArgsValue != nil && depsArgsValue != starlark.None {
-		depsArgs, err = unpackList(depsArgsValue)
 		if err != nil {
 			return starlark.None, err
 		}
@@ -132,9 +125,6 @@ func starActionsFix(thread *starlark.Thread, fn *starlark.Builtin, args starlark
 	}
 	if cmdArgsValue != nil {
 		c.cmd.Args = cmdArgs
-	}
-	if depsArgsValue != nil {
-		c.cmd.DepsArgs = depsArgs
 	}
 	if reproxyConfigValue != nil {
 		err := json.Unmarshal([]byte(reproxyConfigJSON), &c.cmd.REProxyConfig)

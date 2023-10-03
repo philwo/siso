@@ -162,47 +162,18 @@ func (msvc depsMSVC) DepsCmd(ctx context.Context, b *Builder, step *Step) ([]str
 
 func (msvc depsMSVC) depsInputs(ctx context.Context, b *Builder, step *Step) ([]string, error) {
 	ins, err := msvc.scandeps(ctx, b, step)
-	if err == nil {
-		return ins, nil
-	}
-	if errors.Is(err, context.Canceled) {
-		return nil, err
-	}
-	step.metrics.ScandepsErr = true
-	if !experiments.Enabled("scandeps-fallback", "scandeps failed, fallback to use `clang-cl /showIncludes`") {
-		return nil, err
-	}
-
-	cwd := b.path.AbsFromWD(".")
-	err = b.prepareLocalInputs(ctx, step)
 	if err != nil {
-		return nil, fmt.Errorf("prepare for msvc deps: %w", err)
-	}
-	dargs := step.cmd.DepsArgs
-	if len(dargs) == 0 {
-		dargs = msvcutil.DepsArgs(step.cmd.Args)
-	}
-	ins, err = msvcutil.Deps(ctx, dargs, nil, cwd)
-	if err != nil {
-		return nil, err
-	}
-	var inputs []string
-	for _, in := range ins {
-		inpath := b.path.MustFromWD(in)
-		_, err := b.hashFS.Stat(ctx, b.path.ExecRoot, inpath)
-		if err != nil {
-			clog.Warningf(ctx, "missing inputs? %s: %v", inpath, err)
-			continue
+		if !errors.Is(err, context.Canceled) {
+			step.metrics.ScandepsErr = true
 		}
-		inputs = append(inputs, inpath)
+		return nil, err
 	}
-	return inputs, nil
+	return ins, nil
 }
 
 func (depsMSVC) scandeps(ctx context.Context, b *Builder, step *Step) ([]string, error) {
 	var ins []string
 	err := b.scanDepsSema.Do(ctx, func(ctx context.Context) error {
-		// need to use DepsArgs?
 		files, includes, dirs, sysroots, defines, err := msvcutil.ScanDepsParams(ctx, step.cmd.Args, step.cmd.Env)
 		if err != nil {
 			return err

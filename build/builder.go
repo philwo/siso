@@ -41,8 +41,6 @@ import (
 	"infra/build/siso/reapi"
 	"infra/build/siso/scandeps"
 	"infra/build/siso/sync/semaphore"
-	"infra/build/siso/toolsupport/gccutil"
-	"infra/build/siso/toolsupport/msvcutil"
 	"infra/build/siso/ui"
 )
 
@@ -459,9 +457,7 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 		b.remoteSema,
 		b.cacheSema,
 		b.cache.sema,
-		gccutil.Semaphore,
 		hashfs.FlushSemaphore,
-		msvcutil.Semaphore,
 		remoteexec.Semaphore,
 	}
 	b.traceEvents.Start(ctx, semas, []*iometrics.IOMetrics{
