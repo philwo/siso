@@ -8,6 +8,7 @@ import (
 	"context"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"runtime"
 	"testing"
 
@@ -107,5 +108,48 @@ func TestConfigHandler(t *testing.T) {
 	err = cfg.Handle(ctx, "handler_foo", bpath, cmd, nil)
 	if err != nil {
 		t.Errorf(`cfg.Handle()=%v; want nil error`, err)
+	}
+}
+
+func TestGNStar(t *testing.T) {
+	ctx := context.Background()
+	flags := map[string]string{
+		"dir": "out/siso",
+	}
+	cfgrepos := map[string]fs.FS{
+		"config": os.DirFS("./testdata"),
+	}
+	cfg, err := New(ctx, "@config//gn_test.star", flags, cfgrepos)
+	if err != nil {
+		t.Fatalf(`New(ctx, "@config//gn_test.star", %v, cfgrepos)=_, %v; want nil error`, flags, err)
+	}
+	hfs, err := hashfs.New(ctx, hashfs.Option{})
+	if err != nil {
+		t.Fatalf("Failed to create hashfs. err=%v", err)
+	}
+	defer func() {
+		err = hfs.Close(ctx)
+		if err != nil {
+			t.Errorf("hfs.Close=%v", err)
+		}
+	}()
+	root, err := filepath.Abs("./testdata/gn_test")
+	if err != nil {
+		t.Fatalf(`abs("./testdata/gn_test")=%v, %v; want nil err`, root, err)
+	}
+	t.Logf("root=%s", root)
+	bpath := build.NewPath(root, "out/siso")
+	argsgn, err := os.ReadFile("./testdata/gn_test/out/siso/args.gn")
+	if err != nil {
+		t.Fatalf(`os.ReadFile("./testdata/gn_test/out/siso/args.gn")=%v, %v; want nil err`, argsgn, err)
+	}
+	t.Logf("args.gn=%s", string(argsgn))
+	err = cfg.Metadata.Set("args.gn", string(argsgn))
+	if err != nil {
+		t.Fatalf("metadata set = %v; want nil err", err)
+	}
+	_, err = cfg.Init(ctx, hfs, bpath)
+	if err != nil {
+		t.Errorf("cfg.Init()=%v; want nil error", err)
 	}
 }
