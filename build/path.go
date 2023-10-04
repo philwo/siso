@@ -60,6 +60,7 @@ func (p *Path) MustFromWD(path string) string {
 
 // FromWD converts cwd relative to exec root relative,
 // slash-separated.
+// It keeps absolute path if it is out of exec root.
 func (p *Path) FromWD(path string) (string, error) {
 	if path == "" {
 		return "", nil
@@ -72,6 +73,10 @@ func (p *Path) FromWD(path string) (string, error) {
 		rel, err := filepath.Rel(p.ExecRoot, path)
 		if err != nil {
 			return "", err
+		}
+		if !filepath.IsLocal(rel) {
+			// use abs path for out of exec root
+			return path, nil
 		}
 		rel = filepath.ToSlash(rel)
 		rel = p.intern.Intern(rel)
@@ -86,10 +91,14 @@ func (p *Path) FromWD(path string) (string, error) {
 
 // MustToWD converts exec root relative to cwd relative,
 // slash-separated.
+// It keeps absolute path as is.
 // TODO(b/273185597): consider rewriting as non-Must func.
 func (p *Path) MustToWD(path string) string {
 	if path == "" {
 		return ""
+	}
+	if filepath.IsAbs(path) {
+		return path
 	}
 	rel, err := filepath.Rel(p.Dir, path)
 	if err != nil {

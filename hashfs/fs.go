@@ -178,6 +178,9 @@ func needPathClean(names ...string) bool {
 }
 
 func (hfs *HashFS) dirLookup(ctx context.Context, root, fname string) (*entry, *directory, bool) {
+	if filepath.IsAbs(fname) {
+		return hfs.directory.lookup(ctx, filepath.ToSlash(fname))
+	}
 	if needPathClean(root, fname) {
 		return hfs.directory.lookup(ctx, filepath.ToSlash(filepath.Join(root, fname)))
 	}
@@ -254,7 +257,9 @@ func (hfs *HashFS) Stat(ctx context.Context, root, fname string) (FileInfo, erro
 		}
 		return FileInfo{root: root, fname: fname, e: e}, nil
 	}
-	fname = filepath.Join(root, fname)
+	if !filepath.IsAbs(fname) {
+		fname = filepath.Join(root, fname)
+	}
 	fname = filepath.ToSlash(fname)
 	e = newLocalEntry()
 	e.init(ctx, fname, hfs.IOMetrics)
@@ -292,7 +297,10 @@ func (hfs *HashFS) ReadDir(ctx context.Context, root, name string) (dents []DirE
 			clog.Infof(ctx, "readdir @%s %s -> %d %v", root, name, len(dents), err)
 		}()
 	}
-	dirname := filepath.Join(root, name)
+	dirname := name
+	if !filepath.IsAbs(name) {
+		dirname = filepath.Join(root, name)
+	}
 	dname := filepath.ToSlash(dirname)
 	e, _, ok := hfs.directory.lookup(ctx, dname)
 	if !ok {
@@ -439,7 +447,10 @@ func (hfs *HashFS) Copy(ctx context.Context, root, src, dst string, mtime time.T
 		clog.Infof(ctx, "copy @%s %s to %s", root, src, dst)
 	}
 	hfs.clean = false
-	srcname := filepath.Join(root, src)
+	srcname := src
+	if !filepath.IsAbs(src) {
+		srcname = filepath.Join(root, src)
+	}
 	srcfname := filepath.ToSlash(srcname)
 	dstfname := filepath.Join(root, dst)
 	dstfname = filepath.ToSlash(dstfname)
