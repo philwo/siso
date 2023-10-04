@@ -31,7 +31,6 @@ def __load_args(ctx, fname, gnargs):
             continue
         if line.startswith("#"):
             continue
-        print("line %s" % line)
         if line.startswith("import(\""):
             raw_import_path = line.removeprefix("import(\"")
             i = raw_import_path.find("\"")
