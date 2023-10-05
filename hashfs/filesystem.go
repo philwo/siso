@@ -10,6 +10,7 @@ import (
 	"io"
 	"io/fs"
 	"path/filepath"
+	"syscall"
 )
 
 // File implements https://pkg.go.dev/io/fs#File.
@@ -174,20 +175,40 @@ func (fsys FileSystem) Stat(name string) (fs.FileInfo, error) {
 
 // Sub returns an FS corresponding to the subtree rooted at dir.
 func (fsys FileSystem) Sub(dir string) (fs.FS, error) {
-	fi, err := fsys.Stat(dir)
-	if err != nil {
-		return nil, err
-	}
-	if !fi.IsDir() {
-		return nil, &fs.PathError{
-			Op:   "sub",
-			Path: dir,
-			Err:  fmt.Errorf("not directory: %s", dir),
+	origDir := dir
+	for i := 0; i < maxSymlinks; i++ {
+		fi, err := fsys.Stat(dir)
+		if err != nil {
+			return nil, err
 		}
+		if !fi.IsDir() {
+			if hfi, ok := fi.(FileInfo); ok && hfi.Target() != "" {
+				target := hfi.Target()
+				if filepath.IsAbs(target) {
+					return nil, &fs.PathError{
+						Op:   "sub",
+						Path: origDir,
+						Err:  fmt.Errorf("symlink to abs path %s", target),
+					}
+				}
+				dir = filepath.Join(filepath.Dir(dir), target)
+				continue
+			}
+			return nil, &fs.PathError{
+				Op:   "sub",
+				Path: origDir,
+				Err:  fmt.Errorf("not directory: %s", dir),
+			}
+		}
+		return FileSystem{
+			hashFS: fsys.hashFS,
+			ctx:    fsys.ctx,
+			dir:    filepath.Join(fsys.dir, dir),
+		}, nil
 	}
-	return FileSystem{
-		hashFS: fsys.hashFS,
-		ctx:    fsys.ctx,
-		dir:    filepath.Join(fsys.dir, dir),
-	}, nil
+	return nil, &fs.PathError{
+		Op:   "sub",
+		Path: origDir,
+		Err:  syscall.ELOOP,
+	}
 }
