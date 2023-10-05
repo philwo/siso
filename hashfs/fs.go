@@ -1145,7 +1145,12 @@ func (e *entry) flush(ctx context.Context, fname, xattrname string, m *iometrics
 		}
 		return err
 	case d.IsZero() && e.target != "":
-		err := os.Symlink(e.target, fname)
+		target, err := os.Readlink(fname)
+		if err == nil && e.target == target {
+			return nil
+		}
+		e.mu.Lock()
+		err = os.Symlink(e.target, fname)
 		m.OpsDone(err)
 		if errors.Is(err, fs.ErrExist) {
 			err = os.Remove(fname)
@@ -1153,6 +1158,7 @@ func (e *entry) flush(ctx context.Context, fname, xattrname string, m *iometrics
 			err = os.Symlink(e.target, fname)
 			m.OpsDone(err)
 		}
+		e.mu.Unlock()
 		clog.Infof(ctx, "flush symlink %s -> %s: %v", fname, e.target, err)
 		// don't change mtimes. it fails if target doesn't exist.
 		return err
