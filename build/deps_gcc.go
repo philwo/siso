@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"path"
 	"strings"
 	"time"
 
@@ -64,22 +63,6 @@ func (gcc depsGCC) fixCmdInputs(ctx context.Context, b *Builder, cmd *execute.Cm
 	// [-Werror, -Wmissing-sysroot]
 	inputs = append(inputs, sysroots...)
 	inputs = b.expandInputs(ctx, inputs)
-
-	fixSymlink := func(name string, dirs []string) {
-		for i := range dirs {
-			fi, err := b.hashFS.Stat(ctx, b.path.ExecRoot, dirs[i])
-			if err != nil {
-				continue
-			}
-			if target := fi.Target(); target != "" {
-				dir := dirs[i]
-				dirs[i] = path.Join(path.Dir(dir), target)
-				clog.Infof(ctx, "%s symlink: %s -> %s", name, dir, dirs[i])
-			}
-		}
-	}
-	fixSymlink("dirs", dirs)
-	fixSymlink("sysroots", sysroots)
 
 	fn := func(ctx context.Context, dir string) (merkletree.TreeEntry, error) {
 		return b.treeInput(ctx, dir, ":headers", nil)

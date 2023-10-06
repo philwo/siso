@@ -575,18 +575,6 @@ func TestBuildDuplicateError(t *testing.T) {
 				},
 			},
 		},
-		{
-			desc: "dup symlink-dir",
-			ents: []Entry{
-				{
-					Name:   "dir/foo",
-					Target: "bar",
-				},
-				{
-					Name: "dir/foo",
-				},
-			},
-		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
 			ctx := context.Background()
@@ -603,6 +591,31 @@ func TestBuildDuplicateError(t *testing.T) {
 				t.Errorf("mt.Build()=%v, nil, want=error", d)
 			}
 		})
+	}
+}
+
+func TestBuildDuplicateSymlinkDir(t *testing.T) {
+	ctx := context.Background()
+	ds := digest.NewStore()
+	mt := New(ds)
+	ents := []Entry{
+		{
+			Name:   "dir/foo",
+			Target: "bar",
+		},
+		{
+			Name: "dir/foo",
+		},
+	}
+	for _, ent := range ents {
+		err := mt.Set(ent)
+		if err != nil {
+			t.Fatalf("mt.Set(%q)=%v; want=nil", ent.Name, err)
+		}
+	}
+	d, err := mt.Build(ctx)
+	if err != nil {
+		t.Errorf("mt.Build()=%v, %v, want nil err", d, err)
 	}
 }
 

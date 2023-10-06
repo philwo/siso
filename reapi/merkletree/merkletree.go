@@ -113,7 +113,7 @@ func (m *MerkleTree) Set(entry Entry) error {
 		return fmt.Errorf("set %s: %w", fname, ErrAbsPath)
 	}
 	fname = filepath.ToSlash(fname)
-	if entry.IsDir() {
+	if entry.IsDir() || entry.Target != "" {
 		if _, exists := m.m[fname]; exists {
 			return nil
 		}
@@ -370,24 +370,6 @@ func (m *MerkleTree) buildTree(ctx context.Context, curdir *rpb.Directory, dirna
 	})
 	curdir.Files = files
 
-	var symlinks []*rpb.SymlinkNode
-	for _, s := range curdir.Symlinks {
-		p, found := names[s.Name]
-		if found {
-			if !proto.Equal(s, p) {
-				return nil, fmt.Errorf("duplicate symlink %s in %s: %s != %s", s.Name, dirname, s, p)
-			}
-			clog.Infof(ctx, "duplicate symlink %s in %s: %s", s.Name, dirname, s)
-			continue
-		}
-		names[s.Name] = s
-		symlinks = append(symlinks, s)
-	}
-	sort.Slice(symlinks, func(i, j int) bool {
-		return symlinks[i].Name < symlinks[j].Name
-	})
-	curdir.Symlinks = symlinks
-
 	var dirs []*rpb.DirectoryNode
 	for _, subdir := range curdir.Directories {
 		dirname := pathJoin(dirname, subdir.Name)
@@ -417,6 +399,30 @@ func (m *MerkleTree) buildTree(ctx context.Context, curdir *rpb.Directory, dirna
 		return dirs[i].Name < dirs[j].Name
 	})
 	curdir.Directories = dirs
+
+	var symlinks []*rpb.SymlinkNode
+	for _, s := range curdir.Symlinks {
+		p, found := names[s.Name]
+		if found {
+			sdirname := pathJoin(dirname, s.Name)
+			if _, found := m.m[sdirname]; found {
+				clog.Infof(ctx, "duplicate symlink to dir %s in %s -> %s", s.Name, dirname, s.Target)
+				continue
+			}
+
+			if !proto.Equal(s, p) {
+				return nil, fmt.Errorf("duplicate symlink %s in %s: %s != %s", s.Name, dirname, s, p)
+			}
+			clog.Infof(ctx, "duplicate symlink %s in %s: %s", s.Name, dirname, s)
+			continue
+		}
+		names[s.Name] = s
+		symlinks = append(symlinks, s)
+	}
+	sort.Slice(symlinks, func(i, j int) bool {
+		return symlinks[i].Name < symlinks[j].Name
+	})
+	curdir.Symlinks = symlinks
 
 	data, err := digest.FromProtoMessage(curdir)
 	if err != nil {

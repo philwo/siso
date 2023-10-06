@@ -8,10 +8,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	log "github.com/golang/glog"
@@ -44,19 +46,44 @@ func treeInputs(ctx context.Context, fn func(context.Context, string) (merkletre
 	return treeEntries
 }
 
+func (b *Builder) resolveSymlinkForInputDeps(ctx context.Context, dir, labelSuffix string, inputDeps map[string][]string) (string, []string, error) {
+	// Linux imposes a limit of at most 40 symlinks in any one path lookup.
+	// see: https://lwn.net/Articles/650786/
+	const maxSymlinks = 40
+	for i := 0; i < maxSymlinks; i++ {
+		files, ok := inputDeps[dir+labelSuffix]
+		if ok {
+			return dir, files, nil
+		}
+		fi, err := b.hashFS.Stat(ctx, b.path.ExecRoot, dir)
+		if err != nil {
+			return "", nil, fmt.Errorf("not in input_deps, and stat err %s: %w", dir, err)
+		}
+		if target := fi.Target(); target != "" {
+			if filepath.IsAbs(target) {
+				return "", nil, fmt.Errorf("not in input_deps, and abs symlink %s -> %s", dir, target)
+			}
+			dir = path.Join(path.Dir(dir), target)
+			continue
+		}
+		return "", nil, fmt.Errorf("not in input_deps %s", dir)
+	}
+	return "", nil, fmt.Errorf("not in input_deps %s: %w", dir, syscall.ELOOP)
+}
+
 func (b *Builder) treeInput(ctx context.Context, dir, labelSuffix string, expandFn func(context.Context, []string) []string) (merkletree.TreeEntry, error) {
 	if b.reapiclient == nil {
 		return merkletree.TreeEntry{}, errors.New("reapi is not configured")
 	}
 	m := b.graph.InputDeps(ctx)
-	files, ok := m[dir+labelSuffix]
-	if !ok {
-		return merkletree.TreeEntry{}, errors.New("not in input_deps")
+	dir, files, err := b.resolveSymlinkForInputDeps(ctx, dir, labelSuffix, m)
+	if err != nil {
+		return merkletree.TreeEntry{}, err
 	}
 	st := &subtree{}
 	v, _ := b.trees.LoadOrStore(dir, st)
 	st = v.(*subtree)
-	err := st.init(ctx, b, dir, files, expandFn)
+	err = st.init(ctx, b, dir, files, expandFn)
 	if err != nil {
 		return merkletree.TreeEntry{}, err
 	}
