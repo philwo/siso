@@ -37,7 +37,8 @@ func retriableError(err error, called int) bool {
 		// See https://developers.google.com/identity/sign-in/web/devconsole-project.
 		// (access token expired, need to refresh).
 		// but should not retry if it gets in the first request (wrong auth?)
-		codes.Unauthenticated:
+		codes.Unauthenticated,
+		codes.PermissionDenied:
 		return called != 1
 	}
 	return false
