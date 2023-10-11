@@ -137,10 +137,6 @@ type Cmd struct {
 	// Depfile specifies a filename for dep info, relative to ExecRoot.
 	Depfile string
 
-	// DepsArgs are args to get deps.
-	// If empty, it will be generated from Args + Deps.
-	DepsArgs []string
-
 	// If Restat is true
 	// - output files may be used only for inputs
 	// - no need to update mtime if content is not changed.
