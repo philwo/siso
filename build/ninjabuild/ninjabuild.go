@@ -319,8 +319,7 @@ func (g *Graph) Filenames() []string {
 
 // Targets returns targets for ninja args.
 // If args is not given, returns default build targets.
-// Targets are exec-root relative paths.
-func (g *Graph) Targets(ctx context.Context, args ...string) ([]string, error) {
+func (g *Graph) Targets(ctx context.Context, args ...string) ([]build.Target, error) {
 	err := g.init(ctx)
 	if err != nil {
 		return nil, err
@@ -330,16 +329,19 @@ func (g *Graph) Targets(ctx context.Context, args ...string) ([]string, error) {
 		if err != nil {
 			return nil, err
 		}
+		targets := make([]build.Target, 0, len(nodes))
 		for _, n := range nodes {
-			args = append(args, n.Path())
+			targets = append(targets, build.Target(n))
 		}
+		return targets, nil
 	}
-	targets := make([]string, 0, len(args))
+	targets := make([]build.Target, 0, len(args))
 	for _, t := range args {
+		t = filepath.ToSlash(t)
+		var node *ninjautil.Node
 		if strings.HasSuffix(t, "^") {
 			// Special syntax: "foo.cc^" means "the first output of foo.cc".
 			t = strings.TrimSuffix(t, "^")
-			t = filepath.ToSlash(t)
 			n, ok := g.nstate.LookupNode(t)
 			if !ok {
 				return nil, fmt.Errorf("unknown target %q", t)
@@ -354,39 +356,60 @@ func (g *Graph) Targets(ctx context.Context, args ...string) ([]string, error) {
 			if len(outputs) == 0 {
 				return nil, fmt.Errorf("out edge of %q has no output", t)
 			}
-			t = outputs[0].Path()
+			node = outputs[0]
+		} else {
+			n, ok := g.nstate.LookupNode(t)
+			if !ok {
+				return nil, fmt.Errorf("unknown target %q", t)
+			}
+			node = n
 		}
-		targets = append(targets, g.globals.path.MustFromWD(t))
+		targets = append(targets, build.Target(node))
 	}
 	return targets, nil
+}
+
+// TargetPath returns exec-root relative path of the target.
+func (g *Graph) TargetPath(target build.Target) (string, error) {
+	node, ok := target.(*ninjautil.Node)
+	if !ok {
+		return "", fmt.Errorf("unexpected target type %T", target)
+	}
+	return g.globals.path.MustFromWD(node.Path()), nil
 }
 
 // StepDef creates new StepDef to build target (exec-root relative), needed for next.
 // top-level target will use nil for next.
 // It returns a StepDef for the target and inputs (exec-root relative).
-func (g *Graph) StepDef(ctx context.Context, target string, next build.StepDef) (build.StepDef, []string, error) {
-	n, ok := g.nstate.LookupNode(g.globals.path.MustToWD(target))
+func (g *Graph) StepDef(ctx context.Context, target build.Target, next build.StepDef) (build.StepDef, []build.Target, []build.Target, error) {
+	n, ok := target.(*ninjautil.Node)
 	if !ok {
-		return nil, nil, build.ErrNoTarget
+		return nil, nil, nil, build.ErrNoTarget
 	}
 	edge, ok := n.InEdge()
 	if !ok {
-		return nil, nil, build.ErrTargetIsSource
+		return nil, nil, nil, build.ErrTargetIsSource
 	}
 	if g.visited[edge] {
-		return nil, nil, build.ErrDuplicateStep
+		return nil, nil, nil, build.ErrDuplicateStep
 	}
 	g.visited[edge] = true
 	if edge.IsPhony() {
-		g.globals.phony[target] = true
+		tpath := g.globals.path.MustFromWD(n.Path())
+		g.globals.phony[tpath] = true
 	}
 	stepDef := g.newStepDef(ctx, edge, next)
 	edgeInputs := edge.Inputs()
-	inputs := make([]string, 0, len(edgeInputs))
+	inputs := make([]build.Target, 0, len(edgeInputs))
 	for _, in := range edgeInputs {
-		inputs = append(inputs, g.globals.path.MustFromWD(in.Path()))
+		inputs = append(inputs, build.Target(in))
 	}
-	return stepDef, inputs, nil
+	edgeOutputs := edge.Outputs()
+	outputs := make([]build.Target, 0, len(edgeOutputs))
+	for _, out := range edgeOutputs {
+		outputs = append(outputs, build.Target(out))
+	}
+	return stepDef, inputs, outputs, nil
 }
 
 // RecordDepsLog records deps log of output.

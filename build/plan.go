@@ -33,19 +33,24 @@ var (
 	ErrMissingDeps = errors.New("missing deps in depfile/depslog")
 )
 
+// Target is a build target used in Graph.
+// it must be comparable type to be used for map key.
+type Target any
+
 // Graph provides a build graph, i.e. step definitions.
 type Graph interface {
 	// Targets returns target paths for given args.
-	// Targets are exec-root relative.
-	Targets(context.Context, ...string) ([]string, error)
+	Targets(context.Context, ...string) ([]Target, error)
 
-	// StepDef creates new StepDef for the target and its inputs.
-	// Target and inputs should be exec-root relative.
+	// TargetPath returns exec-root relative path of the target
+	TargetPath(Target) (string, error)
+
+	// StepDef creates new StepDef for the target and its input/output targets.
 	// if err is ErrTargetIsSource, target is source and no step to
 	// generate the target.
 	// if err is ErrDuplicateStep, a step that geneartes the target
 	// is already processed.
-	StepDef(context.Context, string, StepDef) (StepDef, []string, error)
+	StepDef(context.Context, Target, StepDef) (def StepDef, ins, outs []Target, err error)
 
 	// InputDeps returns input dependencies.
 	// input dependencies is a map from input path or label to
@@ -62,13 +67,17 @@ type Graph interface {
 // plan maintains which step to execute next.
 type plan struct {
 	// marked source target
-	m map[string]bool
+	m map[Target]bool
 
-	mu        sync.Mutex
-	q         chan *Step
-	closed    bool
-	ready     []*Step
-	waits     map[string][]*Step
+	// steps maps Target to *Step
+	steps map[Target]*Step
+
+	mu     sync.Mutex
+	q      chan *Step
+	closed bool
+	ready  []*Step
+	// value's steps are waiting for key's step.
+	waits     map[*Step][]*Step
 	npendings int
 }
 
@@ -114,7 +123,7 @@ func schedule(ctx context.Context, sched *scheduler, graph Graph, args ...string
 }
 
 // scheduleTarget schedules a build plan for target, which is required to next StepDef, from graph into sched.
-func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target string, next StepDef) error {
+func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target Target, next StepDef) error {
 	if sched.marked(target) {
 		if log.V(1) {
 			clog.Infof(ctx, "sched target already marked: %s", target)
@@ -124,7 +133,7 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target s
 	if log.V(1) {
 		clog.Infof(ctx, "schedule target %s", target)
 	}
-	newStep, inputs, err := graph.StepDef(ctx, target, next)
+	newStep, inputs, outputs, err := graph.StepDef(ctx, target, next)
 	switch {
 	case err == nil:
 		// need to schedule.
@@ -137,7 +146,7 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target s
 		if log.V(1) {
 			clog.Infof(ctx, "sched target is source? %s", target)
 		}
-		return sched.mark(ctx, target)
+		return sched.mark(ctx, graph, target)
 	case errors.Is(err, ErrDuplicateStep):
 		// this step is already processed.
 		if log.V(1) {
@@ -150,7 +159,7 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target s
 		}
 		return err
 	}
-	clog.Infof(ctx, "schedule %s", newStep)
+	clog.Infof(ctx, "schedule %s inputs:%d", newStep, len(inputs))
 	sched.visited++
 	next = newStep
 	select {
@@ -159,7 +168,7 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target s
 	default:
 	}
 	// to suppress duplicates
-	m := make(map[string]bool)
+	m := make(map[Target]bool)
 
 	// we might not need to use depfile's dependencies to construct
 	// build graph.
@@ -174,7 +183,7 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target s
 	//     it means original build graph without depfile contains
 	//     missing dependencies. It would be better to fix gn/ninja's
 	//     build graph, rather than mitigating here in the siso.
-	var waits []string
+	waits := make(map[*Step]struct{})
 	for _, in := range inputs {
 		if m[in] {
 			continue
@@ -185,13 +194,17 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target s
 			return fmt.Errorf("schedule %s: %w", in, err)
 		}
 		if !sched.marked(in) {
+			ws := sched.plan.steps[in]
+			if ws == nil {
+				return fmt.Errorf("schedule %s no step for wait", in)
+			}
 			// If in is not marked (i.e. source), some step
 			// will generate it, so need to wait for it
 			// before running this step.
-			waits = append(waits, in)
+			waits[ws] = struct{}{}
 		}
 	}
-	sched.add(ctx, newStep, waits)
+	sched.add(ctx, newStep, outputs, waits)
 	return nil
 }
 
@@ -204,18 +217,23 @@ func newScheduler(ctx context.Context, opt schedulerOption) *scheduler {
 		path:   opt.Path,
 		hashFS: opt.HashFS,
 		plan: &plan{
-			m: make(map[string]bool),
+			m:     make(map[Target]bool),
+			steps: make(map[Target]*Step),
 			// preallocate capacity for performance optimization.
 			q:     make(chan *Step, 10000),
-			waits: make(map[string][]*Step),
+			waits: make(map[*Step][]*Step),
 		},
 		enableTrace: opt.EnableTrace,
 	}
 }
 
 // mark marks target (exec root relative) as source file.
-func (s *scheduler) mark(ctx context.Context, target string) error {
-	_, err := s.hashFS.Stat(ctx, s.path.ExecRoot, target)
+func (s *scheduler) mark(ctx context.Context, graph Graph, target Target) error {
+	fname, err := graph.TargetPath(target)
+	if err != nil {
+		return err
+	}
+	_, err = s.hashFS.Stat(ctx, s.path.ExecRoot, fname)
 	if err != nil {
 		return fmt.Errorf("missing source %q: %v", target, err)
 	}
@@ -224,7 +242,7 @@ func (s *scheduler) mark(ctx context.Context, target string) error {
 }
 
 // marked checks target is already marked.
-func (s *scheduler) marked(target string) bool {
+func (s *scheduler) marked(target Target) bool {
 	return s.plan.m[target]
 }
 
@@ -246,7 +264,7 @@ func (s *scheduler) finish(ctx context.Context, d time.Duration) {
 }
 
 // add adds new stepDef to run.
-func (s *scheduler) add(ctx context.Context, stepDef StepDef, waits []string) {
+func (s *scheduler) add(ctx context.Context, stepDef StepDef, outputs []Target, waits map[*Step]struct{}) *Step {
 	s.plan.mu.Lock()
 	defer s.plan.mu.Unlock()
 	defer func() {
@@ -259,9 +277,12 @@ func (s *scheduler) add(ctx context.Context, stepDef StepDef, waits []string) {
 		s.lastProgress = time.Now()
 	}()
 	s.total++
-	step := newStep(stepDef, waits)
-	if step.ReadyToRun("", "") {
-		clog.Infof(ctx, "step state: %s ready to run", step.String())
+	step := newStep(stepDef, len(waits))
+	for _, out := range outputs {
+		s.plan.steps[out] = step
+	}
+	if step.ReadyToRun(nil) {
+		clog.Infof(ctx, "step state: %s ready to run (waits: %d)", step.String(), len(waits))
 		select {
 		case s.plan.q <- step:
 		default:
@@ -269,13 +290,14 @@ func (s *scheduler) add(ctx context.Context, stepDef StepDef, waits []string) {
 			step.queueSize = len(s.plan.ready)
 			s.plan.ready = append(s.plan.ready, step)
 		}
-		return
+		return step
 	}
 	clog.Infof(ctx, "pending to run: %s (waits: %d)", step, step.NumWaits())
 	s.plan.npendings++
-	for _, w := range waits {
+	for w := range waits {
 		s.plan.waits[w] = append(s.plan.waits[w], step)
 	}
+	return step
 }
 
 type planStats struct {
@@ -340,44 +362,39 @@ func (p *plan) done(ctx context.Context, step *Step, outs []string) {
 	npendings := p.npendings
 	nready := 0
 	ready := make([]*Step, 0, len(outs))
-	for _, out := range outs {
-		if log.V(1) {
-			clog.Infof(ctx, "done %s", out)
-		}
-		i = 0
-		for _, s := range p.waits[out] {
-			if s.ReadyToRun(step.String(), out) {
-				p.npendings--
-				nready++
-				if log.V(1) {
-					clog.Infof(ctx, "step state: %s ready to run", s.String())
-				}
-				select {
-				case p.q <- s:
-				default:
-					s.queueTime = time.Now()
-					s.queueSize = len(ready)
-					ready = append(ready, s)
-				}
-				continue
+	i = 0
+	for _, s := range p.waits[step] {
+		if s.ReadyToRun(step) {
+			p.npendings--
+			nready++
+			if log.V(1) {
+				clog.Infof(ctx, "step state: %s ready to run", s.String())
 			}
-			p.waits[out][i] = s
-			i++
-		}
-		for j := i; j < len(p.waits[out]); j++ {
-			p.waits[out][j] = nil
-		}
-		if i == 0 {
-			delete(p.waits, out)
+			select {
+			case p.q <- s:
+			default:
+				s.queueTime = time.Now()
+				s.queueSize = len(ready)
+				ready = append(ready, s)
+			}
 			continue
 		}
-		p.waits[out] = p.waits[out][:i]
+		p.waits[step][i] = s
+		i++
+	}
+	for j := i; j < len(p.waits[step]); j++ {
+		p.waits[step][j] = nil
+	}
+	if i == 0 {
+		delete(p.waits, step)
+	} else {
+		p.waits[step] = p.waits[step][:i]
 	}
 	if log.V(1) {
 		if nready > 0 {
 			clog.Infof(ctx, "trigger %d. pendings %d -> %d", nready, npendings, p.npendings)
 		} else {
-			clog.Infof(ctx, "zero-trigger outs=%q", outs)
+			clog.Infof(ctx, "zero-trigger step=%q", step)
 		}
 	}
 	p.ready = append(p.ready, ready...)
@@ -395,7 +412,7 @@ func (p *plan) dump(ctx context.Context) {
 	clog.Infof(ctx, "closed=%t", p.closed)
 	var steps []*Step
 	seen := make(map[*Step]bool)
-	waits := make(map[string]bool)
+	waits := make(map[Target]bool)
 	ready := make([]string, 0, len(p.ready))
 	for _, s := range p.ready {
 		ready = append(ready, s.String())
@@ -414,17 +431,15 @@ func (p *plan) dump(ctx context.Context) {
 		}
 	}
 	for _, s := range steps {
-		for _, o := range s.def.Outputs() {
-			if !waits[o] {
-				clog.Infof(ctx, "step %s output:%s no trigger", s, o)
-				continue
-			}
-			delete(waits, o)
+		if !waits[s] {
+			clog.Infof(ctx, "step %s: no trigger", s)
+			continue
 		}
+		delete(waits, s)
 	}
 	outs := make([]string, 0, len(waits))
 	for k := range waits {
-		outs = append(outs, k)
+		outs = append(outs, fmt.Sprint(k))
 	}
 	sort.Strings(outs)
 	clog.Infof(ctx, "waits=%d no-trigger=%d", len(p.waits), len(outs))
