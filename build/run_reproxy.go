@@ -7,6 +7,7 @@ package build
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -19,6 +20,8 @@ import (
 	"infra/build/siso/execute/reproxyexec"
 	"infra/build/siso/o11y/clog"
 	"infra/build/siso/o11y/trace"
+	"infra/build/siso/toolsupport/gccutil"
+	"infra/build/siso/toolsupport/msvcutil"
 	ppb "infra/third_party/reclient/api/proxy"
 )
 
@@ -32,6 +35,10 @@ func (b *Builder) runReproxy(ctx context.Context, step *Step) error {
 	depsExpandInputs(ctx, b, step)
 	err := b.prepareLocalInputs(ctx, step)
 	if err != nil && !experiments.Enabled("ignore-missing-local-inputs", "step %s missing inputs: %v", step, err) {
+		return err
+	}
+	err = b.prepareLocalIncludeDirs(ctx, step)
+	if err != nil {
 		return err
 	}
 	err = b.prepareLocalOutdirs(ctx, step)
@@ -104,6 +111,64 @@ func allowWriteOutputs(ctx context.Context, cmd *execute.Cmd) error {
 				return err
 			}
 		}
+	}
+	return nil
+}
+
+// prepareLocalIncludeDirs make sure that the include directories in a compile command exist.
+// b/289175336 - In Reproxy mode, the same compile command ends up with different input trees
+// due to empty input directories. Those directories are created by generator actions,
+// but not always used by compile actions.
+// It's better to have the include directories regardless of timing.
+func (b *Builder) prepareLocalIncludeDirs(ctx context.Context, step *Step) error {
+	args := step.cmd.Args
+	cmdname := filepath.Base(args[0])
+	switch {
+	case strings.HasSuffix(cmdname, "clang"),
+		strings.HasSuffix(cmdname, "clang++"),
+		strings.HasSuffix(cmdname, "clang-cl"),
+		strings.HasSuffix(cmdname, "clang-cl.exe"),
+		strings.HasSuffix(cmdname, "gcc"),
+		strings.HasSuffix(cmdname, "g++"):
+	default:
+		if log.V(1) {
+			clog.Infof(ctx, "not compile command")
+		}
+		return nil
+	}
+
+	var err error
+	var dirs []string
+	switch step.cmd.Deps {
+	case "gcc":
+		_, dirs, _, _, err = gccutil.ScanDepsParams(ctx, args, nil)
+	case "msvc":
+		_, _, dirs, _, _, err = msvcutil.ScanDepsParams(ctx, args, nil)
+	default:
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("failed to parse compile commmand flags: %w", err)
+	}
+
+	seen := make(map[string]bool)
+	for _, dir := range dirs {
+		if seen[dir] {
+			continue
+		}
+		if !filepath.IsLocal(dir) {
+			// Do not touch source tree or system dirs outside the build dir.
+			return nil
+		}
+		d := b.path.MustFromWD(dir)
+		if _, err := b.hashFS.Stat(ctx, b.path.ExecRoot, d); errors.Is(err, fs.ErrNotExist) {
+			clog.Infof(ctx, "prepare include dir %s", dir)
+			err = b.hashFS.Mkdir(ctx, b.path.ExecRoot, d, nil)
+			if err != nil {
+				return fmt.Errorf("prepare include dir %s: %w", dir, err)
+			}
+		}
+		seen[dir] = true
 	}
 	return nil
 }
