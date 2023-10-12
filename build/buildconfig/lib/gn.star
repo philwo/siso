@@ -5,21 +5,6 @@
 load("@builtin//path.star", "path")
 load("@builtin//struct.star", "module")
 
-def __parse_args(gnargs):
-    lines = gnargs.splitlines()
-    args = {}
-    for line in lines:
-        line = line.strip()
-        if line.startswith("#"):
-            continue
-        s = line.partition("=")
-        if len(s) != 3:
-            continue
-        name = s[0].strip()
-        value = s[2].strip()
-        args[name] = value
-    return args
-
 # TODO(https://bugs.chromium.org/p/gn/issues/detail?id=346): use gn if possible.
 # similar with https://chromium.googlesource.com/chromium/tools/depot_tools/+/422ba5b9a58c764572478b2c3d948b35ef9c2811/autoninja.py#30
 def __load_args(ctx, fname, gnargs):
@@ -59,8 +44,5 @@ def __args(ctx):
 
 gn = module(
     "gn",
-    # deprecated. use args(ctx) to support import().
-    # TODO(b/303338337): remove parse_args.
-    parse_args = __parse_args,
     args = __args,
 )
