@@ -46,6 +46,11 @@ type StepDef struct {
 	globals *globals
 }
 
+type edgeRule struct {
+	edge                *ninjautil.Edge
+	replace, accumulate bool
+}
+
 func logFormat(e logging.Entry) string {
 	stepID := e.Labels["id"]
 	if e.HTTPRequest != nil {
@@ -82,72 +87,17 @@ func (g *Graph) newStepDef(ctx context.Context, edge *ninjautil.Edge, next build
 		pure:    pure,
 		globals: g.globals,
 	}
-	updateNodeAssoc(ctx, stepDef)
+	if pure {
+		er := &edgeRule{
+			edge:       edge,
+			replace:    rule.Replace,
+			accumulate: rule.Accumulate,
+		}
+		for _, out := range stepDef.Outputs() {
+			g.globals.edgeRules[out] = er
+		}
+	}
 	return stepDef
-}
-
-func updateNodeAssoc(ctx context.Context, stepDef *StepDef) {
-	outputs := stepDef.Outputs()
-	var solibs []string
-	for _, in := range edgeSolibs(stepDef.edge) {
-		in = stepDef.globals.path.MustFromWD(in)
-		solibs = append(solibs, in)
-	}
-	if len(solibs) > 0 {
-		if log.V(1) {
-			clog.Infof(ctx, "add solibs=%q to %q", solibs, outputs)
-		}
-		for _, out := range outputs {
-			stepDef.globals.accumulates[out] = append(stepDef.globals.accumulates[out], solibs...)
-		}
-	}
-	if len(outputs) > 0 {
-		// associates additional outputs to main output.
-		// so step depends on the main output of this step can access
-		// additional outputs of this step (in local run).
-		out := outputs[0]
-		stepDef.globals.accumulates[out] = append(stepDef.globals.accumulates[out], outputs[1:]...)
-	}
-	if stepDef.IsPhony() {
-		seen := make(map[string]bool)
-		var inputs []string
-		for _, in := range stepDef.edge.Inputs() {
-			p := stepDef.globals.path.MustFromWD(in.Path())
-			if seen[p] {
-				continue
-			}
-			seen[p] = true
-			inputs = append(inputs, p)
-		}
-		for _, out := range outputs {
-			stepDef.globals.replaces[out] = inputs
-		}
-	}
-	if !stepDef.pure {
-		return
-	}
-	var inputs []string
-	if stepDef.rule.Replace || stepDef.rule.Accumulate {
-		seen := make(map[string]bool)
-		for _, in := range stepDef.edge.Inputs() {
-			p := stepDef.globals.path.MustFromWD(in.Path())
-			if seen[p] {
-				continue
-			}
-			seen[p] = true
-			inputs = append(inputs, p)
-		}
-	}
-	if stepDef.rule.Replace {
-		for _, out := range outputs {
-			stepDef.globals.replaces[out] = inputs
-		}
-	}
-	if stepDef.rule.Accumulate {
-		for _, out := range outputs {
-			stepDef.globals.accumulates[out] = append(stepDef.globals.accumulates[out], inputs...)
-		}
-	}
 }
 
 // String returns step id.
@@ -315,9 +265,9 @@ func (s *StepDef) Inputs(ctx context.Context) []string {
 	defer span.Close(nil)
 	seen := make(map[string]bool)
 	var targets []string
+	globals := s.globals
 	for _, in := range s.edge.Inputs() {
-		p := in.Path()
-		p = s.globals.path.MustFromWD(p)
+		p := globals.targetPath(in)
 		if seen[p] {
 			continue
 		}
@@ -326,7 +276,7 @@ func (s *StepDef) Inputs(ctx context.Context) []string {
 	}
 	for _, p := range edgeSolibs(s.edge) {
 		clog.Infof(ctx, "solib %s", p)
-		p = s.globals.path.MustFromWD(p)
+		p := globals.path.MustFromWD(p)
 		if seen[p] {
 			continue
 		}
@@ -345,9 +295,9 @@ func (s *StepDef) Inputs(ctx context.Context) []string {
 func (s *StepDef) TriggerInputs(ctx context.Context) ([]string, error) {
 	seen := make(map[string]bool)
 	var targets []string
+	globals := s.globals
 	for _, in := range s.edge.TriggerInputs() {
-		p := in.Path()
-		p = s.globals.path.MustFromWD(p)
+		p := globals.targetPath(in)
 		if seen[p] {
 			continue
 		}
@@ -605,9 +555,9 @@ func (s *StepDef) ExpandedInputs(ctx context.Context) []string {
 	// keep Inputs as is, and expand them when calculating digest ?
 	seen := make(map[string]bool)
 	var inputs []string
+	globals := s.globals
 	for _, in := range s.edge.Inputs() {
-		p := in.Path()
-		p = s.globals.path.MustFromWD(p)
+		p := globals.targetPath(in)
 		if seen[p] {
 			continue
 		}
@@ -618,7 +568,7 @@ func (s *StepDef) ExpandedInputs(ctx context.Context) []string {
 		inputs = append(inputs, p)
 	}
 	for _, p := range edgeSolibs(s.edge) {
-		p = s.globals.path.MustFromWD(p)
+		p = globals.path.MustFromWD(p)
 		if seen[p] {
 			continue
 		}
@@ -658,48 +608,68 @@ func (s *StepDef) ExpandedInputs(ctx context.Context) []string {
 		// and need to expand inputs for toolchain input etc.
 	}
 
-	inputs = s.globals.stepConfig.ExpandInputs(ctx, s.globals.path, s.globals.hashFS, inputs)
+	inputs = globals.stepConfig.ExpandInputs(ctx, globals.path, globals.hashFS, inputs)
 	var newInputs []string
 	changed := false
 	for i := 0; i < len(inputs); i++ {
-		ins, ok := s.globals.replaces[inputs[i]]
-		if ok {
+		er, ok := globals.edgeRules[inputs[i]]
+		if !ok {
+			newInputs = append(newInputs, inputs[i])
+			continue
+		}
+		var ins []string
+		for _, in := range er.edge.Inputs() {
+			p := globals.targetPath(in)
+			if seen[p] {
+				continue
+			}
+			seen[p] = true
+			ins = append(ins, p)
+		}
+		if er.edge.IsPhony() || er.replace {
 			if s.rule.Debug {
-				clog.Infof(ctx, "replace %s", inputs[i])
+				clog.Infof(ctx, "replace %q -> %q", inputs[i], ins)
 			}
-			for _, in := range ins {
-				if seen[in] {
-					continue
-				}
-				seen[in] = true
-				if s.rule.Debug {
-					clog.Infof(ctx, "replace %s -> %s", inputs[i], in)
-				}
-				inputs = append(inputs, in)
+			newInputs = append(newInputs, ins...)
+			if !changed && len(ins) > 0 {
+				changed = true
 			}
-			changed = true
 			continue
 		}
 		newInputs = append(newInputs, inputs[i])
-		ins, ok = s.globals.accumulates[inputs[i]]
-		if ok {
-			if s.rule.Debug {
-				clog.Infof(ctx, "accumulate %s", inputs[i])
+		if !er.accumulate {
+			continue
+		}
+		for _, in := range edgeSolibs(er.edge) {
+			in = globals.path.MustFromWD(in)
+			if seen[in] {
+				continue
 			}
-			for _, in := range ins {
-				if seen[in] {
+			seen[in] = true
+			ins = append(ins, in)
+		}
+		edgeOuts := er.edge.Outputs()
+		if inputs[i] == globals.targetPath(edgeOuts[0]) {
+			// associates additional outputs to main output.
+			// so step depends on the main output of this step can access
+			// additional outputs of this step (in local run).
+			for _, out := range edgeOuts[1:] {
+				o := globals.targetPath(out)
+				if seen[o] {
 					continue
 				}
-				seen[in] = true
-				if s.rule.Debug {
-					clog.Infof(ctx, "accumulate %s -> %s", inputs[i], in)
-				}
-				inputs = append(inputs, in)
+				seen[o] = true
+				ins = append(ins, o)
 			}
+		}
+		inputs = append(inputs, ins...)
+		if s.rule.Debug {
+			clog.Infof(ctx, "accumulate %q -> %q", inputs[i], ins)
+		}
+		if !changed && len(ins) > 0 {
 			changed = true
 		}
 	}
-
 	newInputs = fixInputs(ctx, s, newInputs, s.rule.ExcludeInputPatterns)
 	if changed {
 		inputs = make([]string, len(newInputs))
@@ -714,10 +684,10 @@ func (s *StepDef) ExpandedInputs(ctx context.Context) []string {
 // appendIndirectInputs appends indirect inputs edge into inputs that matches with filter function, and updates seen.
 func (s *StepDef) appendIndirectInputs(ctx context.Context, filter func(context.Context, string, bool) bool, edge *ninjautil.Edge, inputs []string, seen map[string]bool) []string {
 	edgeName := edge.Rule().Name()
+	globals := s.globals
 	// allow to use outputs of the edge.
 	for _, out := range edge.Outputs() {
-		p := out.Path()
-		p = s.globals.path.MustFromWD(p)
+		p := globals.targetPath(out)
 		if seen[p] {
 			continue
 		}
@@ -735,8 +705,7 @@ func (s *StepDef) appendIndirectInputs(ctx context.Context, filter func(context.
 	}
 	var nextEdges []*ninjautil.Edge
 	for _, in := range edge.Inputs() {
-		p := in.Path()
-		p = s.globals.path.MustFromWD(p)
+		p := globals.targetPath(in)
 		if seen[p] {
 			continue
 		}
@@ -793,9 +762,9 @@ func (s *StepDef) Handle(ctx context.Context, cmd *execute.Cmd) error {
 func (s *StepDef) Outputs() []string {
 	seen := make(map[string]bool)
 	var targets []string
+	globals := s.globals
 	for _, out := range s.edge.Outputs() {
-		p := out.Path()
-		p = s.globals.path.MustFromWD(p)
+		p := globals.targetPath(out)
 		if seen[p] {
 			continue
 		}

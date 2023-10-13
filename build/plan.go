@@ -33,19 +33,24 @@ var (
 	ErrMissingDeps = errors.New("missing deps in depfile/depslog")
 )
 
+// Target is a build target used in Graph.
+// it must be comparable type to be used for map key.
+type Target any
+
 // Graph provides a build graph, i.e. step definitions.
 type Graph interface {
 	// Targets returns target paths for given args.
-	// Targets are exec-root relative.
-	Targets(context.Context, ...string) ([]string, error)
+	Targets(context.Context, ...string) ([]Target, error)
 
-	// StepDef creates new StepDef for the target and its inputs.
-	// Target and inputs should be exec-root relative.
+	// TargetPath returns exec-root relative path of target.
+	TargetPath(Target) (string, error)
+
+	// StepDef creates new StepDef for the target and its inputs targets.
 	// if err is ErrTargetIsSource, target is source and no step to
 	// generate the target.
 	// if err is ErrDuplicateStep, a step that geneartes the target
 	// is already processed.
-	StepDef(context.Context, string, StepDef) (StepDef, []string, error)
+	StepDef(context.Context, Target, StepDef) (StepDef, []Target, error)
 
 	// InputDeps returns input dependencies.
 	// input dependencies is a map from input path or label to
@@ -62,7 +67,7 @@ type Graph interface {
 // plan maintains which step to execute next.
 type plan struct {
 	// marked source target
-	m map[string]bool
+	m map[Target]bool
 
 	mu        sync.Mutex
 	q         chan *Step
@@ -114,7 +119,7 @@ func schedule(ctx context.Context, sched *scheduler, graph Graph, args ...string
 }
 
 // scheduleTarget schedules a build plan for target, which is required to next StepDef, from graph into sched.
-func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target string, next StepDef) error {
+func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target Target, next StepDef) error {
 	if sched.marked(target) {
 		if log.V(1) {
 			clog.Infof(ctx, "sched target already marked: %s", target)
@@ -137,7 +142,7 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target s
 		if log.V(1) {
 			clog.Infof(ctx, "sched target is source? %s", target)
 		}
-		return sched.mark(ctx, target)
+		return sched.mark(ctx, graph, target)
 	case errors.Is(err, ErrDuplicateStep):
 		// this step is already processed.
 		if log.V(1) {
@@ -150,7 +155,7 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target s
 		}
 		return err
 	}
-	clog.Infof(ctx, "schedule %s", newStep)
+	clog.Infof(ctx, "schedule %s inputs:%d", newStep, len(inputs))
 	sched.visited++
 	next = newStep
 	select {
@@ -159,7 +164,7 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target s
 	default:
 	}
 	// to suppress duplicates
-	m := make(map[string]bool)
+	m := make(map[Target]bool)
 
 	// we might not need to use depfile's dependencies to construct
 	// build graph.
@@ -185,10 +190,14 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target s
 			return fmt.Errorf("schedule %s: %w", in, err)
 		}
 		if !sched.marked(in) {
+			inpath, err := graph.TargetPath(in)
+			if err != nil {
+				return fmt.Errorf("schedule %s: targetPath: %w", in, err)
+			}
 			// If in is not marked (i.e. source), some step
 			// will generate it, so need to wait for it
 			// before running this step.
-			waits = append(waits, in)
+			waits = append(waits, inpath)
 		}
 	}
 	sched.add(ctx, newStep, waits)
@@ -204,7 +213,7 @@ func newScheduler(ctx context.Context, opt schedulerOption) *scheduler {
 		path:   opt.Path,
 		hashFS: opt.HashFS,
 		plan: &plan{
-			m: make(map[string]bool),
+			m: make(map[Target]bool),
 			// preallocate capacity for performance optimization.
 			q:     make(chan *Step, 10000),
 			waits: make(map[string][]*Step),
@@ -214,8 +223,12 @@ func newScheduler(ctx context.Context, opt schedulerOption) *scheduler {
 }
 
 // mark marks target (exec root relative) as source file.
-func (s *scheduler) mark(ctx context.Context, target string) error {
-	_, err := s.hashFS.Stat(ctx, s.path.ExecRoot, target)
+func (s *scheduler) mark(ctx context.Context, graph Graph, target Target) error {
+	fname, err := graph.TargetPath(target)
+	if err != nil {
+		return err
+	}
+	_, err = s.hashFS.Stat(ctx, s.path.ExecRoot, fname)
 	if err != nil {
 		return fmt.Errorf("missing source %q: %v", target, err)
 	}
@@ -224,7 +237,7 @@ func (s *scheduler) mark(ctx context.Context, target string) error {
 }
 
 // marked checks target is already marked.
-func (s *scheduler) marked(target string) bool {
+func (s *scheduler) marked(target Target) bool {
 	return s.plan.m[target]
 }
 
