@@ -25,10 +25,10 @@ import (
 	ppb "infra/third_party/reclient/api/proxy"
 )
 
-func (b *Builder) runReproxy(ctx context.Context, step *Step) error {
-	ctx, span := trace.NewSpan(ctx, "run-reproxy")
+func (b *Builder) execReproxy(ctx context.Context, step *Step) error {
+	ctx, span := trace.NewSpan(ctx, "exec-reproxy")
 	defer span.Close(nil)
-	clog.Infof(ctx, "run reproxy %s", step.cmd.Desc)
+	clog.Infof(ctx, "exec reproxy %s", step.cmd.Desc)
 	step.setPhase(stepInput)
 	// expand inputs to get full action inputs,
 	// before preparing inputs on local disk for reproxy.
@@ -79,13 +79,13 @@ func (b *Builder) runReproxy(ctx context.Context, step *Step) error {
 		return err
 	})
 	if err != nil {
-		return err
+		return fmt.Errorf("reproxy error: %w", err)
 	}
 	// TODO(b/273407069): this won't be useful until we add code to specifically handle the deps log that reproxy returns.
 	if err = b.updateDeps(ctx, step); err != nil {
 		clog.Warningf(ctx, "failed to update deps: %v", err)
 	}
-	return err
+	return b.outputs(ctx, step)
 }
 
 // allowWriteOutputs fixes the permissions of the output files if they are not writable.

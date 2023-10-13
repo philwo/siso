@@ -22,10 +22,10 @@ import (
 	"infra/build/siso/o11y/trace"
 )
 
-func (b *Builder) runLocal(ctx context.Context, step *Step) error {
-	ctx, span := trace.NewSpan(ctx, "run-local")
+func (b *Builder) execLocal(ctx context.Context, step *Step) error {
+	ctx, span := trace.NewSpan(ctx, "exec-local")
 	defer span.Close(nil)
-	clog.Infof(ctx, "run local %s", step.cmd.Desc)
+	clog.Infof(ctx, "exec local %s", step.cmd.Desc)
 	step.cmd.RemoteWrapper = ""
 
 	step.setPhase(stepInput)
@@ -122,7 +122,7 @@ func (b *Builder) runLocal(ctx context.Context, step *Step) error {
 	if err != nil {
 		return err
 	}
-	return nil
+	return b.outputs(ctx, step)
 }
 
 func (b *Builder) prepareLocalInputs(ctx context.Context, step *Step) error {

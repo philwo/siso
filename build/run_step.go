@@ -127,21 +127,20 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 		b.teardownRSP(ctx, step)
 	}()
 
-	if fastStep, ok := fastDepsCmd(ctx, b, step); ok {
-		ok, err := b.tryFastStep(ctx, step, fastStep)
-		if ok {
-			return err
-		}
-	}
-	step.setPhase(stepPreproc)
-	b.preprocSema.Do(ctx, func(ctx context.Context) error {
-		preprocCmd(ctx, b, step)
-		return nil
-	})
-	err = b.runCmdWithCache(ctx, step, true)
+	runCmd := b.runStrategy(ctx, step)
+	err = runCmd(ctx, step)
 	clog.Infof(ctx, "done err=%v", err)
 	if err != nil {
-		if !errors.Is(err, context.Canceled) {
+		switch {
+		case errors.Is(err, context.Canceled):
+			// do nothing
+		case errors.Is(err, reapi.ErrBadPlatformContainerImage):
+			// RBE returns permission denied when
+			// platform container image are not available
+			// on RBE worker.
+			msgs := cmdOutput(ctx, "FAILED[badContainer]:", step.cmd, step.def.Binding("command"), step.def.RuleName(), err)
+			b.logOutput(ctx, msgs, step.cmd.Console)
+		default:
 			msgs := cmdOutput(ctx, "FAILED:", step.cmd, step.def.Binding("command"), step.def.RuleName(), err)
 			b.logOutput(ctx, msgs, step.cmd.Console)
 		}
@@ -177,44 +176,6 @@ func (b *Builder) handleStep(ctx context.Context, step *Step) (bool, error) {
 		step.metrics.NoExec = true
 	}
 	return exited, nil
-}
-
-func (b *Builder) tryFastStep(ctx context.Context, step, fastStep *Step) (bool, error) {
-	// allow local run if remote exec is not set.
-	// i.e. don't run local fallback due to remote exec failure
-	// because it might be bad fast-deps.
-	fctx, fastSpan := trace.NewSpan(ctx, "fast-deps-run")
-	err := b.runCmdWithCache(fctx, fastStep, b.remoteExec == nil)
-	fastSpan.Close(nil)
-	if err == nil {
-		step.metrics = fastStep.metrics
-		step.metrics.DepsLog = true
-		msgs := cmdOutput(ctx, "SUCCESS:", fastStep.cmd, step.def.Binding("command"), step.def.RuleName(), nil)
-		clog.Infof(ctx, "fast done err=%v", err)
-		if len(msgs) > 0 {
-			b.logOutput(ctx, msgs, step.cmd.Console)
-			if experiments.Enabled("fail-on-stdouterr", "step %s emit stdout/stderr", step) {
-				return true, fmt.Errorf("%s emit stdout/stderr", step)
-			}
-		}
-		return true, b.done(ctx, fastStep)
-	}
-	if errors.Is(err, context.Canceled) {
-		return true, err
-	}
-	if errors.Is(err, reapi.ErrBadPlatformContainerImage) {
-		// RBE returns permission denied when
-		// platform container image are not available
-		// on RBE worker.
-		msgs := cmdOutput(ctx, "FAILED[badContainer]:", fastStep.cmd, step.def.Binding("command"), fastStep.def.RuleName(), err)
-		b.logOutput(ctx, msgs, step.cmd.Console)
-		return true, err
-	}
-	step.metrics.DepsLogErr = true
-	if experiments.Enabled("no-fast-deps-fallback", "fast-deps %s failed", step) {
-		return true, fmt.Errorf("fast-deps failed: %w", err)
-	}
-	return false, nil
 }
 
 // cmdOutput returns cmd ouptut log (result, id, desc, err, action, output, args, stdout, stderr).

@@ -6,71 +6,13 @@ package build
 
 import (
 	"context"
-	"errors"
-	"fmt"
-	"time"
 
 	log "github.com/golang/glog"
 
 	"infra/build/siso/o11y/clog"
-	"infra/build/siso/o11y/trace"
-	"infra/build/siso/reapi"
 )
 
-// runCmdWithCache checks and returns the ActionResult cache,
-// or runs the command if the cache doesn't exist.
-func (b *Builder) runCmdWithCache(ctx context.Context, step *Step, allowLocalFallback bool) error {
-	dedupInputs(ctx, step.cmd)
-	if b.cache != nil && step.cmd.Pure && b.reCacheEnableRead && !step.useReclient() {
-		err := b.cacheSema.Do(ctx, func(ctx context.Context) error {
-			start := time.Now()
-			step.metrics.ActionStartTime = IntervalMetric(start.Sub(b.start))
-			err := b.cache.GetActionResult(ctx, step.cmd)
-			if err != nil {
-				return err
-			}
-			err = b.outputs(ctx, step)
-			if err != nil {
-				return err
-			}
-			b.progressStepCacheHit(ctx, step)
-			step.metrics.RunTime = IntervalMetric(time.Since(start))
-			step.metrics.done(ctx, step)
-			step.metrics.Cached = true
-			// need to update deps for cache hit for deps=gcc, msvc.
-			// even if cache hit, deps should be updated with gcc depsfile,
-			// or with msvc showIncludes outputs.
-			err = b.updateDeps(ctx, step)
-			if err != nil {
-				clog.Warningf(ctx, "failed to update deps %s: %v", step, err)
-			}
-			return nil
-		})
-		if err == nil {
-			return nil
-		}
-		clog.Infof(ctx, "cmd cache miss: %v", err)
-	}
-	err := b.runCmd(ctx, step, allowLocalFallback)
-	if err != nil {
-		if !allowLocalFallback {
-			clog.Warningf(ctx, "step fail->!localFallback")
-			return fmt.Errorf("run for %s [no allowLocalFallback]: %w", step, err)
-		}
-		return fmt.Errorf("run for %s: %w", step, err)
-	}
-	// TODO(b/266518906): enable reCacheEnableWrite option for read-only client.
-	return b.outputs(ctx, step)
-}
-
-// runCmd runs the command remotely if step is remote executable and remoteexec is configured,
-// or locally if step is not remote executable, remoteexec is not configured or failed and allowLocalFallback is true.
-func (b *Builder) runCmd(ctx context.Context, step *Step, allowLocalFallback bool) error {
-	ctx, span := trace.NewSpan(ctx, "run")
-	defer span.Close(nil)
-	if log.V(1) {
-		clog.Infof(ctx, "run %s [allow-localfallback=%t]", step.cmd.Desc, allowLocalFallback)
-	}
+func (b *Builder) runStrategy(ctx context.Context, step *Step) func(context.Context, *Step) error {
 	// Criteria for remote executable:
 	// - Allow remote if available and command has platform container-image property.
 	// - Allow reproxy if available and command has reproxy config set.
@@ -78,47 +20,51 @@ func (b *Builder) runCmd(ctx context.Context, step *Step, allowLocalFallback boo
 	// Any further validation should be done in the exec handler, not here.
 	allowRemote := b.remoteExec != nil && len(step.cmd.Platform) > 0 && step.cmd.Platform["container-image"] != ""
 	allowREProxy := b.reproxyExec.Enabled() && step.cmd.REProxyConfig != nil
-	if step.cmd.Pure && (allowRemote || allowREProxy) {
-		var err error
-		if allowREProxy {
-			err = b.runReproxy(ctx, step)
-		} else {
-			err = b.runRemote(ctx, step)
-		}
-		if err == nil {
-			// need to check remote outptus matches cmd.Outputs?
-			return nil
-		}
-		if errors.Is(err, context.Canceled) {
-			return err
-		}
-		if errors.Is(err, reapi.ErrBadPlatformContainerImage) {
-			return err
-		}
-		if allowREProxy {
-			// TODO: b/297807325 - Siso relies on Reproxy's local fallback for
-			// monitoring at this moment. So, Siso shouldn't try local fallback.
-			return fmt.Errorf("reproxy error: %w", err)
-		}
-		if !allowLocalFallback {
-			return fmt.Errorf("no allow-localfallback: %w", err)
-		}
-		if errors.Is(err, errNotRelocatable) {
-			clog.Errorf(ctx, "not relocatable: %v", err)
-			return err
-		}
-		if experiments.Enabled("no-fallback", "remote-exec %s failed. no-fallback", step) {
-			return fmt.Errorf("remote-exec %s failed no-fallback: %w", step.cmd.ActionDigest(), err)
-		}
-		if allowLocalFallback {
-			step.metrics.IsRemote = false
-			step.metrics.Fallback = true
-		}
-		msgs := cmdOutput(ctx, "FALLBACK", step.cmd, step.def.Binding("command"), step.def.RuleName(), err)
-		b.logOutput(ctx, msgs, false)
+	switch {
+	case step.cmd.Pure && allowREProxy:
+		return b.runReproxy
+	case step.cmd.Pure && allowRemote:
+		return b.runRemote
+	default:
+		return b.runLocal
 	}
-	if !allowLocalFallback {
-		return errors.New("no allow-localfallback")
+}
+
+func (b *Builder) runReproxy(ctx context.Context, step *Step) error {
+	dedupInputs(ctx, step.cmd)
+	// no need to scan deps.
+	// but need to remove missing inputs from cmd.Inputs
+	// because we'll record header inputs for deps=msvc in deps log.
+	inputs := make([]string, 0, len(step.cmd.Inputs))
+	for _, in := range step.cmd.Inputs {
+		if _, err := b.hashFS.Stat(ctx, b.path.ExecRoot, in); err == nil {
+			inputs = append(inputs, in)
+		} else if log.V(1) {
+			clog.Infof(ctx, "remove missing inputs %s: %v", in, err)
+		}
 	}
-	return b.runLocal(ctx, step)
+	if len(inputs) != len(step.cmd.Inputs) {
+		clog.Infof(ctx, "deps remove missing inputs %d -> %d", len(step.cmd.Inputs), len(inputs))
+		step.cmd.Inputs = inputs
+	}
+	// TODO: b/297807325 - Siso relies on Reproxy's local fallback for
+	// monitoring at this moment. So, Siso shouldn't try local fallback.
+	return b.execReproxy(ctx, step)
+}
+
+func (b *Builder) runLocal(ctx context.Context, step *Step) error {
+	step.setPhase(stepPreproc)
+	// preprocess to list up all inputs, so we can flush
+	// these inputs before local execution.
+	// TODO: we always flush *.h etc, so do we need this?
+	err := b.preprocSema.Do(ctx, func(ctx context.Context) error {
+		preprocCmd(ctx, b, step)
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	dedupInputs(ctx, step.cmd)
+	// TODO: use local cache?
+	return b.execLocal(ctx, step)
 }
