@@ -53,9 +53,6 @@ import (
 	"infra/build/siso/ui"
 )
 
-// File name of ninja log.
-const ninjaLogName = ".ninja_log"
-
 // Cmd returns the Command for the `ninja` subcommand provided by this package.
 func Cmd(authOpts cred.Options) *subcommands.Command {
 	return &subcommands.Command{
@@ -615,8 +612,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		c.buildPprof = filepath.Join(c.logDir, c.buildPprof)
 	}
 
-	// TODO(b/288826281): produce ninja log in the valid format.
-	ninjaLogWriter, err := os.OpenFile(ninjaLogName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	ninjaLogWriter, err := ninjautil.OpenNinjaLog(ctx)
 	if err != nil {
 		return stats, err
 	}

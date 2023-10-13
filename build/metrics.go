@@ -67,7 +67,7 @@ type StepMetric struct {
 	// It includes siso-overhead (preproc etc) and command executon
 	// (RunTime).
 	// for full build metric, it's duration to process all scheduled steps.
-	Duration IntervalMetric `json:"duration"`
+	Duration IntervalMetric `json:"duration,omitempty"`
 
 	// WeightedDuration is an estimate of the "true duration" of the action
 	// that tries to accommodate for the impact of other actions running in
@@ -113,6 +113,9 @@ type StepMetric struct {
 	// the process until the process exited.
 	// TODO: set in reproxy mode too
 	ExecTime IntervalMetric `json:"exec,omitempty"`
+	// ActionEndTime is the time it took since build start until
+	// the action completes the execution.
+	ActionEndTime IntervalMetric `json:"action_end,omitempty"`
 
 	Inputs  int `json:"inputs,omitempty"`  // how many input files.
 	Outputs int `json:"outputs,omitempty"` // how many output files.

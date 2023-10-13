@@ -41,6 +41,7 @@ import (
 	"infra/build/siso/reapi"
 	"infra/build/siso/scandeps"
 	"infra/build/siso/sync/semaphore"
+	"infra/build/siso/toolsupport/ninjautil"
 	"infra/build/siso/ui"
 )
 
@@ -167,11 +168,12 @@ type Builder struct {
 	cacheSema *semaphore.Semaphore
 	cache     *Cache
 
-	failureSummaryWriter io.Writer
-	outputLogWriter      io.Writer
 	explainWriter        io.Writer
+	failureSummaryWriter io.Writer
 	localexecLogWriter   io.Writer
 	metricsJSONWriter    io.Writer
+	ninjaLogWriter       io.Writer
+	outputLogWriter      io.Writer
 	traceExporter        *trace.Exporter
 	traceEvents          *traceEvents
 	traceStats           *traceStats
@@ -211,6 +213,10 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 	mw := opts.MetricsJSONWriter
 	if mw == nil {
 		mw = io.Discard
+	}
+	nw := opts.NinjaLogWriter
+	if nw == nil {
+		nw = io.Discard
 	}
 
 	if err := opts.Path.Check(); err != nil {
@@ -280,6 +286,7 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 		explainWriter:        ew,
 		localexecLogWriter:   lelw,
 		metricsJSONWriter:    mw,
+		ninjaLogWriter:       nw,
 		traceExporter:        opts.TraceExporter,
 		traceEvents:          newTraceEvents(opts.TraceJSON, opts.Metadata),
 		traceStats:           newTraceStats(),
@@ -629,8 +636,10 @@ loop:
 				//
 				//     jq --slurp 'sort_by(.duration) | reverse | .[] | select(.cached==false)'
 				step.metrics.Duration = IntervalMetric(duration)
+				step.metrics.ActionEndTime = IntervalMetric(step.startTime.Add(duration).Sub(b.start))
 				step.metrics.Err = err != nil
 				b.recordMetrics(ctx, step.metrics)
+				b.recordNinjaLogs(ctx, step)
 			}
 			b.stats.update(ctx, &step.metrics, step.def.IsPhony() || step.cmd.Pure)
 			select {
@@ -697,6 +706,16 @@ func (b *Builder) recordMetrics(ctx context.Context, m StepMetric) {
 		return
 	}
 	fmt.Fprintf(b.metricsJSONWriter, "%s\n", mb)
+}
+
+func (b *Builder) recordNinjaLogs(ctx context.Context, s *Step) {
+	start := time.Duration(s.metrics.ActionStartTime).Milliseconds()
+	end := time.Duration(s.metrics.ActionEndTime).Milliseconds()
+	// TODO: b/298594790 - Use the same mtime with hashFS.
+	// end time = start time + duration
+	mtime := s.startTime.Add(time.Duration(s.metrics.Duration))
+
+	ninjautil.WriteNinjaLogEntries(ctx, b.ninjaLogWriter, start, end, mtime, s.cmd.Outputs, s.cmd.Args)
 }
 
 // stepLogEntry logs step in parent access log of the step.
