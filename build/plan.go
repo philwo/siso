@@ -331,7 +331,8 @@ func (p *plan) hasReady() bool {
 	return len(p.q) > 0 || len(p.ready) > 0
 }
 
-func (p *plan) done(ctx context.Context, step *Step, outs []string) {
+func (p *plan) done(ctx context.Context, step *Step) {
+	outs := step.def.Outputs()
 	p.mu.Lock()
 	defer p.mu.Unlock()
 

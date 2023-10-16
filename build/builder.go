@@ -933,55 +933,6 @@ func (b *Builder) updateDeps(ctx context.Context, step *Step) error {
 	return nil
 }
 
-func (b *Builder) phonyDone(ctx context.Context, step *Step) error {
-	if log.V(1) {
-		clog.Infof(ctx, "step phony %s", step)
-	}
-	b.plan.done(ctx, step, step.def.Outputs())
-	return nil
-}
-
-func (b *Builder) done(ctx context.Context, step *Step) error {
-	ctx, span := trace.NewSpan(ctx, "done")
-	defer span.Close(nil)
-	var outputs []string
-	defOutputs := step.def.Outputs()
-	for _, out := range step.cmd.Outputs {
-		out := out
-		var mtime time.Time
-		if log.V(1) {
-			clog.Infof(ctx, "output -> %s", out)
-		}
-		fi, err := b.hashFS.Stat(ctx, step.cmd.ExecRoot, out)
-		if err != nil {
-			reqOut := false
-			for _, o := range defOutputs {
-				if out == o {
-					reqOut = true
-					break
-				}
-			}
-			if !reqOut {
-				clog.Warningf(ctx, "missing output %s: %v", out, err)
-				continue
-			}
-			if !b.dryRun {
-				return fmt.Errorf("output %s for %s: %w", out, step, err)
-			}
-			continue
-		}
-		if !fi.ModTime().IsZero() {
-			mtime = fi.ModTime()
-		}
-		if log.V(1) {
-			clog.Infof(ctx, "become ready: %s %s", out, mtime)
-		}
-		outputs = append(outputs, out)
-	}
-	b.plan.done(ctx, step, outputs)
-	return nil
-}
-
 func (b *Builder) finalizeTrace(ctx context.Context, tc *trace.Context) {
 	b.traceEvents.Add(ctx, tc)
 	b.traceStats.update(ctx, tc)

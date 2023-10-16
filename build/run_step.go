@@ -67,7 +67,8 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 	// defer some initialization after mtimeCheck?
 	if step.def.IsPhony() {
 		step.metrics.skip = true
-		return b.phonyDone(ctx, step)
+		b.plan.done(ctx, step)
+		return nil
 	}
 
 	step.init(ctx, b)
@@ -77,7 +78,8 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 	skip := b.checkUpToDate(ctx, step)
 	if skip {
 		step.metrics.skip = true
-		return b.done(ctx, step)
+		b.plan.done(ctx, step)
+		return nil
 	}
 
 	if b.dryRun {
@@ -87,7 +89,8 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 		default:
 		}
 		fmt.Printf("%s\n", step.def.Binding("command"))
-		return b.done(ctx, step)
+		b.plan.done(ctx, step)
+		return nil
 	}
 
 	b.progressStepStarted(ctx, step)
@@ -108,7 +111,8 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 		clog.Infof(ctx, "outputs[handler] %d", len(step.cmd.Outputs))
 		err = b.hashFS.Flush(ctx, step.cmd.ExecRoot, step.cmd.Outputs)
 		if err == nil {
-			return b.done(ctx, step)
+			b.plan.done(ctx, step)
+			return nil
 		}
 		clog.Warningf(ctx, "handle step failure: %v", err)
 	}
@@ -157,7 +161,8 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 			return fmt.Errorf("%s emit stdout/stderr", step)
 		}
 	}
-	return b.done(ctx, step)
+	b.plan.done(ctx, step)
+	return nil
 }
 
 func (b *Builder) handleStep(ctx context.Context, step *Step) (bool, error) {
