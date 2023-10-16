@@ -238,9 +238,22 @@ func (s *StepDef) Binding(name string) string {
 	return s.edge.Binding(name)
 }
 
-// UnescapedBinding returns unescaped binding.
-func (s *StepDef) UnescapedBinding(name string) string {
-	return s.edge.UnescapedBinding(name)
+// Depfile returns exec-root relative depfile path or empty if not set.
+func (s *StepDef) Depfile() string {
+	depfile := s.edge.UnescapedBinding("depfile")
+	if depfile == "" {
+		return ""
+	}
+	return s.globals.path.MustFromWD(depfile)
+}
+
+// Rspfile returns exec-root relative rspfile path or empty if not set.
+func (s *StepDef) Rspfile() string {
+	rspfile := s.edge.UnescapedBinding("rspfile")
+	if rspfile == "" {
+		return ""
+	}
+	return s.globals.path.MustFromWD(rspfile)
 }
 
 func edgeSolibs(edge *ninjautil.Edge) []string {

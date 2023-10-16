@@ -37,9 +37,8 @@ func (f fakeStepDef) Binding(b string) string {
 	return ""
 }
 
-func (f fakeStepDef) UnescapedBinding(b string) string {
-	return f.Binding(b)
-}
+func (f fakeStepDef) Depfile() string { return "" }
+func (f fakeStepDef) Rspfile() string { return "" }
 
 func (fakeStepDef) Inputs(context.Context) []string                 { return nil }
 func (fakeStepDef) TriggerInputs(context.Context) ([]string, error) { return nil, nil }

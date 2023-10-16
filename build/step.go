@@ -46,8 +46,11 @@ type StepDef interface {
 	// Binding returns binding value.
 	Binding(string) string
 
-	// UnescapedBinding returns unescaped binding value.
-	UnescapedBinding(string) string
+	// Depfile returns exec-root relative depfile path, or empty if not set.
+	Depfile() string
+
+	// Rspfile returns exec-root relative rspfile path, or empty if not set.
+	Rspfile() string
 
 	// Inputs returns inputs of the step.
 	Inputs(context.Context) []string
@@ -328,7 +331,7 @@ func newCmd(ctx context.Context, b *Builder, stepDef StepDef) *execute.Cmd {
 		ActionName: stepDef.ActionName(),
 		Args:       b.argTab.InternSlice(stepDef.Args(ctx)),
 		// we don't pass environment variables.
-		RSPFile:        b.path.MustFromWD(stepDef.UnescapedBinding("rspfile")),
+		RSPFile:        stepDef.Rspfile(),
 		RSPFileContent: []byte(rspfileContent),
 		CmdHash:        cmdhash(cmdline, rspfileContent),
 		ExecRoot:       b.path.ExecRoot, // use step binding?
@@ -339,7 +342,7 @@ func newCmd(ctx context.Context, b *Builder, stepDef StepDef) *execute.Cmd {
 		// TODO(b/266518906): enable UseSystemInput
 		// UseSystemInput: stepDef.Binding("use_system_input") != "",
 		Deps:    stepDef.Binding("deps"),
-		Depfile: b.path.MustFromWD(stepDef.UnescapedBinding("depfile")),
+		Depfile: stepDef.Depfile(),
 		Restat:  stepDef.Binding("restat") != "",
 
 		Pure: stepDef.Pure(),
