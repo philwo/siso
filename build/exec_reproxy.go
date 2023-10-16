@@ -152,7 +152,7 @@ func (b *Builder) prepareLocalIncludeDirs(ctx context.Context, step *Step) error
 			clog.Infof(ctx, "prepare include dir %s", dir)
 			err = b.hashFS.Mkdir(ctx, b.path.ExecRoot, d, nil)
 			if err != nil {
-				return fmt.Errorf("prepare include dir %s: %w", dir, err)
+				clog.Warningf(ctx, "failed to create include dir %s: %v", dir, err)
 			}
 		}
 	}
