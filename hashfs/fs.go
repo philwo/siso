@@ -539,6 +539,16 @@ func (hfs *HashFS) Mkdir(ctx context.Context, root, dirname string, cmdhash []by
 		updatedTime: time.Now(),
 	}
 	err = hfs.dirStoreAndNotify(ctx, dirname, e)
+	var serr storeRaceError
+	if errors.As(err, &serr) {
+		curEntry, ok := serr.curEntry.(*entry)
+		if ok {
+			// Mkdir succeeds if cur entry is the directory and has the same cmdhash, or cur cmdhash exists but trying to add no cmdhash.
+			if curEntry != nil && curEntry.getDir() != nil && (bytes.Equal(cmdhash, curEntry.cmdhash) || (len(curEntry.cmdhash) > 0 && len(cmdhash) == 0)) {
+				err = nil
+			}
+		}
+	}
 	clog.Infof(ctx, "mkdir %s %s: %v", dirname, mtime, err)
 	return err
 }
@@ -1368,6 +1378,18 @@ func (d *directory) store(ctx context.Context, fname string, e *entry) (*entry, 
 	return nil, fmt.Errorf("store %s: %w", fname, syscall.ELOOP)
 }
 
+type storeRaceError struct {
+	fname     string
+	prevEntry *entry
+	entry     *entry
+	curEntry  any // *entry
+	exists    bool
+}
+
+func (e storeRaceError) Error() string {
+	return fmt.Sprintf("store race %s: %p -> %p -> %p %t", e.fname, e.prevEntry, e.entry, e.curEntry, e.exists)
+}
+
 func (d *directory) storeEntry(ctx context.Context, fname string, e *entry) (*entry, string, error) {
 	pe := pathElements{
 		origFname: fname,
@@ -1450,13 +1472,25 @@ func (d *directory) storeEntry(ctx context.Context, fname string, e *entry) (*en
 				}{pe.origFname, ee.getMtime(), ee.getUpdatedTime()}
 				clog.Infof(ctx, "store %s: mtime updated %v %v", lv.origFname, lv.mtime, lv.updatedTime)
 				return ee, "", nil
+			} else if ee.getDir() != nil && e.getDir() != nil {
+				// ok if mkdir with the no cmdhash or same cmdhash.
+				if (len(ee.cmdhash) > 0 && len(e.cmdhash) == 0) || bytes.Equal(ee.cmdhash, e.cmdhash) {
+					return ee, "", nil
+				}
 			}
+
 			// e should be new value for fname.
 			swapped := d.m.CompareAndSwap(fname, ee, e)
 			if !swapped {
 				// store race?
 				v, ok := d.m.Load(fname)
-				return nil, "", fmt.Errorf("store race %s: %p -> %p -> %p %t", fname, ee, e, v, ok)
+				return nil, "", storeRaceError{
+					fname:     fname,
+					prevEntry: ee,
+					entry:     e,
+					curEntry:  v,
+					exists:    ok,
+				}
 			}
 			// e is stored for fname
 			return e, "", nil
