@@ -102,13 +102,15 @@ type StepDef interface {
 
 // Step is a build step.
 type Step struct {
-	def    StepDef
-	nwaits int
-	cmd    *execute.Cmd
+	def     StepDef
+	nwaits  int
+	outputs []Target
+
+	cmd *execute.Cmd
 
 	readyTime     time.Time
 	prevStepID    string
-	prevStepOut   string
+	prevStepOut   Target
 	queueTime     time.Time
 	queueSize     int
 	queueDuration time.Duration
@@ -137,11 +139,12 @@ func (s *stepState) Phase() stepPhase {
 	return s.phase
 }
 
-func newStep(stepDef StepDef, numWaits int) *Step {
+func newStep(stepDef StepDef, numWaits int, outputs []Target) *Step {
 	return &Step{
-		def:    stepDef,
-		nwaits: numWaits,
-		state:  &stepState{},
+		def:     stepDef,
+		nwaits:  numWaits,
+		outputs: outputs,
+		state:   &stepState{},
 	}
 }
 
@@ -152,8 +155,8 @@ func (s *Step) NumWaits() int {
 
 // ReadyToRun checks whether the step is ready to run
 // when prev step's out becomes ready.
-func (s *Step) ReadyToRun(prev, out string) bool {
-	if out != "" {
+func (s *Step) ReadyToRun(prev string, out Target) bool {
+	if out != nil {
 		s.nwaits--
 	}
 	ready := s.nwaits == 0

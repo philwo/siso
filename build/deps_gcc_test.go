@@ -40,8 +40,8 @@ func (fakeGraph) TargetPath(target Target) (string, error) {
 	return t, nil
 }
 
-func (fakeGraph) StepDef(ctx context.Context, target Target, next StepDef) (StepDef, []Target, error) {
-	return nil, nil, errors.New("not implemented")
+func (fakeGraph) StepDef(ctx context.Context, target Target, next StepDef) (StepDef, []Target, []Target, error) {
+	return nil, nil, nil, errors.New("not implemented")
 }
 
 func (g fakeGraph) InputDeps(ctx context.Context) map[string][]string {

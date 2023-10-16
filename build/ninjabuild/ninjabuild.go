@@ -394,18 +394,18 @@ func (g *globals) targetPath(node *ninjautil.Node) string {
 
 // StepDef creates new StepDef to build target (exec-root relative), needed for next.
 // top-level target will use nil for next.
-// It returns a StepDef for the target and inputs (exec-root relative).
-func (g *Graph) StepDef(ctx context.Context, target build.Target, next build.StepDef) (build.StepDef, []build.Target, error) {
+// It returns a StepDef for the target and inputs/outputs targets.
+func (g *Graph) StepDef(ctx context.Context, target build.Target, next build.StepDef) (build.StepDef, []build.Target, []build.Target, error) {
 	n, ok := target.(*ninjautil.Node)
 	if !ok {
-		return nil, nil, build.ErrNoTarget
+		return nil, nil, nil, build.ErrNoTarget
 	}
 	edge, ok := n.InEdge()
 	if !ok {
-		return nil, nil, build.ErrTargetIsSource
+		return nil, nil, nil, build.ErrTargetIsSource
 	}
 	if g.visited[edge] {
-		return nil, nil, build.ErrDuplicateStep
+		return nil, nil, nil, build.ErrDuplicateStep
 	}
 	g.visited[edge] = true
 	if edge.IsPhony() {
@@ -417,7 +417,12 @@ func (g *Graph) StepDef(ctx context.Context, target build.Target, next build.Ste
 	for _, in := range edgeInputs {
 		inputs = append(inputs, build.Target(in))
 	}
-	return stepDef, inputs, nil
+	edgeOutputs := edge.Outputs()
+	outputs := make([]build.Target, 0, len(edgeOutputs))
+	for _, out := range edgeOutputs {
+		outputs = append(outputs, build.Target(out))
+	}
+	return stepDef, inputs, outputs, nil
 }
 
 // RecordDepsLog records deps log of output.

@@ -554,7 +554,7 @@ loop:
 			clog.Infof(ctx, "context done")
 			done(context.Cause(ctx))
 			cancel()
-			b.plan.dump(ctx)
+			b.plan.dump(ctx, b.graph)
 			return context.Cause(ctx)
 		}
 		b.plan.pushReady()
@@ -592,19 +592,28 @@ loop:
 				"output0":     step.def.Outputs()[0],
 			}
 			logger.Log(logEntry)
+			var prevStepOut string
+			if step.prevStepOut != nil {
+				s, err := b.graph.TargetPath(step.prevStepOut)
+				if err != nil {
+					clog.Warningf(ctx, "failed to get target path: %v", err)
+				} else {
+					prevStepOut = s
+				}
+			}
 			step.metrics.StepID = step.def.String()
 			step.metrics.Rule = step.def.RuleName()
 			step.metrics.Action = step.def.ActionName()
 			step.metrics.Output = step.def.Outputs()[0]
 			step.metrics.GNTarget = step.def.Binding("gn_target")
 			step.metrics.PrevStepID = step.prevStepID
-			step.metrics.PrevStepOut = step.prevStepOut
+			step.metrics.PrevStepOut = prevStepOut
 			step.metrics.Ready = IntervalMetric(step.readyTime.Sub(b.start))
 			step.metrics.Start = IntervalMetric(stepStart.Sub(step.readyTime))
 
 			span.SetAttr("ready_time", time.Since(step.readyTime).Milliseconds())
 			span.SetAttr("prev", step.prevStepID)
-			span.SetAttr("prev_out", step.prevStepOut)
+			span.SetAttr("prev_out", prevStepOut)
 			span.SetAttr("queue_time", time.Since(step.queueTime).Milliseconds())
 			span.SetAttr("queue_size", step.queueSize)
 			span.SetAttr("build_id", b.id)

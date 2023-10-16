@@ -45,12 +45,12 @@ type Graph interface {
 	// TargetPath returns exec-root relative path of target.
 	TargetPath(Target) (string, error)
 
-	// StepDef creates new StepDef for the target and its inputs targets.
+	// StepDef creates new StepDef for the target and its inputs/outputs targets.
 	// if err is ErrTargetIsSource, target is source and no step to
 	// generate the target.
 	// if err is ErrDuplicateStep, a step that geneartes the target
 	// is already processed.
-	StepDef(context.Context, Target, StepDef) (StepDef, []Target, error)
+	StepDef(context.Context, Target, StepDef) (StepDef, []Target, []Target, error)
 
 	// InputDeps returns input dependencies.
 	// input dependencies is a map from input path or label to
@@ -73,7 +73,7 @@ type plan struct {
 	q         chan *Step
 	closed    bool
 	ready     []*Step
-	waits     map[string][]*Step
+	waits     map[Target][]*Step
 	npendings int
 }
 
@@ -134,7 +134,7 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 	if log.V(1) {
 		clog.Infof(ctx, "schedule target %s", target)
 	}
-	newStep, inputs, err := graph.StepDef(ctx, target, next)
+	newStep, inputs, outputs, err := graph.StepDef(ctx, target, next)
 	switch {
 	case err == nil:
 		// need to schedule.
@@ -197,7 +197,7 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 			waits[in] = struct{}{}
 		}
 	}
-	sched.add(ctx, graph, newStep, waits)
+	sched.add(ctx, graph, newStep, waits, outputs)
 	return nil
 }
 
@@ -213,7 +213,7 @@ func newScheduler(ctx context.Context, opt schedulerOption) *scheduler {
 			m: make(map[Target]bool),
 			// preallocate capacity for performance optimization.
 			q:     make(chan *Step, 10000),
-			waits: make(map[string][]*Step),
+			waits: make(map[Target][]*Step),
 		},
 		scanned:     make(map[Target]bool),
 		enableTrace: opt.EnableTrace,
@@ -257,7 +257,7 @@ func (s *scheduler) finish(ctx context.Context, d time.Duration) {
 }
 
 // add adds new stepDef to run.
-func (s *scheduler) add(ctx context.Context, graph Graph, stepDef StepDef, waits map[Target]struct{}) {
+func (s *scheduler) add(ctx context.Context, graph Graph, stepDef StepDef, waits map[Target]struct{}, outputs []Target) {
 	s.plan.mu.Lock()
 	defer s.plan.mu.Unlock()
 	defer func() {
@@ -270,8 +270,8 @@ func (s *scheduler) add(ctx context.Context, graph Graph, stepDef StepDef, waits
 		s.lastProgress = time.Now()
 	}()
 	s.total++
-	step := newStep(stepDef, len(waits))
-	if step.ReadyToRun("", "") {
+	step := newStep(stepDef, len(waits), outputs)
+	if step.ReadyToRun("", nil) {
 		clog.Infof(ctx, "step state: %s ready to run", step.String())
 		select {
 		case s.plan.q <- step:
@@ -285,12 +285,7 @@ func (s *scheduler) add(ctx context.Context, graph Graph, stepDef StepDef, waits
 	clog.Infof(ctx, "pending to run: %s (waits: %d)", step, step.NumWaits())
 	s.plan.npendings++
 	for w := range waits {
-		wpath, err := graph.TargetPath(w)
-		if err != nil {
-			clog.Warningf(ctx, "schedule %s: targetPath: %v", w, err)
-			continue
-		}
-		s.plan.waits[wpath] = append(s.plan.waits[wpath], step)
+		s.plan.waits[w] = append(s.plan.waits[w], step)
 	}
 }
 
@@ -332,7 +327,7 @@ func (p *plan) hasReady() bool {
 }
 
 func (p *plan) done(ctx context.Context, step *Step) {
-	outs := step.def.Outputs()
+	outs := step.outputs
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -405,14 +400,14 @@ func (p *plan) done(ctx context.Context, step *Step) {
 	}
 }
 
-func (p *plan) dump(ctx context.Context) {
+func (p *plan) dump(ctx context.Context, graph Graph) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	clog.Infof(ctx, "queue = %d pendings=%d", len(p.q), p.npendings)
 	clog.Infof(ctx, "closed=%t", p.closed)
 	var steps []*Step
 	seen := make(map[*Step]bool)
-	waits := make(map[string]bool)
+	waits := make(map[Target]bool)
 	ready := make([]string, 0, len(p.ready))
 	for _, s := range p.ready {
 		ready = append(ready, s.String())
@@ -441,7 +436,12 @@ func (p *plan) dump(ctx context.Context) {
 	}
 	outs := make([]string, 0, len(waits))
 	for k := range waits {
-		outs = append(outs, k)
+		out, err := graph.TargetPath(k)
+		if err != nil {
+			clog.Warningf(ctx, "failed to get target path: %v", err)
+			continue
+		}
+		outs = append(outs, out)
 	}
 	sort.Strings(outs)
 	clog.Infof(ctx, "waits=%d no-trigger=%d", len(p.waits), len(outs))
