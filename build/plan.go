@@ -96,6 +96,7 @@ type scheduler struct {
 
 	lastProgress time.Time
 	visited      int
+	scanned      map[Target]bool
 
 	enableTrace bool
 }
@@ -109,6 +110,9 @@ func schedule(ctx context.Context, sched *scheduler, graph Graph, args ...string
 		return err
 	}
 	for _, t := range targets {
+		if sched.scanned[t] {
+			continue
+		}
 		err := scheduleTarget(ctx, sched, graph, t, nil)
 		if err != nil {
 			return fmt.Errorf("failed in schedule %s: %w", t, err)
@@ -120,6 +124,7 @@ func schedule(ctx context.Context, sched *scheduler, graph Graph, args ...string
 
 // scheduleTarget schedules a build plan for target, which is required to next StepDef, from graph into sched.
 func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target Target, next StepDef) error {
+	sched.scanned[target] = true
 	if sched.marked(target) {
 		if log.V(1) {
 			clog.Infof(ctx, "sched target already marked: %s", target)
@@ -163,8 +168,6 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 		return fmt.Errorf("interrupted in schedule: %w", context.Cause(ctx))
 	default:
 	}
-	// to suppress duplicates
-	m := make(map[Target]bool)
 
 	// we might not need to use depfile's dependencies to construct
 	// build graph.
@@ -179,28 +182,22 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 	//     it means original build graph without depfile contains
 	//     missing dependencies. It would be better to fix gn/ninja's
 	//     build graph, rather than mitigating here in the siso.
-	var waits []string
+	waits := make(map[Target]struct{}, len(inputs))
 	for _, in := range inputs {
-		if m[in] {
-			continue
-		}
-		m[in] = true
-		err := scheduleTarget(ctx, sched, graph, in, next)
-		if err != nil {
-			return fmt.Errorf("schedule %s: %w", in, err)
+		if !sched.scanned[in] {
+			err := scheduleTarget(ctx, sched, graph, in, next)
+			if err != nil {
+				return fmt.Errorf("schedule %s: %w", in, err)
+			}
 		}
 		if !sched.marked(in) {
-			inpath, err := graph.TargetPath(in)
-			if err != nil {
-				return fmt.Errorf("schedule %s: targetPath: %w", in, err)
-			}
 			// If in is not marked (i.e. source), some step
 			// will generate it, so need to wait for it
 			// before running this step.
-			waits = append(waits, inpath)
+			waits[in] = struct{}{}
 		}
 	}
-	sched.add(ctx, newStep, waits)
+	sched.add(ctx, graph, newStep, waits)
 	return nil
 }
 
@@ -218,6 +215,7 @@ func newScheduler(ctx context.Context, opt schedulerOption) *scheduler {
 			q:     make(chan *Step, 10000),
 			waits: make(map[string][]*Step),
 		},
+		scanned:     make(map[Target]bool),
 		enableTrace: opt.EnableTrace,
 	}
 }
@@ -259,7 +257,7 @@ func (s *scheduler) finish(ctx context.Context, d time.Duration) {
 }
 
 // add adds new stepDef to run.
-func (s *scheduler) add(ctx context.Context, stepDef StepDef, waits []string) {
+func (s *scheduler) add(ctx context.Context, graph Graph, stepDef StepDef, waits map[Target]struct{}) {
 	s.plan.mu.Lock()
 	defer s.plan.mu.Unlock()
 	defer func() {
@@ -272,7 +270,7 @@ func (s *scheduler) add(ctx context.Context, stepDef StepDef, waits []string) {
 		s.lastProgress = time.Now()
 	}()
 	s.total++
-	step := newStep(stepDef, waits)
+	step := newStep(stepDef, len(waits))
 	if step.ReadyToRun("", "") {
 		clog.Infof(ctx, "step state: %s ready to run", step.String())
 		select {
@@ -286,8 +284,13 @@ func (s *scheduler) add(ctx context.Context, stepDef StepDef, waits []string) {
 	}
 	clog.Infof(ctx, "pending to run: %s (waits: %d)", step, step.NumWaits())
 	s.plan.npendings++
-	for _, w := range waits {
-		s.plan.waits[w] = append(s.plan.waits[w], step)
+	for w := range waits {
+		wpath, err := graph.TargetPath(w)
+		if err != nil {
+			clog.Warningf(ctx, "schedule %s: targetPath: %v", w, err)
+			continue
+		}
+		s.plan.waits[wpath] = append(s.plan.waits[wpath], step)
 	}
 }
 

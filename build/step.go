@@ -137,10 +137,10 @@ func (s *stepState) Phase() stepPhase {
 	return s.phase
 }
 
-func newStep(stepDef StepDef, waits []string) *Step {
+func newStep(stepDef StepDef, numWaits int) *Step {
 	return &Step{
 		def:    stepDef,
-		nwaits: len(waits),
+		nwaits: numWaits,
 		state:  &stepState{},
 	}
 }
