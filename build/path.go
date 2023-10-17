@@ -15,7 +15,7 @@ import (
 // Path manages paths used by the build.
 type Path struct {
 	ExecRoot string
-	Dir      string // relative to ExecRoot
+	Dir      string // relative to ExecRoot, use slashes
 
 	// Symbol table for seen paths.
 	intern symtab
@@ -27,7 +27,7 @@ type Path struct {
 func NewPath(execRoot, dir string) *Path {
 	return &Path{
 		ExecRoot: execRoot,
-		Dir:      dir,
+		Dir:      filepath.ToSlash(dir),
 	}
 }
 
