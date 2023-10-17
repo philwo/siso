@@ -14,20 +14,23 @@ import (
 
 	log "github.com/golang/glog"
 
-	"infra/build/siso/execute"
 	"infra/build/siso/o11y/clog"
 	"infra/build/siso/o11y/trace"
 )
 
 // checkUpToDate returns true if outputs are already up-to-date and
 // no need to run command.
-func (b *Builder) checkUpToDate(ctx context.Context, step *Step) bool {
+func (b *Builder) checkUpToDate(ctx context.Context, stepDef StepDef) bool {
 	ctx, span := trace.NewSpan(ctx, "mtime-check")
 	defer span.Close(nil)
 
-	generator := step.def.Binding("generator") != ""
-	out0, outmtime, cmdhash := outputMtime(ctx, b, step.cmd)
-	lastIn, inmtime, err := inputMtime(ctx, b, step)
+	generator := stepDef.Binding("generator") != ""
+	cmdline := stepDef.Binding("command")
+	rspfileContent := stepDef.Binding("rspfile_content")
+	stepCmdHash := calculateCmdHash(cmdline, rspfileContent)
+
+	out0, outmtime, cmdhash := outputMtime(ctx, b, stepDef)
+	lastIn, inmtime, err := inputMtime(ctx, b, stepDef)
 
 	// TODO(b/288419130): make sure it covers all cases as ninja does.
 
@@ -56,8 +59,8 @@ func (b *Builder) checkUpToDate(ctx context.Context, step *Step) bool {
 		fmt.Fprintf(b.explainWriter, "output %s older than most recent input %s: out:%s in:+%s\n", outname, lastInName, outmtime.Format(time.RFC3339), inmtime.Sub(outmtime))
 		return false
 	}
-	if !generator && !bytes.Equal(cmdhash, step.cmd.CmdHash) {
-		clog.Infof(ctx, "need: cmdhash differ %q -> %q", hex.EncodeToString(cmdhash), hex.EncodeToString(step.cmd.CmdHash))
+	if !generator && !bytes.Equal(cmdhash, stepCmdHash) {
+		clog.Infof(ctx, "need: cmdhash differ %q -> %q", hex.EncodeToString(cmdhash), hex.EncodeToString(stepCmdHash))
 		span.SetAttr("run-reason", "cmdhash-update")
 		if len(cmdhash) == 0 {
 			fmt.Fprintf(b.explainWriter, "command line not found in log for %s\n", outname)
@@ -74,12 +77,12 @@ func (b *Builder) checkUpToDate(ctx context.Context, step *Step) bool {
 	}
 	if b.outputLocal != nil {
 		var localOutputs []string
-		outputs := step.cmd.Outputs
-		if step.cmd.Depfile != "" {
-			switch step.cmd.Deps {
+		outputs := stepDef.Outputs()
+		if depFile := stepDef.Depfile(); depFile != "" {
+			switch stepDef.Binding("deps") {
 			case "gcc", "msvc":
 			default:
-				outputs = append(outputs, step.cmd.Depfile)
+				outputs = append(outputs, depFile)
 			}
 		}
 		seen := make(map[string]bool)
@@ -100,23 +103,27 @@ func (b *Builder) checkUpToDate(ctx context.Context, step *Step) bool {
 				fmt.Fprintf(b.explainWriter, "output %s flush error %s: %v", outname, localOutputs, err)
 				return false
 			}
-			clog.Infof(ctx, "flush all outputs %s", localOutputs)
+			if log.V(1) {
+				clog.Infof(ctx, "flush all outputs %s", localOutputs)
+			}
 		}
 	}
 
-	clog.Infof(ctx, "skip: in:%s < out:%s %s", lastIn, out0, outmtime.Sub(inmtime))
+	if log.V(1) {
+		clog.Infof(ctx, "skip: in:%s < out:%s %s", lastIn, out0, outmtime.Sub(inmtime))
+	}
 	span.SetAttr("skip", true)
 	return true
 }
 
 // outputMtime returns the oldest modified output, its timestamp and
 // command hash that produced the outputs of the step.
-func outputMtime(ctx context.Context, b *Builder, cmd *execute.Cmd) (string, time.Time, []byte) {
+func outputMtime(ctx context.Context, b *Builder, stepDef StepDef) (string, time.Time, []byte) {
 	var oerr error
 	var outmtime time.Time
 	var outcmdhash []byte
 	out0 := ""
-	for i, out := range cmd.Outputs {
+	for i, out := range stepDef.Outputs() {
 		fi, err := b.hashFS.Stat(ctx, b.path.ExecRoot, out)
 		if err != nil {
 			if oerr == nil {
@@ -138,7 +145,7 @@ func outputMtime(ctx context.Context, b *Builder, cmd *execute.Cmd) (string, tim
 			outcmdhash = nil
 		}
 		var t time.Time
-		if cmd.Restat {
+		if stepDef.Binding("restat") != "" {
 			t = fi.UpdatedTime()
 		} else {
 			t = fi.ModTime()
@@ -163,24 +170,24 @@ var errDirty = errors.New("dirty")
 
 // inputMtime returns the last modified input and its modified timestamp.
 // it will return errDirty if input file has been updated in the build session.
-func inputMtime(ctx context.Context, b *Builder, step *Step) (string, time.Time, error) {
+func inputMtime(ctx context.Context, b *Builder, stepDef StepDef) (string, time.Time, error) {
 	var inmtime time.Time
 	lastIn := ""
-	ins, err := step.def.TriggerInputs(ctx)
+	ins, err := stepDef.TriggerInputs(ctx)
 	if err != nil {
-		return "", inmtime, fmt.Errorf("failed to load deps %s: %v", step, err)
+		return "", inmtime, fmt.Errorf("failed to load deps %s: %w", stepDef, err)
 	}
 	for _, in := range ins {
 		fi, err := b.hashFS.Stat(ctx, b.path.ExecRoot, in)
 		if err != nil {
-			return "", inmtime, fmt.Errorf("missing input %s for %s: %v", step, in, err)
+			return "", inmtime, fmt.Errorf("missing input %s for %s: %w", stepDef, in, err)
 		}
 		if inmtime.Before(fi.ModTime()) {
 			inmtime = fi.ModTime()
 			lastIn = in
 		}
 		if fi.IsUpdated() {
-			return "", inmtime, fmt.Errorf("input %s for %s: %w", step, in, errDirty)
+			return "", inmtime, fmt.Errorf("input %s for %s: %w", stepDef, in, errDirty)
 		}
 	}
 	return lastIn, inmtime, nil

@@ -8,7 +8,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"runtime"
 	"strings"
 	"time"
 
@@ -49,13 +48,6 @@ func (e StepError) Unwrap() error {
 // can control the flows with the experiment ids, defined in experiments.go.
 func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 	defer func() {
-		if r := recover(); r != nil {
-			const size = 64 << 10
-			buf := make([]byte, size)
-			buf = buf[:runtime.Stack(buf, false)]
-			clog.Errorf(ctx, "runStep panic: %v\nstep.cmd: %p\n%s", r, step.cmd, buf)
-			err = fmt.Errorf("panic: %v: %s", r, buf)
-		}
 		if err != nil {
 			step.metrics.Err = true
 		}
@@ -64,23 +56,10 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 	if log.V(1) {
 		clog.Infof(ctx, "run step %s", step)
 	}
-	// defer some initialization after mtimeCheck?
-	if step.def.IsPhony() {
-		step.metrics.skip = true
-		b.plan.done(ctx, step)
-		return nil
-	}
-
-	step.init(ctx, b)
 	ctx, span := trace.NewSpan(ctx, "run-step")
 	defer span.Close(nil)
 
-	skip := b.checkUpToDate(ctx, step)
-	if skip {
-		step.metrics.skip = true
-		b.plan.done(ctx, step)
-		return nil
-	}
+	step.init(ctx, b)
 
 	if b.dryRun {
 		select {

@@ -333,7 +333,7 @@ func newCmd(ctx context.Context, b *Builder, stepDef StepDef) *execute.Cmd {
 		// we don't pass environment variables.
 		RSPFile:        stepDef.Rspfile(),
 		RSPFileContent: []byte(rspfileContent),
-		CmdHash:        cmdhash(cmdline, rspfileContent),
+		CmdHash:        calculateCmdHash(cmdline, rspfileContent),
 		ExecRoot:       b.path.ExecRoot, // use step binding?
 		Dir:            b.path.Dir,
 		Inputs:         stepInputs(ctx, b, stepDef),
@@ -424,7 +424,7 @@ func stepDescription(stepDef StepDef) string {
 	return stepDef.Binding("command")
 }
 
-func cmdhash(cmdline, rspfileContent string) []byte {
+func calculateCmdHash(cmdline, rspfileContent string) []byte {
 	h := sha256.New()
 	fmt.Fprint(h, cmdline)
 	if rspfileContent != "" {

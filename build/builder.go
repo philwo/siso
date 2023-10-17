@@ -544,7 +544,9 @@ loop:
 			if stuck && len(errs) > 0 {
 				errs = append([]error{errors.New("cannot make progress due to previous errors")}, errs...)
 			}
-			clog.Infof(ctx, "errs=%d numServs=%d hasReady=%t stuck=%t", len(errs), numServs, hasReady, stuck)
+			if log.V(1) {
+				clog.Infof(ctx, "errs=%d numServs=%d hasReady=%t stuck=%t", len(errs), numServs, hasReady, stuck)
+			}
 			if len(errs) >= b.failuresAllowed || stuck {
 				cancel()
 				break loop
@@ -569,6 +571,15 @@ loop:
 				case errch <- err:
 				}
 			}()
+			defer func() {
+				if r := recover(); r != nil {
+					const size = 64 << 10
+					buf := make([]byte, size)
+					buf = buf[:runtime.Stack(buf, false)]
+					clog.Errorf(ctx, "runStep panic: %v\nstep.cmd: %p\n%s", r, step.cmd, buf)
+					err = fmt.Errorf("panic: %v: %s", r, buf)
+				}
+			}()
 			defer done(nil)
 			stepStart := time.Now()
 			tc := trace.New(ctx, step.def.String())
@@ -581,6 +592,15 @@ loop:
 			})
 			logger := clog.FromContext(sctx)
 			logger.Formatter = logFormat
+
+			if step.def.IsPhony() || b.checkUpToDate(ctx, step.def) {
+				step.metrics.skip = true
+				b.plan.done(ctx, step)
+				b.stats.update(ctx, &step.metrics, true)
+				span.Close(nil)
+				return
+			}
+
 			description := stepDescription(step.def)
 			logEntry := logger.Entry(logging.Info, description)
 			logEntry.Labels = map[string]string{
@@ -639,25 +659,23 @@ loop:
 			duration := time.Since(stepStart)
 			stepLogEntry(sctx, logger, step, duration, err)
 
-			if !step.def.IsPhony() && !step.metrics.skip {
-				// $ cat siso_metrcis.json |
-				//     jq --slurp 'sort_by(.duration)|reverse'
-				//
-				//     jq --slurp 'sort_by(.duration) | reverse | .[] | select(.cached==false)'
-				step.metrics.Duration = IntervalMetric(duration)
-				step.metrics.ActionEndTime = IntervalMetric(step.startTime.Add(duration).Sub(b.start))
-				step.metrics.Err = err != nil
-				b.recordMetrics(ctx, step.metrics)
-				b.recordNinjaLogs(ctx, step)
-			}
-			b.stats.update(ctx, &step.metrics, step.def.IsPhony() || step.cmd.Pure)
+			// $ cat siso_metrcis.json |
+			//     jq --slurp 'sort_by(.duration)|reverse'
+			//
+			//     jq --slurp 'sort_by(.duration) | reverse | .[] | select(.cached==false)'
+			step.metrics.Duration = IntervalMetric(duration)
+			step.metrics.ActionEndTime = IntervalMetric(step.startTime.Add(duration).Sub(b.start))
+			step.metrics.Err = err != nil
+			b.recordMetrics(ctx, step.metrics)
+			b.recordNinjaLogs(ctx, step)
+			b.stats.update(ctx, &step.metrics, step.cmd.Pure)
 			select {
 			case <-ctx.Done():
 				return
 			default:
 			}
 			b.finalizeTrace(ctx, tc)
-			if err != nil && b.failureSummaryWriter != nil {
+			if err != nil && b.failureSummaryWriter != nil && step.cmd != nil {
 				var buf bytes.Buffer
 				fmt.Fprintf(&buf, "%s\n", step.cmd.Desc)
 				fmt.Fprintf(&buf, "%s\n", strings.Join(step.cmd.Args, " "))
