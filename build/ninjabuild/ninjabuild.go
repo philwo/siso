@@ -47,9 +47,10 @@ type globals struct {
 	// *ninjautil.Node -> string
 	targetPaths sync.Map
 
-	// output -> {edge,rule} that produces the output
-	edgeRules map[string]*edgeRule
-	phony     map[string]bool
+	// output -> *edgeRule that produces the output
+	edgeRules sync.Map
+
+	phony map[string]bool
 
 	caseSensitives map[string][]string
 
@@ -121,7 +122,6 @@ func NewGraph(ctx context.Context, fname string, config *buildconfig.Config, p *
 			depsLog:        depsLog,
 			buildConfig:    config,
 			stepConfig:     stepConfig,
-			edgeRules:      make(map[string]*edgeRule),
 			phony:          make(map[string]bool),
 			caseSensitives: make(map[string][]string),
 			gnTargets:      make(map[*ninjautil.Edge]gnTarget),

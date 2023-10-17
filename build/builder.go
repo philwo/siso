@@ -593,7 +593,7 @@ loop:
 			logger := clog.FromContext(sctx)
 			logger.Formatter = logFormat
 
-			if step.def.IsPhony() || b.checkUpToDate(ctx, step.def) {
+			if step.def.IsPhony() || b.checkUpToDate(ctx, step.def, step.outputs) {
 				step.metrics.skip = true
 				b.plan.done(ctx, step)
 				b.stats.update(ctx, &step.metrics, true)

@@ -160,7 +160,9 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 		}
 		return err
 	}
-	clog.Infof(ctx, "schedule %s inputs:%d", newStep, len(inputs))
+	if log.V(1) {
+		clog.Infof(ctx, "schedule %s inputs:%d", newStep, len(inputs))
+	}
 	sched.visited++
 	next = newStep
 	select {
@@ -272,7 +274,9 @@ func (s *scheduler) add(ctx context.Context, graph Graph, stepDef StepDef, waits
 	s.total++
 	step := newStep(stepDef, len(waits), outputs)
 	if step.ReadyToRun("", nil) {
-		clog.Infof(ctx, "step state: %s ready to run", step.String())
+		if log.V(1) {
+			clog.Infof(ctx, "step state: %s ready to run", step.String())
+		}
 		select {
 		case s.plan.q <- step:
 		default:
@@ -282,7 +286,9 @@ func (s *scheduler) add(ctx context.Context, graph Graph, stepDef StepDef, waits
 		}
 		return
 	}
-	clog.Infof(ctx, "pending to run: %s (waits: %d)", step, step.NumWaits())
+	if log.V(1) {
+		clog.Infof(ctx, "pending to run: %s (waits: %d)", step, step.NumWaits())
+	}
 	s.plan.npendings++
 	for w := range waits {
 		s.plan.waits[w] = append(s.plan.waits[w], step)

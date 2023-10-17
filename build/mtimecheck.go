@@ -20,7 +20,7 @@ import (
 
 // checkUpToDate returns true if outputs are already up-to-date and
 // no need to run command.
-func (b *Builder) checkUpToDate(ctx context.Context, stepDef StepDef) bool {
+func (b *Builder) checkUpToDate(ctx context.Context, stepDef StepDef, outputs []Target) bool {
 	ctx, span := trace.NewSpan(ctx, "mtime-check")
 	defer span.Close(nil)
 
@@ -29,7 +29,7 @@ func (b *Builder) checkUpToDate(ctx context.Context, stepDef StepDef) bool {
 	rspfileContent := stepDef.Binding("rspfile_content")
 	stepCmdHash := calculateCmdHash(cmdline, rspfileContent)
 
-	out0, outmtime, cmdhash := outputMtime(ctx, b, stepDef)
+	out0, outmtime, cmdhash := outputMtime(ctx, b, outputs, stepDef.Binding("restat") != "")
 	lastIn, inmtime, err := inputMtime(ctx, b, stepDef)
 
 	// TODO(b/288419130): make sure it covers all cases as ninja does.
@@ -76,24 +76,36 @@ func (b *Builder) checkUpToDate(ctx context.Context, stepDef StepDef) bool {
 		return false
 	}
 	if b.outputLocal != nil {
-		var localOutputs []string
-		outputs := stepDef.Outputs()
-		if depFile := stepDef.Depfile(); depFile != "" {
+		numOuts := len(outputs)
+		depFile := stepDef.Depfile()
+		if depFile != "" {
+			numOuts++
+		}
+		localOutputs := make([]string, 0, numOuts)
+		seen := make(map[string]bool)
+		for _, out := range outputs {
+			outPath, err := b.graph.TargetPath(out)
+			if err != nil {
+				clog.Warningf(ctx, "bad target %v", err)
+				continue
+			}
+			if seen[outPath] {
+				continue
+			}
+			seen[outPath] = true
+			if !b.outputLocal(ctx, outPath) {
+				continue
+			}
+			localOutputs = append(localOutputs, outPath)
+		}
+		if depFile != "" {
 			switch stepDef.Binding("deps") {
 			case "gcc", "msvc":
 			default:
-				outputs = append(outputs, depFile)
+				if b.outputLocal(ctx, depFile) {
+					localOutputs = append(localOutputs, depFile)
+				}
 			}
-		}
-		seen := make(map[string]bool)
-		for _, out := range outputs {
-			if seen[out] {
-				continue
-			}
-			if b.outputLocal(ctx, out) {
-				localOutputs = append(localOutputs, out)
-			}
-			seen[out] = true
 		}
 		if len(localOutputs) > 0 {
 			err := b.hashFS.Flush(ctx, b.path.ExecRoot, localOutputs)
@@ -118,46 +130,53 @@ func (b *Builder) checkUpToDate(ctx context.Context, stepDef StepDef) bool {
 
 // outputMtime returns the oldest modified output, its timestamp and
 // command hash that produced the outputs of the step.
-func outputMtime(ctx context.Context, b *Builder, stepDef StepDef) (string, time.Time, []byte) {
+func outputMtime(ctx context.Context, b *Builder, outputs []Target, restat bool) (string, time.Time, []byte) {
 	var oerr error
 	var outmtime time.Time
 	var outcmdhash []byte
 	out0 := ""
-	for i, out := range stepDef.Outputs() {
-		fi, err := b.hashFS.Stat(ctx, b.path.ExecRoot, out)
+	for i, out := range outputs {
+		outPath, err := b.graph.TargetPath(out)
 		if err != nil {
 			if oerr == nil {
-				out0 = out
+				oerr = err
+			}
+			continue
+		}
+		fi, err := b.hashFS.Stat(ctx, b.path.ExecRoot, outPath)
+		if err != nil {
+			if oerr == nil {
+				out0 = outPath
 				oerr = err
 			}
 			continue
 		}
 		if log.V(1) {
-			clog.Infof(ctx, "out-cmdhash %d:%s %s", i, out, hex.EncodeToString(fi.CmdHash()))
+			clog.Infof(ctx, "out-cmdhash %d:%s %s", i, outPath, hex.EncodeToString(fi.CmdHash()))
 		}
 		if i == 0 {
 			outcmdhash = fi.CmdHash()
 		}
 		if !bytes.Equal(outcmdhash, fi.CmdHash()) {
 			if log.V(1) {
-				clog.Infof(ctx, "out-cmdhash differ %s %s->%s", out, hex.EncodeToString(outcmdhash), hex.EncodeToString(fi.CmdHash()))
+				clog.Infof(ctx, "out-cmdhash differ %s %s->%s", outPath, hex.EncodeToString(outcmdhash), hex.EncodeToString(fi.CmdHash()))
 			}
 			outcmdhash = nil
 		}
 		var t time.Time
-		if stepDef.Binding("restat") != "" {
+		if restat {
 			t = fi.UpdatedTime()
 		} else {
 			t = fi.ModTime()
 		}
 		if outmtime.IsZero() {
 			outmtime = t
-			out0 = out
+			out0 = outPath
 			continue
 		}
 		if outmtime.After(t) {
 			outmtime = t
-			out0 = out
+			out0 = outPath
 		}
 	}
 	if oerr != nil {

@@ -28,6 +28,9 @@ type StepDef interface {
 	// Next returns next step's def.
 	Next() StepDef
 
+	// Ensure siso rule is applied
+	EnsureRule(context.Context)
+
 	// RuleName returns rule name of the step. empty for no rule.
 	RuleName() string
 
@@ -298,6 +301,7 @@ func (s *Step) useReclient() bool {
 func (s *Step) init(ctx context.Context, b *Builder) {
 	ctx, span := trace.NewSpan(ctx, "step-init")
 	defer span.Close(nil)
+	s.def.EnsureRule(ctx)
 	s.cmd = newCmd(ctx, b, s.def)
 	clog.Infof(ctx, "cmdhash:%s", hex.EncodeToString(s.cmd.CmdHash))
 }

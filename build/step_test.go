@@ -21,8 +21,11 @@ type fakeStepDef struct {
 	expandedInputs func(context.Context) []string
 }
 
-func (f fakeStepDef) String() string     { return fmt.Sprintf("%#v", f) }
-func (f fakeStepDef) Next() StepDef      { return nil }
+func (f fakeStepDef) String() string { return fmt.Sprintf("%#v", f) }
+func (f fakeStepDef) Next() StepDef  { return nil }
+
+func (f fakeStepDef) EnsureRule(context.Context) {}
+
 func (f fakeStepDef) RuleName() string   { return "" }
 func (f fakeStepDef) ActionName() string { return f.actionName }
 func (f fakeStepDef) Args(context.Context) []string {

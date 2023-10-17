@@ -15,7 +15,6 @@ import (
 	"strings"
 	"time"
 
-	"cloud.google.com/go/logging"
 	log "github.com/golang/glog"
 	"github.com/google/uuid"
 
@@ -34,8 +33,10 @@ type StepDef struct {
 	id   string
 	edge *ninjautil.Edge
 	next build.StepDef
-	rule StepRule
-	pure bool
+
+	ruleReady bool
+	rule      StepRule
+	pure      bool
 
 	// from depfile/depslog
 	deps   []string // exec root relative
@@ -51,53 +52,43 @@ type edgeRule struct {
 	replace, accumulate bool
 }
 
-func logFormat(e logging.Entry) string {
-	stepID := e.Labels["id"]
-	if e.HTTPRequest != nil {
-		return fmt.Sprintf("%s %v %s", stepID, e.Payload, e.HTTPRequest.Latency)
-	}
-	if stepID == "" {
-		return fmt.Sprintf("%v", e.Payload)
-	}
-	return fmt.Sprintf("%s %v", stepID, e.Payload)
-}
-
 func (g *Graph) newStepDef(ctx context.Context, edge *ninjautil.Edge, next build.StepDef) *StepDef {
 	id := uuid.New().String()
-	var rule StepRule
-	var pure bool
-	if !edge.IsPhony() {
-		ctx = clog.NewSpan(ctx, "", "", map[string]string{
-			"id": id,
-		})
-		logger := clog.FromContext(ctx)
-		if logger != nil {
-			logger.Formatter = logFormat
-		}
-		rule, pure = g.globals.stepConfig.Lookup(ctx, g.globals.path, edge)
-		if log.V(1) {
-			clog.Infof(ctx, "rule:%t", pure)
-		}
-	}
 	stepDef := &StepDef{
 		id:      id,
 		edge:    edge,
 		next:    next,
-		rule:    rule,
-		pure:    pure,
 		globals: g.globals,
+	}
+	return stepDef
+}
+
+func (s *StepDef) EnsureRule(ctx context.Context) {
+	if s.ruleReady {
+		return
+	}
+	s.ruleReady = true
+	var rule StepRule
+	var pure bool
+	globals := s.globals
+	if !s.edge.IsPhony() {
+		rule, pure = globals.stepConfig.Lookup(ctx, globals.path, s.edge)
+		if log.V(1) {
+			clog.Infof(ctx, "rule:%t", pure)
+		}
 	}
 	if pure {
 		er := &edgeRule{
-			edge:       edge,
+			edge:       s.edge,
 			replace:    rule.Replace,
 			accumulate: rule.Accumulate,
 		}
-		for _, out := range stepDef.Outputs() {
-			g.globals.edgeRules[out] = er
+		for _, out := range s.edge.Outputs() {
+			globals.edgeRules.Store(globals.targetPath(out), er)
 		}
 	}
-	return stepDef
+	s.rule = rule
+	s.pure = pure
 }
 
 // String returns step id.
@@ -276,6 +267,7 @@ func edgeSolibs(edge *ninjautil.Edge) []string {
 func (s *StepDef) Inputs(ctx context.Context) []string {
 	ctx, span := trace.NewSpan(ctx, "stepdef-inputs")
 	defer span.Close(nil)
+
 	seen := make(map[string]bool)
 	var targets []string
 	globals := s.globals
@@ -357,7 +349,9 @@ func depInputs(ctx context.Context, s *StepDef) ([]string, error) {
 		if err != nil {
 			return nil, fmt.Errorf("%w: failed to lookup deps log %s: %v", build.ErrMissingDeps, out, err)
 		}
-		clog.Infof(ctx, "depslog %s: %d", out, len(deps))
+		if log.V(1) {
+			clog.Infof(ctx, "depslog %s: %d", out, len(deps))
+		}
 
 	case "":
 		// deps info is in depfile
@@ -381,7 +375,9 @@ func depInputs(ctx context.Context, s *StepDef) ([]string, error) {
 		if err != nil {
 			return nil, fmt.Errorf("%w: failed to load depfile %s: %v", build.ErrMissingDeps, df, err)
 		}
-		clog.Infof(ctx, "depfile %s: %d", depfile, len(deps))
+		if log.V(1) {
+			clog.Infof(ctx, "depfile %s: %d", depfile, len(deps))
+		}
 	}
 	var inputs []string
 	for _, in := range deps {
@@ -513,6 +509,7 @@ func (s *StepDef) ExpandCaseSensitives(ctx context.Context, inputs []string) []s
 func (s *StepDef) expandLabels(ctx context.Context, inputs []string) []string {
 	ctx, span := trace.NewSpan(ctx, "stepdef-expand-labels")
 	defer span.Close(nil)
+
 	if s.rule.Debug {
 		clog.Infof(ctx, "expands labels")
 	}
@@ -561,6 +558,7 @@ func (s *StepDef) expandLabels(ctx context.Context, inputs []string) []string {
 func (s *StepDef) ExpandedInputs(ctx context.Context) []string {
 	ctx, span := trace.NewSpan(ctx, "stepdef-expanded-inputs")
 	defer span.Close(nil)
+
 	if s.rule.Debug {
 		clog.Infof(ctx, "expanded inputs")
 	}
@@ -625,11 +623,12 @@ func (s *StepDef) ExpandedInputs(ctx context.Context) []string {
 	var newInputs []string
 	changed := false
 	for i := 0; i < len(inputs); i++ {
-		er, ok := globals.edgeRules[inputs[i]]
+		v, ok := globals.edgeRules.Load(inputs[i])
 		if !ok {
 			newInputs = append(newInputs, inputs[i])
 			continue
 		}
+		er := v.(*edgeRule)
 		var ins []string
 		for _, in := range er.edge.Inputs() {
 			p := globals.targetPath(in)
@@ -696,6 +695,7 @@ func (s *StepDef) ExpandedInputs(ctx context.Context) []string {
 
 // appendIndirectInputs appends indirect inputs edge into inputs that matches with filter function, and updates seen.
 func (s *StepDef) appendIndirectInputs(ctx context.Context, filter func(context.Context, string, bool) bool, edge *ninjautil.Edge, inputs []string, seen map[string]bool) []string {
+
 	edgeName := edge.Rule().Name()
 	globals := s.globals
 	// allow to use outputs of the edge.
