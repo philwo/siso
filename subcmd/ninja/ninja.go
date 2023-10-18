@@ -130,6 +130,9 @@ type ninjaCmdRun struct {
 
 	debugMode  debugMode
 	adjustWarn string
+
+	sisoInfoLog string // abs or relative to logDir
+	startDir    string
 }
 
 // Run runs the `ninja` subcommand.
@@ -169,7 +172,10 @@ func (c *ninjaCmdRun) Run(a subcommands.Application, args []string, env subcomma
 				msgPrefix = ui.SGR(ui.BackgroundRed, msgPrefix)
 			}
 			fmt.Fprintf(os.Stderr, "%6s %s: %d done %d failed - %.02f/s\n %v\n", dur, msgPrefix, stats.Done-stats.Skipped, stats.Fail, sps, errBuild.err)
-			suggest := fmt.Sprintf("see %s for command output, or %s", c.logFilename(c.outputLogFile), c.logFilename("siso.INFO"))
+			suggest := fmt.Sprintf("see %s for command output", c.logFilename(c.outputLogFile))
+			if c.sisoInfoLog != "" {
+				suggest += fmt.Sprintf("\n or %s", c.logFilename(c.sisoInfoLog))
+			}
 			if ui.IsTerminal() {
 				suggest = ui.SGR(ui.Bold, suggest)
 			}
@@ -308,6 +314,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	if err != nil {
 		return stats, err
 	}
+	c.startDir = execRoot
 	clog.Infof(ctx, "wd: %s", execRoot)
 	if !filepath.IsAbs(c.configRepoDir) {
 		execRoot, err = detectExecRoot(ctx, execRoot, c.configRepoDir)
@@ -424,7 +431,21 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	}
 	c.dir = rdir
 	clog.Infof(ctx, "working_directory in exec_root: %s", c.dir)
-	c.logSymlink(ctx)
+	if !filepath.IsAbs(c.logDir) {
+		logDir, err := filepath.Abs(c.logDir)
+		if err != nil {
+			return stats, fmt.Errorf("abspath for log dir: %w", err)
+		}
+		c.logDir = logDir
+	}
+	err = os.MkdirAll(c.logDir, 0755)
+	if err != nil {
+		return stats, err
+	}
+	err = c.logSymlink(ctx)
+	if err != nil {
+		return stats, err
+	}
 
 	if c.configFilename == "" {
 		return stats, err
@@ -559,10 +580,6 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	}
 	os.Remove(lastTargetsFile)
 
-	err = os.MkdirAll(c.logDir, 0755)
-	if err != nil {
-		return stats, err
-	}
 	failureSummaryWriter, done, err := c.logWriter(ctx, c.failureSummaryFile)
 	if err != nil {
 		return stats, err
@@ -812,14 +829,25 @@ func (c *ninjaCmdRun) init() {
 	c.Flags.StringVar(&c.adjustWarn, "w", "", "adjust warnings. not supported b/288807840")
 }
 
+// logFilename returns siso's log filename relative to start dir, or absolute path.
 func (c *ninjaCmdRun) logFilename(fname string) string {
-	dir := c.dir
-	if filepath.IsAbs(c.logDir) {
-		dir = c.logDir
-	} else {
-		dir = filepath.Join(dir, c.logDir)
+	if !filepath.IsAbs(fname) {
+		fname = filepath.Join(c.logDir, fname)
 	}
-	return filepath.Join(dir, fname)
+	rel, err := filepath.Rel(c.startDir, fname)
+	if err != nil || !filepath.IsLocal(rel) {
+		return fname
+	}
+	return rel
+}
+
+// glogFilename returns filename of glog logfile. i.e. siso.INFO.
+func (c *ninjaCmdRun) glogFilename() string {
+	logFilename := "siso.INFO"
+	if runtime.GOOS == "windows" {
+		logFilename = "siso.exe.INFO"
+	}
+	return filepath.Join(c.logDir, logFilename)
 }
 
 func (c *ninjaCmdRun) logWriter(ctx context.Context, fname string) (io.Writer, func(errp *error), error) {
@@ -1043,37 +1071,25 @@ type semaTrace struct {
 	waitBuckets, servBuckets [7]int
 }
 
-func (c *ninjaCmdRun) logSymlink(ctx context.Context) {
-	var logDirs []string
-	logDirFlag := flag.Lookup("log_dir")
-	if logDirFlag != nil && logDirFlag.Value.String() != "" {
-		logDirs = append(logDirs, logDirFlag.Value.String())
+func (c *ninjaCmdRun) logSymlink(ctx context.Context) error {
+	logFilename := c.glogFilename()
+	rotateFiles(ctx, logFilename)
+	logfiles, err := log.Names("INFO")
+	if err != nil {
+		return fmt.Errorf("failed to get glog INFO level log files: %w", err)
 	}
-	logDirs = append(logDirs, os.TempDir())
-	logFilename := "siso.INFO"
-	if runtime.GOOS == "windows" {
-		logFilename = "siso.exe.INFO"
+	if len(logfiles) == 0 {
+		return fmt.Errorf("no glog INFO level log files")
 	}
-	rotateFiles(ctx, filepath.Join(c.logDir, logFilename))
-	for _, dir := range logDirs {
-		target, err := os.Readlink(filepath.Join(dir, logFilename))
-		if err != nil {
-			if log.V(1) {
-				clog.Infof(ctx, "log file not found in %s: %v", dir, err)
-			}
-			continue
-		}
-		os.Remove(filepath.Join(c.logDir, logFilename))
-		logFname := filepath.Join(dir, target)
-		err = os.Symlink(logFname, filepath.Join(c.logDir, logFilename))
-		if err != nil {
-			clog.Warningf(ctx, "failed to create %s: %v", logFilename, err)
-			return
-		}
-		clog.Infof(ctx, "logfile: %s", logFname)
-		return
+	err = os.Symlink(logfiles[0], logFilename)
+	if err != nil {
+		clog.Warningf(ctx, "failed to create %s: %v", logFilename, err)
+		c.sisoInfoLog = logfiles[0]
+		return nil
 	}
-	clog.Warningf(ctx, "failed to find %s in %q", logFilename, logDirs)
+	clog.Infof(ctx, "logfile: %q", logfiles)
+	c.sisoInfoLog = filepath.Base(logFilename)
+	return nil
 }
 
 type dataSource struct {
