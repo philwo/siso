@@ -60,6 +60,20 @@ func (g *Graph) newStepDef(ctx context.Context, edge *ninjautil.Edge, next build
 		next:    next,
 		globals: g.globals,
 	}
+	if edge.Binding("solibs") != "" {
+		er := &edgeRule{
+			edge: edge,
+		}
+		globals := g.globals
+		for _, out := range edge.Outputs() {
+			outPath := globals.targetPath(out)
+			globals.edgeRules.Store(outPath, er)
+			if log.V(1) {
+				clog.Infof(ctx, "add edgeRules for %s", outPath)
+			}
+		}
+	}
+
 	return stepDef
 }
 
@@ -84,7 +98,11 @@ func (s *StepDef) EnsureRule(ctx context.Context) {
 			accumulate: rule.Accumulate,
 		}
 		for _, out := range s.edge.Outputs() {
-			globals.edgeRules.Store(globals.targetPath(out), er)
+			outPath := globals.targetPath(out)
+			globals.edgeRules.Store(outPath, er)
+			if log.V(1) {
+				clog.Infof(ctx, "add edgeRules for %s", outPath)
+			}
 		}
 	}
 	s.rule = rule
@@ -629,6 +647,9 @@ func (s *StepDef) ExpandedInputs(ctx context.Context) []string {
 			continue
 		}
 		er := v.(*edgeRule)
+		if s.rule.Debug {
+			clog.Infof(ctx, "check edgeRule for %s inputs=%d solibs=%d", inputs[i], len(er.edge.Inputs()), len(edgeSolibs(er.edge)))
+		}
 		var ins []string
 		for _, in := range er.edge.Inputs() {
 			p := globals.targetPath(in)
@@ -642,16 +663,10 @@ func (s *StepDef) ExpandedInputs(ctx context.Context) []string {
 			if s.rule.Debug {
 				clog.Infof(ctx, "replace %q -> %q", inputs[i], ins)
 			}
-			newInputs = append(newInputs, ins...)
-			if !changed && len(ins) > 0 {
-				changed = true
-			}
+			inputs = append(inputs, ins...)
 			continue
 		}
 		newInputs = append(newInputs, inputs[i])
-		if !er.accumulate {
-			continue
-		}
 		for _, in := range edgeSolibs(er.edge) {
 			in = globals.path.MustFromWD(in)
 			if seen[in] {
@@ -659,6 +674,16 @@ func (s *StepDef) ExpandedInputs(ctx context.Context) []string {
 			}
 			seen[in] = true
 			ins = append(ins, in)
+		}
+		if !er.accumulate {
+			if s.rule.Debug {
+				clog.Infof(ctx, "solibs %q -> %q", inputs[i], ins)
+			}
+			newInputs = append(newInputs, ins...)
+			if !changed && len(ins) > 0 {
+				changed = true
+			}
+			continue
 		}
 		edgeOuts := er.edge.Outputs()
 		if inputs[i] == globals.targetPath(edgeOuts[0]) {
