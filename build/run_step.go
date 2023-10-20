@@ -59,6 +59,8 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 	ctx, span := trace.NewSpan(ctx, "run-step")
 	defer span.Close(nil)
 
+	step.init(ctx, b)
+
 	if b.dryRun {
 		select {
 		case <-ctx.Done():

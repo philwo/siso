@@ -600,7 +600,7 @@ loop:
 				span.Close(nil)
 				return
 			}
-			step.init(ctx, b)
+
 			description := stepDescription(step.def)
 			logEntry := logger.Entry(logging.Info, description)
 			logEntry.Labels = map[string]string{
