@@ -562,6 +562,7 @@ loop:
 		b.plan.pushReady()
 		wg.Add(1)
 		go func(step *Step) {
+			// TODO: factor out this func?
 			defer wg.Done()
 			var err error
 			defer func() {
@@ -600,7 +601,7 @@ loop:
 				span.Close(nil)
 				return
 			}
-
+			step.init(ctx, b)
 			description := stepDescription(step.def)
 			logEntry := logger.Entry(logging.Info, description)
 			logEntry.Labels = map[string]string{
