@@ -512,7 +512,9 @@ func (hfs *HashFS) Mkdir(ctx context.Context, root, dirname string, cmdhash []by
 	if err == nil && fi.IsDir() {
 		err := os.Chtimes(dirname, time.Now(), mtime)
 		hfs.IOMetrics.OpsDone(err)
-		clog.Warningf(ctx, "failed to set dir mtime %s: %v", dirname, mtime)
+		if err != nil {
+			clog.Warningf(ctx, "failed to set dir mtime %s: %v: %v", dirname, mtime, err)
+		}
 	} else {
 		err := os.MkdirAll(dirname, 0755)
 		hfs.IOMetrics.OpsDone(err)
