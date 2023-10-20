@@ -61,10 +61,10 @@ var (
 			return false
 		}
 		switch s.Code() {
-		case codes.Canceled, codes.Unknown, codes.DeadlineExceeded, codes.Aborted,
-			codes.Unavailable, codes.ResourceExhausted:
+		case codes.Canceled, codes.Unknown, codes.DeadlineExceeded, codes.Aborted, codes.Unavailable:
 			return true
 		default:
+			// don't retry for codes.ResourceExhausted. i.e. request too large
 			return false
 		}
 	}
