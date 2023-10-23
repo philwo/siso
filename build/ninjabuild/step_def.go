@@ -60,6 +60,24 @@ func (g *Graph) newStepDef(ctx context.Context, edge *ninjautil.Edge, next build
 		next:    next,
 		globals: g.globals,
 	}
+	if edge.Binding("solibs") != "" {
+		// solibs is required to run the executable generated
+		// by this step.
+		// We'll add this when a step requires the executable
+		// in ExpandedInputs later.
+		// https://gn.googlesource.com/gn/+/main/docs/reference.md#:~:text=extension.%0A%20%20%20%20%20%20%20%20Example%3A%20%22.so%22%0A%0A%20%20%20%20%7B%7B-,solibs,-%7D%7D%0A%20%20%20%20%20%20%20%20Extra%20libraries%20from
+		er := &edgeRule{
+			edge: edge,
+		}
+		globals := g.globals
+		for _, out := range edge.Outputs() {
+			outPath := globals.targetPath(out)
+			globals.edgeRules.Store(outPath, er)
+			if log.V(1) {
+				clog.Infof(ctx, "add edgeRule for %s [solibs]", outPath)
+			}
+		}
+	}
 	return stepDef
 }
 
@@ -558,7 +576,13 @@ func (s *StepDef) expandLabels(ctx context.Context, inputs []string) []string {
 	return expanded
 }
 
-// ExpandedInputs returns expanded inputs, i.e. may include indirect inputs.
+// ExpandedInputs returns expanded inputs
+//   - Include indirect inputs.
+//   - Add solibs for input (to execute the executable).
+//   - Add the inputs from accumulate steps.
+//   - Replace the inputs from replace steps.
+//   - Exclude by ExcludeInputPatterns.
+//     etc
 func (s *StepDef) ExpandedInputs(ctx context.Context) []string {
 	ctx, span := trace.NewSpan(ctx, "stepdef-expanded-inputs")
 	defer span.Close(nil)
@@ -654,7 +678,22 @@ func (s *StepDef) ExpandedInputs(ctx context.Context) []string {
 			continue
 		}
 		newInputs = append(newInputs, inputs[i])
-		// TODO(b/306136848): expand solibs unless replace.
+		var solibsIns []string
+		for _, in := range edgeSolibs(er.edge) {
+			in = globals.path.MustFromWD(in)
+			if seen[in] {
+				continue
+			}
+			seen[in] = true
+			solibsIns = append(solibsIns, in)
+		}
+		if len(solibsIns) > 0 {
+			newInputs = append(newInputs, solibsIns...)
+			if s.rule.Debug {
+				clog.Infof(ctx, "solibs %q -> %q", inputs[i], solibsIns)
+			}
+			changed = true
+		}
 		if !er.accumulate {
 			continue
 		}
