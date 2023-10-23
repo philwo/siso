@@ -147,7 +147,10 @@ to register handlers and step configs.
           * `exclude_input_patterns`: glob pattern to exclude from inputs
             * if it contains '/', full match to input path
             * otherwise, match basename of input path.
-          * `indirect_inputs`: specify what indirect inputs to use. use this when direct inputs don't cover full action inputs. no need to use this when `replace` or `accumulate` flags are sufficient.
+          * `indirect_inputs`: specify what inputs from the previous steps to use as inputs of this step.
+            The matched indirect input are included recursively.
+            Sibling outputs are also included. e.g. gen/{foo.stamp, foo.h, foo.cc} -> a step depending on gen/foo.stamp may need foo.h/foo.cc.
+            Consider using `replace` or `accumulate` first, and use `indirect_inputs` only when they are not sufficient.
             * `includes`: glob patterns to match to indirect inputs.
               * if it contains '/', full match to input path with [path.Match](https://pkg.go.dev/path#Match).
               * otherwise, match basename of input path with [path.Match](https://pkg.go.dev/path#Match).
