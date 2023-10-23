@@ -54,8 +54,7 @@ func TestStepExpandLabels(t *testing.T) {
 	}
 }
 
-// TODO: add test for indirect_inputs etc.
-func TestExpandedInputs(t *testing.T) {
+func TestExpandedInputs_no_expansion(t *testing.T) {
 	ctx := context.Background()
 	state := ninjautil.NewState()
 	p := ninjautil.NewManifestParser(state)
@@ -360,6 +359,111 @@ build foo.h: __rule | ./protoc
 		"out/Default/protoc",
 		"out/Default/libc++.so",
 	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("ExpandedInputs: diff -want +got:\n%s", diff)
+	}
+}
+
+func TestExpandedInputs_indirect_inputs(t *testing.T) {
+	ctx := context.Background()
+	state := ninjautil.NewState()
+	p := ninjautil.NewManifestParser(state)
+	dir := t.TempDir()
+	fname := filepath.Join(dir, "build.ninja")
+	err := os.WriteFile(fname, []byte(`
+rule __rule
+  command = ....
+
+build target4.h target4.m: __rule ../../source4.in
+build target3.h: __rule ../../source3.in target4.m
+build target2.h: __rule ../../source2.in
+build target1: __rule ../../source1.cc target2.h target3.h
+`), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = p.Load(ctx, fname)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	hashFS, err := hashfs.New(ctx, hashfs.Option{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	setupFile := func(fname string) {
+		fullpath := filepath.Join(dir, fname)
+		err := os.MkdirAll(filepath.Dir(fullpath), 0755)
+		if err != nil {
+			t.Fatalf("MkdirAll(%q)=%v", fname, err)
+		}
+		err = os.WriteFile(fullpath, nil, 0644)
+		if err != nil {
+			t.Fatalf("WriteFile(%q)=%v", fname, err)
+		}
+	}
+	setupFile("source4.in")
+	setupFile("source3.in")
+	setupFile("source2.in")
+	setupFile("source1.cc")
+
+	graph := &Graph{
+		nstate:  state,
+		visited: make(map[*ninjautil.Edge]bool),
+		globals: &globals{
+			path:   build.NewPath(dir, "out/Default"),
+			hashFS: hashFS,
+			stepConfig: &StepConfig{
+				Rules: []*StepRule{
+					{
+						Name:       "rule1",
+						ActionName: "__rule",
+						IndirectInputs: &IndirectInputs{
+							Includes: []string{"*.h"},
+						},
+					},
+				},
+			},
+		},
+	}
+	err = graph.globals.stepConfig.Init(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	newStepDef := func(target string) *StepDef {
+		node, ok := state.LookupNode(target)
+		if !ok {
+			t.Fatalf("target %q not found in build.ninja", target)
+		}
+		edge, ok := node.InEdge()
+		if !ok {
+			t.Fatalf("target %q has no edge", target)
+		}
+		s := graph.newStepDef(ctx, edge, nil)
+		s.EnsureRule(ctx)
+		return s
+	}
+	for _, target := range []string{
+		"target4.h",
+		"target3.h",
+		"target2.h",
+	} {
+		setupFile(filepath.Join("out/Default", target))
+		if newStepDef(target) == nil {
+			t.Fatalf("stepDef for %q is nil?", target)
+		}
+	}
+	s := newStepDef("target1")
+	got := s.Inputs(ctx)
+	want := []string{"source1.cc", "out/Default/target2.h", "out/Default/target3.h"}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("Inputs: diff -want +got:\n%s", diff)
+	}
+	got = s.ExpandedInputs(ctx)
+	want = []string{"source1.cc", "out/Default/target2.h", "out/Default/target3.h", "out/Default/target4.h"}
+	sort.Strings(got)
+	sort.Strings(want)
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("ExpandedInputs: diff -want +got:\n%s", diff)
 	}
