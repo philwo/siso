@@ -84,7 +84,11 @@ func (s *StepDef) EnsureRule(ctx context.Context) {
 			accumulate: rule.Accumulate,
 		}
 		for _, out := range s.edge.Outputs() {
-			globals.edgeRules.Store(globals.targetPath(out), er)
+			outPath := globals.targetPath(out)
+			globals.edgeRules.Store(outPath, er)
+			if log.V(1) {
+				clog.Infof(ctx, "add edgeRules for %s replace:%t accumulate:%t", outPath, er.replace, er.accumulate)
+			}
 		}
 	}
 	s.rule = rule
@@ -629,6 +633,9 @@ func (s *StepDef) ExpandedInputs(ctx context.Context) []string {
 			continue
 		}
 		er := v.(*edgeRule)
+		if s.rule.Debug {
+			clog.Infof(ctx, "check edgeRule for %s inputs=%d solibs=%d replace=%t accumulate=%t", inputs[i], len(er.edge.Inputs()), len(edgeSolibs(er.edge)), er.replace, er.accumulate)
+		}
 		var ins []string
 		for _, in := range er.edge.Inputs() {
 			p := globals.targetPath(in)
@@ -642,24 +649,16 @@ func (s *StepDef) ExpandedInputs(ctx context.Context) []string {
 			if s.rule.Debug {
 				clog.Infof(ctx, "replace %q -> %q", inputs[i], ins)
 			}
-			newInputs = append(newInputs, ins...)
-			if !changed && len(ins) > 0 {
-				changed = true
-			}
+			inputs = append(inputs, ins...)
+			changed = true
 			continue
 		}
 		newInputs = append(newInputs, inputs[i])
+		// TODO(b/306136848): expand solibs unless replace.
 		if !er.accumulate {
 			continue
 		}
-		for _, in := range edgeSolibs(er.edge) {
-			in = globals.path.MustFromWD(in)
-			if seen[in] {
-				continue
-			}
-			seen[in] = true
-			ins = append(ins, in)
-		}
+		// when accumulate expands inputs/outputs.
 		edgeOuts := er.edge.Outputs()
 		if inputs[i] == globals.targetPath(edgeOuts[0]) {
 			// associates additional outputs to main output.
