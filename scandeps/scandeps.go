@@ -89,11 +89,11 @@ func (s *ScanDeps) Scan(ctx context.Context, execRoot string, req Request) ([]st
 	// max scandeps time in chromium/linux all build on P920 is 12s
 	// as of 2023-06-26
 	// but we see some timeout with 20s on linux-build-perf-developer builder
-	// as os 2023-08-31 b/298142575
+	// as of 2023-08-31 b/298142575, 2023-10-23 b/307202429
 	// it was introduced to mitigate scanning that does not terminate,
 	// but we see such scan recently, so set sufficient large timeout
 	// to avoid scan failure due to timed out.
-	const scanTimeout = 120 * time.Second
+	const scanTimeout = 150 * time.Second
 
 	icnt := 0
 	ncnt := 0

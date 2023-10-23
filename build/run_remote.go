@@ -33,14 +33,20 @@ func (b *Builder) runRemote(ctx context.Context, step *Step) error {
 	}
 	step.setPhase(stepPreproc)
 	err := b.preprocSema.Do(ctx, func(ctx context.Context) error {
-		preprocCmd(ctx, b, step)
+		ctx, span := trace.NewSpan(ctx, "preproc")
+		defer span.Close(nil)
+		err := depsCmd(ctx, b, step)
+		if err != nil {
+			// disable remote execution. b/289143861
+			step.cmd.Platform = nil
+			return fmt.Errorf("disable remote: failed to get %s deps: %w", step.cmd.Deps, err)
+		}
 		return nil
 	})
-	if err != nil {
-		return err
+	if err == nil {
+		dedupInputs(ctx, step.cmd)
+		err = b.runRemoteStep(ctx, step)
 	}
-	dedupInputs(ctx, step.cmd)
-	err = b.runRemoteStep(ctx, step)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
 			return err
@@ -101,6 +107,9 @@ func (b *Builder) tryFastStep(ctx context.Context, step, fastStep *Step) error {
 }
 
 func (b *Builder) runRemoteStep(ctx context.Context, step *Step) error {
+	if len(step.cmd.Platform) == 0 || step.cmd.Platform["container-image"] == "" {
+		return fmt.Errorf("no remote available (missing container-image property)")
+	}
 	if b.cache != nil && b.reCacheEnableRead {
 		err := b.execRemoteCache(ctx, step)
 		if err == nil {
