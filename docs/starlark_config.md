@@ -189,14 +189,15 @@ to register handlers and step configs.
           * `ignore_extra_output_pattern`: regexp to allow if it is generated,
              but not listed in outputs.
           * `impure`: mark it as not pure. i.e. not check inputs/outputs
-          * `replace`: if output of this step is used in other step,
-             the other step will use inputs of this step as input
-             instead of output of this step.
+          * `replace`: if any output of this step is used in other steps,
+             those steps will use the inputs of this step as inputs
+             instead of the outputs of this step.
              used for `stamp` step or so.
-          * `accumulate`: if output of this step is used in other step,
-             the other step will use inputs of this step as input
-             in addition to output of this step.
+             Recursively replaced when multiple replace steps are chained.
+          * `accumulate`: if any output of this step is used in other steps,
+             those steps will use the inputs and outputs of this step as inputs.
              used for thin archive or so.
+             Not recursively accumulated.
           * `debug`: enable debug log in this step.
 
 ## per-step config
