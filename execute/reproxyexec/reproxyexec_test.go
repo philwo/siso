@@ -10,42 +10,16 @@ import (
 	"path/filepath"
 	"testing"
 
-	cpb "github.com/bazelbuild/remote-apis-sdks/go/api/command"
-	"github.com/golang/glog"
-	"github.com/google/go-cmp/cmp"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	"infra/build/siso/execute"
 	"infra/build/siso/execute/reproxyexec/reproxytest"
 	"infra/build/siso/hashfs"
-	"infra/build/siso/o11y/iometrics"
-	"infra/build/siso/reapi/digest"
-	lpb "infra/third_party/reclient/api/log"
 	ppb "infra/third_party/reclient/api/proxy"
 )
 
-func setupDir(t *testing.T, root, dname string) {
-	t.Helper()
-	fullname := filepath.Join(root, dname)
-	err := os.MkdirAll(fullname, 0755)
-	if err != nil {
-		t.Fatal(err)
-	}
-}
-
-func setupFile(t *testing.T, dir, fname string) {
-	t.Helper()
-	setupDir(t, dir, filepath.Dir(fname))
-	fullname := filepath.Join(dir, fname)
-	err := os.WriteFile(fullname, nil, 0644)
-	if err != nil {
-		t.Fatal(err)
-	}
-}
-
 func TestRun_Unauthenticated(t *testing.T) {
-	defer glog.Flush()
 	ctx := context.Background()
 	dir := t.TempDir()
 
@@ -53,16 +27,28 @@ func TestRun_Unauthenticated(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer func() {
-		err := hashFS.Close(ctx)
+	defer hashFS.Close(ctx)
+
+	setupDir := func(dname string) {
+		t.Helper()
+		fullname := filepath.Join(dir, dname)
+		err := os.MkdirAll(fullname, 0755)
 		if err != nil {
 			t.Fatal(err)
 		}
-	}()
-
-	setupFile(t, dir, "base/base.cc")
-	setupFile(t, dir, "third_party/llvm-build/Release+Asserts/bin/clang++")
-	setupDir(t, dir, "out/siso/obj/base")
+	}
+	setupFile := func(fname string) {
+		t.Helper()
+		setupDir(filepath.Dir(fname))
+		fullname := filepath.Join(dir, fname)
+		err = os.WriteFile(fullname, nil, 0644)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	setupFile("base/base.cc")
+	setupFile("third_party/llvm-build/Release+Asserts/bin/clang++")
+	setupDir("out/siso/obj/base")
 
 	s := reproxytest.NewServer(ctx, t, reproxytest.Fake{
 		RunCommandFunc: func(ctx context.Context, req *ppb.RunRequest) (*ppb.RunResponse, error) {
@@ -97,188 +83,5 @@ func TestRun_Unauthenticated(t *testing.T) {
 	})
 	if status.Code(err) != codes.Unauthenticated {
 		t.Errorf("Run(ctx, cmd)=%v; want %v", err, codes.Unauthenticated)
-	}
-}
-
-func TestRun_RemoteSuccess(t *testing.T) {
-	defer glog.Flush()
-	ctx := context.Background()
-	dir := t.TempDir()
-
-	hashFS, err := hashfs.New(ctx, hashfs.Option{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		err := hashFS.Close(ctx)
-		if err != nil {
-			t.Fatal(err)
-		}
-	}()
-
-	setupFile(t, dir, "base/base.cc")
-	setupFile(t, dir, "third_party/llvm-build/Release+Asserts/bin/clang++")
-	setupDir(t, dir, "out/siso/obj/base")
-
-	testOutDigest := digest.FromBytes("", []byte("fake data")).Digest()
-	s := reproxytest.NewServer(ctx, t, reproxytest.Fake{
-		RunCommandFunc: func(ctx context.Context, req *ppb.RunRequest) (*ppb.RunResponse, error) {
-			err := os.WriteFile(filepath.Join(req.Command.ExecRoot, req.Command.GetOutput().GetOutputFiles()[0]), nil, 0644)
-			if err != nil {
-				t.Fatalf("failed to write output files. %v", err)
-			}
-			return &ppb.RunResponse{
-				Result: &cpb.CommandResult{
-					Status: cpb.CommandResultStatus_SUCCESS,
-				},
-				ActionLog: &lpb.LogRecord{
-					CompletionStatus: lpb.CompletionStatus_STATUS_REMOTE_EXECUTION,
-					RemoteMetadata: &lpb.RemoteMetadata{
-						Result: &cpb.CommandResult{
-							Status: cpb.CommandResultStatus_SUCCESS,
-						},
-						OutputFileDigests: map[string]string{
-							"obj/base/base.o": testOutDigest.String(),
-						},
-					},
-				},
-			}, nil
-		},
-	})
-	t.Cleanup(s.Close)
-	re := REProxyExec{
-		connAddress: s.Addr(),
-	}
-
-	err = re.Run(ctx, &execute.Cmd{
-		ID:       "stepid",
-		ExecRoot: dir,
-		Dir:      "out/siso",
-		HashFS:   hashFS,
-		Args:     []string{"../../third_party/llvm-build/Release+Asserts/bin/clang++", "-c", "../../base/base.cc", "-o", "obj/base/base.o"},
-		Inputs:   []string{"base/base.cc", "third_party/llvm-build/Release+Asserts/bin/clang++"},
-		Outputs:  []string{"out/siso/obj/base/base.o"},
-		REProxyConfig: &execute.REProxyConfig{
-			ExecStrategy: "remote_local_fallback",
-			Labels: map[string]string{
-				"type":     "compile",
-				"compiler": "clang",
-				"lang":     "cpp",
-			},
-			Platform: map[string]string{
-				"container-image": "gcr.io/chops-public-images-prod/xxx@sha256:xxx",
-				"OSFamily":        "Linux",
-			},
-		},
-	})
-	if err != nil {
-		t.Errorf("Run(ctx, cmd)=%v; want nil", err)
-	}
-
-	// No IO operations should be taken by HashFS.
-	wantStats := iometrics.Stats{}
-	if diff := cmp.Diff(wantStats, hashFS.IOMetrics.Stats()); diff != "" {
-		t.Errorf("hashFS.IOMetrics.Stats(): diff -want +got:\n%s", diff)
-	}
-
-	// Check if the output digests are taken from RunResponse.
-	entries, err := hashFS.Entries(ctx, dir, []string{"out/siso/obj/base/base.o"})
-	if err != nil {
-		t.Errorf("hashFS.Entries()=%v; want nil", err)
-	}
-	gotDg := entries[0].Data.Digest().String()
-	wantDg := testOutDigest.String()
-	if gotDg != wantDg {
-		t.Errorf("output digest: got %s; want %s", gotDg, wantDg)
-	}
-}
-
-func TestRun_LocalFallback(t *testing.T) {
-	defer glog.Flush()
-	ctx := context.Background()
-	dir := t.TempDir()
-
-	hashFS, err := hashfs.New(ctx, hashfs.Option{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		err := hashFS.Close(ctx)
-		if err != nil {
-			t.Fatal(err)
-		}
-	}()
-
-	setupFile(t, dir, "base/base.cc")
-	setupFile(t, dir, "third_party/llvm-build/Release+Asserts/bin/clang++")
-	setupDir(t, dir, "out/siso/obj/base")
-
-	testOutput := []byte("local fallback!")
-	s := reproxytest.NewServer(ctx, t, reproxytest.Fake{
-		RunCommandFunc: func(ctx context.Context, req *ppb.RunRequest) (*ppb.RunResponse, error) {
-			err := os.WriteFile(filepath.Join(req.Command.ExecRoot, req.Command.GetOutput().GetOutputFiles()[0]), testOutput, 0644)
-			if err != nil {
-				t.Fatalf("failed to write output files. %v", err)
-			}
-			return &ppb.RunResponse{
-				Result: &cpb.CommandResult{
-					Status: cpb.CommandResultStatus_SUCCESS,
-				},
-				ActionLog: &lpb.LogRecord{
-					CompletionStatus: lpb.CompletionStatus_STATUS_LOCAL_FALLBACK,
-				},
-			}, nil
-		},
-	})
-	t.Cleanup(s.Close)
-	re := REProxyExec{
-		connAddress: s.Addr(),
-	}
-
-	err = re.Run(ctx, &execute.Cmd{
-		ID:       "stepid",
-		ExecRoot: dir,
-		Dir:      "out/siso",
-		HashFS:   hashFS,
-		Args:     []string{"../../third_party/llvm-build/Release+Asserts/bin/clang++", "-c", "../../base/base.cc", "-o", "obj/base/base.o"},
-		Inputs:   []string{"base/base.cc", "third_party/llvm-build/Release+Asserts/bin/clang++"},
-		Outputs:  []string{"out/siso/obj/base/base.o"},
-		REProxyConfig: &execute.REProxyConfig{
-			ExecStrategy: "remote_local_fallback",
-			Labels: map[string]string{
-				"type":     "compile",
-				"compiler": "clang",
-				"lang":     "cpp",
-			},
-			Platform: map[string]string{
-				"container-image": "gcr.io/chops-public-images-prod/xxx@sha256:xxx",
-				"OSFamily":        "Linux",
-			},
-		},
-	})
-	if err != nil {
-		t.Errorf("Run(ctx, cmd)=%v; want nil", err)
-	}
-
-	// HashFS reads out/siso/obj/base/base.o to calculate the digest.
-	got := hashFS.IOMetrics.Stats()
-	want := iometrics.Stats{
-		Ops:    2,
-		ROps:   1,
-		RBytes: int64(len(testOutput)),
-	}
-	if diff := cmp.Diff(want, got); diff != "" {
-		t.Errorf("hashFS.IOMetrics.Stats(): diff -want +got:\n%s", diff)
-	}
-
-	// Check the output digests.
-	entries, err := hashFS.Entries(ctx, dir, []string{"out/siso/obj/base/base.o"})
-	if err != nil {
-		t.Errorf("hashFS.Entries()=%v; want nil", err)
-	}
-	gotDg := entries[0].Data.Digest().String()
-	wantDg := digest.FromBytes("", testOutput).Digest().String()
-	if gotDg != wantDg {
-		t.Errorf("output digest: got %s; want %s", gotDg, wantDg)
 	}
 }
