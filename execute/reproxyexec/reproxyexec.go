@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -24,6 +25,7 @@ import (
 
 	"infra/build/siso/execute"
 	"infra/build/siso/o11y/clog"
+	"infra/build/siso/o11y/iometrics"
 	"infra/build/siso/o11y/trace"
 	"infra/build/siso/reapi/digest"
 	lpb "infra/third_party/reclient/api/log"
@@ -33,6 +35,8 @@ import (
 const (
 	// WorkerNameRemote is a worker name used in ActionResult.ExecutionMetadata for remote execution result.
 	WorkerNameRemote = "reproxy-remote"
+	// WorkerNameLocal is a worker name used in ActionResult.ExecutionMetadata for local execution result.
+	WorkerNameLocal = "reproxy-local"
 	// WorkerNameFallback is a worker name used in ActionResult.ExecutionMetadata for local fallback result.
 	WorkerNameFallback = "reproxy-fallback"
 	// WorkerNameRacingLocal is a worker name used in ActionResult.ExecutionMetadata for racing local result.
@@ -286,13 +290,44 @@ func processResponse(ctx context.Context, cmd *execute.Cmd, response *ppb.RunRes
 		// TODO(b/273407069): this is nowhere near a complete ExecutedActionMetadata. add extra info where siso needs it.
 		ExecutionMetadata: &rpb.ExecutedActionMetadata{},
 	}
-	cs := response.GetActionLog().GetCompletionStatus()
-	if cs == lpb.CompletionStatus_STATUS_LOCAL_FALLBACK {
-		result.ExecutionMetadata.Worker = WorkerNameFallback
-	} else if cs == lpb.CompletionStatus_STATUS_RACING_LOCAL {
-		result.ExecutionMetadata.Worker = WorkerNameRacingLocal
-	} else {
+	al := response.GetActionLog()
+	// Completion status
+	remoteSuccess := false
+	switch cs := al.GetCompletionStatus(); cs {
+	case lpb.CompletionStatus_STATUS_CACHE_HIT, lpb.CompletionStatus_STATUS_REMOTE_EXECUTION, lpb.CompletionStatus_STATUS_RACING_REMOTE:
+		// remote success
 		result.ExecutionMetadata.Worker = WorkerNameRemote
+		remoteSuccess = true
+	case lpb.CompletionStatus_STATUS_REMOTE_FAILURE, lpb.CompletionStatus_STATUS_NON_ZERO_EXIT, lpb.CompletionStatus_STATUS_TIMEOUT, lpb.CompletionStatus_STATUS_INTERRUPTED:
+		// remote failure
+		result.ExecutionMetadata.Worker = WorkerNameRemote
+	case lpb.CompletionStatus_STATUS_LOCAL_FALLBACK:
+		result.ExecutionMetadata.Worker = WorkerNameFallback
+	case lpb.CompletionStatus_STATUS_RACING_LOCAL:
+		result.ExecutionMetadata.Worker = WorkerNameRacingLocal
+	case lpb.CompletionStatus_STATUS_LOCAL_EXECUTION, lpb.CompletionStatus_STATUS_LOCAL_FAILURE:
+		result.ExecutionMetadata.Worker = WorkerNameLocal
+	}
+	// ActionDigest
+	if d := al.GetRemoteMetadata().GetActionDigest(); d != "" {
+		dg, err := digest.Parse(d)
+		if err != nil {
+			return err
+		}
+		cmd.SetActionDigest(dg)
+	}
+	// Outputs
+	updatedTime := time.Now()
+	if remoteSuccess {
+		err := updateHashFSFromReproxy(ctx, cmd, al, result, updatedTime)
+		if err != nil {
+			return fmt.Errorf("failed to update hashfs from reproxy outputs: %w", err)
+		}
+	} else {
+		err := cmd.HashFS.UpdateFromLocal(ctx, cmd.ExecRoot, cmd.AllOutputs(), cmd.Restat, updatedTime, cmd.CmdHash)
+		if err != nil {
+			return fmt.Errorf("failed to update hashfs from local: %w", err)
+		}
 	}
 
 	// any stdout/stderr is unexpected, write this out and stop if received.
@@ -302,27 +337,8 @@ func processResponse(ctx context.Context, cmd *execute.Cmd, response *ppb.RunRes
 	if len(response.Stderr) > 0 {
 		cmd.StderrWriter().Write(response.Stderr)
 	}
-	if d := response.GetActionLog().GetRemoteMetadata().GetActionDigest(); d != "" {
-		dg, err := digest.Parse(d)
-		if err != nil {
-			return err
-		}
-		cmd.SetActionDigest(dg)
-	}
 	cmd.SetActionResult(result, cached)
-	err := resultErr(response)
-	if err != nil {
-		return err
-	}
-
-	// for now, update hashfs as if this was local exec.
-	// https://source.chromium.org/chromium/infra/infra/+/main:go/src/infra/build/siso/execute/localexec/localexec.go;l=58-76;drc=f9a8d895ee9b5d51a5d5da0131de75c021b4a212
-	// TODO(b/273407069): use the hashes returned by reproxy.
-	if cmd.HashFS == nil {
-		return nil
-	}
-	now := time.Now()
-	return cmd.HashFS.UpdateFromLocal(ctx, cmd.ExecRoot, cmd.AllOutputs(), cmd.Restat, now, cmd.CmdHash)
+	return resultErr(response)
 }
 
 func resultErr(response *ppb.RunResponse) error {
@@ -335,4 +351,50 @@ func resultErr(response *ppb.RunResponse) error {
 	return execute.ExitError{
 		ExitCode: int(response.GetResult().GetExitCode()),
 	}
+}
+
+// reproxyOutputsDataSource implements fs.DataStore for Reproxy's outputs.
+// This allows cmd.EntriesFromResult()/cmd.HashFS.Update() to skip calculating
+// digests.
+type reproxyOutputsDataSource struct {
+	execRoot  string
+	iometrics *iometrics.IOMetrics
+}
+
+func (ds reproxyOutputsDataSource) Source(_ digest.Digest, fname string) digest.Source {
+	path := filepath.Join(ds.execRoot, fname)
+	return digest.LocalFileSource{Fname: path, IOMetrics: ds.iometrics}
+}
+
+// updateHashFSFromReproxy updates hashfs with the digests provided by Reproxy.
+func updateHashFSFromReproxy(ctx context.Context, cmd *execute.Cmd, actionLog *lpb.LogRecord, actionResult *rpb.ActionResult, updatedTime time.Time) error {
+	rm := actionLog.GetRemoteMetadata()
+	for path, dg := range rm.GetOutputFileDigests() {
+		d, err := digest.Parse(dg)
+		if err != nil {
+			return err
+		}
+		out := &rpb.OutputFile{
+			Path:   path,
+			Digest: d.Proto(),
+			// TODO: b/303551128 - Fix Reproxy's RunResponse to include IsExecutable.
+		}
+		actionResult.OutputFiles = append(actionResult.OutputFiles, out)
+	}
+	for path, dg := range rm.GetOutputDirectoryDigests() {
+		d, err := digest.Parse(dg)
+		if err != nil {
+			return err
+		}
+		out := &rpb.OutputDirectory{
+			Path:       path,
+			TreeDigest: d.Proto(),
+		}
+		actionResult.OutputDirectories = append(actionResult.OutputDirectories, out)
+	}
+	// TODO: Should handle output symlinks if they are used in Chromium builds?
+	ds := &reproxyOutputsDataSource{execRoot: cmd.ExecRoot, iometrics: cmd.HashFS.IOMetrics}
+	entries := cmd.EntriesFromResult(ctx, ds, actionResult)
+	clog.Infof(ctx, "remote output entries %d", len(entries))
+	return cmd.HashFS.Update(ctx, cmd.ExecRoot, entries, updatedTime, cmd.CmdHash, cmd.ActionDigest())
 }
