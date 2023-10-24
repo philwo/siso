@@ -196,7 +196,6 @@ to register handlers and step configs.
              those steps will use the inputs of this step as inputs
              instead of the outputs of this step.
              used for `stamp` step or so.
-             Recursively replaced when multiple replace steps are chained.
           * `accumulate`: if any output of this step is used in other steps,
              those steps will use the inputs and outputs of this step as inputs.
              used for thin archive or so.

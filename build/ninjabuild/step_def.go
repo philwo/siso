@@ -673,7 +673,8 @@ func (s *StepDef) ExpandedInputs(ctx context.Context) []string {
 			if s.rule.Debug {
 				clog.Infof(ctx, "replace %q -> %q", inputs[i], ins)
 			}
-			inputs = append(inputs, ins...)
+			// TODO: some step may want to expand recursively?
+			newInputs = append(newInputs, ins...)
 			changed = true
 			continue
 		}

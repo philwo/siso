@@ -265,7 +265,7 @@ build target1: __rule ../../source1 foo.stamp foo.a
 		t.Errorf("Inputs: diff -want +got:\n%s", diff)
 	}
 	got = s.ExpandedInputs(ctx)
-	want = []string{"source1", "source2", "out/Default/foo.a", "source3", "source4", "source0"}
+	want = []string{"source1", "source2", "out/Default/foo.a", "out/Default/bar.stamp", "source4", "source0"}
 	sort.Strings(got)
 	sort.Strings(want)
 	if diff := cmp.Diff(want, got); diff != "" {
