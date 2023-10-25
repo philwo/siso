@@ -62,7 +62,7 @@ func (re *RemoteExec) prepareInputs(ctx context.Context, cmd *execute.Cmd) (dige
 func (re *RemoteExec) Run(ctx context.Context, cmd *execute.Cmd) error {
 	if cmd.Timeout > 0 {
 		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, cmd.Timeout)
+		ctx, cancel = context.WithTimeoutCause(ctx, cmd.Timeout, fmt.Errorf("remote exec timeout=%v: %w", cmd.Timeout, context.DeadlineExceeded))
 		defer cancel()
 	}
 	ctx, span := trace.NewSpan(ctx, "remote-exec")
