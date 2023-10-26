@@ -99,19 +99,21 @@ func (depsMSVC) DepsAfterRun(ctx context.Context, b *Builder, step *Step) ([]str
 	deps, filteredOutput := msvcutil.ParseShowIncludes(output)
 
 	m := make(map[string]bool)
+	basenames := make(map[string]bool)
 	for _, d := range deps {
 		m[d] = true
+		basenames[filepath.Base(d)] = true
 	}
 	// clang-cl /showIncludes doesn't report correctly.
 	// b/294927170 https://github.com/llvm/llvm-project/issues/58726
-	// so records cmd.inputs used too.
+	// so records cmd.Inputs used for the same basename.
+	// cmd.Inputs may include unnecessary inputs that may break
+	// confirm no-op b/307834469
 	for _, in := range step.cmd.Inputs {
-		switch ext := filepath.Ext(in); ext {
-		case ".h", ".hxx", ".hpp", ".inc":
-			// include header files only.
+		if !basenames[filepath.Base(in)] {
+			// include basename matched files only.
 			// other files/dirs may add unnecessary deps
 			// and break no-op check.
-		default:
 			continue
 		}
 		in = b.path.MustToWD(in)
