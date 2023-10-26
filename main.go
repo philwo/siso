@@ -25,6 +25,7 @@ import (
 
 	"infra/build/siso/auth/cred"
 	"infra/build/siso/subcmd/authcheck"
+	"infra/build/siso/subcmd/digraph"
 	"infra/build/siso/subcmd/fetch"
 	"infra/build/siso/subcmd/fscmd"
 	"infra/build/siso/subcmd/metricscmd"
@@ -54,6 +55,7 @@ func getApplication(authOpts cred.Options) *cli.Application {
 			subcommands.CmdHelp,
 
 			ninja.Cmd(authOpts),
+			digraph.Cmd(),
 			fscmd.Cmd(authOpts),
 			recall.Cmd(authOpts),
 			fetch.Cmd(authOpts),
