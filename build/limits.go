@@ -22,9 +22,9 @@ const (
 	// to protect from out of memory, or too many threads.
 	stepLimitFactor = 1024
 
-	// limit # of concurrent scandeps steps at most 4 times of num cpus
+	// limit # of concurrent scandeps steps at most 2 times of num cpus
 	// to protect from out of memory, reduce contention
-	scanDepsLimitFactor = 4
+	scanDepsLimitFactor = 2
 
 	// limit # of concurrent steps at most 80 times of num cpus
 	// to protect from out of memory, or DDoS to RE API.
