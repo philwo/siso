@@ -4,3 +4,4 @@
 import("//build/args/chromeos/test.gni")
 import("../common.gni")
 use_siso = true
+use_remoteexec = true # used to be use_goma = true

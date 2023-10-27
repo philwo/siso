@@ -9,9 +9,10 @@ def __parse_args(gnargs):
     lines = gnargs.splitlines()
     args = {}
     for line in lines:
+        i = line.find("#")
+        if i >= 0:
+            line = line[:i]
         line = line.strip()
-        if line.startswith("#"):
-            continue
         s = line.partition("=")
         if len(s) != 3:
             continue
@@ -26,10 +27,11 @@ def __load_args(ctx, fname, gnargs):
     lines = gnargs.splitlines()
     args = {}
     for line in lines:
+        i = line.find("#")
+        if i >= 0:
+            line = line[:i]
         line = line.strip()
         if len(line) == 0:
-            continue
-        if line.startswith("#"):
             continue
         if line.startswith("import(\""):
             raw_import_path = line.removeprefix("import(\"")
