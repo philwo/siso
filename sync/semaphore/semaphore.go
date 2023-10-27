@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// TODO(b/267409605): add test.
-
 // Package semaphore provives semaphore.
 package semaphore
 
