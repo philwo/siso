@@ -28,17 +28,6 @@ func fastDepsCmd(ctx context.Context, b *Builder, step *Step) (*Step, bool) {
 	return fastStep, true
 }
 
-func preprocCmd(ctx context.Context, b *Builder, step *Step) {
-	ctx, span := trace.NewSpan(ctx, "preproc")
-	defer span.Close(nil)
-	err := depsCmd(ctx, b, step)
-	if err != nil {
-		clog.Warningf(ctx, "disable remote: failed to get %s deps: %v", step.cmd.Deps, err)
-		// disable remote execution. b/289143861
-		step.cmd.Platform = nil
-	}
-}
-
 func uniqueFiles(inputsList ...[]string) []string {
 	seen := make(map[string]bool)
 	var inputs []string

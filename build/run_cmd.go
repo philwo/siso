@@ -53,17 +53,10 @@ func (b *Builder) runReproxy(ctx context.Context, step *Step) error {
 }
 
 func (b *Builder) runLocal(ctx context.Context, step *Step) error {
-	step.setPhase(stepPreproc)
-	// preprocess to list up all inputs, so we can flush
-	// these inputs before local execution.
-	// TODO: we always flush *.h etc, so do we need this?
-	err := b.preprocSema.Do(ctx, func(ctx context.Context) error {
-		preprocCmd(ctx, b, step)
-		return nil
-	})
-	if err != nil {
-		return err
-	}
+	// preproc performs scandeps to list up all inputs, so
+	// we can flush these inputs before local execution.
+	// but we already flushed generated *.h etc, no need to
+	// preproc for local run.
 	dedupInputs(ctx, step.cmd)
 	// TODO: use local cache?
 	return b.execLocal(ctx, step)
