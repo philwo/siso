@@ -17,10 +17,11 @@ import (
 )
 
 type progress struct {
-	started time.Time
-	verbose bool
-	mu      sync.Mutex
-	ts      time.Time
+	started  time.Time
+	verbose  bool
+	numLocal atomic.Int32
+	mu       sync.Mutex
+	ts       time.Time
 
 	actives       activeSteps
 	done          chan struct{}
@@ -181,6 +182,10 @@ func (p *progress) step(ctx context.Context, b *Builder, step *Step, s string) {
 			localWaits += p.NumWaits()
 			localServs += p.NumServs()
 		}
+		// no wait for fastLocalSema since it only use TryAcquire,
+		// so no need to count b.fastLocalSema.NumWaits.
+		localServs += b.fastLocalSema.NumServs()
+		p.numLocal.Store(int32(localWaits + localServs))
 		localProgress := runProgress(localWaits, localServs)
 
 		remoteWaits := b.remoteSema.NumWaits()

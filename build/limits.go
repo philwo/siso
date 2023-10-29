@@ -34,13 +34,14 @@ const (
 // Limits specifies the resource limits used in siso build process.
 // zero limit means default.
 type Limits struct {
-	Step     int
-	Preproc  int
-	ScanDeps int
-	Local    int
-	Remote   int
-	REWrap   int
-	Cache    int
+	Step      int
+	Preproc   int
+	ScanDeps  int
+	Local     int
+	FastLocal int
+	Remote    int
+	REWrap    int
+	Cache     int
 }
 
 var (
@@ -58,13 +59,14 @@ func DefaultLimits(ctx context.Context) Limits {
 	limitOnce.Do(func() {
 		numCPU := runtime.NumCPU()
 		defaultLimits = Limits{
-			Step:     stepLimitFactor * numCPU,
-			Preproc:  stepLimitFactor * numCPU,
-			ScanDeps: scanDepsLimitFactor * numCPU,
-			Local:    numCPU,
-			Remote:   remoteLimitFactor * numCPU,
-			REWrap:   limitForREWrapper(ctx, numCPU),
-			Cache:    stepLimitFactor * numCPU,
+			Step:      stepLimitFactor * numCPU,
+			Preproc:   stepLimitFactor * numCPU,
+			ScanDeps:  scanDepsLimitFactor * numCPU,
+			Local:     numCPU,
+			FastLocal: limitForFastLocal(numCPU),
+			Remote:    remoteLimitFactor * numCPU,
+			REWrap:    limitForREWrapper(ctx, numCPU),
+			Cache:     stepLimitFactor * numCPU,
 		}
 		overrides := os.Getenv("SISO_LIMITS")
 		if overrides == "" {
@@ -92,6 +94,8 @@ func DefaultLimits(ctx context.Context) Limits {
 				defaultLimits.ScanDeps = n
 			case "local":
 				defaultLimits.Local = n
+			case "fastlocal":
+				defaultLimits.FastLocal = n
 			case "remote":
 				defaultLimits.Remote = n
 			case "rewrap":
@@ -123,6 +127,16 @@ func UnitTestLimits(ctx context.Context) Limits {
 		REWrap:   2,
 		Cache:    2,
 	}
+}
+
+func limitForFastLocal(numCPU int) int {
+	// We want to use local resources on powerful machine (but not so
+	// many, as it needs to run local only steps too),
+	// but not want to use on cheap machine (*-standard-8 etc).
+	// So don't use fast local if cpus < 32.
+	// 64 cpus -> 2
+	// 128 cpus -> 6
+	return max(0, numCPU-32) / 16
 }
 
 func limitForREWrapper(ctx context.Context, numCPU int) int {

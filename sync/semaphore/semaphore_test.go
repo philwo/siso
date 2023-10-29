@@ -120,6 +120,88 @@ func TestWaitAcquire(t *testing.T) {
 	}
 }
 
+func TestTryAcquire(t *testing.T) {
+	ctx := context.Background()
+	sema := semaphore.New(t.Name(), 3)
+	if n := sema.NumServs(); n != 0 {
+		t.Errorf("NumServs=%d; want %d", n, 0)
+	}
+	if n := sema.NumWaits(); n != 0 {
+		t.Errorf("NumWaits=%d; want %d", n, 0)
+	}
+	if n := sema.NumRequests(); n != 0 {
+		t.Errorf("NumRequests=%d; want %d", n, 0)
+	}
+
+	var dones []func(error)
+	for i := 0; i < 3; i++ {
+		_, done, err := sema.TryAcquire(ctx)
+		if err != nil {
+			t.Fatalf("TryAcquire %d: %v", i, err)
+		}
+		dones = append(dones, done)
+		if n := sema.NumServs(); n != i+1 {
+			t.Errorf("NumServs=%d; want %d", n, i+1)
+		}
+		if n := sema.NumWaits(); n != 0 {
+			t.Errorf("NumWaits=%d; want %d", n, 0)
+		}
+		if n := sema.NumRequests(); n != i+1 {
+			t.Errorf("NumRequests=%d; want %d", n, i+1)
+		}
+	}
+	t.Logf("all acquired")
+	_, _, err := sema.TryAcquire(ctx)
+	if err == nil {
+		t.Fatalf("TryAcquire ok; want err")
+	}
+	if n := sema.NumServs(); n != 3 {
+		t.Errorf("NumServs=%d; want %d", n, 3)
+	}
+	if n := sema.NumWaits(); n != 0 {
+		t.Errorf("NumWaits=%d; want %d", n, 0)
+	}
+	if n := sema.NumRequests(); n != 3 {
+		t.Errorf("NumRequests=%d; want %d", n, 3)
+	}
+	t.Logf("release first")
+	dones[0](nil)
+	if n := sema.NumServs(); n != 2 {
+		t.Errorf("NumServs=%d; want %d", n, 2)
+	}
+	if n := sema.NumWaits(); n != 0 {
+		t.Errorf("NumWaits=%d; want %d", n, 0)
+	}
+	if n := sema.NumRequests(); n != 3 {
+		t.Errorf("NumRequests=%d; want %d", n, 3)
+	}
+	_, done, err := sema.TryAcquire(ctx)
+	if err != nil {
+		t.Fatalf("TryAcquire %v", err)
+	}
+	if n := sema.NumServs(); n != 3 {
+		t.Errorf("NumServs=%d; want %d", n, 2)
+	}
+	if n := sema.NumWaits(); n != 0 {
+		t.Errorf("NumWaits=%d; want %d", n, 0)
+	}
+	if n := sema.NumRequests(); n != 4 {
+		t.Errorf("NumRequests=%d; want %d", n, 4)
+	}
+	dones[1](nil)
+	dones[2](nil)
+	done(nil)
+	if n := sema.NumServs(); n != 0 {
+		t.Errorf("NumServs=%d; want %d", n, 0)
+	}
+	if n := sema.NumWaits(); n != 0 {
+		t.Errorf("NumWaits=%d; want %d", n, 0)
+	}
+	if n := sema.NumRequests(); n != 4 {
+		t.Errorf("NumRequests=%d; want %d", n, 4)
+	}
+}
+
 func TestDo(t *testing.T) {
 	ctx := context.Background()
 	sema := semaphore.New(t.Name(), 3)

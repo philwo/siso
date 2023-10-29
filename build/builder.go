@@ -151,6 +151,8 @@ type Builder struct {
 
 	rewrapSema *semaphore.Semaphore
 
+	fastLocalSema *semaphore.Semaphore
+
 	remoteSema        *semaphore.Semaphore
 	remoteExec        *remoteexec.RemoteExec
 	reCacheEnableRead bool
@@ -252,6 +254,10 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 	logger.Infof("correlated_invocations_id: %s", opts.JobID)
 	logger.Infof("tool_invocation_id: %s", opts.ID)
 
+	var fastLocalSema *semaphore.Semaphore
+	if opts.Limits.FastLocal > 0 {
+		fastLocalSema = semaphore.New("fastlcoal", opts.Limits.FastLocal)
+	}
 	return &Builder{
 		jobID:     opts.JobID,
 		id:        opts.ID,
@@ -269,6 +275,7 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 		localSema:         semaphore.New("localexec", opts.Limits.Local),
 		localExec:         le,
 		rewrapSema:        semaphore.New("rewrap", opts.Limits.REWrap),
+		fastLocalSema:     fastLocalSema,
 		remoteSema:        semaphore.New("remoteexec", opts.Limits.Remote),
 		remoteExec:        re,
 		reCacheEnableRead: opts.RECacheEnableRead,

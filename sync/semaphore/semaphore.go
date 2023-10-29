@@ -7,6 +7,7 @@ package semaphore
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -80,6 +81,30 @@ func (s *Semaphore) WaitAcquire(ctx context.Context) (context.Context, func(erro
 		}, nil
 	case <-ctx.Done():
 		return ctx, func(error) {}, context.Cause(ctx)
+	}
+}
+
+var errNotAvailable = errors.New("semaphore: not available")
+
+// TryAcquire acquires a semaphore if available, or return error.
+// It returns a context for acquired semaphore and func to release it.
+// TODO(b/267576561): add Cloud Trace integration and add tid as an attribute of a Span.
+func (s *Semaphore) TryAcquire(ctx context.Context) (context.Context, func(error), error) {
+	select {
+	case tid := <-s.ch:
+		s.reqs.Add(1)
+		ctx, span := trace.NewSpan(ctx, fmt.Sprintf("serv:%s", s.name))
+		span.SetAttr("tid", tid)
+		return ctx, func(err error) {
+			st, ok := status.FromError(err)
+			if !ok {
+				st = status.FromContextError(err)
+			}
+			span.Close(st.Proto())
+			s.ch <- tid
+		}, nil
+	default:
+		return ctx, func(error) {}, errNotAvailable
 	}
 }
 
