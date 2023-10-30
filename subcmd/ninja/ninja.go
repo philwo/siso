@@ -291,9 +291,18 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		c.reproxyAddr = ""
 	}
 
+	execRoot, err := c.initWorkdirs(ctx)
+	if err != nil {
+		return stats, err
+	}
+	buildPath := build.NewPath(execRoot, c.dir)
+
+	buildID := uuid.New().String()
 	projectID := c.reopt.UpdateProjectID(c.projectID)
+
 	var credential cred.Cred
 	if projectID != "" {
+		// TODO: can be async until cred is needed?
 		spin := ui.Default.NewSpinner()
 		spin.Start("init credentials")
 		credential, err = cred.New(ctx, c.authOpts)
@@ -303,71 +312,17 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		}
 		spin.Stop(nil)
 	}
-	// don't use $PWD for current directory
-	// to avoid symlink issue. b/286779149
-	pwd := os.Getenv("PWD")
-	os.Unsetenv("PWD")
-	execRoot, err := os.Getwd()
-	if pwd != "" {
-		os.Setenv("PWD", pwd)
-	}
-	if err != nil {
-		return stats, err
-	}
-	c.startDir = execRoot
-	clog.Infof(ctx, "wd: %s", execRoot)
-	if !filepath.IsAbs(c.configRepoDir) {
-		execRoot, err = detectExecRoot(ctx, execRoot, c.configRepoDir)
-		if err != nil {
-			return stats, err
-		}
-		c.configRepoDir = filepath.Join(execRoot, c.configRepoDir)
-	}
-	clog.Infof(ctx, "exec_root: %s", execRoot)
-
-	buildID := uuid.New().String()
 	if c.enableCloudLogging {
-		log.Infof("enable cloud logging project=%s id=%s", projectID, buildID)
-
-		spin := ui.Default.NewSpinner()
-		spin.Start("init cloud logging to %s", projectID)
-		// log_id: "siso.log" and "siso.step"
-		// use generic_task resource
-		// https://cloud.google.com/logging/docs/api/v2/resource-list
-		// https://cloud.google.com/monitoring/api/resources#tag_generic_task
-		client, err := logging.NewClient(ctx, projectID, credential.ClientOptions()...)
+		logCtx, loggerURL, done, err := c.initCloudLogging(ctx, projectID, buildID, execRoot, credential)
 		if err != nil {
 			return stats, err
 		}
-		hostname, err := os.Hostname()
-		if err != nil {
-			return stats, err
-		}
-		// Monitored resource labels have a maximum length of 1024. b/295251052
-		job := c.jobID
-		if len(job) > 1024 {
-			job = job[:1024]
-		}
-		logger, err := clog.New(ctx, client, "siso.log", "siso.step", &mrpb.MonitoredResource{
-			Type: "generic_task",
-			Labels: map[string]string{
-				"project_id": projectID,
-				"location":   hostname,
-				"namespace":  execRoot,
-				"job":        job,
-				"task_id":    buildID,
-			},
-		})
-		spin.Stop(err)
-		// TODO(b/288534744): use stdout?
-		fmt.Fprintln(os.Stderr, logger.URL())
-		if err != nil {
-			return stats, err
-		}
-		defer logger.Close()
-		ctx = clog.NewContext(ctx, logger)
-		grpclog.SetLoggerV2(logger)
+		// use stderr for confirm no-op step. b/288534744
+		fmt.Fprintln(os.Stderr, loggerURL)
+		defer done()
+		ctx = logCtx
 	}
+	// logging is ready.
 
 	if cmdver, err := version.GetStartupVersion(); err != nil {
 		clog.Warningf(ctx, "cannot determine CIPD package version: %s", err)
@@ -381,175 +336,60 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	clog.Infof(ctx, "commandline %q", os.Args)
 
 	if c.enableCloudProfiler {
-		clog.Infof(ctx, "enable cloud profiler %q in %s", c.cloudProfilerServiceName, projectID)
-		err := profiler.Start(profiler.Config{
-			Service:        c.cloudProfilerServiceName,
-			MutexProfiling: true,
-			ProjectID:      projectID,
-		}, credential.ClientOptions()...)
-		if err != nil {
-			clog.Errorf(ctx, "failed to start cloud profiler: %v", err)
-		}
+		c.initCloudProfiler(ctx, projectID, credential)
 	}
 	var traceExporter *trace.Exporter
 	if c.enableCloudTrace {
-		clog.Infof(ctx, "enable trace in %s [trace > %s]", projectID, c.traceThreshold)
-		traceExporter, err = trace.NewExporter(ctx, trace.Options{
-			ProjectID:     projectID,
-			StepThreshold: c.traceThreshold,
-			SpanThreshold: c.traceSpanThreshold,
-			ClientOptions: append([]option.ClientOption{}, credential.ClientOptions()...),
-		})
-		if err != nil {
-			clog.Errorf(ctx, "failed to start trace exporter: %v", err)
-		}
+		traceExporter = c.initCloudTrace(ctx, projectID, credential)
 		defer traceExporter.Close(ctx)
 	}
 	// upload build pprof
 
-	cfgrepos := map[string]fs.FS{
-		"config":           os.DirFS(c.configRepoDir),
-		"config_overrides": os.DirFS(filepath.Join(execRoot, ".siso_remote")),
-	}
-	err = os.Chdir(c.dir)
-	if err != nil {
-		return stats, err
-	}
-	clog.Infof(ctx, "change dir to %s", c.dir)
-	cwd, err := os.Getwd()
-	if err != nil {
-		return stats, err
-	}
-	// recalculate dir as relative to exec_root.
-	// recipe may use absolute path for -C.
-	rdir, err := filepath.Rel(execRoot, cwd)
-	if err != nil {
-		return stats, err
-	}
-	if !filepath.IsLocal(rdir) {
-		return stats, fmt.Errorf("dir %q is out of exec root %q", cwd, execRoot)
-	}
-	c.dir = rdir
-	clog.Infof(ctx, "working_directory in exec_root: %s", c.dir)
-	if !filepath.IsAbs(c.logDir) {
-		logDir, err := filepath.Abs(c.logDir)
-		if err != nil {
-			return stats, fmt.Errorf("abspath for log dir: %w", err)
-		}
-		c.logDir = logDir
-	}
-	err = os.MkdirAll(c.logDir, 0755)
-	if err != nil {
-		return stats, err
-	}
-	err = c.logSymlink(ctx)
+	err = c.initLogDir(ctx)
 	if err != nil {
 		return stats, err
 	}
 
-	if c.configFilename == "" {
-		return stats, err
-	}
-	flags := make(map[string]string)
-	c.Flags.Visit(func(f *flag.Flag) {
-		name := f.Name
-		if name == "C" {
-			name = "dir"
-		}
-		flags[name] = f.Value.String()
-	})
 	targets := c.Flags.Args()
-	flags["targets"] = strings.Join(targets, " ")
-	lastTargetsFile := ".siso_last_targets"
-	sameTargets := checkTargets(ctx, lastTargetsFile, targets)
-
-	config, err := buildconfig.New(ctx, c.configFilename, flags, cfgrepos)
+	config, err := c.initConfig(ctx, execRoot, targets)
 	if err != nil {
 		return stats, err
 	}
-
-	if gnArgs, err := os.ReadFile("args.gn"); err == nil {
-		config.Metadata.Set("args.gn", string(gnArgs))
-	} else {
-		clog.Warningf(ctx, "no args.gn: %v", err)
-	}
+	const lastTargetsFile = ".siso_last_targets"
+	sameTargets := checkTargets(ctx, lastTargetsFile, targets)
 
 	spin := ui.Default.NewSpinner()
 
 	var eg errgroup.Group
 	var localDepsLog *ninjautil.DepsLog
 	eg.Go(func() error {
-		err := os.MkdirAll(filepath.Dir(c.depsLogFile), 0755)
+		depsLog, err := c.initDepsLog(ctx)
 		if err != nil {
-			clog.Warningf(ctx, "failed to mkdir for deps log: %v", err)
-			return err
-		}
-		depsLog, err := ninjautil.NewDepsLog(ctx, c.depsLogFile)
-		if err != nil {
-			clog.Warningf(ctx, "failed to load deps log: %v", err)
-			return err
-		}
-		if !depsLog.NeedsRecompact() {
-			localDepsLog = depsLog
-			return nil
-		}
-		err = depsLog.Recompact(ctx)
-		if err != nil {
-			clog.Warningf(ctx, "failed to recompact deps log: %v", err)
 			return err
 		}
 		localDepsLog = depsLog
 		return nil
 	})
 
-	if !c.localCacheEnable {
-		c.cacheDir = ""
-	}
-	var cacheStore build.CacheStore
-	cacheStore, err = build.NewLocalCache(c.cacheDir)
-	if err != nil {
-		clog.Warningf(ctx, "no local cache enabled: %v", err)
-	}
-	var client *reapi.Client
 	if c.reopt.IsValid() {
 		ui.Default.PrintLines(fmt.Sprintf("reapi instance: %s\n", c.reopt.Instance))
-		client, err = reapi.New(ctx, credential, *c.reopt)
-		if err != nil {
-			return stats, err
-		}
-		defer client.Close()
-		cacheStore = client.CacheStore()
 	}
-	cache, err := build.NewCache(ctx, build.CacheOptions{
-		Store:      cacheStore,
-		EnableRead: c.cacheEnableRead,
-	})
+	ds, err := c.initDataSource(ctx, credential)
 	if err != nil {
-		clog.Warningf(ctx, "no cache enabled: %v", err)
+		return stats, err
+	}
+	defer func() {
+		err := ds.Close(ctx)
+		if err != nil {
+			clog.Errorf(ctx, "close datasource: %v", err)
+		}
+	}()
+	c.fsopt.DataSource = ds
+	c.fsopt.OutputLocal, err = c.initOutputLocal()
+	if err != nil {
+		return stats, err
 	}
 	spin.Start("loading fs state")
-	c.fsopt.DataSource = dataSource{
-		cache:  cacheStore,
-		client: client,
-	}
-	switch c.outputLocalStrategy {
-	case "full":
-		c.fsopt.OutputLocal = func(context.Context, string) bool { return true }
-	case "greedy":
-		c.fsopt.OutputLocal = func(ctx context.Context, fname string) bool {
-			// Note: d. wil be downloaded to get deps anyway,
-			// but will not be written to disk.
-			switch filepath.Ext(fname) {
-			case ".o", ".obj", ".a", ".d", ".stamp":
-				return false
-			}
-			return true
-		}
-	case "minimum":
-		c.fsopt.OutputLocal = func(context.Context, string) bool { return false }
-	default:
-		return stats, fmt.Errorf("unknown output local strategy:%q. should be full/greedy/minimum", c.outputLocalStrategy)
-	}
 
 	hashFS, err := hashfs.New(ctx, *c.fsopt)
 	spin.Stop(err)
@@ -580,111 +420,16 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	}
 	os.Remove(lastTargetsFile)
 
-	failureSummaryWriter, done, err := c.logWriter(ctx, c.failureSummaryFile)
+	bopts, done, err := c.initBuildOpts(ctx, projectID, buildID, buildPath, config, ds, hashFS, limits, traceExporter)
 	if err != nil {
 		return stats, err
 	}
 	defer done(&err)
-	defer func() {
-		if failureSummaryWriter != nil && err != nil {
-			fmt.Fprintf(failureSummaryWriter, "error: %v\n", err)
-		}
-	}()
-
-	outputLogWriter, done, err := c.logWriter(ctx, c.outputLogFile)
-	if err != nil {
-		return stats, err
-	}
-	defer done(&err)
-
-	explainWriter, done, err := c.logWriter(ctx, c.explainFile)
-	if err != nil {
-		return stats, err
-	}
-	defer done(&err)
-	if c.debugMode.Explain {
-		if explainWriter == nil {
-			explainWriter = newExplainWriter(os.Stderr, "")
-		} else {
-			explainWriter = io.MultiWriter(newExplainWriter(os.Stderr, filepath.Join(c.dir, c.explainFile)), explainWriter)
-		}
-	}
-
-	localexecLogWriter, done, err := c.logWriter(ctx, c.localexecLogFile)
-	if err != nil {
-		return stats, err
-	}
-	defer done(&err)
-
-	metricsJSONWriter, done, err := c.logWriter(ctx, c.metricsJSON)
-	if err != nil {
-		return stats, err
-	}
-	defer done(&err)
-
-	if !filepath.IsAbs(c.traceJSON) {
-		c.traceJSON = filepath.Join(c.logDir, c.traceJSON)
-	}
-	if !filepath.IsAbs(c.buildPprof) {
-		c.buildPprof = filepath.Join(c.logDir, c.buildPprof)
-	}
-
-	ninjaLogWriter, err := ninjautil.OpenNinjaLog(ctx)
-	if err != nil {
-		return stats, err
-	}
-	defer func() {
-		clog.Infof(ctx, "close .ninja_log")
-		cerr := ninjaLogWriter.Close()
-		if err == nil {
-			err = cerr
-		}
-	}()
-	var actionSaltBytes []byte
-	if c.actionSalt != "" {
-		actionSaltBytes = []byte(c.actionSalt)
-	}
-	buildPath := build.NewPath(execRoot, c.dir)
-	if c.traceJSON != "" {
-		rotateFiles(ctx, c.traceJSON)
-	}
-
 	spin.Start("loading/recompacting deps log")
 	err = eg.Wait()
 	spin.Stop(err)
-
 	if localDepsLog != nil {
 		defer localDepsLog.Close()
-	}
-	bopts := build.Options{
-		JobID:                c.jobID,
-		ID:                   buildID,
-		StartTime:            c.started,
-		ProjectID:            projectID,
-		Metadata:             config.Metadata,
-		Path:                 buildPath,
-		HashFS:               hashFS,
-		REAPIClient:          client,
-		RECacheEnableRead:    c.reCacheEnableRead,
-		ReproxyAddr:          c.reproxyAddr,
-		ActionSalt:           actionSaltBytes,
-		OutputLocal:          build.OutputLocalFunc(c.fsopt.OutputLocal),
-		Cache:                cache,
-		FailureSummaryWriter: failureSummaryWriter,
-		OutputLogWriter:      outputLogWriter,
-		ExplainWriter:        explainWriter,
-		LocalexecLogWriter:   localexecLogWriter,
-		MetricsJSONWriter:    metricsJSONWriter,
-		NinjaLogWriter:       ninjaLogWriter,
-		TraceExporter:        traceExporter,
-		TraceJSON:            c.traceJSON,
-		Pprof:                c.buildPprof,
-		Clobber:              c.clobber,
-		Verbose:              c.verbose,
-		DryRun:               c.dryRun,
-		FailuresAllowed:      c.failuresAllowed,
-		KeepRSP:              c.debugMode.Keeprsp,
-		Limits:               limits,
 	}
 	const failedTargetsFile = ".siso_failed_targets"
 	for {
@@ -825,6 +570,319 @@ func (c *ninjaCmdRun) init() {
 
 	c.Flags.Var(&c.debugMode, "d", "enable debugging (use '-d list' to list modes)")
 	c.Flags.StringVar(&c.adjustWarn, "w", "", "adjust warnings. not supported b/288807840")
+}
+
+func (c *ninjaCmdRun) initWorkdirs(ctx context.Context) (string, error) {
+	// don't use $PWD for current directory
+	// to avoid symlink issue. b/286779149
+	pwd := os.Getenv("PWD")
+	_ = os.Unsetenv("PWD") // no error for safe env key name.
+
+	execRoot, err := os.Getwd()
+	if pwd != "" {
+		_ = os.Setenv("PWD", pwd) // no error to reset env with valid value.
+	}
+	if err != nil {
+		return "", err
+	}
+	c.startDir = execRoot
+	clog.Infof(ctx, "wd: %s", execRoot)
+	if !filepath.IsAbs(c.configRepoDir) {
+		execRoot, err = detectExecRoot(ctx, execRoot, c.configRepoDir)
+		if err != nil {
+			return "", err
+		}
+		c.configRepoDir = filepath.Join(execRoot, c.configRepoDir)
+	}
+	clog.Infof(ctx, "exec_root: %s", execRoot)
+
+	err = os.Chdir(c.dir)
+	if err != nil {
+		return "", err
+	}
+	clog.Infof(ctx, "change dir to %s", c.dir)
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+	// recalculate dir as relative to exec_root.
+	// recipe may use absolute path for -C.
+	rdir, err := filepath.Rel(execRoot, cwd)
+	if err != nil {
+		return "", err
+	}
+	if !filepath.IsLocal(rdir) {
+		return "", fmt.Errorf("dir %q is out of exec root %q", cwd, execRoot)
+	}
+	c.dir = rdir
+	clog.Infof(ctx, "working_directory in exec_root: %s", c.dir)
+	return execRoot, nil
+}
+
+func (c *ninjaCmdRun) initCloudLogging(ctx context.Context, projectID, buildID, execRoot string, credential cred.Cred) (context.Context, string, func(), error) {
+	log.Infof("enable cloud logging project=%s id=%s", projectID, buildID)
+
+	// log_id: "siso.log" and "siso.step"
+	// use generic_task resource
+	// https://cloud.google.com/logging/docs/api/v2/resource-list
+	// https://cloud.google.com/monitoring/api/resources#tag_generic_task
+	client, err := logging.NewClient(ctx, projectID, credential.ClientOptions()...)
+	if err != nil {
+		return ctx, "", func() {}, err
+	}
+	hostname, err := os.Hostname()
+	if err != nil {
+		return ctx, "", func() {}, err
+	}
+	// Monitored resource labels have a maximum length of 1024. b/295251052
+	job := c.jobID
+	if len(job) > 1024 {
+		job = job[:1024]
+	}
+	logger, err := clog.New(ctx, client, "siso.log", "siso.step", &mrpb.MonitoredResource{
+		Type: "generic_task",
+		Labels: map[string]string{
+			"project_id": projectID,
+			"location":   hostname,
+			"namespace":  execRoot,
+			"job":        job,
+			"task_id":    buildID,
+		},
+	})
+	if err != nil {
+		return ctx, "", func() {}, err
+	}
+	ctx = clog.NewContext(ctx, logger)
+	grpclog.SetLoggerV2(logger)
+	return ctx, logger.URL(), func() {
+		err := logger.Close()
+		if err != nil {
+			log.Errorf("close cloug logger: %v", err)
+		}
+	}, nil
+}
+
+func (c *ninjaCmdRun) initCloudProfiler(ctx context.Context, projectID string, credential cred.Cred) {
+	clog.Infof(ctx, "enable cloud profiler %q in %s", c.cloudProfilerServiceName, projectID)
+	err := profiler.Start(profiler.Config{
+		Service:        c.cloudProfilerServiceName,
+		MutexProfiling: true,
+		ProjectID:      projectID,
+	}, credential.ClientOptions()...)
+	if err != nil {
+		clog.Errorf(ctx, "failed to start cloud profiler: %v", err)
+	}
+}
+
+func (c *ninjaCmdRun) initCloudTrace(ctx context.Context, projectID string, credential cred.Cred) *trace.Exporter {
+	clog.Infof(ctx, "enable trace in %s [trace > %s]", projectID, c.traceThreshold)
+	traceExporter, err := trace.NewExporter(ctx, trace.Options{
+		ProjectID:     projectID,
+		StepThreshold: c.traceThreshold,
+		SpanThreshold: c.traceSpanThreshold,
+		ClientOptions: append([]option.ClientOption{}, credential.ClientOptions()...),
+	})
+	if err != nil {
+		clog.Errorf(ctx, "failed to start trace exporter: %v", err)
+	}
+	return traceExporter
+}
+
+func (c *ninjaCmdRun) initLogDir(ctx context.Context) error {
+	if !filepath.IsAbs(c.logDir) {
+		logDir, err := filepath.Abs(c.logDir)
+		if err != nil {
+			return fmt.Errorf("abspath for log dir: %w", err)
+		}
+		c.logDir = logDir
+	}
+	err := os.MkdirAll(c.logDir, 0755)
+	if err != nil {
+		return err
+	}
+	return c.logSymlink(ctx)
+}
+
+func (c *ninjaCmdRun) initFlags(targets []string) map[string]string {
+	flags := make(map[string]string)
+	c.Flags.Visit(func(f *flag.Flag) {
+		name := f.Name
+		if name == "C" {
+			name = "dir"
+		}
+		flags[name] = f.Value.String()
+	})
+	flags["targets"] = strings.Join(targets, " ")
+	return flags
+}
+
+func (c *ninjaCmdRun) initConfig(ctx context.Context, execRoot string, targets []string) (*buildconfig.Config, error) {
+	if c.configFilename == "" {
+		return nil, errors.New("no config filename")
+	}
+	cfgrepos := map[string]fs.FS{
+		"config":           os.DirFS(c.configRepoDir),
+		"config_overrides": os.DirFS(filepath.Join(execRoot, ".siso_remote")),
+	}
+	flags := c.initFlags(targets)
+	config, err := buildconfig.New(ctx, c.configFilename, flags, cfgrepos)
+	if err != nil {
+		return nil, err
+	}
+	if gnArgs, err := os.ReadFile("args.gn"); err == nil {
+		err := config.Metadata.Set("args.gn", string(gnArgs))
+		if err != nil {
+			return nil, err
+		}
+	} else if errors.Is(err, fs.ErrNotExist) {
+		clog.Warningf(ctx, "no args.gn: %v", err)
+	} else {
+		return nil, err
+	}
+	return config, nil
+}
+
+func (c *ninjaCmdRun) initDepsLog(ctx context.Context) (*ninjautil.DepsLog, error) {
+	err := os.MkdirAll(filepath.Dir(c.depsLogFile), 0755)
+	if err != nil {
+		clog.Warningf(ctx, "failed to mkdir for deps log: %v", err)
+		return nil, err
+	}
+	depsLog, err := ninjautil.NewDepsLog(ctx, c.depsLogFile)
+	if err != nil {
+		clog.Warningf(ctx, "failed to load deps log: %v", err)
+		return nil, err
+	}
+	if !depsLog.NeedsRecompact() {
+		return depsLog, nil
+	}
+	err = depsLog.Recompact(ctx)
+	if err != nil {
+		clog.Warningf(ctx, "failed to recompact deps log: %v", err)
+		return nil, err
+	}
+	return depsLog, nil
+}
+
+func (c *ninjaCmdRun) initBuildOpts(ctx context.Context, projectID, buildID string, buildPath *build.Path, config *buildconfig.Config, ds dataSource, hashFS *hashfs.HashFS, limits build.Limits, traceExporter *trace.Exporter) (bopts build.Options, done func(*error), err error) {
+	var dones []func(*error)
+	defer func() {
+		if err != nil {
+			for i := len(dones) - 1; i >= 0; i++ {
+				dones[i](&err)
+			}
+			dones = nil
+		}
+	}()
+
+	failureSummaryWriter, done, err := c.logWriter(ctx, c.failureSummaryFile)
+	if err != nil {
+		return bopts, nil, err
+	}
+	dones = append(dones, done)
+	dones = append(dones, func(errp *error) {
+		if failureSummaryWriter != nil && *errp != nil {
+			fmt.Fprintf(failureSummaryWriter, "error: %v\n", *errp)
+		}
+	})
+	outputLogWriter, done, err := c.logWriter(ctx, c.outputLogFile)
+	if err != nil {
+		return bopts, nil, err
+	}
+	dones = append(dones, done)
+	explainWriter, done, err := c.logWriter(ctx, c.explainFile)
+	if err != nil {
+		return bopts, nil, err
+	}
+	dones = append(dones, done)
+	if c.debugMode.Explain {
+		if explainWriter == nil {
+			explainWriter = newExplainWriter(os.Stderr, "")
+		} else {
+			explainWriter = io.MultiWriter(newExplainWriter(os.Stderr, filepath.Join(c.dir, c.explainFile)), explainWriter)
+		}
+	}
+
+	localexecLogWriter, done, err := c.logWriter(ctx, c.localexecLogFile)
+	if err != nil {
+		return bopts, nil, err
+	}
+	dones = append(dones, done)
+
+	metricsJSONWriter, done, err := c.logWriter(ctx, c.metricsJSON)
+	if err != nil {
+		return bopts, nil, err
+	}
+	dones = append(dones, done)
+
+	if !filepath.IsAbs(c.traceJSON) {
+		c.traceJSON = filepath.Join(c.logDir, c.traceJSON)
+	}
+	if !filepath.IsAbs(c.buildPprof) {
+		c.buildPprof = filepath.Join(c.logDir, c.buildPprof)
+	}
+
+	ninjaLogWriter, err := ninjautil.OpenNinjaLog(ctx)
+	if err != nil {
+		return bopts, nil, err
+	}
+	dones = append(dones, func(errp *error) {
+		clog.Infof(ctx, "close .ninja_log")
+		cerr := ninjaLogWriter.Close()
+		if *errp == nil {
+			*errp = cerr
+		}
+	})
+	var actionSaltBytes []byte
+	if c.actionSalt != "" {
+		actionSaltBytes = []byte(c.actionSalt)
+	}
+	if c.traceJSON != "" {
+		rotateFiles(ctx, c.traceJSON)
+	}
+
+	cache, err := build.NewCache(ctx, build.CacheOptions{
+		Store:      ds.cache,
+		EnableRead: c.cacheEnableRead,
+	})
+	if err != nil {
+		clog.Warningf(ctx, "no cache enabled: %v", err)
+	}
+	bopts = build.Options{
+		JobID:                c.jobID,
+		ID:                   buildID,
+		StartTime:            c.started,
+		ProjectID:            projectID,
+		Metadata:             config.Metadata,
+		Path:                 buildPath,
+		HashFS:               hashFS,
+		REAPIClient:          ds.client,
+		RECacheEnableRead:    c.reCacheEnableRead,
+		ReproxyAddr:          c.reproxyAddr,
+		ActionSalt:           actionSaltBytes,
+		OutputLocal:          build.OutputLocalFunc(c.fsopt.OutputLocal),
+		Cache:                cache,
+		FailureSummaryWriter: failureSummaryWriter,
+		OutputLogWriter:      outputLogWriter,
+		ExplainWriter:        explainWriter,
+		LocalexecLogWriter:   localexecLogWriter,
+		MetricsJSONWriter:    metricsJSONWriter,
+		NinjaLogWriter:       ninjaLogWriter,
+		TraceExporter:        traceExporter,
+		TraceJSON:            c.traceJSON,
+		Pprof:                c.buildPprof,
+		Clobber:              c.clobber,
+		Verbose:              c.verbose,
+		DryRun:               c.dryRun,
+		FailuresAllowed:      c.failuresAllowed,
+		KeepRSP:              c.debugMode.Keeprsp,
+		Limits:               limits,
+	}
+	return bopts, func(err *error) {
+		for i := len(dones) - 1; i >= 0; i-- {
+			dones[i](err)
+		}
+	}, nil
 }
 
 // logFilename returns siso's log filename relative to start dir, or absolute path.
@@ -1095,6 +1153,33 @@ type dataSource struct {
 	client *reapi.Client
 }
 
+func (c *ninjaCmdRun) initDataSource(ctx context.Context, credential cred.Cred) (dataSource, error) {
+	if !c.localCacheEnable {
+		c.cacheDir = ""
+	}
+	var ds dataSource
+	var err error
+	ds.cache, err = build.NewLocalCache(c.cacheDir)
+	if err != nil {
+		clog.Warningf(ctx, "no local cache enabled: %v", err)
+	}
+	if c.reopt.IsValid() {
+		ds.client, err = reapi.New(ctx, credential, *c.reopt)
+		if err != nil {
+			return ds, err
+		}
+		ds.cache = ds.client.CacheStore()
+	}
+	return ds, nil
+}
+
+func (ds dataSource) Close(ctx context.Context) error {
+	if ds.client == nil {
+		return nil
+	}
+	return ds.client.Close()
+}
+
 func (ds dataSource) DigestData(d digest.Digest, fname string) digest.Data {
 	return digest.NewData(ds.Source(d, fname), d)
 }
@@ -1150,6 +1235,27 @@ func rotateFiles(ctx context.Context, fname string) {
 	err := os.Rename(fname, fmt.Sprintf("%s.0", fname))
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		clog.Warningf(ctx, "rotate %s ->0 failed: %v", fname, err)
+	}
+}
+
+func (c *ninjaCmdRun) initOutputLocal() (func(context.Context, string) bool, error) {
+	switch c.outputLocalStrategy {
+	case "full":
+		return func(context.Context, string) bool { return true }, nil
+	case "greedy":
+		return func(ctx context.Context, fname string) bool {
+			// Note: d. wil be downloaded to get deps anyway,
+			// but will not be written to disk.
+			switch filepath.Ext(fname) {
+			case ".o", ".obj", ".a", ".d", ".stamp":
+				return false
+			}
+			return true
+		}, nil
+	case "minimum":
+		return func(context.Context, string) bool { return false }, nil
+	default:
+		return nil, fmt.Errorf("unknown output local strategy: %q. should be full/greedy/minimum", c.outputLocalStrategy)
 	}
 }
 
