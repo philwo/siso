@@ -11,11 +11,10 @@ import (
 	"os"
 	"testing"
 
+	ppb "github.com/bazelbuild/reclient/api/proxy"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-
-	ppb "infra/third_party/reclient/api/proxy"
 )
 
 // Fake is fake reproxy server.
@@ -41,7 +40,7 @@ type Server struct {
 }
 
 // NewServer starts new fake reproxy grpc server.
-func NewServer(ctx context.Context, t *testing.T, fake Fake) *Server {
+func NewServer(ctx context.Context, t *testing.T, fake *Fake) *Server {
 	t.Helper()
 	s := &Server{
 		closed: make(chan struct{}),

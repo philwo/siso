@@ -10,13 +10,13 @@ import (
 	"path/filepath"
 	"testing"
 
+	pb "github.com/bazelbuild/reclient/api/proxy"
 	cpb "github.com/bazelbuild/remote-apis-sdks/go/api/command"
 	"github.com/google/go-cmp/cmp"
 
 	"infra/build/siso/build"
 	"infra/build/siso/execute/reproxyexec/reproxytest"
 	"infra/build/siso/hashfs"
-	pb "infra/third_party/reclient/api/proxy"
 )
 
 func TestBuild_DepsMSVC(t *testing.T) {
@@ -99,7 +99,7 @@ func TestBuild_DepsMSVC_Reproxy(t *testing.T) {
 	func() {
 		t.Logf("first build")
 		setupFiles(t, dir, t.Name(), nil)
-		s := reproxytest.NewServer(ctx, t, reproxytest.Fake{
+		s := reproxytest.NewServer(ctx, t, &reproxytest.Fake{
 			RunCommandFunc: func(ctx context.Context, req *pb.RunRequest) (*pb.RunResponse, error) {
 				err := os.WriteFile(filepath.Join(dir, "out/siso/foo.o"), nil, 0644)
 				if err != nil {
@@ -159,7 +159,7 @@ Note: including file:   ../../base/other.h
 	func() {
 		t.Logf("second build")
 		setupFiles(t, dir, t.Name()+"_second", []string{"base/other.h"})
-		s := reproxytest.NewServer(ctx, t, reproxytest.Fake{
+		s := reproxytest.NewServer(ctx, t, &reproxytest.Fake{
 			RunCommandFunc: func(ctx context.Context, req *pb.RunRequest) (*pb.RunResponse, error) {
 				err := os.WriteFile(filepath.Join(dir, "out/siso/foo.o"), nil, 0644)
 				if err != nil {

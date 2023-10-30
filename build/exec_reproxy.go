@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	ppb "github.com/bazelbuild/reclient/api/proxy"
 	log "github.com/golang/glog"
 
 	"infra/build/siso/execute"
@@ -22,7 +23,6 @@ import (
 	"infra/build/siso/o11y/trace"
 	"infra/build/siso/toolsupport/gccutil"
 	"infra/build/siso/toolsupport/msvcutil"
-	ppb "infra/third_party/reclient/api/proxy"
 )
 
 func (b *Builder) execReproxy(ctx context.Context, step *Step) error {

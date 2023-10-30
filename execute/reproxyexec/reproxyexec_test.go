@@ -12,6 +12,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	lpb "github.com/bazelbuild/reclient/api/log"
+	ppb "github.com/bazelbuild/reclient/api/proxy"
 	cpb "github.com/bazelbuild/remote-apis-sdks/go/api/command"
 	"github.com/golang/glog"
 	"github.com/google/go-cmp/cmp"
@@ -23,8 +25,6 @@ import (
 	"infra/build/siso/hashfs"
 	"infra/build/siso/o11y/iometrics"
 	"infra/build/siso/reapi/digest"
-	lpb "infra/third_party/reclient/api/log"
-	ppb "infra/third_party/reclient/api/proxy"
 )
 
 func setupDir(t *testing.T, root, dname string) {
@@ -66,7 +66,7 @@ func TestRun_Unauthenticated(t *testing.T) {
 	setupFile(t, dir, "third_party/llvm-build/Release+Asserts/bin/clang++")
 	setupDir(t, dir, "out/siso/obj/base")
 
-	s := reproxytest.NewServer(ctx, t, reproxytest.Fake{
+	s := reproxytest.NewServer(ctx, t, &reproxytest.Fake{
 		RunCommandFunc: func(ctx context.Context, req *ppb.RunRequest) (*ppb.RunResponse, error) {
 			return &ppb.RunResponse{}, status.Error(codes.Unauthenticated, "Unable to authenticate with RBE")
 		},
@@ -122,7 +122,7 @@ func TestRun_RemoteSuccess(t *testing.T) {
 	setupDir(t, dir, "out/siso/obj/base")
 	testOut := []byte("fake data")
 	testOutDigest := digest.FromBytes("", testOut).Digest()
-	s := reproxytest.NewServer(ctx, t, reproxytest.Fake{
+	s := reproxytest.NewServer(ctx, t, &reproxytest.Fake{
 		RunCommandFunc: func(ctx context.Context, req *ppb.RunRequest) (*ppb.RunResponse, error) {
 			err := os.WriteFile(filepath.Join(req.Command.ExecRoot, req.Command.GetOutput().GetOutputFiles()[0]), testOut, 0644)
 			if err != nil {
@@ -233,7 +233,7 @@ func TestRun_LocalFallback(t *testing.T) {
 	setupDir(t, dir, "out/siso/obj/base")
 
 	testOut := []byte("local fallback!")
-	s := reproxytest.NewServer(ctx, t, reproxytest.Fake{
+	s := reproxytest.NewServer(ctx, t, &reproxytest.Fake{
 		RunCommandFunc: func(ctx context.Context, req *ppb.RunRequest) (*ppb.RunResponse, error) {
 			err := os.WriteFile(filepath.Join(req.Command.ExecRoot, req.Command.GetOutput().GetOutputFiles()[0]), testOut, 0644)
 			if err != nil {

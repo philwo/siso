@@ -15,6 +15,8 @@ import (
 	"sync"
 	"time"
 
+	lpb "github.com/bazelbuild/reclient/api/log"
+	ppb "github.com/bazelbuild/reclient/api/proxy"
 	cpb "github.com/bazelbuild/remote-apis-sdks/go/api/command"
 	"github.com/bazelbuild/remote-apis-sdks/go/pkg/command"
 	"github.com/bazelbuild/remote-apis-sdks/go/pkg/retry"
@@ -28,8 +30,6 @@ import (
 	"infra/build/siso/o11y/iometrics"
 	"infra/build/siso/o11y/trace"
 	"infra/build/siso/reapi/digest"
-	lpb "infra/third_party/reclient/api/log"
-	ppb "infra/third_party/reclient/api/proxy"
 )
 
 const (
