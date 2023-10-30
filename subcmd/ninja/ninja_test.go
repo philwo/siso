@@ -98,17 +98,10 @@ func setupBuild(ctx context.Context, t *testing.T, dir string, fsopt hashfs.Opti
 			t.Fatal(err)
 		}
 	})
-	stepConfig, err := ninjabuild.NewStepConfig(ctx, config, path, hashFS, "build.ninja")
+	graph, err := ninjabuild.NewGraph(ctx, "build.ninja", config, path, hashFS, depsLog)
 	if err != nil {
 		t.Fatal(err)
 	}
-	nstate, err := ninjabuild.Load(ctx, "build.ninja", path)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	graph := ninjabuild.NewGraph(ctx, "build.ninja", nstate, config, path, hashFS, stepConfig, depsLog)
-
 	cachestore, err := build.NewLocalCache(".siso_cache")
 	if err != nil {
 		t.Logf("no local cache enabled: %v", err)

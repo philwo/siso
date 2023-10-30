@@ -26,8 +26,10 @@ import (
 
 // Graph holds build graph, i.e. all step defs described in build.ninja.
 type Graph struct {
-	fname  string
-	nstate *ninjautil.State
+	fname   string
+	once    sync.Once
+	initErr error
+	nstate  *ninjautil.State
 
 	visited map[*ninjautil.Edge]bool
 
@@ -83,9 +85,8 @@ func (g gnTarget) String() string {
 	return g.target
 }
 
-// NewStepConfig creates new *StepConfig and stores it in .siso_config
-// and .siso_filegroups.
-func NewStepConfig(ctx context.Context, config *buildconfig.Config, p *build.Path, hashFS *hashfs.HashFS, fname string) (*StepConfig, error) {
+// NewGraph creates new Graph from fname (usually "build.ninja") with stepConfig.
+func NewGraph(ctx context.Context, fname string, config *buildconfig.Config, p *build.Path, hashFS *hashfs.HashFS, depsLog *ninjautil.DepsLog) (*Graph, error) {
 	s, err := config.Init(ctx, hashFS, p)
 	if err != nil {
 		return nil, err
@@ -110,15 +111,35 @@ func NewStepConfig(ctx context.Context, config *buildconfig.Config, p *build.Pat
 	if err != nil {
 		return nil, err
 	}
-	err = updateFilegroups(ctx, config, p, hashFS, fname, stepConfig)
+	graph := &Graph{
+		fname: fname,
+
+		visited: make(map[*ninjautil.Edge]bool),
+
+		globals: &globals{
+			path:           p,
+			hashFS:         hashFS,
+			depsLog:        depsLog,
+			buildConfig:    config,
+			stepConfig:     stepConfig,
+			phony:          make(map[string]bool),
+			caseSensitives: make(map[string][]string),
+			gnTargets:      make(map[*ninjautil.Edge]gnTarget),
+		},
+	}
+	err = graph.UpdateFilegroups(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return stepConfig, nil
+	return graph, nil
 }
 
-// updateFilegroups updates filegroups in *StepConfig and stores it in .siso_filegroups.
-func updateFilegroups(ctx context.Context, config *buildconfig.Config, buildPath *build.Path, hashFS *hashfs.HashFS, fname string, sc *StepConfig) error {
+// UpdateFilegroups updates filegroups.
+func (g *Graph) UpdateFilegroups(ctx context.Context) error {
+	return updateFilegroups(ctx, g.globals.buildConfig, g.globals.hashFS, g.globals.path, g.fname, g.globals.stepConfig)
+}
+
+func updateFilegroups(ctx context.Context, config *buildconfig.Config, hashFS *hashfs.HashFS, buildPath *build.Path, fname string, sc *StepConfig) error {
 	var fnameTime, fgTime time.Time
 	fi, err := os.Stat(fname)
 	if err != nil {
@@ -172,45 +193,22 @@ func updateFilegroups(ctx context.Context, config *buildconfig.Config, buildPath
 	return sc.UpdateFilegroups(ctx, fg.Filegroups)
 }
 
-func Load(ctx context.Context, fname string, buildPath *build.Path) (*ninjautil.State, error) {
+func (g *Graph) load(ctx context.Context) error {
 	started := time.Now()
-	state := ninjautil.NewState()
-	state.AddBinding("exec_root", buildPath.ExecRoot)
-	state.AddBinding("working_directory", buildPath.Dir)
-	p := ninjautil.NewManifestParser(state)
+	g.nstate = ninjautil.NewState()
+	g.nstate.AddBinding("exec_root", g.globals.path.ExecRoot)
+	g.nstate.AddBinding("working_directory", g.globals.path.Dir)
+	p := ninjautil.NewManifestParser(g.nstate)
 	spin := ui.Default.NewSpinner()
-	spin.Start("loading %s", fname)
-	err := p.Load(ctx, fname)
+	spin.Start("loading %s", g.fname)
+	err := p.Load(ctx, g.fname)
 	if err != nil {
 		spin.Stop(errors.New("")) // err will be reported as Build's err.
-		return nil, fmt.Errorf("failed to load %s: %w", fname, err)
+		return fmt.Errorf("failed to load %s: %w", g.fname, err)
 	}
 	spin.Stop(nil)
-	clog.Infof(ctx, "load %s %s", fname, time.Since(started))
-	return state, nil
-}
-
-// NewGraph creates new Graph from fname (usually "build.ninja") with stepConfig.
-func NewGraph(ctx context.Context, fname string, nstate *ninjautil.State, config *buildconfig.Config, p *build.Path, hashFS *hashfs.HashFS, stepConfig *StepConfig, depsLog *ninjautil.DepsLog) *Graph {
-	graph := &Graph{
-		fname:  fname,
-		nstate: nstate,
-
-		visited: make(map[*ninjautil.Edge]bool),
-
-		globals: &globals{
-			path:           p,
-			hashFS:         hashFS,
-			depsLog:        depsLog,
-			buildConfig:    config,
-			stepConfig:     stepConfig,
-			phony:          make(map[string]bool),
-			caseSensitives: make(map[string][]string),
-			gnTargets:      make(map[*ninjautil.Edge]gnTarget),
-		},
-	}
-	graph.initGlobals(ctx)
-	return graph
+	clog.Infof(ctx, "load %s %s", g.fname, time.Since(started))
+	return nil
 }
 
 func (g *Graph) initGlobals(ctx context.Context) {
@@ -301,6 +299,18 @@ func (g *Graph) initGlobals(ctx context.Context) {
 	clog.Infof(ctx, "gn_targets=%d edges=%d in %s", nGNTargets, len(g.globals.gnTargets), time.Since(started))
 }
 
+func (g *Graph) init(ctx context.Context) error {
+	g.once.Do(func() {
+		err := g.load(ctx)
+		if err != nil {
+			g.initErr = err
+			return
+		}
+		g.initGlobals(ctx)
+	})
+	return g.initErr
+}
+
 // Filename returns filename of build manifest (e.g. build.ninja).
 func (g *Graph) Filename() string {
 	return g.fname
@@ -314,6 +324,10 @@ func (g *Graph) Filenames() []string {
 // Targets returns targets for ninja args.
 // If args is not given, returns default build targets.
 func (g *Graph) Targets(ctx context.Context, args ...string) ([]build.Target, error) {
+	err := g.init(ctx)
+	if err != nil {
+		return nil, err
+	}
 	if len(args) == 0 {
 		nodes, err := g.nstate.DefaultNodes()
 		if err != nil {

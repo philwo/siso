@@ -431,21 +431,13 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	if localDepsLog != nil {
 		defer localDepsLog.Close()
 	}
-	// TODO(b/286501388): init concurrently for .siso_config/.siso_filegroups, build.ninja.
-	stepConfig, err := ninjabuild.NewStepConfig(ctx, config, buildPath, hashFS, "build.ninja")
-	if err != nil {
-		return stats, err
-	}
-
-	nstate, err := ninjabuild.Load(ctx, c.fname, buildPath)
-	if err != nil {
-		return stats, err
-	}
-
 	const failedTargetsFile = ".siso_failed_targets"
 	for {
 		clog.Infof(ctx, "build starts")
-		graph := ninjabuild.NewGraph(ctx, c.fname, nstate, config, buildPath, hashFS, stepConfig, localDepsLog)
+		graph, err := ninjabuild.NewGraph(ctx, c.fname, config, buildPath, hashFS, localDepsLog)
+		if err != nil {
+			return stats, err
+		}
 		if !c.batch && sameTargets && !c.clobber {
 			failedTargets, err := loadTargets(ctx, failedTargetsFile)
 			if err != nil {
@@ -489,16 +481,6 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 				return stats, err
 			}
 			clog.Infof(ctx, "refresh hashfs done. build retry")
-
-			stepConfig, err = ninjabuild.NewStepConfig(ctx, config, buildPath, hashFS, "build.ninja")
-			if err != nil {
-				return stats, err
-			}
-
-			nstate, err = ninjabuild.Load(ctx, c.fname, buildPath)
-			if err != nil {
-				return stats, err
-			}
 			continue
 		}
 		clog.Infof(ctx, "build finished: %v", err)
