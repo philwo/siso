@@ -698,10 +698,8 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 			if err != nil {
 				clog.Infof(ctx, "no failed targets: %v", err)
 			} else {
-				lbopts := bopts
-				lbopts.REAPIClient = nil
 				ui.Default.PrintLines(fmt.Sprintf("Building last failed targets: %s...\n", failedTargets))
-				stats, err = doBuild(ctx, graph, lbopts, failedTargets...)
+				stats, err = doBuild(ctx, graph, bopts, failedTargets...)
 				if errors.Is(err, build.ErrManifestModified) {
 					if c.dryRun {
 						return stats, nil
