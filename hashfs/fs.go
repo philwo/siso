@@ -1128,7 +1128,18 @@ func (e *entry) flush(ctx context.Context, fname, xattrname string, m *iometrics
 	defer close(e.lready)
 
 	if errors.Is(e.err, fs.ErrNotExist) {
+		// to protect concurrent digest calculation and removal
+		// on Windows.
+		digestLock.Lock()
+		for {
+			if _, ok := digestFnames[fname]; !ok {
+				break
+			}
+			// wait if digest calculation on fname is under progress
+			digestCond.Wait()
+		}
 		err := os.Remove(fname)
+		digestLock.Unlock()
 		m.OpsDone(err)
 		clog.Infof(ctx, "flush remove %s: %v", fname, err)
 		return err
