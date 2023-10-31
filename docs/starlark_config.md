@@ -179,6 +179,9 @@ to register handlers and step configs.
           * `use_remote_exec_wrapper`: true if gomacc/rewrapper is used,
              so it runs locally without using deps/file trace.
           * `reproxy_config`: [`REProxyConfig`](../execute/cmd.go) if reproxy is used.
+             the following RBE environment variables override the flags specified in the config:
+             `RBE_exec_strategy`, `RBE_server_address`.
+             See also https://github.com/bazelbuild/reclient/blob/main/docs/cmd-line-flags.md#rewrapper for more details.
           * `timeout`: duration of the step remote execution.
           * `handler`: handler name to use for the step
           * `deps`: deps overrides

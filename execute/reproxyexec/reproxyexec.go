@@ -223,10 +223,18 @@ func createRequest(ctx context.Context, cmd *execute.Cmd, execTimeout, reclientT
 
 	// Use exec strategy if found, otherwise fallback to unspecified.
 	strategy := ppb.ExecutionStrategy_UNSPECIFIED
-	if res, ok := ppb.ExecutionStrategy_Value_value[strings.ToUpper(cmd.REProxyConfig.ExecStrategy)]; ok {
-		strategy = ppb.ExecutionStrategy_Value(res)
-	} else {
-		return nil, fmt.Errorf("invalid execution strategy %s", cmd.REProxyConfig.ExecStrategy)
+	if strategyEnv := os.Getenv("RBE_exec_strategy"); strategyEnv != "" {
+		if res, ok := ppb.ExecutionStrategy_Value_value[strings.ToUpper(strategyEnv)]; ok {
+			strategy = ppb.ExecutionStrategy_Value(res)
+		} else {
+			return nil, fmt.Errorf("invalid execution strategy environment variable. RBE_exec_strategy=%s", strategyEnv)
+		}
+	} else if strategyConf := cmd.REProxyConfig.ExecStrategy; strategyConf != "" {
+		if res, ok := ppb.ExecutionStrategy_Value_value[strings.ToUpper(strategyConf)]; ok {
+			strategy = ppb.ExecutionStrategy_Value(res)
+		} else {
+			return nil, fmt.Errorf("invalid execution strategy config. exec_strategy=%s", strategyConf)
+		}
 	}
 
 	md := &ppb.Metadata{EventTimes: map[string]*cpb.TimeInterval{
