@@ -330,6 +330,14 @@ func processResponse(ctx context.Context, cmd *execute.Cmd, response *ppb.RunRes
 		}
 	}
 
+	if fallbackInfo := response.GetRemoteFallbackInfo(); fallbackInfo != nil {
+		cmd.SetRemoteFallbackResult(&rpb.ActionResult{
+			ExitCode:  fallbackInfo.GetExitCode(),
+			StdoutRaw: fallbackInfo.GetStdout(),
+			StderrRaw: fallbackInfo.GetStderr(),
+		})
+	}
+
 	// any stdout/stderr is unexpected, write this out and stop if received.
 	if len(response.Stdout) > 0 {
 		cmd.StdoutWriter().Write(response.Stdout)

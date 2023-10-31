@@ -204,6 +204,9 @@ type Cmd struct {
 	actionResult *rpb.ActionResult
 	// actionResult is cached result if cachedResult is true.
 	cachedResult bool
+
+	// reproxy remote fallback
+	remoteFallbackResult *rpb.ActionResult
 }
 
 // String returns an ID of the cmd.
@@ -602,6 +605,16 @@ func (c *Cmd) SetActionResult(result *rpb.ActionResult, cached bool) {
 // ActionResult returns the action result of the cmd.
 func (c *Cmd) ActionResult() (*rpb.ActionResult, bool) {
 	return c.actionResult, c.cachedResult
+}
+
+// SetRemoteFallbackResult sets remote action failed result for reproxy.
+func (c *Cmd) SetRemoteFallbackResult(result *rpb.ActionResult) {
+	c.remoteFallbackResult = result
+}
+
+// RemoteFallbackResult returns the remote action failed result of the cmd for reproxy.
+func (c *Cmd) RemoteFallbackResult() *rpb.ActionResult {
+	return c.remoteFallbackResult
 }
 
 // EntriesFromResult returns output file entries for the cmd and result.
