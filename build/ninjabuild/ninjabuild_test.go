@@ -96,11 +96,23 @@ build all: phony exe
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer depsLog.Close()
-	g, err := NewGraph(ctx, "build.ninja", config, path, hashFS, depsLog)
+	defer func() {
+		err := depsLog.Close()
+		if err != nil {
+			t.Error(err)
+		}
+	}()
+	stepConfig, err := NewStepConfig(ctx, config, path, hashFS, "build.ninja")
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	nstate, err := Load(ctx, "build.ninja", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	g := NewGraph(ctx, "build.ninja", nstate, config, path, hashFS, stepConfig, depsLog)
 
 	for _, tc := range []struct {
 		args []string

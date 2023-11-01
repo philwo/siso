@@ -180,6 +180,16 @@ func (c *ninjaCmdRun) Run(a subcommands.Application, args []string, env subcomma
 				suggest = ui.SGR(ui.Bold, suggest)
 			}
 			fmt.Fprintf(os.Stderr, "%s\n", suggest)
+			if !c.batch {
+				var stepError build.StepError
+				if errors.As(errBuild.err, &stepError) {
+					clog.Infof(ctx, "record failed targets: %q", stepError.Target)
+					serr := saveTargets(ctx, failedTargetsFile, []string{stepError.Target})
+					if serr != nil {
+						clog.Warningf(ctx, "failed to save failed targets: %v", serr)
+					}
+				}
+			}
 		default:
 			msgPrefix := "Error"
 			if ui.IsTerminal() {
@@ -249,6 +259,11 @@ type errInterrupted struct{}
 
 func (errInterrupted) Error() string        { return "interrupt by signal" }
 func (errInterrupted) Is(target error) bool { return target == context.Canceled }
+
+const (
+	lastTargetsFile   = ".siso_last_targets"
+	failedTargetsFile = ".siso_failed_targets"
+)
 
 func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	ctx, cancel := context.WithCancelCause(ctx)
@@ -355,7 +370,6 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	if err != nil {
 		return stats, err
 	}
-	const lastTargetsFile = ".siso_last_targets"
 	sameTargets := checkTargets(ctx, lastTargetsFile, targets)
 
 	spin := ui.Default.NewSpinner()
@@ -397,7 +411,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		return stats, err
 	}
 	defer func() {
-		if err != nil || c.dryRun {
+		if c.dryRun {
 			return
 		}
 		clog.Infof(ctx, "save targets to %s...", lastTargetsFile)
@@ -413,8 +427,10 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		}
 	}()
 
-	clog.Infof(ctx, "sameTargets:%t hashfs clean:%t", sameTargets, hashFS.IsClean())
-	if !c.clobber && !c.dryRun && !c.debugMode.Explain && sameTargets && hashFS.IsClean() {
+	_, err = os.Stat(failedTargetsFile)
+	lastFailed := err == nil
+	clog.Infof(ctx, "sameTargets: %t hashfs clean: %t last failed: %t", sameTargets, hashFS.IsClean(), lastFailed)
+	if !c.clobber && !c.dryRun && !c.debugMode.Explain && sameTargets && hashFS.IsClean() && !lastFailed {
 		// TODO: better to check digest of .siso_fs_state?
 		return stats, errNothingToDo
 	}
@@ -431,14 +447,35 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	if localDepsLog != nil {
 		defer localDepsLog.Close()
 	}
-	const failedTargetsFile = ".siso_failed_targets"
+	// TODO(b/286501388): init concurrently for .siso_config/.siso_filegroups, build.ninja.
+	spin.Start("load siso config")
+	stepConfig, err := ninjabuild.NewStepConfig(ctx, config, buildPath, hashFS, "build.ninja")
+	if err != nil {
+		spin.Stop(err)
+		return stats, err
+	}
+	spin.Stop(nil)
+
+	spin.Start(fmt.Sprintf("load %s", c.fname))
+	nstate, err := ninjabuild.Load(ctx, c.fname, buildPath)
+	if err != nil {
+		spin.Stop(errors.New(""))
+		return stats, err
+	}
+	spin.Stop(nil)
+
+	graph := ninjabuild.NewGraph(ctx, c.fname, nstate, config, buildPath, hashFS, stepConfig, localDepsLog)
+
+	return runNinja(ctx, c.fname, graph, bopts, targets, c.dryRun, !c.batch && sameTargets && !c.clobber)
+}
+
+func runNinja(ctx context.Context, fname string, graph *ninjabuild.Graph, bopts build.Options, targets []string, dryRun, checkFailedTargets bool) (build.Stats, error) {
+	var stats build.Stats
+	spin := ui.Default.NewSpinner()
+
 	for {
 		clog.Infof(ctx, "build starts")
-		graph, err := ninjabuild.NewGraph(ctx, c.fname, config, buildPath, hashFS, localDepsLog)
-		if err != nil {
-			return stats, err
-		}
-		if !c.batch && sameTargets && !c.clobber {
+		if checkFailedTargets {
 			failedTargets, err := loadTargets(ctx, failedTargetsFile)
 			if err != nil {
 				clog.Infof(ctx, "no failed targets: %v", err)
@@ -446,17 +483,18 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 				ui.Default.PrintLines(fmt.Sprintf("Building last failed targets: %s...\n", failedTargets))
 				stats, err = doBuild(ctx, graph, bopts, failedTargets...)
 				if errors.Is(err, build.ErrManifestModified) {
-					if c.dryRun {
+					if dryRun {
 						return stats, nil
 					}
-					clog.Infof(ctx, "%s modified. refresh hashfs...", c.fname)
-					// need to refresh cached entries as `gn gen` updated files
-					// but nnja manifest doesn't know what files are updated.
-					err := hashFS.Refresh(ctx, buildPath.ExecRoot)
+					clog.Infof(ctx, "%s modified.", fname)
+					spin.Start("reloading")
+					err := graph.Reload(ctx)
 					if err != nil {
+						spin.Stop(err)
 						return stats, err
 					}
-					clog.Infof(ctx, "refresh hashfs done. build retry")
+					spin.Stop(nil)
+					clog.Infof(ctx, "reload done. build retry")
 					continue
 				}
 				if err != nil {
@@ -466,34 +504,29 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 				ui.Default.PrintLines(fmt.Sprintf(" %s: %s\n", ui.SGR(ui.Green, "last failed targets fixed"), failedTargets))
 				continue
 			}
+			graph.Reset(ctx)
 		}
-		os.Remove(failedTargetsFile)
-		stats, err = doBuild(ctx, graph, bopts, targets...)
+		err := os.Remove(failedTargetsFile)
+		if err != nil && !errors.Is(err, fs.ErrNotExist) {
+			clog.Warningf(ctx, "failed to remove %s: %v", failedTargetsFile, err)
+		}
+		stats, err := doBuild(ctx, graph, bopts, targets...)
 		if errors.Is(err, build.ErrManifestModified) {
-			if c.dryRun {
+			if dryRun {
 				return stats, nil
 			}
-			clog.Infof(ctx, "%s modified. refresh hashfs...", c.fname)
-			// need to refresh cached entries as `gn gen` updated files
-			// but nnja manifest doesn't know what files are updated.
-			err := hashFS.Refresh(ctx, buildPath.ExecRoot)
+			clog.Infof(ctx, "%s modified", fname)
+			spin.Start("reloading")
+			err := graph.Reload(ctx)
 			if err != nil {
+				spin.Stop(err)
 				return stats, err
 			}
-			clog.Infof(ctx, "refresh hashfs done. build retry")
+			spin.Stop(nil)
+			clog.Infof(ctx, "reload done. build retry")
 			continue
 		}
 		clog.Infof(ctx, "build finished: %v", err)
-		if err != nil && !c.batch {
-			var stepError build.StepError
-			if errors.As(err, &stepError) {
-				clog.Infof(ctx, "record failed targets: %q", stepError.Target)
-				serr := saveTargets(ctx, failedTargetsFile, []string{stepError.Target})
-				if serr != nil {
-					clog.Warningf(ctx, "failed to save failed targets: %v", serr)
-				}
-			}
-		}
 		return stats, err
 	}
 }

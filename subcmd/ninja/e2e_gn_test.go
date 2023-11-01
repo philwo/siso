@@ -32,7 +32,7 @@ func TestBuild_GNGen(t *testing.T) {
 		return cmd.Run()
 	}
 
-	sisoNinja := func(s string) (build.Stats, []build.StepMetric, error) {
+	runBuild := func(t *testing.T, s string) (build.Stats, []build.StepMetric, error) {
 		t.Helper()
 		t.Logf("build - %s", s)
 		opt, graph, cleanup := setupBuild(ctx, t, dir, hashfs.Option{
@@ -80,6 +80,35 @@ func TestBuild_GNGen(t *testing.T) {
 		return stats, metrics, err
 	}
 
+	update := func(t *testing.T, fname string) {
+		t.Helper()
+		fullname := filepath.Join(dir, fname)
+		fi, err := os.Stat(fullname)
+		if err != nil {
+			t.Fatal(err)
+		}
+		buf, err := os.ReadFile(fullname)
+		if err != nil {
+			t.Fatal(err)
+		}
+		buf = append(buf, []byte("!!!")...)
+		for {
+			err = os.WriteFile(fullname, buf, 0644)
+			if err != nil {
+				t.Fatal(err)
+			}
+			nfi, err := os.Stat(fullname)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if fi.ModTime().Equal(nfi.ModTime()) {
+				time.Sleep(1 * time.Millisecond)
+				continue
+			}
+			return
+		}
+	}
+
 	testName := t.Name()
 	const nsteps = 2
 
@@ -90,7 +119,7 @@ func TestBuild_GNGen(t *testing.T) {
 			t.Fatalf("gn gen failed: %v", err)
 		}
 
-		stats, _, err := sisoNinja("first")
+		stats, _, err := runBuild(t, "first")
 		if err != nil {
 			t.Fatalf("first build=%v; want nil err", err)
 		}
@@ -103,7 +132,7 @@ func TestBuild_GNGen(t *testing.T) {
 		if stats.Skipped != 1 {
 			t.Errorf("first build Skipped=%d want=1", stats.Skipped)
 		}
-		stats, _, err = sisoNinja("null")
+		stats, _, err = runBuild(t, "null")
 		if err != nil {
 			t.Fatalf("null build=%v; want nil err", err)
 		}
@@ -117,43 +146,14 @@ func TestBuild_GNGen(t *testing.T) {
 			t.Errorf("null build Skipped=%d want=%d", stats.Skipped, nsteps)
 		}
 
-		update := func(fname string) {
-			t.Helper()
-			fullname := filepath.Join(dir, fname)
-			fi, err := os.Stat(fullname)
-			if err != nil {
-				t.Fatal(err)
-			}
-			buf, err := os.ReadFile(fullname)
-			if err != nil {
-				t.Fatal(err)
-			}
-			buf = append(buf, []byte("!!!")...)
-			for {
-				err = os.WriteFile(fullname, buf, 0644)
-				if err != nil {
-					t.Fatal(err)
-				}
-				nfi, err := os.Stat(fullname)
-				if err != nil {
-					t.Fatal(err)
-				}
-				if fi.ModTime().Equal(nfi.ModTime()) {
-					time.Sleep(1 * time.Millisecond)
-					continue
-				}
-				return
-			}
-		}
+		update(t, "BUILD.gn")
 
-		update("BUILD.gn")
-
-		stats, _, err = sisoNinja("incremental-regen")
+		stats, _, err = runBuild(t, "incremental-regen")
 		if !errors.Is(err, build.ErrManifestModified) {
 			t.Fatalf("regen build=%v; want %v", err, build.ErrManifestModified)
 		}
 
-		stats, _, err = sisoNinja("incremental-after-regen")
+		stats, _, err = runBuild(t, "incremental-after-regen")
 		if err != nil {
 			t.Fatalf("incremental build after regen %v, want nil err", err)
 		}
@@ -180,12 +180,12 @@ func TestBuild_GNGen(t *testing.T) {
 			t.Fatalf("gn clean failed: %v", err)
 		}
 
-		stats, _, err := sisoNinja("clean-regen")
+		stats, _, err := runBuild(t, "clean-regen")
 		if !errors.Is(err, build.ErrManifestModified) {
 			t.Fatalf("clean build=%v; want %v", err, build.ErrManifestModified)
 		}
 
-		stats, _, err = sisoNinja("clean-after-regen")
+		stats, _, err = runBuild(t, "clean-after-regen")
 		if err != nil {
 			t.Fatalf("clean build after regen %v, want nil err", err)
 		}
@@ -199,4 +199,46 @@ func TestBuild_GNGen(t *testing.T) {
 			t.Errorf("clean build Skipped=%d want=1", stats.Skipped)
 		}
 	})
+
+	t.Run("failure_regen", func(t *testing.T) {
+		ninja := func(s string) (build.Stats, error) {
+			opt, graph, cleanup := setupBuild(ctx, t, dir, hashfs.Option{
+				StateFile: ".siso_fs_state",
+			})
+			defer cleanup()
+			return runNinja(ctx, "build.ninja", graph, opt, nil, false, true)
+		}
+		setupFiles(t, dir, testName, nil)
+		err := run("buildtools/gn.py", "gen", "out/siso")
+		if err != nil {
+			t.Fatalf("gn gen failed: %v", err)
+		}
+
+		stats, err := ninja("first")
+		if err != nil {
+			t.Fatalf("first build  %v, want nil err", err)
+		}
+		// mark base.stamp failed
+		err = saveTargets(ctx, filepath.Join(dir, "out/siso", failedTargetsFile), []string{"base.stamp"})
+		if err != nil {
+			t.Fatalf("failed to save failed targets: %v", err)
+		}
+
+		update(t, "BUILD.gn")
+
+		stats, err = ninja("fix")
+		if err != nil {
+			t.Errorf("build err: %v", err)
+		}
+		if stats.Total != nsteps {
+			t.Errorf("fix build Total=%d want=%d", stats.Total, nsteps)
+		}
+		if stats.Done != nsteps {
+			t.Errorf("fix build Done=%d want=%d", stats.Done, nsteps)
+		}
+		if stats.Skipped != nsteps {
+			t.Errorf("fix build Skipped=%d want=%d", stats.Skipped, nsteps)
+		}
+	})
+
 }
