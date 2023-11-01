@@ -43,6 +43,7 @@ func (s *stats) update(ctx context.Context, m *StepMetric, pure bool) {
 		s.s.Remote++
 	case m.IsLocal:
 		s.s.Local++
+	case m.Err: // maybe canceled?
 	default:
 		clog.Warningf(ctx, "unexpected metrics? %#v", m)
 	}
