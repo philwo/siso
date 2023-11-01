@@ -6,7 +6,9 @@ package build
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"time"
@@ -52,7 +54,7 @@ func (b *Builder) teardownRSP(ctx context.Context, step *Step) {
 	}
 	// remove local file if it is used on local?
 	err = os.Remove(filepath.Join(step.cmd.ExecRoot, rsp))
-	if err != nil {
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		clog.Warningf(ctx, "failed to remove %s: %v", rsp, err)
 	}
 }
