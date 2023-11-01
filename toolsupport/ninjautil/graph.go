@@ -16,6 +16,8 @@ type Node struct {
 	outs   []*Edge
 }
 
+func (n *Node) String() string { return n.path }
+
 // Path is the path of the node.
 func (n *Node) Path() string { return n.path }
 
