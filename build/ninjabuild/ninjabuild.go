@@ -15,6 +15,8 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/sync/errgroup"
+
 	"infra/build/siso/build"
 	"infra/build/siso/build/buildconfig"
 	"infra/build/siso/hashfs"
@@ -203,17 +205,23 @@ func NewGraph(ctx context.Context, fname string, nstate *ninjautil.State, config
 
 // Reload reloads hashfs, filegroups and build.ninja.
 func (g *Graph) Reload(ctx context.Context) error {
-	// need to refresh cached entries as `gn gen` updated files
-	// but ninja manifest doesn't know what files are updated.
-	err := g.globals.hashFS.Refresh(ctx, g.globals.path.ExecRoot)
-	if err != nil {
+	eg, ctx := errgroup.WithContext(ctx)
+	eg.Go(func() error {
+		// need to refresh cached entries as `gn gen` updated files
+		// but ninja manifest doesn't know what files are updated.
+		err := g.globals.hashFS.Refresh(ctx, g.globals.path.ExecRoot)
+		if err != nil {
+			return err
+		}
+		g.globals.stepConfig, err = NewStepConfig(ctx, g.globals.buildConfig, g.globals.path, g.globals.hashFS, g.fname)
 		return err
-	}
-	g.globals.stepConfig, err = NewStepConfig(ctx, g.globals.buildConfig, g.globals.path, g.globals.hashFS, g.fname)
-	if err != nil {
+	})
+	eg.Go(func() error {
+		var err error
+		g.nstate, err = Load(ctx, g.fname, g.globals.path)
 		return err
-	}
-	g.nstate, err = Load(ctx, g.fname, g.globals.path)
+	})
+	err := eg.Wait()
 	if err != nil {
 		return err
 	}
