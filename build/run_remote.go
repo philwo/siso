@@ -29,7 +29,7 @@ var errDepsLog = errors.New("failed to exec with deps log")
 func (b *Builder) runRemote(ctx context.Context, step *Step) error {
 	var fastStep *Step
 	var fastOK, fastChecked bool
-	var fastCacheMiss bool
+	fastNeedCheckCache := true
 	cacheCheck := b.cache != nil && b.reCacheEnableRead
 	if b.fastLocalSema != nil && int(b.progress.numLocal.Load()) < b.fastLocalSema.Capacity() {
 		// TODO: skip fast when step is too new and can't expect cache hit?
@@ -40,7 +40,7 @@ func (b *Builder) runRemote(ctx context.Context, step *Step) error {
 				if err == nil {
 					return b.fastStepDone(ctx, step, fastStep)
 				}
-				fastCacheMiss = true
+				fastNeedCheckCache = false
 				clog.Infof(ctx, "cmd fast cache miss: %v", err)
 			}
 			fastChecked = true
@@ -60,7 +60,7 @@ func (b *Builder) runRemote(ctx context.Context, step *Step) error {
 		fastStep, fastOK = fastDepsCmd(ctx, b, step)
 	}
 	if fastOK {
-		err := b.tryFastStep(ctx, step, fastStep, fastCacheMiss && cacheCheck)
+		err := b.tryFastStep(ctx, step, fastStep, fastNeedCheckCache && cacheCheck)
 		if !errors.Is(err, errDepsLog) {
 			return err
 		}
