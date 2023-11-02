@@ -21,7 +21,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"text/tabwriter"
 	"time"
 
@@ -312,23 +311,23 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		return stats, err
 	}
 	buildPath := build.NewPath(execRoot, c.dir)
+
 	buildID := uuid.New().String()
 	projectID := c.reopt.UpdateProjectID(c.projectID)
-	targets := c.Flags.Args()
-	credNew := sync.OnceValues(func() (cred.Cred, error) {
-		if projectID == "" {
-			return cred.Cred{}, nil
-		}
-		started := time.Now()
-		c, err := cred.New(ctx, c.authOpts)
-		clog.Infof(ctx, "init cred in %s: %v", time.Since(started), err)
-		return c, err
-	})
-	if c.enableCloudLogging {
-		credential, err := credNew()
+
+	var credential cred.Cred
+	if projectID != "" {
+		// TODO: can be async until cred is needed?
+		spin := ui.Default.NewSpinner()
+		spin.Start("init credentials")
+		credential, err = cred.New(ctx, c.authOpts)
 		if err != nil {
+			spin.Stop(errors.New(""))
 			return stats, err
 		}
+		spin.Stop(nil)
+	}
+	if c.enableCloudLogging {
 		logCtx, loggerURL, done, err := c.initCloudLogging(ctx, projectID, buildID, execRoot, credential)
 		if err != nil {
 			return stats, err
@@ -339,44 +338,6 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		ctx = logCtx
 	}
 	// logging is ready.
-	sameTargets := checkTargets(ctx, lastTargetsFile, targets)
-
-	graph, bopts, done, err := c.initNinja(ctx, buildPath, buildID, projectID, targets, sameTargets, limits, credNew)
-	if err != nil {
-		return stats, err
-	}
-	defer done(&err)
-
-	defer func() {
-		if c.dryRun {
-			return
-		}
-		clog.Infof(ctx, "save targets to %s...", lastTargetsFile)
-		serr := saveTargets(ctx, lastTargetsFile, targets)
-		if serr != nil {
-			clog.Warningf(ctx, "failed to save failed targets: %v", serr)
-		}
-	}()
-	return runNinja(ctx, c.fname, graph, bopts, targets, c.dryRun, !c.batch && sameTargets && !c.clobber)
-}
-
-func (c *ninjaCmdRun) initNinja(ctx context.Context, buildPath *build.Path, buildID, projectID string, targets []string, sameTargets bool, limits build.Limits, credNew func() (cred.Cred, error)) (graph *ninjabuild.Graph, bopts build.Options, done func(*error), err error) {
-	var dones []func(*error)
-	done = func(errp *error) {
-		for i := len(dones) - 1; i >= 0; i-- {
-			dones[i](errp)
-		}
-	}
-	defer func() {
-		if err != nil {
-			done(&err)
-			dones = nil
-		}
-	}()
-
-	spin := ui.Default.NewSpinner()
-	spin.Start("loading")
-	eg, ctx := errgroup.WithContext(ctx)
 
 	if cmdver, err := version.GetStartupVersion(); err != nil {
 		clog.Warningf(ctx, "cannot determine CIPD package version: %s", err)
@@ -390,144 +351,122 @@ func (c *ninjaCmdRun) initNinja(ctx context.Context, buildPath *build.Path, buil
 	clog.Infof(ctx, "commandline %q", os.Args)
 
 	if c.enableCloudProfiler {
-		credential, err := credNew()
-		if err != nil {
-			spin.Stop(err)
-			return graph, bopts, done, err
-		}
 		c.initCloudProfiler(ctx, projectID, credential)
 	}
 	var traceExporter *trace.Exporter
 	if c.enableCloudTrace {
-		credential, err := credNew()
-		if err != nil {
-			spin.Stop(err)
-			return graph, bopts, done, err
-		}
 		traceExporter = c.initCloudTrace(ctx, projectID, credential)
-		dones = append(dones, func(*error) {
-			traceExporter.Close(ctx)
-		})
+		defer traceExporter.Close(ctx)
 	}
 	// upload build pprof
 
 	err = c.initLogDir(ctx)
 	if err != nil {
-		spin.Stop(err)
-		return graph, bopts, done, err
+		return stats, err
 	}
 
-	config, err := c.initConfig(ctx, buildPath.ExecRoot, targets)
+	targets := c.Flags.Args()
+	config, err := c.initConfig(ctx, execRoot, targets)
 	if err != nil {
-		spin.Stop(err)
-		return graph, bopts, done, err
+		return stats, err
 	}
+	sameTargets := checkTargets(ctx, lastTargetsFile, targets)
 
-	ds := &dataSource{}
-	dones = append(dones, func(*error) {
-		err := ds.Close(ctx)
-		if err != nil {
-			clog.Errorf(ctx, "close datasource: %v", err)
-		}
-	})
-	c.fsopt.DataSource = ds
-	c.fsopt.OutputLocal, err = c.initOutputLocal()
-	if err != nil {
-		spin.Stop(err)
-		return graph, bopts, done, err
-	}
-	started := time.Now()
-	hashFS, err := hashfs.New(ctx, *c.fsopt)
-	clog.Infof(ctx, "load hashfs in %s: %v", time.Since(started), err)
-	if err != nil {
-		spin.Stop(err)
-		return graph, bopts, done, err
-	}
-	dones = append(dones, func(*error) {
-		err := hashFS.Close(ctx)
-		clog.Infof(ctx, "close hashfs: %v", err)
-	})
-	_, err = os.Stat(failedTargetsFile)
-	lastFailed := err == nil
+	spin := ui.Default.NewSpinner()
 
-	// when hashfs is clean, we can consider nothing to do if
-	//  - sameTargets with the last build - if target differs, need to build.
-	//  - not lastFiled - if last build was failure, need to build.
-	//  - not clobber - clobber force to build again.
-	//  - not dry run - dry run want to see what to do.
-	//  - not -d explain - explain force to check what to be scheduled.
-	checkHashFSClean := sameTargets && !lastFailed && !c.clobber && !c.dryRun && !c.debugMode.Explain
-
-	clog.Infof(ctx, "sameTargets: %t hashfs clean: %t last failed: %t", sameTargets, hashFS.IsClean(), lastFailed)
-	if checkHashFSClean && hashFS.IsClean() {
-		// TODO: better to check digest of .siso_fs_state?
-		spin.Stop(nil)
-		return graph, bopts, done, errNothingToDo
-	}
-	os.Remove(lastTargetsFile)
-
-	eg.Go(func() error {
-		started := time.Now()
-		if !c.localCacheEnable {
-			c.cacheDir = ""
-		}
-		err := ds.Init(ctx, c.cacheDir, c.reopt, credNew)
-		clog.Infof(ctx, "init datasource in %s: %v", time.Since(started), err)
-		return err
-	})
-
-	var stepConfig *ninjabuild.StepConfig
-	eg.Go(func() error {
-		started := time.Now()
-		var err error
-		stepConfig, err = ninjabuild.NewStepConfig(ctx, config, buildPath, hashFS, c.fname)
-		clog.Infof(ctx, "load siso config in %s: %v", time.Since(started), err)
-		return err
-	})
-
-	var nstate *ninjautil.State
-	eg.Go(func() error {
-		started := time.Now()
-		var err error
-		nstate, err = ninjabuild.Load(ctx, c.fname, buildPath)
-		clog.Infof(ctx, "load %s in %s: %v", c.fname, time.Since(started), err)
-		return err
-	})
-
+	var eg errgroup.Group
 	var localDepsLog *ninjautil.DepsLog
 	eg.Go(func() error {
-		started := time.Now()
-		var err error
-		localDepsLog, err = c.initDepsLog(ctx)
-		clog.Infof(ctx, "load deps log in %s: %v", time.Since(started), err)
-		return err
-	})
-	dones = append(dones, func(*error) {
-		if localDepsLog != nil {
-			err := localDepsLog.Close()
-			clog.Infof(ctx, "close deps log: %v", err)
+		depsLog, err := c.initDepsLog(ctx)
+		if err != nil {
+			return err
 		}
+		localDepsLog = depsLog
+		return nil
 	})
-
-	err = eg.Wait()
-	spin.Stop(err)
-	if err != nil {
-		return graph, bopts, done, err
-	}
 
 	if c.reopt.IsValid() {
 		ui.Default.PrintLines(fmt.Sprintf("reapi instance: %s\n", c.reopt.Instance))
 	}
-
-	bopts, bdone, err := c.initBuildOpts(ctx, projectID, buildID, buildPath, config, ds, hashFS, limits, traceExporter)
+	ds, err := c.initDataSource(ctx, credential)
 	if err != nil {
-		return graph, bopts, done, err
+		return stats, err
 	}
-	dones = append(dones, bdone)
+	defer func() {
+		err := ds.Close(ctx)
+		if err != nil {
+			clog.Errorf(ctx, "close datasource: %v", err)
+		}
+	}()
+	c.fsopt.DataSource = ds
+	c.fsopt.OutputLocal, err = c.initOutputLocal()
+	if err != nil {
+		return stats, err
+	}
+	spin.Start("loading fs state")
 
-	graph = ninjabuild.NewGraph(ctx, c.fname, nstate, config, buildPath, hashFS, stepConfig, localDepsLog)
+	hashFS, err := hashfs.New(ctx, *c.fsopt)
+	spin.Stop(err)
+	if err != nil {
+		return stats, err
+	}
+	defer func() {
+		if c.dryRun {
+			return
+		}
+		clog.Infof(ctx, "save targets to %s...", lastTargetsFile)
+		serr := saveTargets(ctx, lastTargetsFile, targets)
+		if serr != nil {
+			clog.Warningf(ctx, "failed to save failed targets: %v", serr)
+		}
+	}()
+	defer func() {
+		err := hashFS.Close(ctx)
+		if err != nil {
+			clog.Errorf(ctx, "close hashfs: %v", err)
+		}
+	}()
 
-	return graph, bopts, done, nil
+	_, err = os.Stat(failedTargetsFile)
+	lastFailed := err == nil
+	clog.Infof(ctx, "sameTargets: %t hashfs clean: %t last failed: %t", sameTargets, hashFS.IsClean(), lastFailed)
+	if !c.clobber && !c.dryRun && !c.debugMode.Explain && sameTargets && hashFS.IsClean() && !lastFailed {
+		// TODO: better to check digest of .siso_fs_state?
+		return stats, errNothingToDo
+	}
+	os.Remove(lastTargetsFile)
+
+	bopts, done, err := c.initBuildOpts(ctx, projectID, buildID, buildPath, config, ds, hashFS, limits, traceExporter)
+	if err != nil {
+		return stats, err
+	}
+	defer done(&err)
+	spin.Start("loading/recompacting deps log")
+	err = eg.Wait()
+	spin.Stop(err)
+	if localDepsLog != nil {
+		defer localDepsLog.Close()
+	}
+	// TODO(b/286501388): init concurrently for .siso_config/.siso_filegroups, build.ninja.
+	spin.Start("load siso config")
+	stepConfig, err := ninjabuild.NewStepConfig(ctx, config, buildPath, hashFS, "build.ninja")
+	if err != nil {
+		spin.Stop(err)
+		return stats, err
+	}
+	spin.Stop(nil)
+
+	spin.Start(fmt.Sprintf("load %s", c.fname))
+	nstate, err := ninjabuild.Load(ctx, c.fname, buildPath)
+	if err != nil {
+		spin.Stop(errors.New(""))
+		return stats, err
+	}
+	spin.Stop(nil)
+
+	graph := ninjabuild.NewGraph(ctx, c.fname, nstate, config, buildPath, hashFS, stepConfig, localDepsLog)
+
+	return runNinja(ctx, c.fname, graph, bopts, targets, c.dryRun, !c.batch && sameTargets && !c.clobber)
 }
 
 func runNinja(ctx context.Context, fname string, graph *ninjabuild.Graph, bopts build.Options, targets []string, dryRun, checkFailedTargets bool) (build.Stats, error) {
@@ -859,7 +798,7 @@ func (c *ninjaCmdRun) initDepsLog(ctx context.Context) (*ninjautil.DepsLog, erro
 	return depsLog, nil
 }
 
-func (c *ninjaCmdRun) initBuildOpts(ctx context.Context, projectID, buildID string, buildPath *build.Path, config *buildconfig.Config, ds *dataSource, hashFS *hashfs.HashFS, limits build.Limits, traceExporter *trace.Exporter) (bopts build.Options, done func(*error), err error) {
+func (c *ninjaCmdRun) initBuildOpts(ctx context.Context, projectID, buildID string, buildPath *build.Path, config *buildconfig.Config, ds dataSource, hashFS *hashfs.HashFS, limits build.Limits, traceExporter *trace.Exporter) (bopts build.Options, done func(*error), err error) {
 	var dones []func(*error)
 	defer func() {
 		if err != nil {
@@ -1248,38 +1187,38 @@ type dataSource struct {
 	client *reapi.Client
 }
 
-func (ds *dataSource) Init(ctx context.Context, cacheDir string, reopt *reapi.Option, credNew func() (cred.Cred, error)) error {
+func (c *ninjaCmdRun) initDataSource(ctx context.Context, credential cred.Cred) (dataSource, error) {
+	if !c.localCacheEnable {
+		c.cacheDir = ""
+	}
+	var ds dataSource
 	var err error
-	ds.cache, err = build.NewLocalCache(cacheDir)
+	ds.cache, err = build.NewLocalCache(c.cacheDir)
 	if err != nil {
 		clog.Warningf(ctx, "no local cache enabled: %v", err)
 	}
-	if reopt.IsValid() {
-		credential, err := credNew()
+	if c.reopt.IsValid() {
+		ds.client, err = reapi.New(ctx, credential, *c.reopt)
 		if err != nil {
-			return err
-		}
-		ds.client, err = reapi.New(ctx, credential, *reopt)
-		if err != nil {
-			return err
+			return ds, err
 		}
 		ds.cache = ds.client.CacheStore()
 	}
-	return nil
+	return ds, nil
 }
 
-func (ds *dataSource) Close(ctx context.Context) error {
+func (ds dataSource) Close(ctx context.Context) error {
 	if ds.client == nil {
 		return nil
 	}
 	return ds.client.Close()
 }
 
-func (ds *dataSource) DigestData(d digest.Digest, fname string) digest.Data {
+func (ds dataSource) DigestData(d digest.Digest, fname string) digest.Data {
 	return digest.NewData(ds.Source(d, fname), d)
 }
 
-func (ds *dataSource) Source(d digest.Digest, fname string) digest.Source {
+func (ds dataSource) Source(d digest.Digest, fname string) digest.Source {
 	return source{
 		dataSource: ds,
 		d:          d,
@@ -1288,7 +1227,7 @@ func (ds *dataSource) Source(d digest.Digest, fname string) digest.Source {
 }
 
 type source struct {
-	dataSource *dataSource
+	dataSource dataSource
 	d          digest.Digest
 	fname      string
 }
