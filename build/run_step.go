@@ -74,6 +74,7 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 	defer b.progressStepFinished(ctx, step)
 	depsExpandInputs(ctx, b, step)
 
+	step.setPhase(stepHandler)
 	exited, err := b.handleStep(ctx, step)
 	if err != nil {
 		if !experiments.Enabled("keep-going-handle-error", "handle %s failed: %v", step, err) {

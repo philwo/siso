@@ -187,6 +187,7 @@ type stepPhase int
 const (
 	stepPhaseNone stepPhase = iota
 	stepStart
+	stepHandler
 	stepPreproc
 	stepInput
 	stepLocalRun
@@ -202,6 +203,8 @@ func (s stepPhase) String() string {
 		return "none"
 	case stepStart:
 		return "start"
+	case stepHandler:
+		return "handler"
 	case stepPreproc:
 		return "prep"
 	case stepInput:
