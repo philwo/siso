@@ -751,7 +751,8 @@ func (c *ninjaCmdRun) initCloudLogging(ctx context.Context, projectID, buildID, 
 	return ctx, logger.URL(), func() {
 		err := logger.Close()
 		if err != nil {
-			log.Errorf("close cloug logger: %v", err)
+			// Don't use clog as it's closing Cloud logging client.
+			log.Warningf("falied to close Cloud logger: %v", err)
 		}
 	}, nil
 }
