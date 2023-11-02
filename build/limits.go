@@ -81,7 +81,7 @@ func DefaultLimits(ctx context.Context) Limits {
 				continue
 			}
 			n, err := strconv.Atoi(v)
-			if err != nil || n <= 0 {
+			if err != nil || n < 0 || (n == 0 && k != "fastlocal") {
 				clog.Warningf(ctx, "wrong limits value for %s: %v", k, v)
 				continue
 			}
@@ -127,6 +127,12 @@ func UnitTestLimits(ctx context.Context) Limits {
 		REWrap:   2,
 		Cache:    2,
 	}
+}
+
+// SetDefaultForTest updates default limits for test.
+// Test should restore the original value after the test.
+func SetDefaultForTest(limits Limits) {
+	defaultLimits = limits
 }
 
 func limitForFastLocal(numCPU int) int {
