@@ -83,7 +83,7 @@ func TestBuild_DepsMSVC(t *testing.T) {
 		}
 		want := []string{
 			"../../base/foo.h",
-			"../../base/other2.h",
+			"../../other/other.h",
 			"../../base/foo.cc",
 		}
 		if diff := cmp.Diff(want, deps); diff != "" {

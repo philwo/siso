@@ -3,6 +3,6 @@
 # found in the LICENSE file.
 
 print("Note: including file: ../../base/foo.h")
-print("Note: including file:   ../../base/other2.h")
+print("Note: including file:   ../../other/other.h")
 with open("foo.o", "w") as f:
   f.write("")

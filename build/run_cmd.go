@@ -32,6 +32,24 @@ func (b *Builder) runStrategy(ctx context.Context, step *Step) func(context.Cont
 
 func (b *Builder) runReproxy(ctx context.Context, step *Step) error {
 	dedupInputs(ctx, step.cmd)
+	b.fixMissingInputs(ctx, step)
+	// TODO: b/297807325 - Siso relies on Reproxy's local fallback for
+	// monitoring at this moment. So, Siso shouldn't try local fallback.
+	return b.execReproxy(ctx, step)
+}
+
+func (b *Builder) runLocal(ctx context.Context, step *Step) error {
+	// preproc performs scandeps to list up all inputs, so
+	// we can flush these inputs before local execution.
+	// but we already flushed generated *.h etc, no need to
+	// preproc for local run.
+	dedupInputs(ctx, step.cmd)
+	b.fixMissingInputs(ctx, step)
+	// TODO: use local cache?
+	return b.execLocal(ctx, step)
+}
+
+func (b *Builder) fixMissingInputs(ctx context.Context, step *Step) {
 	// no need to scan deps.
 	// but need to remove missing inputs from cmd.Inputs
 	// because we'll record header inputs for deps=msvc in deps log.
@@ -47,17 +65,4 @@ func (b *Builder) runReproxy(ctx context.Context, step *Step) error {
 		clog.Infof(ctx, "deps remove missing inputs %d -> %d", len(step.cmd.Inputs), len(inputs))
 		step.cmd.Inputs = inputs
 	}
-	// TODO: b/297807325 - Siso relies on Reproxy's local fallback for
-	// monitoring at this moment. So, Siso shouldn't try local fallback.
-	return b.execReproxy(ctx, step)
-}
-
-func (b *Builder) runLocal(ctx context.Context, step *Step) error {
-	// preproc performs scandeps to list up all inputs, so
-	// we can flush these inputs before local execution.
-	// but we already flushed generated *.h etc, no need to
-	// preproc for local run.
-	dedupInputs(ctx, step.cmd)
-	// TODO: use local cache?
-	return b.execLocal(ctx, step)
 }
