@@ -194,19 +194,19 @@ func inputMtime(ctx context.Context, b *Builder, stepDef StepDef) (string, time.
 	lastIn := ""
 	ins, err := stepDef.TriggerInputs(ctx)
 	if err != nil {
-		return "", inmtime, fmt.Errorf("failed to load deps %s: %w", stepDef, err)
+		return "", inmtime, fmt.Errorf("failed to load deps: %w", err)
 	}
 	for _, in := range ins {
 		fi, err := b.hashFS.Stat(ctx, b.path.ExecRoot, in)
 		if err != nil {
-			return "", inmtime, fmt.Errorf("missing input %s for %s: %w", stepDef, in, err)
+			return "", inmtime, fmt.Errorf("missing input %s: %w", in, err)
 		}
 		if inmtime.Before(fi.ModTime()) {
 			inmtime = fi.ModTime()
 			lastIn = in
 		}
 		if fi.IsUpdated() {
-			return "", inmtime, fmt.Errorf("input %s for %s: %w", stepDef, in, errDirty)
+			return "", inmtime, fmt.Errorf("input %s: %w", in, errDirty)
 		}
 	}
 	return lastIn, inmtime, nil
