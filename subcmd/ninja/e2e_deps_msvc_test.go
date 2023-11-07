@@ -17,6 +17,7 @@ import (
 	"infra/build/siso/build"
 	"infra/build/siso/execute/reproxyexec/reproxytest"
 	"infra/build/siso/hashfs"
+	"infra/build/siso/reapi"
 )
 
 func TestBuild_DepsMSVC(t *testing.T) {
@@ -209,6 +210,89 @@ Note: including file:   ../../base/other2.h
 		want := []string{
 			"../../base/foo.h",
 			"../../base/other2.h",
+			"../../base/foo.cc",
+		}
+		if diff := cmp.Diff(want, deps); diff != "" {
+			t.Errorf("deps for foo.o: diff -want +got:\n%s", diff)
+		}
+	}()
+}
+
+func TestBuild_DepsMSVC_fastlocal(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+
+	limits := build.DefaultLimits(ctx)
+	testLimits := limits
+	testLimits.FastLocal = 1
+	build.SetDefaultForTest(testLimits)
+	defer build.SetDefaultForTest(limits)
+
+	func() {
+		t.Logf("first build")
+		setupFiles(t, dir, t.Name(), nil)
+		opt, graph, cleanup := setupBuild(ctx, t, dir, hashfs.Option{})
+		defer cleanup()
+		opt.REAPIClient = &reapi.Client{}
+		opt.Limits = testLimits
+
+		b, err := build.New(ctx, graph, opt)
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = b.Build(ctx, "build", "all")
+		if err != nil {
+			t.Fatalf(`b.Build(ctx, "build", "all")=%v; want nil err`, err)
+		}
+	}()
+
+	func() {
+		t.Logf("first_check_deps")
+		depsLog, cleanup := openDepsLog(ctx, t, dir)
+		defer cleanup()
+		deps, mtime, err := depsLog.Get(ctx, "foo.o")
+		if err != nil {
+			t.Fatalf(`depsLog.Get(ctx, "foo.o")=%v, %v, %v; want nil err`, deps, mtime, err)
+		}
+		want := []string{
+			"../../base/foo.h",
+			"../../base/other.h",
+			"../../base/foo.cc",
+		}
+		if diff := cmp.Diff(want, deps); diff != "" {
+			t.Errorf("deps for foo.o: diff -want +got:\n%s", diff)
+		}
+	}()
+
+	func() {
+		t.Logf("second build")
+		setupFiles(t, dir, t.Name()+"_second", []string{"base/other.h"})
+		opt, graph, cleanup := setupBuild(ctx, t, dir, hashfs.Option{})
+		defer cleanup()
+		opt.REAPIClient = &reapi.Client{}
+		opt.Limits = testLimits
+
+		b, err := build.New(ctx, graph, opt)
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = b.Build(ctx, "build", "all")
+		if err != nil {
+			t.Fatalf(`b.Build(ctx, "build", "all")=%v; want nil err`, err)
+		}
+	}()
+
+	func() {
+		t.Logf("second_check_deps")
+		depsLog, cleanup := openDepsLog(ctx, t, dir)
+		defer cleanup()
+		deps, mtime, err := depsLog.Get(ctx, "foo.o")
+		if err != nil {
+			t.Fatalf(`depsLog.Get(ctx, "foo.o")=%v, %v, %v; want nil err`, deps, mtime, err)
+		}
+		want := []string{
+			"../../base/foo.h",
+			"../../other/other.h",
 			"../../base/foo.cc",
 		}
 		if diff := cmp.Diff(want, deps); diff != "" {
