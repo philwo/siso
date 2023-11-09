@@ -39,6 +39,8 @@ import (
 	"infra/build/siso/o11y/pprof"
 	"infra/build/siso/o11y/trace"
 	"infra/build/siso/reapi"
+	"infra/build/siso/reapi/digest"
+	"infra/build/siso/reapi/merkletree"
 	"infra/build/siso/scandeps"
 	"infra/build/siso/sync/semaphore"
 	"infra/build/siso/toolsupport/ninjautil"
@@ -357,6 +359,9 @@ func (b numBytes) String() string {
 
 // Build builds args with the name.
 func (b *Builder) Build(ctx context.Context, name string, args ...string) (err error) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	defer func() {
 		if r := recover(); r != nil {
 			const size = 64 << 10
@@ -369,6 +374,14 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 		}
 		clog.Infof(ctx, "build %v", err)
 	}()
+
+	if b.rebuildManifest == "" && b.reapiclient != nil {
+		// upload build.ninja in background.
+		// if build finished earilier, we'll cancel the uploading
+		// since it would be better to finish build soon rather
+		// than waiting for uploading build.ninja.
+		go b.uploadBuildNinja(ctx)
+	}
 
 	// scheduling
 	// TODO: run asynchronously?
@@ -511,8 +524,7 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 	var wg sync.WaitGroup
 	var errs []error
 	errch := make(chan error, 1000)
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
+
 loop:
 	for {
 		t := time.Now()
@@ -732,6 +744,36 @@ loop:
 	b.recordMetrics(ctx, metrics)
 	clog.Infof(ctx, "%s finished: %v", name, err)
 	return err
+}
+
+func (b *Builder) uploadBuildNinja(ctx context.Context) {
+	started := time.Now()
+	inputs := b.graph.Filenames()
+	inputs = append(inputs, "args.gn")
+	ents, err := b.hashFS.Entries(ctx, filepath.Join(b.path.ExecRoot, b.path.Dir), inputs)
+	if err != nil {
+		clog.Warningf(ctx, "failed to get build files entries: %v", err)
+		return
+	}
+	ds := digest.NewStore()
+	tree := merkletree.New(ds)
+	for _, ent := range ents {
+		err := tree.Set(ent)
+		if err != nil {
+			clog.Warningf(ctx, "failed to set %s: %v", ent.Name, err)
+		}
+	}
+	d, err := tree.Build(ctx)
+	if err != nil {
+		clog.Warningf(ctx, "failed to calculate tree: %v", err)
+		return
+	}
+	_, err = b.reapiclient.UploadAll(ctx, ds)
+	if err != nil {
+		clog.Warningf(ctx, "failed to upload build files tree %s: %v", d, err)
+		return
+	}
+	clog.Infof(ctx, "uploaded build files tree %s (%d entries) in %s", d, len(ents), time.Since(started))
 }
 
 func (b *Builder) recordMetrics(ctx context.Context, m StepMetric) {

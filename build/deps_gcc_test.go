@@ -52,6 +52,8 @@ func (g fakeGraph) StepLimits(ctx context.Context) map[string]int {
 	return map[string]int{}
 }
 
+func (g fakeGraph) Filenames() []string { return []string{"build.ninja"} }
+
 func TestDepsGCCFixCmdInputs_ios(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("depsGCC is not used on windows")

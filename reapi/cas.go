@@ -193,6 +193,9 @@ func (c *Client) Missing(ctx context.Context, blobs []digest.Digest) ([]digest.D
 
 // UploadAll uploads all blobs specified in ds that are still missing in the CAS.
 func (c *Client) UploadAll(ctx context.Context, ds *digest.Store) (int, error) {
+	if c.conn == nil {
+		return 0, status.Error(codes.FailedPrecondition, "conn is not configured")
+	}
 	ctx, span := trace.NewSpan(ctx, "upload-all")
 	defer span.Close(nil)
 	blobs := ds.List()

@@ -62,6 +62,9 @@ type Graph interface {
 	// StepLimits returns a map of maximum number of concurrent
 	// steps by pool name.
 	StepLimits(context.Context) map[string]int
+
+	// Filenames returns filenames of build manifest (all files loaded by build.ninja).
+	Filenames() []string
 }
 
 // plan maintains which step to execute next.
