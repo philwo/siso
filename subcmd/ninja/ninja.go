@@ -180,16 +180,6 @@ func (c *ninjaCmdRun) Run(a subcommands.Application, args []string, env subcomma
 				suggest = ui.SGR(ui.Bold, suggest)
 			}
 			fmt.Fprintf(os.Stderr, "%s\n", suggest)
-			if !c.batch {
-				var stepError build.StepError
-				if errors.As(errBuild.err, &stepError) {
-					clog.Infof(ctx, "record failed targets: %q", stepError.Target)
-					serr := saveTargets(ctx, failedTargetsFile, []string{stepError.Target})
-					if serr != nil {
-						clog.Warningf(ctx, "failed to save failed targets: %v", serr)
-					}
-				}
-			}
 		default:
 			msgPrefix := "Error"
 			if ui.IsTerminal() {
@@ -414,10 +404,32 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		if c.dryRun {
 			return
 		}
+		if err != nil {
+			if !c.batch {
+				return
+			}
+			var errBuild buildError
+			if !errors.As(err, &errBuild) {
+				return
+			}
+			var stepError build.StepError
+			if !errors.As(errBuild.err, &stepError) {
+				return
+			}
+			// store failed targets only when build steps failed.
+			// i.e., don't store with error like context canceled, etc.
+			clog.Infof(ctx, "record failed targets: %q", stepError.Target)
+			serr := saveTargets(ctx, failedTargetsFile, []string{stepError.Target})
+			if serr != nil {
+				clog.Warningf(ctx, "failed to save failed targets: %v", serr)
+				return
+			}
+			// when write failedTargetsFile, need to write lastTargetsFile too.
+		}
 		clog.Infof(ctx, "save targets to %s...", lastTargetsFile)
 		serr := saveTargets(ctx, lastTargetsFile, targets)
 		if serr != nil {
-			clog.Warningf(ctx, "failed to save failed targets: %v", serr)
+			clog.Warningf(ctx, "failed to save last targets: %v", serr)
 		}
 	}()
 	defer func() {
