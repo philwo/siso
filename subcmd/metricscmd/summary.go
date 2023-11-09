@@ -96,7 +96,7 @@ func (c *summaryRun) run(ctx context.Context) error {
 	}
 
 	if len(metrics) == 0 {
-		return fmt.Errorf("no metrics data?")
+		return nil
 	}
 
 	// TODO(ukai): deduce wait time from the duration?
@@ -149,7 +149,7 @@ func (c *summaryRun) run(ctx context.Context) error {
 		})
 	}
 	if len(events) == 0 {
-		return fmt.Errorf("no metrics data?")
+		return nil
 	}
 	length := latest - earliest
 
