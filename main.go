@@ -31,6 +31,7 @@ import (
 	"infra/build/siso/subcmd/metricscmd"
 	"infra/build/siso/subcmd/ninja"
 	"infra/build/siso/subcmd/recall"
+	"infra/build/siso/subcmd/report"
 	"infra/build/siso/subcmd/scandeps"
 	"infra/build/siso/subcmd/version"
 	"infra/build/siso/ui"
@@ -58,6 +59,7 @@ func getApplication(authOpts cred.Options) *cli.Application {
 			digraph.Cmd(),
 			fscmd.Cmd(authOpts),
 			recall.Cmd(authOpts),
+			report.Cmd(),
 			fetch.Cmd(authOpts),
 			metricscmd.Cmd(),
 			scandeps.Cmd(),
