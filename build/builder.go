@@ -403,7 +403,6 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 		ui.Default.PrintLines(ninjaNoWorkToDo)
 		return nil
 	}
-	ui.Default.PrintLines("\n", fmt.Sprintf("%s %d\n", name, stat.Total), "")
 
 	var pools []string
 	localLimit := b.localSema.Capacity()
@@ -462,20 +461,29 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 			ui.Default.PrintLines(ninjaNoWorkToDo)
 			return
 		}
+		var depsStatLine string
 		var restatLine string
 		if b.reapiclient != nil {
+			// fastdeps / scandeps is only used in siso native mode.
+			if stat.FastDepsSuccess != 0 || stat.FastDepsFailed != 0 || stat.ScanDepsFailed != 0 {
+				depsStatLine = fmt.Sprintf("deps log:%d logErr:%d scanErr:%d\n",
+					stat.FastDepsSuccess, stat.FastDepsFailed, stat.ScanDepsFailed)
+			}
 			restat := b.reapiclient.IOMetrics().Stats()
 			restatLine = fmt.Sprintf("reapi: ops: %d(err:%d) / r:%d(err:%d) %s / w:%d(err:%d) %s\n",
 				restat.Ops, restat.OpsErrs,
 				restat.ROps, restat.RErrs, numBytes(restat.RBytes),
 				restat.WOps, restat.WErrs, numBytes(restat.WBytes))
 		}
-		ui.Default.PrintLines(
-			fmt.Sprintf("local:%d remote:%d cache:%d fallback:%d skip:%d\n",
-				stat.Local+stat.NoExec, stat.Remote, stat.CacheHit, stat.LocalFallback, stat.Skipped) +
-				fmt.Sprintf("deps log:%d logErr:%d scanErr:%d\n",
-					stat.FastDepsSuccess, stat.FastDepsFailed, stat.ScanDepsFailed) +
-				restatLine)
+		if !b.reproxyExec.Enabled() {
+			// this stats will be shown by reproxy shutdown.
+			ui.Default.PrintLines(
+				"\n",
+				fmt.Sprintf("\nlocal:%d remote:%d cache:%d fallback:%d skip:%d\n",
+					stat.Local+stat.NoExec, stat.Remote, stat.CacheHit, stat.LocalFallback, stat.Skipped)+
+					depsStatLine+
+					restatLine)
+		}
 	}()
 	semas := []*semaphore.Semaphore{
 		b.stepSema,
