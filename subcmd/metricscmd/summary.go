@@ -18,6 +18,8 @@ import (
 	"github.com/maruel/subcommands"
 
 	"go.chromium.org/luci/common/cli"
+
+	"infra/build/siso/build"
 )
 
 const summaryUsage = `summarize siso_metrics.json
@@ -95,6 +97,16 @@ func (c *summaryRun) run(ctx context.Context) error {
 		return err
 	}
 
+	var filteredMetrics []build.StepMetric
+	for _, s := range metrics {
+		if s.StepID == "" {
+			// this is special entry for build metrics, not per step metrics.
+			continue
+		}
+		filteredMetrics = append(filteredMetrics, s)
+	}
+	metrics = filteredMetrics
+
 	if len(metrics) == 0 {
 		return nil
 	}
@@ -108,10 +120,6 @@ func (c *summaryRun) run(ctx context.Context) error {
 	var events []buildEvent
 	var earliest, latest time.Duration
 	for _, s := range metrics {
-		if s.StepID == "" {
-			// this is special entry for build metrics, not per step metrics.
-			continue
-		}
 		var start, end time.Duration
 		switch c.elapsedTime {
 		case "run":
