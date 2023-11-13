@@ -10,6 +10,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -40,7 +41,8 @@ Print contents to stdout, or extract in <dir> for -type dir-extract.
   action: action message in text proto format
   dir: directory message in text proto format
   tree: tree message in text proto format
-  dir-extract: extract to <dir>
+  dir-extract: extract to <dir> (if <dir> is specified)
+               or list (if <dir> is not specified)
 `
 
 // Cmd returns the Command for the `fetch` subcommand provided by this package.
@@ -135,11 +137,15 @@ func (c *run) run(ctx context.Context) error {
 	case "tree":
 		pmsg = &rpb.Tree{}
 	case "dir-extract":
+		var w io.Writer
 		dir := "."
 		if c.Flags.NArg() > 1 {
 			dir = c.Flags.Arg(1)
+			fmt.Printf("extract %s to %s\n", d, dir)
+		} else {
+			w = os.Stdout
+			fmt.Printf("list %s\n", d)
 		}
-		fmt.Printf("extract %s to %s\n", d, dir)
 
 		b, err := client.Get(ctx, d, d.String())
 		if err != nil {
@@ -151,7 +157,7 @@ func (c *run) run(ctx context.Context) error {
 			return fmt.Errorf("failed to unmarshal %s as %T: %v", d, pmsg, err)
 		}
 		exporter := exporter.New(client)
-		err = exporter.Export(ctx, dir, d)
+		err = exporter.Export(ctx, dir, d, w)
 		if err != nil {
 			return fmt.Errorf("error from exporter.Export: %w", err)
 		}

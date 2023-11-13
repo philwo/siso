@@ -198,7 +198,7 @@ func (c *run) run(ctx context.Context) error {
 	}
 
 	e := exporter.New(client)
-	err = e.Export(ctx, "root", digest.FromProto(action.InputRootDigest))
+	err = e.Export(ctx, "root", digest.FromProto(action.InputRootDigest), nil)
 	if err != nil {
 		return err
 	}
