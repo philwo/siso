@@ -436,7 +436,9 @@ func (p *ManifestParser) parseFileInclude(ctx context.Context, newScope bool) er
 
 		return err
 	}
-	clog.Infof(ctx, "%s %s %s", op, path, time.Since(start))
+	if log.V(1) {
+		clog.Infof(ctx, "%s %s %s", op, path, time.Since(start))
+	}
 
 	err = p.expectToken(tokenNewline{})
 	if err != nil {
