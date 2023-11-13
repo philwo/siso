@@ -193,6 +193,10 @@ func cmdOutput(ctx context.Context, result string, cmd *execute.Cmd, cmdline, ru
 	if rule != "" {
 		msgs = append(msgs, fmt.Sprintf("siso_rule:%s\n", rule))
 	}
+	digest := cmd.ActionDigest()
+	if !digest.IsZero() {
+		msgs = append(msgs, fmt.Sprintf("digest:%s\n", cmd.ActionDigest().String()))
+	}
 	msgs = append(msgs, fmt.Sprintf("%q %q\n%s\n", cmd.ActionName, output, cmdline))
 	rsp := cmd.RSPFile
 	if rsp != "" {
