@@ -258,7 +258,7 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 
 	var fastLocalSema *semaphore.Semaphore
 	if opts.Limits.FastLocal > 0 {
-		fastLocalSema = semaphore.New("fastlcoal", opts.Limits.FastLocal)
+		fastLocalSema = semaphore.New("fastlocal", opts.Limits.FastLocal)
 	}
 	return &Builder{
 		jobID:     opts.JobID,
