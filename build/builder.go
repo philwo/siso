@@ -475,7 +475,7 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 				restat.ROps, restat.RErrs, numBytes(restat.RBytes),
 				restat.WOps, restat.WErrs, numBytes(restat.WBytes))
 		}
-		if !b.reproxyExec.Enabled() {
+		if !b.reproxyExec.Used() {
 			// this stats will be shown by reproxy shutdown.
 			ui.Default.PrintLines(
 				"\n",

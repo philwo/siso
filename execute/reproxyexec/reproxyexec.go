@@ -103,6 +103,11 @@ func (re *REProxyExec) Enabled() bool {
 	return re.connAddress != ""
 }
 
+// Used returns whether reproxy is used or not.
+func (re *REProxyExec) Used() bool {
+	return re.conn != nil
+}
+
 // Run runs a cmd.
 func (re *REProxyExec) Run(ctx context.Context, cmd *execute.Cmd) error {
 	ctx, span := trace.NewSpan(ctx, "reproxy-exec")
