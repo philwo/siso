@@ -685,8 +685,6 @@ loop:
 			}
 			span.Close(st.Proto())
 			duration := time.Since(stepStart)
-			stepLogEntry(sctx, logger, step, duration, err)
-
 			// $ cat siso_metrcis.json |
 			//     jq --slurp 'sort_by(.duration)|reverse'
 			//
@@ -694,6 +692,7 @@ loop:
 			step.metrics.Duration = IntervalMetric(duration)
 			step.metrics.ActionEndTime = IntervalMetric(step.startTime.Add(duration).Sub(b.start))
 			step.metrics.Err = err != nil
+			stepLogEntry(sctx, logger, step, duration, err)
 			b.recordMetrics(ctx, step.metrics)
 			b.recordNinjaLogs(ctx, step)
 			b.stats.update(ctx, &step.metrics, step.cmd.Pure)
@@ -828,6 +827,36 @@ func stepLogEntry(ctx context.Context, logger *clog.Logger, step *Step, duration
 		Latency: duration,
 		// CacheHit
 	}
+	logEntry.Labels = map[string]string{
+		"id":        step.def.String(),
+		"siso_rule": step.metrics.Rule,
+		"action":    step.metrics.Action,
+		"output":    step.metrics.Output,
+		"gn_target": step.metrics.GNTarget,
+		"cmdhash":   step.metrics.CmdHash,
+		"digest":    step.metrics.Digest,
+		"run_secs":  fmt.Sprintf("%.02f", time.Duration(step.metrics.RunTime).Seconds()),
+		"exec_secs": fmt.Sprintf("%.02f", time.Duration(step.metrics.ExecTime).Seconds()),
+	}
+	if step.metrics.NoExec {
+		logEntry.Labels["no_exec"] = "true"
+	}
+	if step.metrics.IsRemote {
+		logEntry.Labels["is_remote"] = "true"
+	}
+	if step.metrics.IsLocal {
+		logEntry.Labels["is_local"] = "true"
+	}
+	if step.metrics.FastLocal {
+		logEntry.Labels["fast_local"] = "true"
+	}
+	if step.metrics.Cached {
+		logEntry.Labels["cached"] = "true"
+	}
+	if step.metrics.Fallback {
+		logEntry.Labels["fallback"] = "true"
+	}
+	// TODO: record more useful metrics
 	logger.Log(logEntry)
 }
 
