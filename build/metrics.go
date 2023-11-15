@@ -126,6 +126,18 @@ type StepMetric struct {
 	skip bool // whether the step was skipped during the build.
 }
 
+func (m *StepMetric) init(ctx context.Context, b *Builder, step *Step, stepStart time.Time, prevStepOut string) {
+	m.StepID = step.def.String()
+	m.Rule = step.def.RuleName()
+	m.Action = step.def.ActionName()
+	m.Output = step.def.Outputs()[0]
+	m.GNTarget = step.def.Binding("gn_target")
+	m.PrevStepID = step.prevStepID
+	m.PrevStepOut = prevStepOut
+	m.Ready = IntervalMetric(step.readyTime.Sub(b.start))
+	m.Start = IntervalMetric(stepStart.Sub(step.readyTime))
+}
+
 func (m *StepMetric) done(ctx context.Context, step *Step) {
 	m.WeightedDuration = IntervalMetric(step.getWeightedDuration())
 	m.Inputs = len(step.cmd.Inputs)

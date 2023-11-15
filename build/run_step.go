@@ -5,13 +5,15 @@
 package build
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"strings"
 	"time"
 
-	log "github.com/golang/glog"
+	"cloud.google.com/go/logging"
+	"google.golang.org/grpc/status"
 
 	"infra/build/siso/execute"
 	"infra/build/siso/o11y/clog"
@@ -47,16 +49,62 @@ func (e StepError) Unwrap() error {
 //
 // can control the flows with the experiment ids, defined in experiments.go.
 func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
+	stepStart := time.Now()
+	tc := trace.New(ctx, step.def.String())
+	ctx = trace.NewContext(ctx, tc)
+	spanName := stepSpanName(step.def)
+	ctx, span := trace.NewSpan(ctx, "step:"+spanName)
+	traceID, spanID := span.ID(b.projectID)
+	ctx = clog.NewSpan(ctx, traceID, spanID, map[string]string{
+		logLabelKeyID: step.def.String(),
+	})
+	logger := clog.FromContext(ctx)
+	logger.Formatter = logFormat
 	defer func() {
+		if errors.Is(err, context.Canceled) {
+			return
+		}
 		if err != nil {
 			step.metrics.Err = true
+			st, ok := status.FromError(err)
+			if !ok {
+				st = status.FromContextError(err)
+			}
+			span.Close(st.Proto())
+		} else {
+			span.Close(nil)
 		}
+		if !step.metrics.skip {
+			duration := time.Since(stepStart)
+			step.metrics.Duration = IntervalMetric(duration)
+			step.metrics.ActionEndTime = IntervalMetric(step.startTime.Add(duration).Sub(b.start))
+			step.metrics.Err = err != nil
+			stepLogEntry(ctx, logger, step, duration, err)
+			b.recordMetrics(ctx, step.metrics)
+			b.recordNinjaLogs(ctx, step)
+			b.stats.update(ctx, &step.metrics, step.cmd.Pure)
+			b.finalizeTrace(ctx, tc)
+			b.outputFailureSummary(ctx, step, err)
+		}
+		// unref for GC to reclaim memory.
+		step.cmd = nil
 	}()
 
-	if log.V(1) {
-		clog.Infof(ctx, "run step %s", step)
+	if step.def.IsPhony() || b.checkUpToDate(ctx, step.def, step.outputs) {
+		step.metrics.skip = true
+		b.plan.done(ctx, step)
+		b.stats.update(ctx, &step.metrics, true)
+		return nil
 	}
-	ctx, span := trace.NewSpan(ctx, "run-step")
+
+	step.init(ctx, b)
+	description := stepDescription(step.def)
+	prevStepOut := b.prevStepOut(ctx, step)
+	stepStartLog(logger, step, description, spanName)
+	step.metrics.init(ctx, b, step, stepStart, prevStepOut)
+	b.stepSpanInit(span, step, description, spanName, prevStepOut)
+
+	ctx, span = trace.NewSpan(ctx, "run-step")
 	defer span.Close(nil)
 
 	if b.dryRun {
@@ -141,6 +189,53 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 	}
 	b.plan.done(ctx, step)
 	return nil
+}
+
+func (b *Builder) prevStepOut(ctx context.Context, step *Step) string {
+	if step.prevStepOut == nil {
+		return ""
+	}
+	s, err := b.graph.TargetPath(step.prevStepOut)
+	if err != nil {
+		clog.Warningf(ctx, "failed to get target path: %v", err)
+		return ""
+	}
+	return s
+}
+
+func stepStartLog(logger *clog.Logger, step *Step, description, spanName string) {
+	logEntry := logger.Entry(logging.Info, description)
+	logEntry.Labels = map[string]string{
+		"id":          step.def.String(),
+		"command":     step.def.Binding("command"),
+		"description": description,
+		"action":      step.def.ActionName(),
+		"span_name":   spanName,
+		"output0":     step.def.Outputs()[0],
+	}
+	logger.Log(logEntry)
+}
+
+func (b *Builder) stepSpanInit(span *trace.Span, step *Step, description, spanName, prevStepOut string) {
+	span.SetAttr("ready_time", time.Since(step.readyTime).Milliseconds())
+	span.SetAttr("prev", step.prevStepID)
+	span.SetAttr("prev_out", prevStepOut)
+	span.SetAttr("queue_time", time.Since(step.queueTime).Milliseconds())
+	span.SetAttr("queue_size", step.queueSize)
+	span.SetAttr("build_id", b.id)
+	span.SetAttr("id", step.def.String())
+	span.SetAttr("command", step.def.Binding("command"))
+	span.SetAttr("description", description)
+	span.SetAttr("action", step.def.ActionName())
+	span.SetAttr("span_name", spanName)
+	span.SetAttr("output0", step.def.Outputs()[0])
+	if next := step.def.Next(); next != nil {
+		span.SetAttr("next_id", step.def.Next().String())
+	}
+	if step.metrics.GNTarget != "" {
+		span.SetAttr("gn_target", step.metrics.GNTarget)
+	}
+	span.SetAttr("backtraces", stepBacktraces(step))
 }
 
 func (b *Builder) handleStep(ctx context.Context, step *Step) (bool, error) {
@@ -261,4 +356,26 @@ func (b *Builder) logOutput(ctx context.Context, msgs []string, console bool) {
 		msgs = nmsgs
 	}
 	ui.Default.PrintLines(append([]string{"\n", "\n"}, msgs...)...)
+}
+
+func (b *Builder) outputFailureSummary(ctx context.Context, step *Step, err error) {
+	if err == nil || b.failureSummaryWriter == nil || step.cmd == nil {
+		return
+	}
+	var buf bytes.Buffer
+	fmt.Fprintf(&buf, "%s\n", step.cmd.Desc)
+	fmt.Fprintf(&buf, "%s\n", strings.Join(step.cmd.Args, " "))
+	stderr := step.cmd.Stderr()
+	if len(stderr) > 0 {
+		fmt.Fprint(&buf, ui.StripANSIEscapeCodes(string(stderr)))
+	}
+	stdout := step.cmd.Stdout()
+	if len(stdout) > 0 {
+		fmt.Fprint(&buf, ui.StripANSIEscapeCodes(string(stdout)))
+	}
+	fmt.Fprintf(&buf, "%v\n", err)
+	_, err = b.failureSummaryWriter.Write(buf.Bytes())
+	if err != nil {
+		clog.Warningf(ctx, "failed to write failure_summary: %v", err)
+	}
 }

@@ -5,7 +5,6 @@
 package build
 
 import (
-	"bytes"
 	"context"
 	"encoding/hex"
 	"encoding/json"
@@ -589,7 +588,6 @@ loop:
 		b.plan.pushReady()
 		wg.Add(1)
 		go func(step *Step) {
-			// TODO: factor out this func?
 			defer wg.Done()
 			var err error
 			defer func() {
@@ -609,118 +607,13 @@ loop:
 				}
 			}()
 			defer done(nil)
-			stepStart := time.Now()
-			tc := trace.New(ctx, step.def.String())
-			ctx := trace.NewContext(ctx, tc)
-			spanName := stepSpanName(step.def)
-			ctx, span := trace.NewSpan(ctx, "step:"+spanName)
-			traceID, spanID := span.ID(b.projectID)
-			sctx := clog.NewSpan(ctx, traceID, spanID, map[string]string{
-				"id": step.def.String(),
-			})
-			logger := clog.FromContext(sctx)
-			logger.Formatter = logFormat
 
-			if step.def.IsPhony() || b.checkUpToDate(ctx, step.def, step.outputs) {
-				step.metrics.skip = true
-				b.plan.done(ctx, step)
-				b.stats.update(ctx, &step.metrics, true)
-				span.Close(nil)
-				return
-			}
-			step.init(ctx, b)
-			description := stepDescription(step.def)
-			logEntry := logger.Entry(logging.Info, description)
-			logEntry.Labels = map[string]string{
-				"id":          step.def.String(),
-				"command":     step.def.Binding("command"),
-				"description": description,
-				"action":      step.def.ActionName(),
-				"span_name":   spanName,
-				"output0":     step.def.Outputs()[0],
-			}
-			logger.Log(logEntry)
-			var prevStepOut string
-			if step.prevStepOut != nil {
-				s, err := b.graph.TargetPath(step.prevStepOut)
-				if err != nil {
-					clog.Warningf(ctx, "failed to get target path: %v", err)
-				} else {
-					prevStepOut = s
-				}
-			}
-			step.metrics.StepID = step.def.String()
-			step.metrics.Rule = step.def.RuleName()
-			step.metrics.Action = step.def.ActionName()
-			step.metrics.Output = step.def.Outputs()[0]
-			step.metrics.GNTarget = step.def.Binding("gn_target")
-			step.metrics.PrevStepID = step.prevStepID
-			step.metrics.PrevStepOut = prevStepOut
-			step.metrics.Ready = IntervalMetric(step.readyTime.Sub(b.start))
-			step.metrics.Start = IntervalMetric(stepStart.Sub(step.readyTime))
-
-			span.SetAttr("ready_time", time.Since(step.readyTime).Milliseconds())
-			span.SetAttr("prev", step.prevStepID)
-			span.SetAttr("prev_out", prevStepOut)
-			span.SetAttr("queue_time", time.Since(step.queueTime).Milliseconds())
-			span.SetAttr("queue_size", step.queueSize)
-			span.SetAttr("build_id", b.id)
-			span.SetAttr("id", step.def.String())
-			span.SetAttr("command", step.def.Binding("command"))
-			span.SetAttr("description", description)
-			span.SetAttr("action", step.def.ActionName())
-			span.SetAttr("span_name", spanName)
-			span.SetAttr("output0", step.def.Outputs()[0])
-			if next := step.def.Next(); next != nil {
-				span.SetAttr("next_id", step.def.Next().String())
-			}
-			if step.metrics.GNTarget != "" {
-				span.SetAttr("gn_target", step.metrics.GNTarget)
-			}
-			span.SetAttr("backtraces", stepBacktraces(step))
-			err = b.runStep(sctx, step)
-			st, ok := status.FromError(err)
-			if !ok {
-				st = status.FromContextError(err)
-			}
-			span.Close(st.Proto())
-			duration := time.Since(stepStart)
-			// $ cat siso_metrcis.json |
-			//     jq --slurp 'sort_by(.duration)|reverse'
-			//
-			//     jq --slurp 'sort_by(.duration) | reverse | .[] | select(.cached==false)'
-			step.metrics.Duration = IntervalMetric(duration)
-			step.metrics.ActionEndTime = IntervalMetric(step.startTime.Add(duration).Sub(b.start))
-			step.metrics.Err = err != nil
-			stepLogEntry(sctx, logger, step, duration, err)
-			b.recordMetrics(ctx, step.metrics)
-			b.recordNinjaLogs(ctx, step)
-			b.stats.update(ctx, &step.metrics, step.cmd.Pure)
+			err = b.runStep(ctx, step)
 			select {
 			case <-ctx.Done():
 				return
 			default:
 			}
-			b.finalizeTrace(ctx, tc)
-			if err != nil && b.failureSummaryWriter != nil && step.cmd != nil {
-				var buf bytes.Buffer
-				fmt.Fprintf(&buf, "%s\n", step.cmd.Desc)
-				fmt.Fprintf(&buf, "%s\n", strings.Join(step.cmd.Args, " "))
-				stderr := step.cmd.Stderr()
-				if len(stderr) > 0 {
-					fmt.Fprint(&buf, ui.StripANSIEscapeCodes(string(stderr)))
-				}
-				stdout := step.cmd.Stdout()
-				if len(stdout) > 0 {
-					fmt.Fprint(&buf, ui.StripANSIEscapeCodes(string(stdout)))
-				}
-				fmt.Fprintf(&buf, "%v\n", err)
-				b.failureSummaryWriter.Write(buf.Bytes())
-			}
-
-			// unref for GC to reclaim memory.
-			tc = nil
-			step.cmd = nil
 		}(step)
 	}
 	clog.Infof(ctx, "all pendings becomes ready")
