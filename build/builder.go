@@ -482,6 +482,8 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 					stat.Local+stat.NoExec, stat.Remote, stat.CacheHit, stat.LocalFallback, stat.Skipped)+
 					depsStatLine+
 					restatLine)
+		} else {
+			ui.Default.PrintLines("\n", "\n")
 		}
 	}()
 	semas := []*semaphore.Semaphore{
