@@ -522,7 +522,7 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 
 	}(ctx)
 	pstat := b.plan.stats()
-	b.progress.report("[%d+%d] build start", pstat.npendings, pstat.nready)
+	b.progress.report("\nbuild start: Ready %d Pending %d", pstat.nready, pstat.npendings)
 	clog.Infof(ctx, "build pendings=%d ready=%d", pstat.npendings, pstat.nready)
 	b.progress.start(ctx, b)
 	defer b.progress.stop(ctx)

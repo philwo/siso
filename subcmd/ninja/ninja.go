@@ -506,6 +506,7 @@ func runNinja(ctx context.Context, fname string, graph *ninjabuild.Graph, bopts 
 						return stats, err
 					}
 					spin.Stop(nil)
+					ui.Default.PrintLines("\n", "\n")
 					clog.Infof(ctx, "reload done. build retry")
 					continue
 				}
