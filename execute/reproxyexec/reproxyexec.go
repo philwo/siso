@@ -311,6 +311,12 @@ func processResponse(ctx context.Context, cmd *execute.Cmd, response *ppb.RunRes
 		// remote success
 		result.ExecutionMetadata.Worker = WorkerNameRemote
 		remoteSuccess = true
+		execInterval, ok := al.GetRemoteMetadata().GetEventTimes()["ServerWorkerExecution"]
+		if ok {
+			result.ExecutionMetadata.ExecutionStartTimestamp = execInterval.GetFrom()
+			result.ExecutionMetadata.ExecutionCompletedTimestamp = execInterval.GetTo()
+		}
+
 	case lpb.CompletionStatus_STATUS_REMOTE_FAILURE, lpb.CompletionStatus_STATUS_NON_ZERO_EXIT, lpb.CompletionStatus_STATUS_TIMEOUT, lpb.CompletionStatus_STATUS_INTERRUPTED:
 		// remote failure
 		result.ExecutionMetadata.Worker = WorkerNameRemote
@@ -320,6 +326,13 @@ func processResponse(ctx context.Context, cmd *execute.Cmd, response *ppb.RunRes
 		result.ExecutionMetadata.Worker = WorkerNameRacingLocal
 	case lpb.CompletionStatus_STATUS_LOCAL_EXECUTION, lpb.CompletionStatus_STATUS_LOCAL_FAILURE:
 		result.ExecutionMetadata.Worker = WorkerNameLocal
+	}
+	if !remoteSuccess {
+		execInterval, ok := al.GetLocalMetadata().GetEventTimes()["LocalCommandExecution"]
+		if ok {
+			result.ExecutionMetadata.ExecutionStartTimestamp = execInterval.GetFrom()
+			result.ExecutionMetadata.ExecutionCompletedTimestamp = execInterval.GetTo()
+		}
 	}
 	// ActionDigest
 	if d := al.GetRemoteMetadata().GetActionDigest(); d != "" {

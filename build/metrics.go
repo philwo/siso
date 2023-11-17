@@ -112,7 +112,6 @@ type StepMetric struct {
 	QueueTime IntervalMetric `json:"queue,omitempty"`
 	// ExecTime is the time measured from the execution strategy starting
 	// the process until the process exited.
-	// TODO: set in reproxy mode too
 	ExecTime IntervalMetric `json:"exec,omitempty"`
 	// ActionEndTime is the time it took since build start until
 	// the action completes the execution.
