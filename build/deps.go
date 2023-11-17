@@ -66,9 +66,7 @@ func depsFastStep(ctx context.Context, b *Builder, step *Step) (*Step, error) {
 	// Inputs may contains unnecessary inputs.
 	// just needs ToolInputs.
 	stepInputs := newCmd.ToolInputs
-	if step.cmd.Platform["OSFamily"] != "Windows" {
-		depsIns = step.def.ExpandCaseSensitives(ctx, depsIns)
-	}
+	depsIns = expandDepsIfCaseSensitive(ctx, step, depsIns)
 	inputs, err := fixInputsByDeps(ctx, b, stepInputs, depsIns)
 	if err != nil {
 		clog.Warningf(ctx, "failed to fix inputs by deps: %v", err)
@@ -142,9 +140,7 @@ func depsExpandInputs(ctx context.Context, b *Builder, step *Step) {
 
 func depsFixCmd(ctx context.Context, b *Builder, step *Step, deps []string) {
 	stepInputs := step.def.Inputs(ctx) // use ToolInputs?
-	if step.cmd.Platform["OSFamily"] != "Windows" {
-		deps = step.def.ExpandCaseSensitives(ctx, deps)
-	}
+	deps = expandDepsIfCaseSensitive(ctx, step, deps)
 	inputs, err := fixInputsByDeps(ctx, b, stepInputs, deps)
 	if err != nil {
 		clog.Warningf(ctx, "fix inputs by deps: %v", err)
@@ -175,9 +171,7 @@ func depsCmd(ctx context.Context, b *Builder, step *Step) error {
 			stepInputs = step.def.Inputs(ctx) // use ToolInputs?
 		}
 		depsIns, err := ds.DepsCmd(ctx, b, step)
-		if step.cmd.Platform["OSFamily"] != "Windows" {
-			depsIns = step.def.ExpandCaseSensitives(ctx, depsIns)
-		}
+		depsIns = expandDepsIfCaseSensitive(ctx, step, depsIns)
 		inputs := uniqueFiles(stepInputs, depsIns)
 		clog.Infof(ctx, "%s-deps %d %s: %v", step.cmd.Deps, len(inputs), time.Since(start), err)
 		if err != nil {
@@ -238,4 +232,13 @@ func fixInputsByDeps(ctx context.Context, b *Builder, stepInputs, depsIns []stri
 	}
 	inputs = uniqueFiles(inputs)
 	return inputs, nil
+}
+
+// expandDepsIfCaseSensitive expands inputs if the platform is case-sensitive.
+// TODO(b/273669921): merge this with step.def.ExpandCaseSensitives? This is the only place the function is used.
+func expandDepsIfCaseSensitive(ctx context.Context, step *Step, deps []string) []string {
+	if step.cmd.Platform["OSFamily"] != "Windows" {
+		return step.def.ExpandCaseSensitives(ctx, deps)
+	}
+	return deps
 }

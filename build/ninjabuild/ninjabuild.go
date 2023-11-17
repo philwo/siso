@@ -50,6 +50,7 @@ type globals struct {
 
 	phony map[string]bool
 
+	// caseSensitives lists all case sensitive input filenames.
 	caseSensitives map[string][]string
 
 	// edge will be associated with the gn target.
