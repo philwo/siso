@@ -2,18 +2,172 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-package hashfs_test
+package hashfs
 
 import (
 	"context"
+	"errors"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
 
-	"infra/build/siso/hashfs"
+	"github.com/google/go-cmp/cmp"
 )
+
+func TestReadDir_ReadsNEntries(t *testing.T) {
+	cmpOpts := []cmp.Option{
+		cmp.AllowUnexported(DirEntry{}),
+		cmp.AllowUnexported(FileInfo{}),
+	}
+	makeDir := func() *Dir {
+		return &Dir{
+			ents: []DirEntry{
+				{fi: FileInfo{fname: "foo"}},
+				{fi: FileInfo{fname: "bar"}},
+				{fi: FileInfo{fname: "baz"}},
+				{fi: FileInfo{fname: "qux"}},
+				{fi: FileInfo{fname: "quux"}},
+			},
+		}
+	}
+	allEntries := []fs.DirEntry{
+		DirEntry{fi: FileInfo{fname: "foo"}},
+		DirEntry{fi: FileInfo{fname: "bar"}},
+		DirEntry{fi: FileInfo{fname: "baz"}},
+		DirEntry{fi: FileInfo{fname: "qux"}},
+		DirEntry{fi: FileInfo{fname: "quux"}},
+	}
+
+	// Read all with n = 0.
+	entries, err := makeDir().ReadDir(0)
+
+	if err != nil {
+		t.Fatalf("dir.ReadDir(0)=_, %v; want nil err", err)
+	}
+	if diff := cmp.Diff(allEntries, entries, cmpOpts...); diff != "" {
+		t.Errorf("dir.ReadDir(0) diff -want +got:\n%s", diff)
+	}
+
+	// Read all with n = -1.
+	entries, err = makeDir().ReadDir(-1)
+
+	if err != nil {
+		t.Fatalf("dir.ReadDir(-1)=_, %v; want nil err", err)
+	}
+	if diff := cmp.Diff(allEntries, entries, cmpOpts...); diff != "" {
+		t.Errorf("dir.ReadDir(-1) diff -want +got:\n%s", diff)
+	}
+
+	// Read len(allEntries).
+	entries, err = makeDir().ReadDir(5)
+
+	if err != nil {
+		t.Fatalf("dir.ReadDir(5)=_, %v; want nil err", err)
+	}
+	if diff := cmp.Diff(allEntries, entries, cmpOpts...); diff != "" {
+		t.Errorf("dir.ReadDir(5) diff -want +got:\n%s", diff)
+	}
+
+	// Read n > len(allEntries) should still return n.
+	entries, err = makeDir().ReadDir(6)
+
+	if err != nil {
+		t.Fatalf("dir.ReadDir(6)=_, %v; want nil err", err)
+	}
+	if diff := cmp.Diff(allEntries, entries, cmpOpts...); diff != "" {
+		t.Errorf("dir.ReadDir(6) diff -want +got:\n%s", diff)
+	}
+}
+
+func TestReadDir_ReadsRemainingEntries(t *testing.T) {
+	cmpOpts := []cmp.Option{
+		cmp.AllowUnexported(DirEntry{}),
+		cmp.AllowUnexported(FileInfo{}),
+	}
+	dir := &Dir{
+		ents: []DirEntry{
+			{fi: FileInfo{fname: "foo"}},
+			{fi: FileInfo{fname: "bar"}},
+			{fi: FileInfo{fname: "baz"}},
+			{fi: FileInfo{fname: "qux"}},
+			{fi: FileInfo{fname: "quux"}},
+		},
+	}
+	allEntries := []fs.DirEntry{
+		DirEntry{fi: FileInfo{fname: "foo"}},
+		DirEntry{fi: FileInfo{fname: "bar"}},
+		DirEntry{fi: FileInfo{fname: "baz"}},
+		DirEntry{fi: FileInfo{fname: "qux"}},
+		DirEntry{fi: FileInfo{fname: "quux"}},
+	}
+
+	// Read n where n < len(allEntries).
+	entries, err := dir.ReadDir(3)
+
+	if err != nil {
+		t.Fatalf("dir.ReadDir(3)=_, %v; want nil err", err)
+	}
+	if diff := cmp.Diff(allEntries[0:3], entries, cmpOpts...); diff != "" {
+		t.Errorf("dir.ReadDir(3) diff -want +got:\n%s", diff)
+	}
+
+	// Read remaining len(allEntries) - n.
+	entries, err = dir.ReadDir(2)
+
+	if err != nil {
+		t.Fatalf("dir.ReadDir(2)=_, %v; want nil err", err)
+	}
+	if diff := cmp.Diff(allEntries[3:], entries, cmpOpts...); diff != "" {
+		t.Errorf("dir.ReadDir(2) diff -want +got:\n%s", diff)
+	}
+
+	// Read again when n > 0 should be EOF.
+	entries, err = dir.ReadDir(1)
+
+	if len(entries) != 0 {
+		t.Fatalf("len(entries) = %d; want 0", len(entries))
+	}
+	if !errors.Is(err, io.EOF) {
+		t.Fatalf("err = %v; want io.EOF", err)
+	}
+
+	// Read again when n = 0 should be nil.
+	entries, err = dir.ReadDir(0)
+
+	if err != nil {
+		t.Fatalf("dir.ReadDir(0)=_, %v; want nil err", err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("len(entries) = %d; want 0", len(entries))
+	}
+
+	// Read again when n = -1 should be nil.
+	entries, err = dir.ReadDir(-1)
+
+	if err != nil {
+		t.Fatalf("dir.ReadDir(0)=_, %v; want nil err", err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("len(entries) = %d; want 0", len(entries))
+	}
+}
+
+func TestReadDir_ErrIfEmptyDir(t *testing.T) {
+	emptyDir := &Dir{}
+
+	// Read empty.
+	entries, err := emptyDir.ReadDir(3)
+
+	if len(entries) != 0 {
+		t.Fatalf("len(emptyDir.ReadDir(3)) = %d; want 0", len(entries))
+	}
+	if !errors.Is(err, io.EOF) {
+		t.Fatalf("err = %v; want io.EOF", err)
+	}
+}
 
 func TestFilesystemSub_SymlinkDir(t *testing.T) {
 	if runtime.GOOS == "windows" {
@@ -26,7 +180,7 @@ func TestFilesystemSub_SymlinkDir(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	hfs, err := hashfs.New(ctx, hashfs.Option{})
+	hfs, err := New(ctx, Option{})
 	if err != nil {
 		t.Fatalf("New=%v", err)
 	}

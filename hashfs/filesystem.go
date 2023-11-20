@@ -62,7 +62,6 @@ func (d *Dir) Close() error {
 }
 
 // ReadDir reads directory entries from the dir.
-// TODO(b/271363619): return at most n entries.
 func (d *Dir) ReadDir(n int) ([]fs.DirEntry, error) {
 	if n <= 0 {
 		var ents []fs.DirEntry
@@ -72,16 +71,19 @@ func (d *Dir) ReadDir(n int) ([]fs.DirEntry, error) {
 		d.ents = nil
 		return ents, nil
 	}
-	var ents []fs.DirEntry
+	if len(d.ents) == 0 {
+		return nil, io.EOF
+	}
 	var i int
 	var e DirEntry
+	var ents []fs.DirEntry
 	for i, e = range d.ents {
+		if i == n {
+			break
+		}
 		ents = append(ents, e)
 	}
-	d.ents = d.ents[i:]
-	if len(d.ents) == 0 {
-		return ents, io.EOF
-	}
+	d.ents = d.ents[len(ents):]
 	return ents, nil
 }
 
