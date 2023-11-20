@@ -18,6 +18,7 @@ import (
 	"runtime"
 	"runtime/debug"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -750,6 +751,9 @@ func stepLogEntry(ctx context.Context, logger *clog.Logger, step *Step, duration
 	}
 	if step.metrics.Fallback {
 		logEntry.Labels["fallback"] = "true"
+	}
+	if step.metrics.MaxRSS > 0 {
+		logEntry.Labels["max_rss"] = strconv.FormatInt(step.metrics.MaxRSS, 10)
 	}
 	// TODO: record more useful metrics
 	logger.Log(logEntry)
