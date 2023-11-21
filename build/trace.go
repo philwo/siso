@@ -45,6 +45,8 @@ type traceEvents struct {
 	memstats runtime.MemStats
 	// resource usage record of siso.
 	rusage usageRecord
+	// system resource record
+	sys sysRecord
 
 	// iometrics to emit in trace json.
 	ioms []*iometrics.IOMetrics
@@ -84,6 +86,7 @@ func (te *traceEvents) loop(ctx context.Context) {
 	defer close(te.done)
 	runtime.ReadMemStats(&te.memstats)
 	te.rusage.get()
+	te.sys.get(ctx)
 	tmpname := te.fname + ".tmp"
 	f, err := os.Create(te.fname + ".tmp")
 	if err != nil {
@@ -105,6 +108,16 @@ func (te *traceEvents) loop(ctx context.Context) {
 	fmt.Fprintf(w, "[\n")
 	te.start = time.Now()
 	te.rusage.start = te.start
+	te.sys.start = te.start
+	te.write(ctx, w, traceEventObject{
+		Name: "process_name",
+		Ph:   "M",
+		Pid:  sysPid,
+		Tid:  sysTid,
+		Args: map[string]any{
+			"name": "sys",
+		},
+	})
 	te.write(ctx, w, traceEventObject{
 		Name: "process_name",
 		Ph:   "M",
@@ -188,7 +201,8 @@ func (te *traceEvents) loop(ctx context.Context) {
 }
 
 const (
-	sisoPid = iota + 1
+	sysPid = iota + 1
+	sisoPid
 	sisoSemaPid
 	sisoPreprocPid
 	sisoLocalPid
@@ -198,6 +212,7 @@ const (
 )
 
 const (
+	sysTid  = 1
 	sisoTid = 1
 )
 
@@ -240,6 +255,9 @@ func (te *traceEvents) sample(ctx context.Context, w io.Writer, t time.Time) {
 		te.write(ctx, w, o)
 	}
 	for _, o := range te.rusage.sample(ctx, t) {
+		te.write(ctx, w, o)
+	}
+	for _, o := range te.sys.sample(ctx, t) {
 		te.write(ctx, w, o)
 	}
 
