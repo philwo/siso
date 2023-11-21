@@ -1189,6 +1189,9 @@ func (e *entry) flush(ctx context.Context, fname, xattrname string, m *iometrics
 	}
 	fi, err := os.Lstat(fname)
 	m.OpsDone(err)
+	// need to remove the file after it reads from data source,
+	// since data source will read from the local disk.
+	var removeReason string
 	if err == nil {
 		if fi.IsDir() {
 			err := &fs.PathError{
@@ -1205,13 +1208,9 @@ func (e *entry) flush(ctx context.Context, fname, xattrname string, m *iometrics
 			return nil
 		}
 		if isHardlink(fi) {
-			err = os.Remove(fname)
-			m.OpsDone(err)
-			clog.Infof(ctx, "flush %s: remove hardlink: %v", fname, err)
+			removeReason = "hardlink"
 		} else if !fi.Mode().IsRegular() {
-			err = os.Remove(fname)
-			m.OpsDone(err)
-			clog.Infof(ctx, "flush %s: remove non-regular %s: %v", fname, fi.Mode(), err)
+			removeReason = fmt.Sprintf("non-regular file %s", fi.Mode())
 		} else {
 			var fileDigest digest.Digest
 			src := digest.LocalFileSource{Fname: fname, IOMetrics: m}
@@ -1243,6 +1242,11 @@ func (e *entry) flush(ctx context.Context, fname, xattrname string, m *iometrics
 		return fmt.Errorf("failed to create directory for %s: %w", fname, err)
 	}
 	if d.SizeBytes == 0 {
+		if removeReason != "" {
+			err = os.Remove(fname)
+			m.OpsDone(err)
+			clog.Infof(ctx, "flush %s: remove %s: %v", fname, removeReason, err)
+		}
 		clog.Infof(ctx, "flush %s: empty file", fname)
 		err := os.WriteFile(fname, nil, 0644)
 		m.WriteDone(0, err)
@@ -1257,18 +1261,25 @@ func (e *entry) flush(ctx context.Context, fname, xattrname string, m *iometrics
 		return nil
 	}
 	buf := e.buf
+	var sourceFrom string
 	if len(buf) == 0 {
 		if e.d.IsZero() {
 			return fmt.Errorf("no data: retrieve %s: ", fname)
 		}
 		buf, err = digest.DataToBytes(ctx, digest.NewData(e.src, d))
-		clog.Infof(ctx, "flush %s %s from source: %v", fname, d, err)
 		if err != nil {
 			return fmt.Errorf("flush %s size=%d: %w", fname, d.SizeBytes, err)
 		}
+		sourceFrom = fmt.Sprintf("%s from source", d)
 	} else {
-		clog.Infof(ctx, "flush %s from embedded buf", fname)
+		sourceFrom = "from embedded buf"
 	}
+	if removeReason != "" {
+		err = os.Remove(fname)
+		m.OpsDone(err)
+		clog.Infof(ctx, "flush %s: remove %s: %v", fname, removeReason, err)
+	}
+	clog.Infof(ctx, "flush %s %s", fname, sourceFrom)
 	err = os.WriteFile(fname, buf, e.mode)
 	m.WriteDone(len(buf), err)
 	if err != nil {

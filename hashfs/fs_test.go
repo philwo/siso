@@ -26,6 +26,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"infra/build/siso/hashfs"
+	"infra/build/siso/o11y/iometrics"
 	"infra/build/siso/reapi/digest"
 	"infra/build/siso/reapi/merkletree"
 )
@@ -1692,6 +1693,69 @@ func TestWriteDataFlush(t *testing.T) {
 				if err != nil {
 					t.Fatalf("Flush(ctx, dir, {%q})=%v; want nil err", name, err)
 				}
+			}
+			lfi, err := os.Lstat(filepath.Join(dir, name))
+			if err != nil {
+				t.Fatalf("Lstat(%q)=%v, %v; want nil err", name, lfi, err)
+			}
+			if !lfi.Mode().IsRegular() {
+				t.Errorf("isRegular=%t; want true", lfi.Mode().IsRegular())
+			}
+			if !mtime.Equal(lfi.ModTime()) {
+				t.Errorf("mtime: hashfs=%v disk=%v", mtime, lfi.ModTime())
+			}
+			if name == "hardlink" {
+				ofi, err := os.Lstat(filepath.Join(dir, "subdir/some-file"))
+				if err != nil {
+					t.Fatalf("Lstat(%q)=%v, %v; want nil err", "subdir/some-file", ofi, err)
+				}
+				if ofi.ModTime().Equal(lfi.ModTime()) {
+					t.Errorf("mtime hardlink changes some-file: %v", ofi.ModTime())
+				}
+			}
+		})
+	}
+}
+
+func TestUpdateWithLocalFlush(t *testing.T) {
+	ctx := context.Background()
+	var m iometrics.IOMetrics
+
+	for _, name := range flushTestNames {
+		t.Run(name, func(t *testing.T) {
+			hashFS, dir := setupForFlush(t)
+			now := time.Now()
+			switch name {
+			case "empty-dir", "subdir", "new-entry":
+				return
+			}
+			data, err := digest.FromLocalFile(ctx, digest.LocalFileSource{
+				Fname:     filepath.Join(dir, name),
+				IOMetrics: &m,
+			})
+			if err != nil {
+				t.Fatalf("digest.FromLocalFile(ctx, {%q})=%v, %v; want nil err", filepath.Join(dir, name), data, err)
+			}
+			err = hashFS.Update(ctx, dir, []merkletree.Entry{
+				{
+					Name: name,
+					Data: data,
+				},
+			}, now, []byte("new-cmd-hash"), digest.Digest{})
+			if err != nil {
+				t.Fatalf("Update(ctx, dir, []{%q}, now, cmdhash, actionDigest)=%v; want nil err", name, err)
+			}
+			fi, err := hashFS.Stat(ctx, dir, name)
+			if err != nil {
+				t.Fatalf("Stat(ctx, dir, %q)=%v, %v; want nil err", name, fi, err)
+			}
+			mtime := fi.ModTime()
+			if !mtime.Equal(now) {
+				t.Errorf("mtime %v != %v", mtime, now)
+			}
+			err = hashFS.Flush(ctx, dir, []string{name})
+			if err != nil {
+				t.Fatalf("Flush(ctx, dir, {%q})=%v; want nil err", name, err)
 			}
 			lfi, err := os.Lstat(filepath.Join(dir, name))
 			if err != nil {
