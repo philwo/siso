@@ -395,6 +395,8 @@ type spanEventAttr struct {
 	output0     string
 	command     string
 	backtrace   string
+	prevID      string
+	prevOut     string
 }
 
 func newSpanEventAttr(attr map[string]any) spanEventAttr {
@@ -410,6 +412,8 @@ func newSpanEventAttr(attr map[string]any) spanEventAttr {
 		args = args[:7]
 		args = append(args, "...")
 	}
+	prevID, _ := attr["prev"].(string)
+	prevOut, _ := attr["prev_out"].(string)
 	return spanEventAttr{
 		id:          id,
 		description: description,
@@ -418,6 +422,8 @@ func newSpanEventAttr(attr map[string]any) spanEventAttr {
 		output0:     output0,
 		command:     strings.Join(args, " "),
 		backtrace:   strings.Join(backtraces, "<"),
+		prevID:      prevID,
+		prevOut:     prevOut,
 	}
 }
 
@@ -436,6 +442,8 @@ func (te *traceEvents) runPreprocSpanEvent(span trace.SpanData, attr spanEventAt
 			"action":      attr.action,
 			"command":     attr.command,
 			"backtrace":   attr.backtrace,
+			"prev_id":     attr.prevID,
+			"prev_out":    attr.prevOut,
 		},
 	}
 }
@@ -455,6 +463,8 @@ func (te *traceEvents) runLocalSpanEvent(span trace.SpanData, attr spanEventAttr
 			"action":      attr.action,
 			"command":     attr.command,
 			"backtrace":   attr.backtrace,
+			"prev_id":     attr.prevID,
+			"prev_out":    attr.prevOut,
 		},
 	}
 }
@@ -474,6 +484,8 @@ func (te *traceEvents) runRemoteSpanEvent(span trace.SpanData, attr spanEventAtt
 			"action":      attr.action,
 			"command":     attr.command,
 			"backtrace":   attr.backtrace,
+			"prev_id":     attr.prevID,
+			"prev_out":    attr.prevOut,
 		},
 	}
 }
@@ -493,6 +505,8 @@ func (te *traceEvents) rbeWorkerSpanEvent(span trace.SpanData, attr spanEventAtt
 			"action":      attr.action,
 			"command":     attr.command,
 			"backtrace":   attr.backtrace,
+			"prev_id":     attr.prevID,
+			"prev_out":    attr.prevOut,
 			"worker":      span.Attrs["worker"].(string),
 		},
 	}
