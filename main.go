@@ -28,6 +28,7 @@ import (
 	"infra/build/siso/subcmd/digraph"
 	"infra/build/siso/subcmd/fetch"
 	"infra/build/siso/subcmd/fscmd"
+	"infra/build/siso/subcmd/help"
 	"infra/build/siso/subcmd/metricscmd"
 	"infra/build/siso/subcmd/ninja"
 	"infra/build/siso/subcmd/recall"
@@ -53,8 +54,7 @@ func getApplication(authOpts cred.Options) *cli.Application {
 		Name:  "siso",
 		Title: "Ninja-compatible build system optimized for remote execution",
 		Commands: []*subcommands.Command{
-			subcommands.CmdHelp,
-
+			help.Cmd(),
 			ninja.Cmd(authOpts),
 			digraph.Cmd(),
 			fscmd.Cmd(authOpts),
@@ -111,7 +111,6 @@ Use "siso help -advanced" to display all commands.
 		flag.PrintDefaults()
 	}
 
-	// TODO(b/274361523): Ensure that these flags show up in `siso help`.
 	flag.StringVar(&pprofAddr, "pprof_addr", "", `listen address for "go tool pprof". e.g. "localhost:6060"`)
 	flag.StringVar(&cpuprofile, "cpuprofile", "", "write cpu profile to this file")
 	flag.StringVar(&memprofile, "memprofile", "", "write memory profile to this file")
