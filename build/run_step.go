@@ -60,8 +60,9 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 	})
 	logger := clog.FromContext(ctx)
 	logger.Formatter = logFormat
-	defer func() {
+	defer func(span *trace.Span) {
 		if errors.Is(err, context.Canceled) {
+			span.Close(status.FromContextError(err).Proto())
 			return
 		}
 		if err != nil {
@@ -88,7 +89,7 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 		}
 		// unref for GC to reclaim memory.
 		step.cmd = nil
-	}()
+	}(span)
 
 	if step.def.IsPhony() || b.checkUpToDate(ctx, step.def, step.outputs) {
 		step.metrics.skip = true
