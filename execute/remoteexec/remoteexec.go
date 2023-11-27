@@ -180,6 +180,7 @@ func (re *RemoteExec) processResult(ctx context.Context, action digest.Digest, c
 	result.OutputFiles = files
 	result.OutputSymlinks = symlinks
 	result.OutputDirectories = dirs
+	cmd.SetActionResult(result, cached)
 	if err != nil {
 		// Even when err was not nil, the outputs were populated to ActionResult for investigation.
 		return err
@@ -202,7 +203,6 @@ func (re *RemoteExec) processResult(ctx context.Context, action digest.Digest, c
 	if err != nil {
 		return err
 	}
-	cmd.SetActionResult(result, cached)
 	return nil
 }
 

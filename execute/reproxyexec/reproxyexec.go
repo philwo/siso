@@ -342,10 +342,16 @@ func processResponse(ctx context.Context, cmd *execute.Cmd, response *ppb.RunRes
 		}
 		cmd.SetActionDigest(dg)
 	}
+	err := setOutputsFromActionLog(al, result)
+	if err != nil {
+		return err
+	}
+	cmd.SetActionResult(result, cached)
 	// Outputs
 	updatedTime := time.Now()
 	if remoteSuccess {
-		err := updateHashFSFromReproxy(ctx, cmd, al, result, updatedTime)
+		ds := &reproxyOutputsDataSource{execRoot: cmd.ExecRoot, iometrics: cmd.HashFS.IOMetrics}
+		err := cmd.RecordOutputs(ctx, ds, updatedTime)
 		if err != nil {
 			return err
 		}
@@ -371,7 +377,6 @@ func processResponse(ctx context.Context, cmd *execute.Cmd, response *ppb.RunRes
 	if len(response.Stderr) > 0 {
 		cmd.StderrWriter().Write(response.Stderr)
 	}
-	cmd.SetActionResult(result, cached)
 	return resultErr(response)
 }
 
@@ -400,8 +405,7 @@ func (ds reproxyOutputsDataSource) Source(_ digest.Digest, fname string) digest.
 	return digest.LocalFileSource{Fname: path, IOMetrics: ds.iometrics}
 }
 
-// updateHashFSFromReproxy updates hashfs with the digests provided by Reproxy.
-func updateHashFSFromReproxy(ctx context.Context, cmd *execute.Cmd, actionLog *lpb.LogRecord, actionResult *rpb.ActionResult, updatedTime time.Time) error {
+func setOutputsFromActionLog(actionLog *lpb.LogRecord, actionResult *rpb.ActionResult) error {
 	rm := actionLog.GetRemoteMetadata()
 	for path, dg := range rm.GetOutputFileDigests() {
 		d, err := digest.Parse(dg)
@@ -427,6 +431,5 @@ func updateHashFSFromReproxy(ctx context.Context, cmd *execute.Cmd, actionLog *l
 		actionResult.OutputDirectories = append(actionResult.OutputDirectories, out)
 	}
 	// TODO: Should handle output symlinks if they are used in Chromium builds?
-	ds := &reproxyOutputsDataSource{execRoot: cmd.ExecRoot, iometrics: cmd.HashFS.IOMetrics}
-	return cmd.RecordOutputs(ctx, ds, updatedTime)
+	return nil
 }
