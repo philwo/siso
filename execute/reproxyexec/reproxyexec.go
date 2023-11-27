@@ -347,12 +347,12 @@ func processResponse(ctx context.Context, cmd *execute.Cmd, response *ppb.RunRes
 	if remoteSuccess {
 		err := updateHashFSFromReproxy(ctx, cmd, al, result, updatedTime)
 		if err != nil {
-			return fmt.Errorf("failed to update hashfs from reproxy outputs: %w", err)
+			return err
 		}
 	} else {
-		err := cmd.HashFS.UpdateFromLocal(ctx, cmd.ExecRoot, cmd.AllOutputs(), cmd.Restat, updatedTime, cmd.CmdHash)
+		err := cmd.RecordOutputsFromLocal(ctx, updatedTime)
 		if err != nil {
-			return fmt.Errorf("failed to update hashfs from local: %w", err)
+			return err
 		}
 	}
 
@@ -388,7 +388,7 @@ func resultErr(response *ppb.RunResponse) error {
 }
 
 // reproxyOutputsDataSource implements fs.DataStore for Reproxy's outputs.
-// This allows cmd.EntriesFromResult()/cmd.HashFS.Update() to skip calculating
+// This allows cmd.RecordOutputs() to skip calculating
 // digests.
 type reproxyOutputsDataSource struct {
 	execRoot  string
@@ -428,7 +428,5 @@ func updateHashFSFromReproxy(ctx context.Context, cmd *execute.Cmd, actionLog *l
 	}
 	// TODO: Should handle output symlinks if they are used in Chromium builds?
 	ds := &reproxyOutputsDataSource{execRoot: cmd.ExecRoot, iometrics: cmd.HashFS.IOMetrics}
-	entries := cmd.EntriesFromResult(ctx, ds, actionResult)
-	clog.Infof(ctx, "remote output entries %d", len(entries))
-	return cmd.HashFS.Update(ctx, cmd.ExecRoot, entries, updatedTime, cmd.CmdHash, cmd.ActionDigest())
+	return cmd.RecordOutputs(ctx, ds, updatedTime)
 }

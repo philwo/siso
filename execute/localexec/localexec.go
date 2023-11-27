@@ -61,7 +61,7 @@ func (LocalExec) Run(ctx context.Context, cmd *execute.Cmd) (err error) {
 	}
 	// TODO(b/254158307): calculate action digest if cmd is pure?
 	now := time.Now()
-	return cmd.HashFS.UpdateFromLocal(ctx, cmd.ExecRoot, cmd.AllOutputs(), cmd.Restat, now, cmd.CmdHash)
+	return cmd.RecordOutputsFromLocal(ctx, now)
 }
 
 // fix for http://b/278658064 windows: fork/exec: Not enough memory resources are available to process this command.

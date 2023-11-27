@@ -184,9 +184,7 @@ func (re *RemoteExec) processResult(ctx context.Context, action digest.Digest, c
 		// Even when err was not nil, the outputs were populated to ActionResult for investigation.
 		return err
 	}
-	entries := cmd.EntriesFromResult(ctx, cmd.HashFS.DataSource(), result)
-	clog.Infof(ctx, "output entries %d", len(entries))
-	err = cmd.HashFS.Update(ctx, cmd.ExecRoot, entries, now, cmd.CmdHash, action)
+	err = cmd.RecordOutputs(ctx, cmd.HashFS.DataSource(), now)
 	if err != nil {
 		return err
 	}

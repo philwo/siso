@@ -617,15 +617,32 @@ func (c *Cmd) RemoteFallbackResult() *rpb.ActionResult {
 	return c.remoteFallbackResult
 }
 
-// EntriesFromResult returns output file entries for the cmd and result.
-func (c *Cmd) EntriesFromResult(ctx context.Context, ds hashfs.DataSource, result *rpb.ActionResult) []merkletree.Entry {
-	var entries []merkletree.Entry
+// entriesFromResult returns output file entries and depfile entries for the cmd and result.
+// if depfile is in output, its entry is in entries, not depEntries to have
+// cmdhash in the entry.
+func (c *Cmd) entriesFromResult(ctx context.Context, ds hashfs.DataSource, result *rpb.ActionResult) (entries, depEntries []merkletree.Entry) {
+	depfile := c.Depfile
+	for _, out := range c.Outputs {
+		if out == depfile {
+			depfile = ""
+			break
+		}
+	}
+
 	for _, f := range result.GetOutputFiles() {
 		if f.Digest == nil {
 			continue
 		}
-		fname := filepath.Join(c.Dir, f.Path)
+		fname := filepath.ToSlash(filepath.Join(c.Dir, f.Path))
 		d := digest.FromProto(f.Digest)
+		if fname == depfile {
+			depEntries = append(depEntries, merkletree.Entry{
+				Name:         fname,
+				Data:         digest.NewData(ds.Source(d, fname), d),
+				IsExecutable: f.IsExecutable,
+			})
+			continue
+		}
 		entries = append(entries, merkletree.Entry{
 			Name:         fname,
 			Data:         digest.NewData(ds.Source(d, fname), d),
@@ -636,7 +653,7 @@ func (c *Cmd) EntriesFromResult(ctx context.Context, ds hashfs.DataSource, resul
 		if s.Target == "" {
 			continue
 		}
-		fname := filepath.Join(c.Dir, s.Path)
+		fname := filepath.ToSlash(filepath.Join(c.Dir, s.Path))
 		entries = append(entries, merkletree.Entry{
 			Name:   fname,
 			Target: s.Target,
@@ -644,12 +661,45 @@ func (c *Cmd) EntriesFromResult(ctx context.Context, ds hashfs.DataSource, resul
 	}
 	for _, d := range result.GetOutputDirectories() {
 		// It just needs to add the directories here because it assumes that they have already been expanded by ninja State.
-		dname := filepath.Join(c.Dir, d.Path)
+		dname := filepath.ToSlash(filepath.Join(c.Dir, d.Path))
 		entries = append(entries, merkletree.Entry{
 			Name: dname,
 		})
 	}
-	return entries
+	return entries, depEntries
+}
+
+// RecordOutputs records cmd's outputs from action result in hashfs.
+func (c *Cmd) RecordOutputs(ctx context.Context, ds hashfs.DataSource, now time.Time) error {
+	entries, depEntries := c.entriesFromResult(ctx, ds, c.actionResult)
+	clog.Infof(ctx, "output entries %d+%d", len(entries), len(depEntries))
+	err := c.HashFS.Update(ctx, c.ExecRoot, entries, now, c.CmdHash, c.actionDigest)
+	if err != nil {
+		return fmt.Errorf("failed to update hashfs from remote: %w", err)
+	}
+	if len(depEntries) == 0 {
+		return nil
+	}
+	err = c.HashFS.Update(ctx, c.ExecRoot, depEntries, now, nil, c.actionDigest)
+	if err != nil {
+		return fmt.Errorf("failed to update hashfs from remote[depfile]: %w", err)
+	}
+	return nil
+}
+
+// RecordOutputsFromLocal records cmd's outputs from local disk in hashfs.
+func (c *Cmd) RecordOutputsFromLocal(ctx context.Context, now time.Time) error {
+	if c.Depfile != "" {
+		err := c.HashFS.UpdateFromLocal(ctx, c.ExecRoot, []string{c.Depfile}, c.Restat, now, nil)
+		if err != nil {
+			return fmt.Errorf("failed to update hashfs from local[depfile]: %w", err)
+		}
+	}
+	err := c.HashFS.UpdateFromLocal(ctx, c.ExecRoot, c.Outputs, c.Restat, now, c.CmdHash)
+	if err != nil {
+		return fmt.Errorf("failed to update hashfs from local: %w", err)
+	}
+	return nil
 }
 
 // ResultFromEntries updates result from entries.
