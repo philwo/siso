@@ -128,6 +128,8 @@ type ninjaCmdRun struct {
 	traceThreshold           time.Duration
 	traceSpanThreshold       time.Duration
 
+	subtool    string
+	cleandead  bool
 	debugMode  debugMode
 	adjustWarn string
 
@@ -264,6 +266,18 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	err = c.debugMode.check()
 	if err != nil {
 		return stats, flagError{err: err}
+	}
+	switch c.subtool {
+	case "":
+	case "list":
+		return stats, flagError{
+			err: errors.New(`ninja subtools:
+  cleandead  clean built files that are no longer produced by the manifest`),
+		}
+	case "cleandead":
+		c.cleandead = true
+	default:
+		return stats, flagError{err: fmt.Errorf("unknown tool %q", c.subtool)}
 	}
 
 	limits := build.DefaultLimits(ctx)
@@ -404,6 +418,10 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		if c.dryRun {
 			return
 		}
+		if c.subtool != "" {
+			// don't modify .siso_failed_targets, .siso_last_targets by subtool.
+			return
+		}
 		if err != nil {
 			if !c.batch {
 				return
@@ -442,7 +460,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	_, err = os.Stat(failedTargetsFile)
 	lastFailed := err == nil
 	clog.Infof(ctx, "sameTargets: %t hashfs clean: %t last failed: %t", sameTargets, hashFS.IsClean(), lastFailed)
-	if !c.clobber && !c.dryRun && !c.debugMode.Explain && sameTargets && hashFS.IsClean() && !lastFailed {
+	if !c.clobber && !c.dryRun && !c.debugMode.Explain && c.subtool != "cleandead" && sameTargets && hashFS.IsClean() && !lastFailed {
 		// TODO: better to check digest of .siso_fs_state?
 		return stats, errNothingToDo
 	}
@@ -478,24 +496,40 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 
 	graph := ninjabuild.NewGraph(ctx, c.fname, nstate, config, buildPath, hashFS, stepConfig, localDepsLog)
 
-	return runNinja(ctx, c.fname, graph, bopts, targets, c.dryRun, !c.batch && sameTargets && !c.clobber)
+	return runNinja(ctx, c.fname, graph, bopts, targets, runNinjaOpts{
+		checkFailedTargets: !c.batch && sameTargets && !c.clobber,
+		cleandead:          c.cleandead,
+		subtool:            c.subtool,
+	})
 }
 
-func runNinja(ctx context.Context, fname string, graph *ninjabuild.Graph, bopts build.Options, targets []string, dryRun, checkFailedTargets bool) (build.Stats, error) {
+type runNinjaOpts struct {
+	// whether to check .siso_failed_targets or not.
+	checkFailedTargets bool
+
+	// whether to perform cleandead or not.
+	cleandead bool
+
+	// subtool name.
+	// if "cleandead", it returns after cleandead performed.
+	subtool string
+}
+
+func runNinja(ctx context.Context, fname string, graph *ninjabuild.Graph, bopts build.Options, targets []string, nopts runNinjaOpts) (build.Stats, error) {
 	var stats build.Stats
 	spin := ui.Default.NewSpinner()
 
 	for {
 		clog.Infof(ctx, "build starts")
-		if checkFailedTargets {
+		if nopts.checkFailedTargets {
 			failedTargets, err := loadTargets(ctx, failedTargetsFile)
 			if err != nil {
 				clog.Infof(ctx, "no failed targets: %v", err)
 			} else {
 				ui.Default.PrintLines(fmt.Sprintf("Building last failed targets: %s...\n", failedTargets))
-				stats, err = doBuild(ctx, graph, bopts, failedTargets...)
+				stats, err = doBuild(ctx, graph, bopts, nopts, failedTargets...)
 				if errors.Is(err, build.ErrManifestModified) {
-					if dryRun {
+					if bopts.DryRun {
 						return stats, nil
 					}
 					clog.Infof(ctx, "%s modified.", fname)
@@ -523,9 +557,9 @@ func runNinja(ctx context.Context, fname string, graph *ninjabuild.Graph, bopts 
 		if err != nil && !errors.Is(err, fs.ErrNotExist) {
 			clog.Warningf(ctx, "failed to remove %s: %v", failedTargetsFile, err)
 		}
-		stats, err := doBuild(ctx, graph, bopts, targets...)
+		stats, err := doBuild(ctx, graph, bopts, nopts, targets...)
 		if errors.Is(err, build.ErrManifestModified) {
-			if dryRun {
+			if bopts.DryRun {
 				return stats, nil
 			}
 			clog.Infof(ctx, "%s modified", fname)
@@ -614,6 +648,8 @@ func (c *ninjaCmdRun) init() {
 	c.Flags.StringVar(&c.cloudProfilerServiceName, "cloud_profiler_service_name", "siso", "cloud profiler service name")
 	c.Flags.BoolVar(&c.enableCloudTrace, "enable_cloud_trace", false, "enable cloud trace")
 
+	c.Flags.StringVar(&c.subtool, "t", "", "run a subtool (use '-t list' to list subtools)")
+	c.Flags.BoolVar(&c.cleandead, "cleandead", false, "clean built files that are no longer produced by the manifest")
 	c.Flags.Var(&c.debugMode, "d", "enable debugging (use '-d list' to list modes)")
 	c.Flags.StringVar(&c.adjustWarn, "w", "", "adjust warnings. not supported b/288807840")
 }
@@ -983,7 +1019,7 @@ func defaultCacheDir() string {
 	return filepath.Join(d, "siso")
 }
 
-func doBuild(ctx context.Context, graph *ninjabuild.Graph, bopts build.Options, args ...string) (stats build.Stats, err error) {
+func doBuild(ctx context.Context, graph *ninjabuild.Graph, bopts build.Options, nopts runNinjaOpts, args ...string) (stats build.Stats, err error) {
 	clog.Infof(ctx, "rebuild manifest")
 	mfbopts := bopts
 	mfbopts.Clobber = false
@@ -1000,7 +1036,21 @@ func doBuild(ctx context.Context, graph *ninjabuild.Graph, bopts build.Options, 
 	if err != nil {
 		return stats, err
 	}
-	// TODO(b/266518906): upload manifest
+
+	if !bopts.DryRun && nopts.cleandead {
+		spin := ui.Default.NewSpinner()
+		spin.Start("cleaning deadfiles")
+		n, total, err := graph.CleanDead(ctx)
+		if err != nil {
+			spin.Stop(err)
+			return stats, err
+		}
+		if nopts.subtool == "cleandead" {
+			spin.Done("%d/%d generated files", n, total)
+			return stats, nil
+		}
+		spin.Stop(nil)
+	}
 
 	b, err := build.New(ctx, graph, bopts)
 	if err != nil {

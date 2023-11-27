@@ -206,7 +206,9 @@ func TestBuild_GNGen(t *testing.T) {
 				StateFile: ".siso_fs_state",
 			})
 			defer cleanup()
-			return runNinja(ctx, "build.ninja", graph, opt, nil, false, true)
+			return runNinja(ctx, "build.ninja", graph, opt, nil, runNinjaOpts{
+				checkFailedTargets: true,
+			})
 		}
 		setupFiles(t, dir, testName, nil)
 		err := run("buildtools/gn.py", "gen", "out/siso")
