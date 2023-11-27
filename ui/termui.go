@@ -63,6 +63,15 @@ func (s *termSpinner) Stop(err error) {
 	fmt.Printf("\r\033[K%6s %s\n", FormatDuration(d), s.msg)
 }
 
+// Done finishes the spinner with message.
+func (s *termSpinner) Done(format string, args ...any) {
+	close(s.quit)
+	<-s.done
+	msg := fmt.Sprintf(format, args...)
+	d := time.Since(s.started)
+	fmt.Printf("\r\033[K%6s %s %s\n", FormatDuration(d), s.msg, msg)
+}
+
 // TermUI is a terminal-based UI.
 type TermUI struct {
 	width int

@@ -19,6 +19,8 @@ type spinner interface {
 	Start(format string, args ...any)
 	// Stop stops the spinner, outputting an error if provided.
 	Stop(err error)
+	// Done finishes the spinner with message.
+	Done(format string, args ...any)
 }
 
 // UI is a user interface.

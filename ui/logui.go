@@ -32,6 +32,11 @@ func (l *logSpinner) Stop(err error) {
 	fmt.Printf(" done %s\n", time.Since(l.started))
 }
 
+// Done finishes the spinner with message.
+func (l *logSpinner) Done(format string, args ...any) {
+	fmt.Printf(" %s %s\n", fmt.Sprintf(format, args...), time.Since(l.started))
+}
+
 // LogUI is a log-based UI.
 type LogUI struct{}
 
