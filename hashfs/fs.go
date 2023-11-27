@@ -68,6 +68,10 @@ type HashFS struct {
 
 	digester digester
 	clean    bool
+
+	// holds generated files in previous builds.
+	// key: full path, value: true
+	previouslyGeneratedFiles *sync.Map
 }
 
 // New creates a HashFS.
@@ -95,6 +99,7 @@ func New(ctx context.Context, opt Option) (*HashFS, error) {
 			quit:      make(chan struct{}),
 			done:      make(chan struct{}),
 		},
+		previouslyGeneratedFiles: new(sync.Map),
 	}
 	if opt.StateFile != "" {
 		start := time.Now()
@@ -140,6 +145,25 @@ func (hfs *HashFS) Close(ctx context.Context) error {
 // IsClean returns whether hashfs is clean (i.e. sync with local disk).
 func (hfs *HashFS) IsClean() bool {
 	return hfs.clean
+}
+
+// PreviouslyGeneratedFiles returns a list of generated files
+// (i.e. has cmdhash) in the previous builds.
+// It will reset internal data, so next call will return nil
+func (hfs *HashFS) PreviouslyGeneratedFiles() []string {
+	if hfs.previouslyGeneratedFiles == nil {
+		return nil
+	}
+	var names []string
+	hfs.previouslyGeneratedFiles.Range(func(key, value any) bool {
+		k, ok := key.(string)
+		if ok {
+			names = append(names, k)
+		}
+		return true
+	})
+	hfs.previouslyGeneratedFiles = nil
+	return names
 }
 
 // FileSystem returns FileSystem interface at dir.

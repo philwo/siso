@@ -250,6 +250,10 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 				clog.Infof(gctx, "set state %s: d:%s %s s:%s m:%s cmdhash:%s action:%s", ent.Name, e.d, e.mode, e.target, e.mtime, hex.EncodeToString(e.cmdhash), e.action)
 			}
 			_, err = hfs.directory.store(gctx, filepath.ToSlash(ent.Name), e)
+			if len(e.cmdhash) > 0 {
+				// records generated files found in the loaded .siso_fs_state into previouslyGeneratedFiles.
+				hfs.previouslyGeneratedFiles.Store(ent.Name, true)
+			}
 			return err
 		})
 	}
