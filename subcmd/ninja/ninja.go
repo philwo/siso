@@ -106,6 +106,7 @@ type ninjaCmdRun struct {
 
 	logDir             string
 	failureSummaryFile string
+	failedCommandsFile string
 	outputLogFile      string
 	explainFile        string
 	localexecLogFile   string
@@ -177,6 +178,9 @@ func (c *ninjaCmdRun) Run(a subcommands.Application, args []string, env subcomma
 			suggest := fmt.Sprintf("see %s for command line and output", c.logFilename(c.outputLogFile))
 			if c.sisoInfoLog != "" {
 				suggest += fmt.Sprintf("\n or %s", c.logFilename(c.sisoInfoLog))
+			}
+			if c.failedCommandsFile != "" {
+				suggest += fmt.Sprintf("\nuse %s to re-run failed commands", c.logFilename(c.failedCommandsFile))
 			}
 			if ui.IsTerminal() {
 				suggest = ui.SGR(ui.Bold, suggest)
@@ -443,6 +447,11 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 				return
 			}
 			// when write failedTargetsFile, need to write lastTargetsFile too.
+		} else {
+			rerr := os.Remove(c.failedCommandsFile)
+			if rerr != nil {
+				clog.Warningf(ctx, "failed to remove failed command file: %v", rerr)
+			}
 		}
 		clog.Infof(ctx, "save targets to %s...", lastTargetsFile)
 		serr := saveTargets(ctx, lastTargetsFile, targets)
@@ -618,6 +627,11 @@ func (c *ninjaCmdRun) init() {
 
 	c.Flags.StringVar(&c.logDir, "log_dir", ".", "log directory (relative to -C")
 	c.Flags.StringVar(&c.failureSummaryFile, "failure_summary", "", "filename for failure summary (relative to -log_dir)")
+	c.failedCommandsFile = "siso_failed_commands.sh"
+	if runtime.GOOS == "windows" {
+		c.failedCommandsFile = "siso_failed_commands.bat"
+	}
+	c.Flags.StringVar(&c.failedCommandsFile, "failed_commands", c.failedCommandsFile, "script file to rerun the last failed commands")
 	c.Flags.StringVar(&c.outputLogFile, "output_log", "siso_output", "output log filename (relative to -log_dir")
 	c.Flags.StringVar(&c.explainFile, "explain_log", "siso_explain", "explain log filename (relative to -log_dir")
 	c.Flags.StringVar(&c.localexecLogFile, "localexec_log", "siso_localexec", "localexec log filename (relative to -log_dir")
@@ -868,6 +882,27 @@ func (c *ninjaCmdRun) initBuildOpts(ctx context.Context, projectID, buildID stri
 			fmt.Fprintf(failureSummaryWriter, "error: %v\n", *errp)
 		}
 	})
+	failedCommandsWriter, done, err := c.logWriter(ctx, c.failedCommandsFile)
+	if err != nil {
+		return bopts, nil, err
+	}
+	dones = append(dones, done)
+	newline := "\n"
+	if runtime.GOOS != "windows" {
+		if f, ok := failedCommandsWriter.(*os.File); ok {
+			err = f.Chmod(0755)
+			if err != nil {
+				return bopts, nil, err
+			}
+		}
+		fmt.Fprintf(failedCommandsWriter, "#!/bin/sh\n")
+		fmt.Fprintf(failedCommandsWriter, "set -ve\n")
+	} else {
+		newline = "\r\n"
+	}
+	fmt.Fprintf(failedCommandsWriter, "cd %s%s", filepath.Join(buildPath.ExecRoot, buildPath.Dir), newline)
+	// TODO: for reproxy mode, may need to run reproxy for rewrapper commands.
+
 	outputLogWriter, done, err := c.logWriter(ctx, c.outputLogFile)
 	if err != nil {
 		return bopts, nil, err
@@ -946,6 +981,7 @@ func (c *ninjaCmdRun) initBuildOpts(ctx context.Context, projectID, buildID stri
 		OutputLocal:          build.OutputLocalFunc(c.fsopt.OutputLocal),
 		Cache:                cache,
 		FailureSummaryWriter: failureSummaryWriter,
+		FailedCommandsWriter: failedCommandsWriter,
 		OutputLogWriter:      outputLogWriter,
 		ExplainWriter:        explainWriter,
 		LocalexecLogWriter:   localexecLogWriter,
@@ -1321,15 +1357,17 @@ func (s source) String() string {
 }
 
 func rotateFiles(ctx context.Context, fname string) {
+	ext := filepath.Ext(fname)
+	fnameBase := strings.TrimSuffix(fname, ext)
 	for i := 8; i >= 0; i-- {
 		err := os.Rename(
-			fmt.Sprintf("%s.%d", fname, i),
-			fmt.Sprintf("%s.%d", fname, i+1))
+			fmt.Sprintf("%s.%d%s", fnameBase, i, ext),
+			fmt.Sprintf("%s.%d%s", fnameBase, i+1, ext))
 		if err != nil && !errors.Is(err, fs.ErrNotExist) {
 			clog.Warningf(ctx, "rotate %s %d->%d failed: %v", fname, i, i+1, err)
 		}
 	}
-	err := os.Rename(fname, fmt.Sprintf("%s.0", fname))
+	err := os.Rename(fname, fmt.Sprintf("%s.0%s", fnameBase, ext))
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		clog.Warningf(ctx, "rotate %s ->0 failed: %v", fname, err)
 	}

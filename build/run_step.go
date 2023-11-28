@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"runtime"
 	"strings"
 	"time"
 
@@ -86,6 +87,7 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 			b.stats.update(ctx, &step.metrics, step.cmd.Pure)
 			b.finalizeTrace(ctx, tc)
 			b.outputFailureSummary(ctx, step, err)
+			b.outputFailedCommands(ctx, step, err)
 		}
 		// unref for GC to reclaim memory.
 		step.cmd = nil
@@ -378,5 +380,27 @@ func (b *Builder) outputFailureSummary(ctx context.Context, step *Step, err erro
 	_, err = b.failureSummaryWriter.Write(buf.Bytes())
 	if err != nil {
 		clog.Warningf(ctx, "failed to write failure_summary: %v", err)
+	}
+}
+
+func (b *Builder) outputFailedCommands(ctx context.Context, step *Step, err error) {
+	if err == nil || b.failedCommandsWriter == nil || step.cmd == nil {
+		return
+	}
+	var buf bytes.Buffer
+	// rspfile is preserved when failed, so assume it exists.
+	comment := "#"
+	newline := "\n"
+	if runtime.GOOS == "windows" {
+		comment = "rem"
+		newline = "\r\n"
+	}
+	fmt.Fprintf(&buf, "%s step_id=%s%s", comment, step.String(), newline)
+	fmt.Fprintf(&buf, "%s %s%s", comment, step.cmd.Desc, newline)
+	fmt.Fprintf(&buf, "%s%s", step.def.Binding("command"), newline)
+	fmt.Fprint(&buf, newline)
+	_, err = b.failedCommandsWriter.Write(buf.Bytes())
+	if err != nil {
+		clog.Warningf(ctx, "failed to write failed commands: %v", err)
 	}
 }
