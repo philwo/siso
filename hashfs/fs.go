@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -816,6 +817,8 @@ func (hfs *HashFS) UpdateFromLocal(ctx context.Context, root string, inputs []st
 	ctx, span := trace.NewSpan(ctx, "fs-update-local")
 	defer span.Close(nil)
 	hfs.Forget(ctx, root, inputs)
+	// copy outputs to avoid sort cmd.Outputs in RecordOutputsFromLocal.
+	inputs = slices.Clone(inputs)
 	// sort inputs, so check dir containing files first. b/300385880
 	sort.Strings(inputs)
 	for _, fname := range inputs {
