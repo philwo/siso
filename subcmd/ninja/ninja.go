@@ -427,7 +427,10 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 			return
 		}
 		if err != nil {
-			if !c.batch {
+			// when batch mode, no need to record failed targets,
+			// as it will build full targets when rebuilding
+			// for throughput, rather than latency.
+			if c.batch {
 				return
 			}
 			var errBuild buildError
