@@ -399,7 +399,7 @@ func (g *globals) targetPath(node *ninjautil.Node) string {
 	if ok {
 		return p.(string)
 	}
-	s := g.path.MustFromWD(node.Path())
+	s := g.path.MaybeFromWD(node.Path())
 	p, _ = g.targetPaths.LoadOrStore(node, s)
 	return p.(string)
 }

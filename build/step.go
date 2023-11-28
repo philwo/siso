@@ -329,7 +329,7 @@ func newCmd(ctx context.Context, b *Builder, stepDef StepDef) *execute.Cmd {
 	// correctly managed by Siso.
 	// This workaround is needed to make second build as null build.
 	if stepDef.ActionName() == "gn" && len(outputs) == 1 && filepath.Base(outputs[0]) == "build.ninja.stamp" {
-		outputs = append(outputs, b.path.MustFromWD("build.ninja"))
+		outputs = append(outputs, b.path.MaybeFromWD("build.ninja"))
 	}
 
 	cmd := &execute.Cmd{

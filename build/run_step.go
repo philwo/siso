@@ -176,7 +176,7 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 			b.logOutput(ctx, msgs, step.cmd.Console)
 		}
 		return StepError{
-			Target: b.path.MustToWD(step.cmd.Outputs[0]),
+			Target: b.path.MaybeToWD(step.cmd.Outputs[0]),
 			Cause:  err,
 		}
 	}

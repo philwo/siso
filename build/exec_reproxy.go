@@ -158,7 +158,7 @@ func (b *Builder) prepareLocalIncludeDirs(ctx context.Context, step *Step) error
 			// Do not touch source tree or system dirs outside the build dir.
 			continue
 		}
-		d := b.path.MustFromWD(dir)
+		d := b.path.MaybeFromWD(dir)
 		if _, err := b.hashFS.Stat(ctx, b.path.ExecRoot, d); errors.Is(err, fs.ErrNotExist) {
 			clog.Infof(ctx, "prepare include dir %s", dir)
 			err = b.hashFS.Mkdir(ctx, b.path.ExecRoot, d, nil)

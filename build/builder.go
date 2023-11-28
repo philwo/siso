@@ -940,7 +940,7 @@ func (b *Builder) updateDeps(ctx context.Context, step *Step) error {
 	span.SetAttr("deps", len(deps))
 	span.SetAttr("updated", updated)
 	for i := range deps {
-		deps[i] = b.path.MustFromWD(deps[i])
+		deps[i] = b.path.MaybeFromWD(deps[i])
 	}
 	depsFixCmd(ctx, b, step, deps)
 	return nil

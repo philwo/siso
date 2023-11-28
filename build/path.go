@@ -47,9 +47,9 @@ func (p *Path) Intern(path string) string {
 	return p.intern.Intern(path)
 }
 
-// MustFromWD converts cwd relative to exec root relative.
-// TODO(b/273185597): consider rewriting as non-Must func.
-func (p *Path) MustFromWD(path string) string {
+// MaybeFromWD attempts to convert cwd relative to exec root relative.
+// It logs an error and returns the path as-is if this fails.
+func (p *Path) MaybeFromWD(path string) string {
 	s, err := p.FromWD(path)
 	if err != nil {
 		log.Errorf("Failed to get rel %s, %s: %v", p.ExecRoot, path, err)
@@ -89,11 +89,11 @@ func (p *Path) FromWD(path string) (string, error) {
 	return v.(string), nil
 }
 
-// MustToWD converts exec root relative to cwd relative,
+// MaybeToWD converts exec root relative to cwd relative,
 // slash-separated.
 // It keeps absolute path as is.
-// TODO(b/273185597): consider rewriting as non-Must func.
-func (p *Path) MustToWD(path string) string {
+// It logs an error and returns the path as-is if this fails.
+func (p *Path) MaybeToWD(path string) string {
 	if path == "" {
 		return ""
 	}

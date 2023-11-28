@@ -257,7 +257,7 @@ func (s *StepDef) Depfile() string {
 	if depfile == "" {
 		return ""
 	}
-	return s.globals.path.MustFromWD(depfile)
+	return s.globals.path.MaybeFromWD(depfile)
 }
 
 // Rspfile returns exec-root relative rspfile path or empty if not set.
@@ -266,7 +266,7 @@ func (s *StepDef) Rspfile() string {
 	if rspfile == "" {
 		return ""
 	}
-	return s.globals.path.MustFromWD(rspfile)
+	return s.globals.path.MaybeFromWD(rspfile)
 }
 
 func edgeSolibs(edge *ninjautil.Edge) []string {
@@ -303,7 +303,7 @@ func (s *StepDef) Inputs(ctx context.Context) []string {
 	}
 	for _, p := range edgeSolibs(s.edge) {
 		clog.Infof(ctx, "solib %s", p)
-		p := globals.path.MustFromWD(p)
+		p := globals.path.MaybeFromWD(p)
 		if seen[p] {
 			continue
 		}
@@ -381,7 +381,7 @@ func depInputs(ctx context.Context, s *StepDef) ([]string, error) {
 		if depfile == "" {
 			return nil, nil
 		}
-		df := s.globals.path.MustFromWD(depfile)
+		df := s.globals.path.MaybeFromWD(depfile)
 		if s.edge.Binding("generator") != "" {
 			// e.g. rule gn.
 			// generator runs locally, so believe a local file
@@ -403,7 +403,7 @@ func depInputs(ctx context.Context, s *StepDef) ([]string, error) {
 	}
 	var inputs []string
 	for _, in := range deps {
-		rin := s.globals.path.MustFromWD(in)
+		rin := s.globals.path.MaybeFromWD(in)
 		inputs = append(inputs, rin)
 	}
 	return inputs, nil
@@ -607,7 +607,7 @@ func (s *StepDef) ExpandedInputs(ctx context.Context) []string {
 		inputs = append(inputs, p)
 	}
 	for _, p := range edgeSolibs(s.edge) {
-		p = globals.path.MustFromWD(p)
+		p = globals.path.MaybeFromWD(p)
 		if seen[p] {
 			continue
 		}
@@ -681,7 +681,7 @@ func (s *StepDef) ExpandedInputs(ctx context.Context) []string {
 		newInputs = append(newInputs, inputs[i])
 		var solibsIns []string
 		for _, in := range edgeSolibs(er.edge) {
-			in = globals.path.MustFromWD(in)
+			in = globals.path.MaybeFromWD(in)
 			if seen[in] {
 				continue
 			}

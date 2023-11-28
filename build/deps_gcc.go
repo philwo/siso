@@ -48,10 +48,10 @@ func (gcc depsGCC) fixCmdInputs(ctx context.Context, b *Builder, cmd *execute.Cm
 		return nil, err
 	}
 	for i := range dirs {
-		dirs[i] = b.path.MustFromWD(dirs[i])
+		dirs[i] = b.path.MaybeFromWD(dirs[i])
 	}
 	for i := range sysroots {
-		sysroots[i] = b.path.MustFromWD(sysroots[i])
+		sysroots[i] = b.path.MaybeFromWD(sysroots[i])
 	}
 	var inputs []string
 	// include directory must be included, even if no include files there.
@@ -160,13 +160,13 @@ func (depsGCC) scandeps(ctx context.Context, b *Builder, step *Step) ([]string, 
 			return err
 		}
 		for i := range files {
-			files[i] = b.path.MustFromWD(files[i])
+			files[i] = b.path.MaybeFromWD(files[i])
 		}
 		for i := range dirs {
-			dirs[i] = b.path.MustFromWD(dirs[i])
+			dirs[i] = b.path.MaybeFromWD(dirs[i])
 		}
 		for i := range sysroots {
-			sysroots[i] = b.path.MustFromWD(sysroots[i])
+			sysroots[i] = b.path.MaybeFromWD(sysroots[i])
 		}
 		req := scandeps.Request{
 			Defines:  defines,

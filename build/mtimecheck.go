@@ -34,8 +34,8 @@ func (b *Builder) checkUpToDate(ctx context.Context, stepDef StepDef, outputs []
 
 	// TODO(b/288419130): make sure it covers all cases as ninja does.
 
-	outname := b.path.MustToWD(out0)
-	lastInName := b.path.MustToWD(lastIn)
+	outname := b.path.MaybeToWD(out0)
+	lastInName := b.path.MaybeToWD(lastIn)
 	if errors.Is(err, errDirty) {
 		clog.Infof(ctx, "need %v", err)
 		span.SetAttr("run-reason", "dirty")
