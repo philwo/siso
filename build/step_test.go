@@ -47,7 +47,7 @@ func (fakeStepDef) Inputs(context.Context) []string                 { return nil
 func (fakeStepDef) TriggerInputs(context.Context) ([]string, error) { return nil, nil }
 func (fakeStepDef) DepInputs(context.Context) ([]string, error)     { return nil, nil }
 func (fakeStepDef) ToolInputs(context.Context) []string             { return nil }
-func (fakeStepDef) ExpandCaseSensitives(ctx context.Context, in []string) []string {
+func (fakeStepDef) ExpandedCaseSensitives(ctx context.Context, in []string) []string {
 	return in
 }
 func (f fakeStepDef) ExpandedInputs(ctx context.Context) []string {

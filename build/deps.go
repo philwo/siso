@@ -235,10 +235,10 @@ func fixInputsByDeps(ctx context.Context, b *Builder, stepInputs, depsIns []stri
 }
 
 // expandDepsIfCaseSensitive expands inputs if the platform is case-sensitive.
-// TODO(b/273669921): merge this with step.def.ExpandCaseSensitives? This is the only place the function is used.
+// TODO(b/273669921): merge this with step.def.ExpandedCaseSensitives? This is the only place the function is used.
 func expandDepsIfCaseSensitive(ctx context.Context, step *Step, deps []string) []string {
 	if step.cmd.Platform["OSFamily"] != "Windows" {
-		return step.def.ExpandCaseSensitives(ctx, deps)
+		return step.def.ExpandedCaseSensitives(ctx, deps)
 	}
 	return deps
 }

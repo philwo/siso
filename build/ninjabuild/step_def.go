@@ -491,8 +491,8 @@ func fixInputs(ctx context.Context, stepDef *StepDef, inputs, excludes []string)
 	return r
 }
 
-// ExpandCaseSensitives expands inputs for the case sensitive FS.
-func (s *StepDef) ExpandCaseSensitives(ctx context.Context, inputs []string) []string {
+// ExpandedCaseSensitives gets expanded inputs for the case sensitive FS.
+func (s StepDef) ExpandedCaseSensitives(ctx context.Context, inputs []string) []string {
 	ctx, span := trace.NewSpan(ctx, "stepdef-expand-case-sensitives")
 	defer span.Close(nil)
 	if len(s.globals.caseSensitives) == 0 {

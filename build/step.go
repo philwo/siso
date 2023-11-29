@@ -71,8 +71,8 @@ type StepDef interface {
 	// ToolInputs is added to deps inputs.
 	ToolInputs(context.Context) []string
 
-	// ExpandCaseSensitives expands filenames to be used on case sensitive fs.
-	ExpandCaseSensitives(context.Context, []string) []string
+	// ExpandedCaseSensitives gets expanded filenames to be used on case sensitive fs.
+	ExpandedCaseSensitives(context.Context, []string) []string
 
 	// ExpandedInputs returns expanded inputs of the step.
 	ExpandedInputs(context.Context) []string
