@@ -19,10 +19,6 @@ import (
 func TestBuild_Cleandead(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
-	dir, err := filepath.EvalSymlinks(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	copy := func(t *testing.T, src, dst string) {
 		t.Helper()
@@ -58,7 +54,7 @@ func TestBuild_Cleandead(t *testing.T) {
 	copy(t, "out/siso/build.ninja.0", "out/siso/build.ninja")
 
 	t.Logf("first build")
-	_, err = ninja(t, "")
+	_, err := ninja(t, "")
 	if err != nil {
 		t.Fatalf("ninja err: %v", err)
 	}

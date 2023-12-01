@@ -52,6 +52,10 @@ func setupFiles(t *testing.T, dir, name string, deletes []string) {
 func setupBuild(ctx context.Context, t *testing.T, dir string, fsopt hashfs.Option) (build.Options, *ninjabuild.Graph, func()) {
 	t.Helper()
 	var cleanups []func()
+	dir, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
 	wd, err := os.Getwd()
 	if err != nil {
 		t.Fatal(err)
