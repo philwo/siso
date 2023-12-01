@@ -16,8 +16,11 @@ import (
 func rusage(cmd *exec.Cmd) *epb.Rusage {
 	if u, ok := cmd.ProcessState.SysUsage().(*syscall.Rusage); ok {
 		return &epb.Rusage{
-			// 32bit arch may use int32 for Maxrss.
-			MaxRss: int64(u.Maxrss),
+			// 32bit arch may use int32 for Maxrss etc.
+			MaxRss:  int64(u.Maxrss),
+			Majflt:  int64(u.Majflt),
+			Inblock: int64(u.Inblock),
+			Oublock: int64(u.Oublock),
 		}
 	}
 	return nil

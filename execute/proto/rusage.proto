@@ -13,4 +13,7 @@ option go_package = "infra/build/siso/execute/proto";
 // https://github.com/bazelbuild/remote-apis/blob/6c32c3b917cc5d3cfee680c03179d7552832bb3f/build/bazel/remote/execution/v2/remote_execution.proto#L1016
 message Rusage {
   int64 max_rss = 1;
+  int64 majflt = 2;
+  int64 inblock = 3;
+  int64 oublock = 4;
 }
