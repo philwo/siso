@@ -165,6 +165,13 @@ func limitForREWrapper(ctx context.Context, numCPU int) int {
 			coreMultiplier = p
 		}
 	}
+	if runtime.GOARCH == "amd64" {
+		// autoninja half num_cores for platform.machine is 'x86_64' or 'AMD64'.
+		numCPU /= 2
+		if numCPU == 0 {
+			numCPU = 1
+		}
+	}
 	limit := numCPU * coreMultiplier
 	if v := os.Getenv("NINJA_CORE_LIMIT"); v != "" {
 		p, err := strconv.Atoi(v)
