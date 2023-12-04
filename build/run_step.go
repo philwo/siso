@@ -164,9 +164,13 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 	err = runCmd(ctx, step)
 	clog.Infof(ctx, "done err=%v", err)
 	if err != nil {
+		if ctx.Err() != nil {
+			err = fmt.Errorf("ctx err: %w: %w", ctx.Err(), err)
+		}
 		switch {
 		case errors.Is(err, context.Canceled):
 			// do nothing
+			return err
 		case errors.Is(err, reapi.ErrBadPlatformContainerImage):
 			// RBE returns permission denied when
 			// platform container image are not available
