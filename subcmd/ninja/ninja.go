@@ -556,12 +556,20 @@ func runNinja(ctx context.Context, fname string, graph *ninjabuild.Graph, bopts 
 					clog.Infof(ctx, "reload done. build retry")
 					continue
 				}
-				if err != nil {
-					return stats, err
+				var errBuild buildError
+				if errors.As(err, &errBuild) {
+					var stepError build.StepError
+					if errors.As(errBuild.err, &stepError) {
+						// last failed is not fixed yet.
+						return stats, err
+					}
 				}
-				os.Remove(failedTargetsFile)
-				ui.Default.PrintLines(fmt.Sprintf(" %s: %s\n", ui.SGR(ui.Green, "last failed targets fixed"), failedTargets))
-				continue
+				nopts.checkFailedTargets = false
+				if err != nil {
+					ui.Default.PrintLines(fmt.Sprintf(" %s: %s: %v\n", ui.SGR(ui.Yellow, "err in last failed targets, rebuild again"), failedTargets, err))
+				} else {
+					ui.Default.PrintLines(fmt.Sprintf(" %s: %s\n", ui.SGR(ui.Green, "last failed targets fixed"), failedTargets))
+				}
 			}
 			graph.Reset(ctx)
 		}

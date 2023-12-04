@@ -243,4 +243,47 @@ func TestBuild_GNGen(t *testing.T) {
 		}
 	})
 
+	t.Run("failure_missing_targets", func(t *testing.T) {
+		ninja := func(s string) (build.Stats, error) {
+			opt, graph, cleanup := setupBuild(ctx, t, dir, hashfs.Option{
+				StateFile: ".siso_fs_state",
+			})
+			defer cleanup()
+			return runNinja(ctx, "build.ninja", graph, opt, nil, runNinjaOpts{
+				checkFailedTargets: true,
+			})
+		}
+		setupFiles(t, dir, testName, nil)
+		err := run("buildtools/gn.py", "gen", "out/siso")
+		if err != nil {
+			t.Fatalf("gn gen failed: %v", err)
+		}
+
+		stats, err := ninja("first")
+		if err != nil {
+			t.Fatalf("first build  %v, want nil err", err)
+		}
+		// mark deprecated.stamp failed to simulate missing last failed targets in next build
+		err = saveTargets(ctx, filepath.Join(dir, "out/siso", failedTargetsFile), []string{"deprecated.stamp"})
+		if err != nil {
+			t.Fatalf("failed to save failed targets: %v", err)
+		}
+
+		update(t, "BUILD.gn")
+
+		stats, err = ninja("fix")
+		if err != nil {
+			t.Errorf("build err: %v", err)
+		}
+		if stats.Total != nsteps {
+			t.Errorf("fix build Total=%d want=%d", stats.Total, nsteps)
+		}
+		if stats.Done != nsteps {
+			t.Errorf("fix build Done=%d want=%d", stats.Done, nsteps)
+		}
+		if stats.Skipped != nsteps {
+			t.Errorf("fix build Skipped=%d want=%d", stats.Skipped, nsteps)
+		}
+	})
+
 }
