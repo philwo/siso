@@ -17,8 +17,13 @@ rule link
 rule gen
   command = python3 ../../tools/gen.py ${in} ${out}
 
-build gen/foo.h: gen ../../base/foo.h.in
-build gen/baz.h: gen ../../base/baz.h.in
+rule copy
+  command = ln -f ${in} ${out} 2>/dev/null || (rm -rf ${out} && cp -af ${in} ${out})
+
+build gen/cache: copy ../../cache
+
+build gen/foo.h: gen ../../base/foo.h.in | gen/cache
+build gen/baz.h: gen ../../base/baz.h.in | gen/cache
 
 build obj/foo.o: cxx ../../base/foo.cc | gen/foo.h
 build obj/baz.o: cxx ../../base/baz.cc | gen/baz.h

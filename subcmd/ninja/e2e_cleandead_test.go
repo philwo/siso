@@ -59,6 +59,7 @@ func TestBuild_Cleandead(t *testing.T) {
 		t.Fatalf("ninja err: %v", err)
 	}
 	for _, fname := range []string{
+		"out/siso/gen/cache/data",
 		"out/siso/gen/foo.h",
 		"out/siso/gen/bar.h",
 		"out/siso/obj/foo.o",
@@ -89,6 +90,7 @@ func TestBuild_Cleandead(t *testing.T) {
 		}
 	}
 	for _, fname := range []string{
+		"out/siso/gen/cache/data",
 		"out/siso/gen/foo.h",
 		"out/siso/obj/foo.o",
 		"out/siso/target",

@@ -167,20 +167,20 @@ func starActionsCopy(thread *starlark.Thread, fn *starlark.Builtin, args starlar
 		return starlark.None, err
 	}
 	if recursive {
-		err = actionsCopyRecursively(c.ctx, c.cmd, src, dst, time.Now())
+		err = actionsCopyRecursively(c.ctx, c.cmd, src, dst, time.Now(), c.cmd.CmdHash)
 	} else {
 		err = c.cmd.HashFS.Copy(c.ctx, c.cmd.ExecRoot, src, dst, time.Now(), c.cmd.CmdHash)
 	}
 	return starlark.None, err
 }
 
-func actionsCopyRecursively(ctx context.Context, cmd *execute.Cmd, src, dst string, t time.Time) error {
+func actionsCopyRecursively(ctx context.Context, cmd *execute.Cmd, src, dst string, t time.Time, cmdhash []byte) error {
 	fi, err := cmd.HashFS.Stat(ctx, cmd.ExecRoot, src)
 	if err != nil {
 		return err
 	}
 	if fi.IsDir() {
-		err := cmd.HashFS.Mkdir(ctx, cmd.ExecRoot, dst, cmd.CmdHash)
+		err := cmd.HashFS.Mkdir(ctx, cmd.ExecRoot, dst, cmdhash)
 		if err != nil {
 			return err
 		}
@@ -191,14 +191,17 @@ func actionsCopyRecursively(ctx context.Context, cmd *execute.Cmd, src, dst stri
 		for _, ent := range ents {
 			s := filepath.Join(src, ent.Name())
 			d := filepath.Join(dst, ent.Name())
-			err := actionsCopyRecursively(ctx, cmd, s, d, t)
+			// don't record cmdhash for recursive copy
+			// since these are not appeared in build graph
+			// but cleandead will try to delete these dirs/files.
+			err := actionsCopyRecursively(ctx, cmd, s, d, t, nil)
 			if err != nil {
 				return err
 			}
 		}
 		return nil
 	}
-	return cmd.HashFS.Copy(ctx, cmd.ExecRoot, src, dst, t, cmd.CmdHash)
+	return cmd.HashFS.Copy(ctx, cmd.ExecRoot, src, dst, t, cmdhash)
 }
 
 // Starlark function `actions.symlink(target, linkpath)` to create a symlink in hashfs.
