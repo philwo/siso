@@ -501,6 +501,9 @@ func (hfs *HashFS) Copy(ctx context.Context, root, src, dst string, mtime time.T
 	if subdir != nil {
 		return fmt.Errorf("is a directory: %s", srcfname)
 	}
+	if e.target == "" && e.d.IsZero() {
+		hfs.digester.compute(ctx, srcfname, e)
+	}
 	lready := make(chan bool, 1)
 	lready <- true
 	newEnt := &entry{
@@ -879,6 +882,11 @@ type noDataSource struct{}
 
 func (noDataSource) Source(d digest.Digest, fname string) digest.Source {
 	return noSource{fname}
+}
+
+// NeedFlush returns whether the fname need to be flushed based on OutputLocal option.
+func (hfs *HashFS) NeedFlush(ctx context.Context, execRoot, fname string) bool {
+	return hfs.opt.OutputLocal(ctx, filepath.ToSlash(filepath.Join(execRoot, fname)))
 }
 
 // Flush flushes cached information for files under execRoot to local disk.

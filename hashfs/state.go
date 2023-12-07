@@ -427,6 +427,8 @@ func (hfs *HashFS) State(ctx context.Context) *pb.State {
 						Action:       fromDigest(e.action),
 						UpdatedTime:  e.updatedTime.UnixNano(),
 					})
+				} else if log.V(1) {
+					clog.Infof(ctx, "ignore %s: not file?", name)
 				}
 			}
 			if e.directory != nil {

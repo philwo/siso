@@ -167,41 +167,58 @@ func starActionsCopy(thread *starlark.Thread, fn *starlark.Builtin, args starlar
 		return starlark.None, err
 	}
 	if recursive {
-		err = actionsCopyRecursively(c.ctx, c.cmd, src, dst, time.Now(), c.cmd.CmdHash)
+		var files []string
+		files, err = actionsCopyRecursively(c.ctx, c.cmd, src, dst, time.Now(), c.cmd.CmdHash)
+		if err == nil && len(files) > 0 {
+			err = c.cmd.HashFS.Flush(c.ctx, c.cmd.ExecRoot, files)
+		}
 	} else {
 		err = c.cmd.HashFS.Copy(c.ctx, c.cmd.ExecRoot, src, dst, time.Now(), c.cmd.CmdHash)
 	}
 	return starlark.None, err
 }
 
-func actionsCopyRecursively(ctx context.Context, cmd *execute.Cmd, src, dst string, t time.Time, cmdhash []byte) error {
+// recursively copy from src to dst by setting mtime t with cmdhash,
+// and returns a list of files that needs to be written to the disk.
+// if src is a directory, it recurrsively calls itself without cmdhash.
+// if src is a file, it just copies the file.
+func actionsCopyRecursively(ctx context.Context, cmd *execute.Cmd, src, dst string, t time.Time, cmdhash []byte) ([]string, error) {
 	fi, err := cmd.HashFS.Stat(ctx, cmd.ExecRoot, src)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if fi.IsDir() {
 		err := cmd.HashFS.Mkdir(ctx, cmd.ExecRoot, dst, cmdhash)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		ents, err := cmd.HashFS.ReadDir(ctx, cmd.ExecRoot, src)
 		if err != nil {
-			return err
+			return nil, err
 		}
+		var files []string
 		for _, ent := range ents {
 			s := filepath.Join(src, ent.Name())
 			d := filepath.Join(dst, ent.Name())
 			// don't record cmdhash for recursive copy
 			// since these are not appeared in build graph
 			// but cleandead will try to delete these dirs/files.
-			err := actionsCopyRecursively(ctx, cmd, s, d, t, nil)
+			f, err := actionsCopyRecursively(ctx, cmd, s, d, t, nil)
 			if err != nil {
-				return err
+				return files, err
 			}
+			files = append(files, f...)
 		}
-		return nil
+		return files, nil
 	}
-	return cmd.HashFS.Copy(ctx, cmd.ExecRoot, src, dst, t, cmdhash)
+	err = cmd.HashFS.Copy(ctx, cmd.ExecRoot, src, dst, t, cmdhash)
+	if err != nil {
+		return nil, err
+	}
+	if cmd.HashFS.NeedFlush(ctx, cmd.ExecRoot, dst) {
+		return []string{dst}, nil
+	}
+	return nil, nil
 }
 
 // Starlark function `actions.symlink(target, linkpath)` to create a symlink in hashfs.
