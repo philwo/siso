@@ -41,6 +41,11 @@ func (b *Builder) execLocal(ctx context.Context, step *Step) error {
 	if err != nil {
 		return err
 	}
+	_, err = b.prevOutputEntries(ctx, step)
+	if err != nil {
+		clog.Warningf(ctx, "failed to get entries for prev outputs: %v", err)
+	}
+
 	stateMessage := "local exec"
 	sema := b.localSema
 	pool := step.def.Binding("pool")
