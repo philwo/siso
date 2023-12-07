@@ -50,6 +50,10 @@ func (b *Builder) execReproxy(ctx context.Context, step *Step) error {
 	if err != nil {
 		return err
 	}
+	_, err = b.prevOutputEntries(ctx, step)
+	if err != nil {
+		clog.Warningf(ctx, "failed to get entries for prev outputs: %v", err)
+	}
 	err = b.reproxySema.Do(ctx, func(ctx context.Context) error {
 		started := time.Now()
 		step.metrics.ActionStartTime = IntervalMetric(started.Sub(b.start))
