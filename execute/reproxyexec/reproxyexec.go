@@ -347,21 +347,6 @@ func processResponse(ctx context.Context, cmd *execute.Cmd, response *ppb.RunRes
 		return err
 	}
 	cmd.SetActionResult(result, cached)
-	// Outputs
-	updatedTime := time.Now()
-	if remoteSuccess {
-		ds := &reproxyOutputsDataSource{execRoot: cmd.ExecRoot, iometrics: cmd.HashFS.IOMetrics}
-		err := cmd.RecordOutputs(ctx, ds, updatedTime)
-		if err != nil {
-			return err
-		}
-	} else {
-		err := cmd.RecordOutputsFromLocal(ctx, updatedTime)
-		if err != nil {
-			return err
-		}
-	}
-
 	if fallbackInfo := response.GetRemoteFallbackInfo(); fallbackInfo != nil {
 		cmd.SetRemoteFallbackResult(&rpb.ActionResult{
 			ExitCode:  fallbackInfo.GetExitCode(),
@@ -377,7 +362,17 @@ func processResponse(ctx context.Context, cmd *execute.Cmd, response *ppb.RunRes
 	if len(response.Stderr) > 0 {
 		cmd.StderrWriter().Write(response.Stderr)
 	}
-	return resultErr(response)
+	err = resultErr(response)
+	if err != nil {
+		return err
+	}
+	// update outputs file only step succeeded.
+	updatedTime := time.Now()
+	if remoteSuccess {
+		ds := &reproxyOutputsDataSource{execRoot: cmd.ExecRoot, iometrics: cmd.HashFS.IOMetrics}
+		return cmd.RecordOutputs(ctx, ds, updatedTime)
+	}
+	return cmd.RecordOutputsFromLocal(ctx, updatedTime)
 }
 
 func resultErr(response *ppb.RunResponse) error {

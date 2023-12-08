@@ -185,10 +185,6 @@ func (re *RemoteExec) processResult(ctx context.Context, action digest.Digest, c
 		// Even when err was not nil, the outputs were populated to ActionResult for investigation.
 		return err
 	}
-	err = cmd.RecordOutputs(ctx, cmd.HashFS.DataSource(), now)
-	if err != nil {
-		return err
-	}
 	if len(result.GetStdoutRaw()) > 0 {
 		cmd.StdoutWriter().Write(result.GetStdoutRaw())
 	} else {
@@ -203,7 +199,8 @@ func (re *RemoteExec) processResult(ctx context.Context, action digest.Digest, c
 	if err != nil {
 		return err
 	}
-	return nil
+	// update output file only step succeeded.
+	return cmd.RecordOutputs(ctx, cmd.HashFS.DataSource(), now)
 }
 
 // share it with localexec?
