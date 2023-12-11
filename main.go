@@ -47,7 +47,7 @@ var (
 	traceFile     string
 )
 
-const versionStr = "siso v0.0.25"
+const versionStr = "siso v0.0.26"
 
 func getApplication(authOpts cred.Options) *cli.Application {
 	return &cli.Application{
