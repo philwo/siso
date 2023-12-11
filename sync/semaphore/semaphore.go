@@ -27,6 +27,9 @@ type Semaphore struct {
 	name string
 	ch   chan int
 
+	waitSpanName string
+	servSpanName string
+
 	waits atomic.Int64
 	reqs  atomic.Int64
 }
@@ -49,8 +52,10 @@ func New(name string, n int) *Semaphore {
 		ch <- i + 1 // tid
 	}
 	s := &Semaphore{
-		name: name,
-		ch:   ch,
+		name:         name,
+		ch:           ch,
+		waitSpanName: fmt.Sprintf("wait:%s", name),
+		servSpanName: fmt.Sprintf("serv:%s", name),
 	}
 	mu.Lock()
 	semaphores[name] = s
@@ -62,14 +67,14 @@ func New(name string, n int) *Semaphore {
 // It returns a context for acquired semaphore and func to release it.
 // TODO(b/267576561): add Cloud Trace integration and add tid as an attribute of a Span.
 func (s *Semaphore) WaitAcquire(ctx context.Context) (context.Context, func(error), error) {
-	_, span := trace.NewSpan(ctx, fmt.Sprintf("wait:%s", s.name))
+	_, span := trace.NewSpan(ctx, s.waitSpanName)
 	s.waits.Add(1)
 	defer span.Close(nil)
 	defer s.waits.Add(-1)
 	select {
 	case tid := <-s.ch:
 		s.reqs.Add(1)
-		ctx, span := trace.NewSpan(ctx, fmt.Sprintf("serv:%s", s.name))
+		ctx, span := trace.NewSpan(ctx, s.servSpanName)
 		span.SetAttr("tid", tid)
 		return ctx, func(err error) {
 			st, ok := status.FromError(err)
@@ -93,7 +98,7 @@ func (s *Semaphore) TryAcquire(ctx context.Context) (context.Context, func(error
 	select {
 	case tid := <-s.ch:
 		s.reqs.Add(1)
-		ctx, span := trace.NewSpan(ctx, fmt.Sprintf("serv:%s", s.name))
+		ctx, span := trace.NewSpan(ctx, s.servSpanName)
 		span.SetAttr("tid", tid)
 		return ctx, func(err error) {
 			st, ok := status.FromError(err)
