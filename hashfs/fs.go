@@ -761,7 +761,7 @@ func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []merkle
 				d:       ent.Data.Digest(),
 
 				updatedTime: mtime,
-				isUpdated:   true,
+				isChanged:   true,
 			}
 			err := hfs.dirStoreAndNotify(ctx, fname, e)
 			if err != nil {
@@ -779,7 +779,7 @@ func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []merkle
 				target:  ent.Target,
 
 				updatedTime: mtime,
-				isUpdated:   true,
+				isChanged:   true,
 			}
 			err := hfs.dirStoreAndNotify(ctx, fname, e)
 			if err != nil {
@@ -797,7 +797,7 @@ func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []merkle
 				directory: &directory{},
 
 				updatedTime: mtime,
-				isUpdated:   true,
+				isChanged:   true,
 			}
 			err := hfs.dirStoreAndNotify(ctx, fname, e)
 			if err != nil {
@@ -819,7 +819,16 @@ func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []merkle
 func (hfs *HashFS) UpdateFromLocal(ctx context.Context, root string, inputs []string, restat bool, updatedTime time.Time, cmdhash []byte) error {
 	ctx, span := trace.NewSpan(ctx, "fs-update-local")
 	defer span.Close(nil)
-	hfs.Forget(ctx, root, inputs)
+	// checks mtime before forget. i.e. get mtime for last restat before local exec.
+	mtimes := make(map[string]time.Time)
+	if restat {
+		for _, fname := range inputs {
+			fi, err := hfs.Stat(ctx, root, fname)
+			if err == nil {
+				mtimes[fname] = fi.ModTime()
+			}
+		}
+	}
 	// copy outputs to avoid sort cmd.Outputs in RecordOutputsFromLocal.
 	inputs = slices.Clone(inputs)
 	// sort inputs, so check dir containing files first. b/300385880
@@ -830,10 +839,7 @@ func (hfs *HashFS) UpdateFromLocal(ctx context.Context, root string, inputs []st
 		e := newLocalEntry()
 		var mtime time.Time
 		if restat {
-			fi, err := hfs.Stat(ctx, root, fname)
-			if err == nil {
-				mtime = fi.ModTime()
-			}
+			mtime = mtimes[fname]
 		} else {
 			e.mtime = updatedTime
 		}
@@ -842,16 +848,16 @@ func (hfs *HashFS) UpdateFromLocal(ctx context.Context, root string, inputs []st
 		// Mark as updated
 		// except when restat=1 and file mtime hasn't changed.
 		if !restat || !mtime.Equal(e.getMtime()) {
-			e.isUpdated = true
+			e.isChanged = true
 		}
 		e.cmdhash = cmdhash
-		clog.Infof(ctx, "stat new entry(local outputs): %s %s isUpdated=%t", fullname, e, e.isUpdated)
+		clog.Infof(ctx, "stat new entry(local outputs): %s %s isChanged=%t", fullname, e, e.isChanged)
 		err := hfs.dirStoreAndNotify(ctx, fullname, e)
 		if err != nil {
 			return err
 		}
 		hfs.digester.compute(ctx, fullname, e)
-		if e.isUpdated {
+		if e.isChanged {
 			err = os.Chtimes(fullname, time.Now(), e.getMtime())
 			hfs.IOMetrics.OpsDone(err)
 			if errors.Is(err, fs.ErrNotExist) {
@@ -974,8 +980,8 @@ type entry struct {
 	// digest of action that generated this file.
 	action digest.Digest
 
-	// isUpdated indicates the file is updated in the session.
-	isUpdated bool
+	// isChanged indicates the file is changed in the session.
+	isChanged bool
 
 	target string // symlink.
 
@@ -1822,9 +1828,9 @@ func (fi FileInfo) UpdatedTime() time.Time {
 	return fi.e.getUpdatedTime()
 }
 
-// IsUpdated returns true if file has been updated in the session.
-func (fi FileInfo) IsUpdated() bool {
-	return fi.e.isUpdated
+// IsChanged returns true if file has been changed in the session.
+func (fi FileInfo) IsChanged() bool {
+	return fi.e.isChanged
 }
 
 // IsDir returns true if it is the directory.

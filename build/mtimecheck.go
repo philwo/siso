@@ -205,7 +205,7 @@ func inputMtime(ctx context.Context, b *Builder, stepDef StepDef) (string, time.
 			inmtime = fi.ModTime()
 			lastIn = in
 		}
-		if fi.IsUpdated() {
+		if fi.IsChanged() {
 			return "", inmtime, fmt.Errorf("input %s: %w", in, errDirty)
 		}
 	}

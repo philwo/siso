@@ -596,8 +596,8 @@ func TestUpdateFromLocal(t *testing.T) {
 	if !now.Equal(fi.UpdatedTime()) {
 		t.Errorf("fi.UpdatedTime: %v should equal to now: %v", fi.UpdatedTime(), now)
 	}
-	if !fi.IsUpdated() {
-		t.Errorf("fi.IsUpdated()=%t; want true", fi.IsUpdated())
+	if !fi.IsChanged() {
+		t.Errorf("fi.IsChanged()=%t; want true", fi.IsChanged())
 	}
 	m := hashfs.StateMap(hfs.State(ctx))
 	hfs = nil
@@ -625,7 +625,9 @@ func TestUpdateFromLocal(t *testing.T) {
 	}
 }
 
-func TestUpdateFromLocal_Restat(t *testing.T) {
+// Test IsChanged is true after UpdateFromLocal with restat,
+// if stamp file didn't exist before.
+func TestUpdateFromLocal_Restat_update(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
 	dir, err := filepath.EvalSymlinks(dir)
@@ -683,8 +685,97 @@ func TestUpdateFromLocal_Restat(t *testing.T) {
 	if !now.Equal(fi.UpdatedTime()) {
 		t.Errorf("fi.UpdatedTime: %v should equal to now: %v", fi.UpdatedTime(), now)
 	}
-	if fi.IsUpdated() {
-		t.Errorf("fi.IsUpdated()=%t; want false", fi.IsUpdated())
+	if !fi.IsChanged() {
+		t.Errorf("fi.IsChanged()=%t; want true", fi.IsChanged())
+	}
+	m := hashfs.StateMap(hfs.State(ctx))
+	hfs = nil
+	e, ok := m[fullname]
+	if !ok {
+		var keys []string
+		for k := range m {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		t.Fatalf("entry for %s not found: %q", fullname, keys)
+	}
+	if e.Id.ModTime != lfi.ModTime().UnixNano() {
+		t.Errorf("entry modtime=%d want=%d", e.Id.ModTime, now.UnixNano())
+	}
+	if !bytes.Equal(e.CmdHash, cmdhash) {
+		t.Errorf("entry cmdhash=%q want=%q", hex.EncodeToString(e.CmdHash), hex.EncodeToString(cmdhash))
+	}
+	lfi, err = os.Lstat(fullname)
+	if err != nil {
+		t.Fatalf("lstat(%q)=%v; want nil", fullname, err)
+	}
+	if e.Id.ModTime != lfi.ModTime().UnixNano() {
+		t.Errorf("entry modtime=%d lfi=%d", e.Id.ModTime, lfi.ModTime().UnixNano())
+	}
+}
+
+// Test IsChanged is false after UpdateFromLocal with restat,
+// if stamp file is not changed.
+func TestUpdateFromLocal_Restat_noupdate(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	dir, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	opt := hashfs.Option{}
+	hfs, err := hashfs.New(ctx, opt)
+	if err != nil {
+		t.Fatalf("New=%v", err)
+	}
+	defer func() {
+		if hfs == nil {
+			return
+		}
+		err := hfs.Close(ctx)
+		if err != nil {
+			t.Fatalf("hfs.Close=%v", err)
+		}
+	}()
+
+	fname := "out/siso/gen/foo.stamp"
+	fullname := filepath.Join(dir, fname)
+	setupFiles(t, dir, map[string]string{
+		fname: "",
+	})
+	_, err = hfs.Stat(ctx, dir, fname)
+	if errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("Stat(ctx, %q,%q)=%v; want nil", dir, fname, err)
+	}
+	lfi, err := os.Lstat(fullname)
+	if err != nil {
+		t.Fatalf("lstat(%q)=%v; want nil", fullname, err)
+	}
+	time.Sleep(1 * time.Microsecond)
+	now := time.Now()
+	if now.Equal(lfi.ModTime()) {
+		t.Fatalf("lfi.ModTime: %v should not be equal to now: %v", lfi.ModTime(), now)
+	}
+	h := sha256.New()
+	h.Write([]byte("command line"))
+	cmdhash := h.Sum(nil)
+	err = hfs.UpdateFromLocal(ctx, dir, []string{fname}, true, now, cmdhash)
+	if err != nil {
+		t.Errorf("UpdateFromLocal(ctx, %q, {%q}, %v, cmdhash)=%v; want nil err", dir, fname, now, err)
+	}
+	fi, err := hfs.Stat(ctx, dir, fname)
+	if err != nil {
+		t.Fatalf("Stat(ctx, %q, %q)=_, %v; want nil err", dir, fname, err)
+	}
+	if !lfi.ModTime().Equal(fi.ModTime()) {
+		t.Errorf("fi.ModTime: %v should equal to %v", fi.ModTime(), lfi.ModTime())
+	}
+	if !now.Equal(fi.UpdatedTime()) {
+		t.Errorf("fi.UpdatedTime: %v should equal to now: %v", fi.UpdatedTime(), now)
+	}
+	if fi.IsChanged() {
+		t.Errorf("fi.IsChanged()=%t; want false", fi.IsChanged())
 	}
 	m := hashfs.StateMap(hfs.State(ctx))
 	hfs = nil
@@ -754,8 +845,8 @@ func TestUpdateFromLocal_Dir(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Stat(ctx, %q, %q)=_, %v; want nil err", dir, outname, err)
 	}
-	if !fi.IsUpdated() {
-		t.Errorf("fi.IsUpdated()=%t; want true", fi.IsUpdated())
+	if !fi.IsChanged() {
+		t.Errorf("fi.IsChanged()=%t; want true", fi.IsChanged())
 	}
 	if !bytes.Equal(cmdhash, fi.CmdHash()) {
 		t.Errorf("fi.CmdHash=%q; want=%q", fi.CmdHash(), cmdhash)
@@ -864,9 +955,9 @@ func TestUpdateFromLocal_AbsSymlink(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Stat(ctx, %q, %q)=_, %v; want nil err", dir, outname, err)
 	}
-	if fi.IsUpdated() {
+	if fi.IsChanged() {
 		// restat=true, so no update
-		t.Errorf("fi.IsUpdated()=%t; want false", fi.IsUpdated())
+		t.Errorf("fi.IsChanged()=%t; want false", fi.IsChanged())
 	}
 	if !bytes.Equal(cmdhash, fi.CmdHash()) {
 		t.Errorf("fi.CmdHash=%q; want=%q", fi.CmdHash(), cmdhash)
@@ -888,9 +979,9 @@ func TestUpdateFromLocal_AbsSymlink(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Stat(ctx, %q, %q)=_, %v; want nil err", dir, outname, err)
 	}
-	if fi.IsUpdated() {
+	if fi.IsChanged() {
 		// restat=true, so no update
-		t.Errorf("fi.IsUpdated()=%t; want false", fi.IsUpdated())
+		t.Errorf("fi.IsChanged()=%t; want false", fi.IsChanged())
 	}
 	if !bytes.Equal(cmdhash, fi.CmdHash()) {
 		t.Errorf("fi.CmdHash=%q; want=%q", fi.CmdHash(), cmdhash)
@@ -1012,9 +1103,9 @@ func TestUpdateFromLocal_NonLocalSymlink(t *testing.T) {
 		t.Fatalf("Stat(ctx, %q, %q)=_, %v; want nil err", dir, outname, err)
 	}
 	stats := hfs.IOMetrics.Stats()
-	if fi.IsUpdated() {
+	if fi.IsChanged() {
 		// restat=true, so no update
-		t.Errorf("fi.IsUpdated()=%t; want false", fi.IsUpdated())
+		t.Errorf("fi.IsChanged()=%t; want false", fi.IsChanged())
 	}
 	if !bytes.Equal(cmdhash, fi.CmdHash()) {
 		t.Errorf("fi.CmdHash=%q; want=%q", fi.CmdHash(), cmdhash)
@@ -1036,9 +1127,9 @@ func TestUpdateFromLocal_NonLocalSymlink(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Stat(ctx, %q, %q)=_, %v; want nil err", dir, outname, err)
 	}
-	if fi.IsUpdated() {
+	if fi.IsChanged() {
 		// restat=true, so no update
-		t.Errorf("fi.IsUpdated()=%t; want false", fi.IsUpdated())
+		t.Errorf("fi.IsChanged()=%t; want false", fi.IsChanged())
 	}
 	if !bytes.Equal(cmdhash, fi.CmdHash()) {
 		t.Errorf("fi.CmdHash=%q; want=%q", fi.CmdHash(), cmdhash)
