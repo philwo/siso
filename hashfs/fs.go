@@ -15,7 +15,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -736,52 +735,88 @@ func (hfs *HashFS) Entries(ctx context.Context, root string, inputs []string) ([
 	return entries, nil
 }
 
-// Update updates cache information for entries under execRoot with mtime and cmdhash.
-func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []merkletree.Entry, mtime time.Time, cmdhash []byte, action digest.Digest) error {
+type updateEntry struct {
+	Entry       merkletree.Entry
+	Mode        fs.FileMode
+	ModTime     time.Time
+	CmdHash     []byte
+	Action      digest.Digest
+	UpdatedTime time.Time
+	IsLocal     bool
+	IsChanged   bool
+}
+
+func (hfs *HashFS) update(ctx context.Context, execRoot string, entries []updateEntry) error {
 	ctx, span := trace.NewSpan(ctx, "fs-update")
 	defer span.Close(nil)
 	hfs.clean = false
+
+	// sort inputs, so update dir containing files first. b/300385880
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].Entry.Name < entries[j].Entry.Name
+	})
+
 	for _, ent := range entries {
-		fname := filepath.Join(execRoot, ent.Name)
+		fname := filepath.Join(execRoot, ent.Entry.Name)
 		fname = filepath.ToSlash(fname)
 		switch {
-		case !ent.Data.IsZero():
+		case !ent.Entry.Data.IsZero():
 			lready := make(chan bool, 1)
-			lready <- true
-			mode := fs.FileMode(0644)
-			if ent.IsExecutable {
+			if ent.IsLocal {
+				close(lready)
+			} else {
+				lready <- true
+			}
+			mode := ent.Mode
+			if ent.Entry.IsExecutable {
 				mode |= 0111
 			}
 			e := &entry{
-				lready:  lready,
-				size:    ent.Data.Digest().SizeBytes,
-				mtime:   mtime,
-				mode:    mode,
-				cmdhash: cmdhash,
-				action:  action,
-				src:     ent.Data,
-				d:       ent.Data.Digest(),
-
-				updatedTime: mtime,
-				isChanged:   true,
+				lready:      lready,
+				size:        ent.Entry.Data.Digest().SizeBytes,
+				mtime:       ent.ModTime,
+				mode:        mode,
+				cmdhash:     ent.CmdHash,
+				action:      ent.Action,
+				src:         ent.Entry.Data,
+				d:           ent.Entry.Data.Digest(),
+				updatedTime: ent.UpdatedTime,
+				isChanged:   ent.IsChanged,
 			}
 			err := hfs.dirStoreAndNotify(ctx, fname, e)
 			if err != nil {
 				return err
 			}
-		case ent.Target != "":
+			if ent.IsLocal && e.isChanged {
+				err = os.Chtimes(fname, time.Now(), e.getMtime())
+				hfs.IOMetrics.OpsDone(err)
+				if errors.Is(err, fs.ErrNotExist) {
+					clog.Warningf(ctx, "failed to update mtime of %s: %v", fname, err)
+					continue
+				}
+				if err != nil {
+					return fmt.Errorf("failed to update mtime of %s: %w", fname, err)
+				}
+			}
+		case ent.Entry.Target != "":
 			lready := make(chan bool, 1)
-			lready <- true
+			if ent.IsLocal {
+				close(lready)
+			} else {
+				lready <- true
+			}
+			mode := ent.Mode
+			mode |= fs.ModeSymlink
 			e := &entry{
 				lready:  lready,
-				mtime:   mtime,
-				mode:    0644 | fs.ModeSymlink,
-				cmdhash: cmdhash,
-				action:  action,
-				target:  ent.Target,
+				mtime:   ent.ModTime,
+				mode:    mode,
+				cmdhash: ent.CmdHash,
+				action:  ent.Action,
+				target:  ent.Entry.Target,
 
-				updatedTime: mtime,
-				isChanged:   true,
+				updatedTime: ent.UpdatedTime,
+				isChanged:   ent.IsChanged,
 			}
 			err := hfs.dirStoreAndNotify(ctx, fname, e)
 			if err != nil {
@@ -789,23 +824,29 @@ func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []merkle
 			}
 		default: // directory
 			lready := make(chan bool, 1)
-			lready <- true
+			if ent.IsLocal {
+				close(lready)
+			} else {
+				lready <- true
+			}
+			mode := ent.Mode
+			mode |= fs.ModeDir
 			e := &entry{
 				lready:    lready,
-				mtime:     mtime,
-				mode:      0644 | fs.ModeDir,
-				cmdhash:   cmdhash,
-				action:    action,
+				mtime:     ent.ModTime,
+				mode:      mode,
+				cmdhash:   ent.CmdHash,
+				action:    ent.Action,
 				directory: &directory{},
 
-				updatedTime: mtime,
-				isChanged:   true,
+				updatedTime: ent.UpdatedTime,
+				isChanged:   ent.IsChanged,
 			}
 			err := hfs.dirStoreAndNotify(ctx, fname, e)
 			if err != nil {
 				return err
 			}
-			err = os.Chtimes(fname, time.Now(), mtime)
+			err = os.Chtimes(fname, time.Now(), ent.ModTime)
 			hfs.IOMetrics.OpsDone(err)
 			if err != nil {
 				clog.Warningf(ctx, "failed to update dir mtime %s: %v", fname, err)
@@ -815,63 +856,101 @@ func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []merkle
 	return nil
 }
 
+// Update updates cache information for entries under execRoot with mtime and cmdhash.
+func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []merkletree.Entry, mtime time.Time, cmdhash []byte, action digest.Digest) error {
+	ents := make([]updateEntry, 0, len(entries))
+	for _, ent := range entries {
+		mode := fs.FileMode(0644)
+		switch {
+		case !ent.Data.IsZero():
+			if ent.IsExecutable {
+				mode |= 0111
+			}
+		case ent.Target != "":
+			mode = 0644 | fs.ModeSymlink
+		default: // directory
+			mode = 0755 | fs.ModeDir
+		}
+
+		ents = append(ents, updateEntry{
+			Entry:       ent,
+			Mode:        mode,
+			ModTime:     mtime,
+			CmdHash:     cmdhash,
+			Action:      action,
+			UpdatedTime: mtime,
+			IsChanged:   true,
+		})
+	}
+	return hfs.update(ctx, execRoot, ents)
+}
+
+func (hfs *HashFS) updateEntries(ctx context.Context, root string, fnames []string) []updateEntry {
+	ctx, span := trace.NewSpan(ctx, "fs-update-entries")
+	defer span.Close(nil)
+	ents, err := hfs.Entries(ctx, root, fnames)
+	if err != nil {
+		clog.Warningf(ctx, "failed to get entries: %v", err)
+	}
+	entries := make([]updateEntry, 0, len(ents))
+	for _, ent := range ents {
+		fi, err := hfs.Stat(ctx, root, ent.Name)
+		if err != nil {
+			clog.Warningf(ctx, "failed to stat %s: %v", ent.Name, err)
+			continue
+		}
+		entries = append(entries, updateEntry{
+			Entry:       ent,
+			Mode:        fi.Mode(),
+			ModTime:     fi.ModTime(),
+			CmdHash:     fi.CmdHash(),
+			Action:      fi.Action(),
+			UpdatedTime: fi.UpdatedTime(),
+			IsChanged:   fi.IsChanged(),
+		})
+	}
+	return entries
+}
+
 // UpdateFromLocal updates cache information for inputs under execRoot with cmdhash from local disk and record it as updated at updatedTime.
 // when restat=true, it keeps mtime of local file.
 // otherwise, it will update mtime.
 func (hfs *HashFS) UpdateFromLocal(ctx context.Context, root string, inputs []string, restat bool, updatedTime time.Time, cmdhash []byte) error {
 	ctx, span := trace.NewSpan(ctx, "fs-update-local")
 	defer span.Close(nil)
-	// checks mtime before forget. i.e. get mtime for last restat before local exec.
-	mtimes := make(map[string]time.Time)
+
+	m := make(map[string]updateEntry)
 	if restat {
-		for _, fname := range inputs {
-			fi, err := hfs.Stat(ctx, root, fname)
-			if err == nil {
-				mtimes[fname] = fi.ModTime()
-			}
+		// retrieve entries stored in hashfs.
+		// TODO: record this before local execution.
+		entries := hfs.updateEntries(ctx, root, inputs)
+		for _, ent := range entries {
+			m[ent.Entry.Name] = ent
 		}
 	}
-	// copy outputs to avoid sort cmd.Outputs in RecordOutputsFromLocal.
-	inputs = slices.Clone(inputs)
-	// sort inputs, so check dir containing files first. b/300385880
-	sort.Strings(inputs)
-	for _, fname := range inputs {
-		fullname := filepath.Join(root, fname)
-		fullname = filepath.ToSlash(fullname)
-		e := newLocalEntry()
-		var mtime time.Time
-		if restat {
-			mtime = mtimes[fname]
-		} else {
-			e.mtime = updatedTime
+
+	// forget and retrieve entries from local disk.
+	hfs.Forget(ctx, root, inputs)
+	entries := hfs.updateEntries(ctx, root, inputs)
+
+	// Set cmdhash, updatedTime.
+	// also isChanged=true if entry has been changed.
+	for i, ent := range entries {
+		ent.CmdHash = cmdhash
+		ent.UpdatedTime = updatedTime
+		ent.IsLocal = true
+		pent := m[ent.Entry.Name]
+		if !restat {
+			ent.ModTime = updatedTime
+			ent.IsChanged = true
+		} else if !pent.ModTime.Equal(ent.ModTime) {
+			// TODO: check digest too?
+			ent.IsChanged = true
 		}
-		e.updatedTime = updatedTime
-		e.init(ctx, fullname, hfs.IOMetrics)
-		// Mark as updated
-		// except when restat=1 and file mtime hasn't changed.
-		if !restat || !mtime.Equal(e.getMtime()) {
-			e.isChanged = true
-		}
-		e.cmdhash = cmdhash
-		clog.Infof(ctx, "stat new entry(local outputs): %s %s isChanged=%t", fullname, e, e.isChanged)
-		err := hfs.dirStoreAndNotify(ctx, fullname, e)
-		if err != nil {
-			return err
-		}
-		hfs.digester.compute(ctx, fullname, e)
-		if e.isChanged {
-			err = os.Chtimes(fullname, time.Now(), e.getMtime())
-			hfs.IOMetrics.OpsDone(err)
-			if errors.Is(err, fs.ErrNotExist) {
-				clog.Warningf(ctx, "failed to update mtime of %s: %v", fullname, err)
-				continue
-			}
-			if err != nil {
-				return fmt.Errorf("failed to update mtime of %s: %w", fullname, err)
-			}
-		}
+		entries[i] = ent
 	}
-	return nil
+	// store in hashfs.
+	return hfs.update(ctx, root, entries)
 }
 
 type noSource struct {
