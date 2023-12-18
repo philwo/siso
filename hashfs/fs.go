@@ -50,7 +50,9 @@ func isExecutable(fi fs.FileInfo, fname string) bool {
 	}
 	// siso-toolchain-chromium-browser-clang creates an executables
 	// marker file, so check it.
+	// TODO: Use StepConfig.Executables instead of the ".is_executable" file.
 	_, err := os.Stat(fname + ".is_executable")
+
 	return err == nil
 }
 

@@ -807,6 +807,17 @@ func (s *StepDef) Handle(ctx context.Context, cmd *execute.Cmd) error {
 	// handler may use labels in inputs, so expand here.
 	// TODO(ukai): always need to expand labels here?
 	cmd.Inputs = s.expandLabels(ctx, cmd.Inputs)
+
+	// Add executables to REProxyConfig.ToolchainInputs to send Linux executables from Windows.
+	if runtime.GOOS == "windows" {
+		var ok bool
+		for _, in := range cmd.Inputs {
+			_, ok = s.globals.executables[in]
+			if ok {
+				cmd.REProxyConfig.ToolchainInputs = append(cmd.REProxyConfig.ToolchainInputs, in)
+			}
+		}
+	}
 	return nil
 }
 

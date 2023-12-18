@@ -134,6 +134,10 @@ to register handlers and step configs.
        * a list of filenames for case sensitive filesystem.
          if "a.txt" and "A.txt" are in this, and "a.txt" is
          used as input, "A.txt" will be added as input too.
+     * `executables`
+       * (Windows only) a list of filenames for executables.
+         This is used to send Linux executables from Windows machine.
+         e.g. node binary for typescript action.
      * `rules` list of `StepRule`.
         path is exec root relative, or cwd relative if it starts with "./"
         * identifier

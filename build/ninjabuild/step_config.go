@@ -285,6 +285,10 @@ type StepConfig struct {
 
 	// Rules lists step rules.
 	Rules []*StepRule `json:"rules,omitempty"`
+
+	// Executables are files that need to have executable bit on Linux worker.
+	// This field is used to upload Linux executables from Windows host.
+	Executables []string `json:"executables,omitempty"`
 }
 
 // Init initializes StepConfig.

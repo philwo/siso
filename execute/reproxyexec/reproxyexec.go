@@ -272,10 +272,10 @@ func createRequest(ctx context.Context, cmd *execute.Cmd, execTimeout, reclientT
 			// Necessary for metadata such as digests to be returned.
 			IncludeActionLog: true,
 		},
-		// b/297458470: Do not apply cmd.ToolInputs because Reproxy adds
-		// the directories of ToolchainInputs to PATH and it may cause
-		// "docker: argument list too long" error.
-		ToolchainInputs: nil,
+		// Reproxy's ToolchainInputs are different from Siso's ToolchainInputs.
+		// Include only binaries to set executable bit on them.
+		// e.g. Send Linux binaries from Windows host.
+		ToolchainInputs: cmd.REProxyConfig.ToolchainInputs,
 		Metadata:        md,
 	}, nil
 }

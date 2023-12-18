@@ -55,6 +55,10 @@ type globals struct {
 
 	// edge will be associated with the gn target.
 	gnTargets map[*ninjautil.Edge]gnTarget
+
+	// executables are files that need to set executable bit on Linux worker.
+	// This field is used to upload Linux executables from Windows host.
+	executables map[string]bool
 }
 
 type gnTarget struct {
@@ -198,6 +202,7 @@ func NewGraph(ctx context.Context, fname string, nstate *ninjautil.State, config
 			phony:          make(map[string]bool),
 			caseSensitives: make(map[string][]string),
 			gnTargets:      make(map[*ninjautil.Edge]gnTarget),
+			executables:    make(map[string]bool),
 		},
 	}
 	graph.initGlobals(ctx)
@@ -236,6 +241,7 @@ func (g *Graph) Reset(ctx context.Context) {
 	g.globals.phony = make(map[string]bool)
 	g.globals.caseSensitives = make(map[string][]string)
 	g.globals.gnTargets = make(map[*ninjautil.Edge]gnTarget)
+	g.globals.executables = make(map[string]bool)
 	g.initGlobals(ctx)
 }
 
@@ -244,6 +250,10 @@ func (g *Graph) initGlobals(ctx context.Context) {
 	for _, f := range g.globals.stepConfig.CaseSensitiveInputs {
 		cif := strings.ToLower(f)
 		g.globals.caseSensitives[cif] = append(g.globals.caseSensitives[cif], f)
+	}
+	// initialize executables.
+	for _, f := range g.globals.stepConfig.Executables {
+		g.globals.executables[f] = true
 	}
 
 	// infer gn target.

@@ -47,6 +47,7 @@ type REProxyConfig struct {
 	ExecTimeout            string            `json:"exec_timeout,omitempty"`     // duration format
 	ReclientTimeout        string            `json:"reclient_timeout,omitempty"` // duration format
 	Inputs                 []string          `json:"inputs,omitempty"`
+	ToolchainInputs        []string          `json:"toolchain_inputs,omitempty"`
 	Labels                 map[string]string `json:"labels,omitempty"`
 	Platform               map[string]string `json:"platform,omitempty"`
 	RemoteWrapper          string            `json:"remote_wrapper,omitempty"`
