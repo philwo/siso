@@ -21,11 +21,11 @@ def main():
   if "error" in data:
     sys.stderr.write("error\n")
     return 1
-
   if os.path.exists(options.output):
     oldData = ""
     with open(options.output) as r:
       oldData = r.read()
+
     # for restat
     if data == oldData:
       return 0

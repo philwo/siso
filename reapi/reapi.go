@@ -183,6 +183,11 @@ func New(ctx context.Context, cred cred.Cred, opt Option) (*Client, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to dial %s: %w", opt.Address, err)
 	}
+	return NewFromConn(ctx, opt, conn)
+}
+
+// NewFromConn creates new remote exec API client from conn.
+func NewFromConn(ctx context.Context, opt Option, conn *grpc.ClientConn) (*Client, error) {
 	cc := rpb.NewCapabilitiesClient(conn)
 	capa, err := cc.GetCapabilities(ctx, &rpb.GetCapabilitiesRequest{
 		InstanceName: opt.Instance,

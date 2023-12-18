@@ -12,10 +12,13 @@ import (
 
 	pb "github.com/bazelbuild/reclient/api/proxy"
 	cpb "github.com/bazelbuild/remote-apis-sdks/go/api/command"
+	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
 
 	"infra/build/siso/build"
 	"infra/build/siso/execute/reproxyexec/reproxytest"
 	"infra/build/siso/hashfs"
+	"infra/build/siso/reapi/digest"
+	"infra/build/siso/reapi/reapitest"
 )
 
 func TestBuild_Fail_Reproxy(t *testing.T) {
@@ -104,6 +107,109 @@ func TestBuild_Fail_Reproxy(t *testing.T) {
 	}
 	if stats.Done != 1 || stats.Fail != 1 || stats.Remote != 1 {
 		t.Fatalf("ninja stats done=%d Fail=%d Remote=%d; want done=1 Fail=1 Remote=1", stats.Done, stats.Fail, stats.Remote)
+	}
+
+	t.Logf("fix")
+	err = os.WriteFile(filepath.Join(dir, "foo.txt"), []byte("ok"), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stats, err = ninja(t, fakereSuccess)
+	if err != nil {
+		t.Fatalf("ninja %v; want nil err", err)
+	}
+	if stats.Done != 3 || stats.NoExec != 1 || stats.Remote != 1 || stats.Skipped != 1 {
+		t.Fatalf("ninja stats done=%d NoExec=%d Remote=%d Skipped=%d; want done=3 NoExec=1 Remote=1 Skipped=1", stats.Done, stats.NoExec, stats.Remote, stats.Skipped)
+	}
+}
+
+func TestBuild_Fail_Remote(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+
+	ninja := func(t *testing.T, refake *reapitest.Fake) (build.Stats, error) {
+		t.Helper()
+		var ds dataSource
+		defer func() {
+			err := ds.Close(ctx)
+			if err != nil {
+				t.Error(err)
+			}
+		}()
+		ds.client = reapitest.New(ctx, t, refake)
+		ds.cache = ds.client.CacheStore()
+
+		opt, graph, cleanup := setupBuild(ctx, t, dir, hashfs.Option{
+			StateFile:  ".siso_fs_state",
+			DataSource: ds,
+		})
+		defer cleanup()
+		opt.REAPIClient = ds.client
+		return runNinja(ctx, "build.ninja", graph, opt, nil, runNinjaOpts{})
+	}
+
+	t.Logf("first build")
+	setupFiles(t, dir, t.Name(), nil)
+	fakereSuccess := &reapitest.Fake{
+		ExecuteFunc: func(re *reapitest.Fake, action *rpb.Action) (*rpb.ActionResult, error) {
+			t.Logf("remote succeed")
+			return &rpb.ActionResult{
+				ExitCode: 0,
+				OutputFiles: []*rpb.OutputFile{
+					{
+						Path:   "gen/foo.srcjar",
+						Digest: digest.Empty.Proto(),
+					},
+				},
+			}, nil
+		},
+	}
+	stats, err := ninja(t, fakereSuccess)
+	if err != nil {
+		t.Fatalf("ninja %v; want nil err", err)
+	}
+	if stats.Done != 3 || stats.NoExec != 1 || stats.Remote != 1 || stats.Skipped != 1 {
+		t.Fatalf("ninja stats done=%d NoExec=%d Remote=%d Skipped=%d; want done=3 NoExec=1 Remote=1 Skipped=1", stats.Done, stats.NoExec, stats.Remote, stats.Skipped)
+	}
+
+	t.Logf("first confirm no-op")
+	stats, err = ninja(t, fakereSuccess)
+	if err != nil {
+		t.Fatalf("ninja %v; want nil err", err)
+	}
+	if stats.Done != 3 || stats.Skipped != 3 || stats.Remote != 0 || stats.Local != 0 || stats.NoExec != 0 {
+		t.Fatalf("ninja confirm no-op error? stats=%#v", stats)
+	}
+
+	t.Logf("make bad foo.txt and fail gen/foo.srcjar")
+	err = os.WriteFile(filepath.Join(dir, "foo.txt"), []byte("error"), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fakereErr := &reapitest.Fake{
+		ExecuteFunc: func(re *reapitest.Fake, action *rpb.Action) (*rpb.ActionResult, error) {
+			t.Logf("remote fail")
+			return &rpb.ActionResult{
+				ExitCode:  1,
+				StderrRaw: []byte("reapi error"),
+			}, nil
+		},
+	}
+	stats, err = ninja(t, fakereErr)
+	if err == nil {
+		t.Fatalf("ninja succeeded, but want err; stats=%#v", stats)
+	}
+	if stats.Done != 1 || stats.Fail != 1 || stats.Remote != 0 {
+		t.Fatalf("ninja stats done=%d Fail=%d Remote=%d; want done=1 Fail=1 Remote=0 %#v", stats.Done, stats.Fail, stats.Remote, stats)
+	}
+
+	t.Logf("rerun ninja, should fail again")
+	stats, err = ninja(t, fakereErr)
+	if err == nil {
+		t.Fatalf("ninja succeeded, but want err; stats=%#v", stats)
+	}
+	if stats.Done != 1 || stats.Fail != 1 || stats.Remote != 0 {
+		t.Fatalf("ninja stats done=%d Fail=%d Remote=%d; want done=1 Fail=1 Remote=0", stats.Done, stats.Fail, stats.Remote)
 	}
 
 	t.Logf("fix")
