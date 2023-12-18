@@ -538,7 +538,42 @@ func TestStat_Dir(t *testing.T) {
 	}
 }
 
-func TestUpdateFromLocal(t *testing.T) {
+func updateFromLocal(ctx context.Context, hfs *hashfs.HashFS, root string, inputs []string, restat bool, updatedTime time.Time, cmdhash []byte) error {
+	m := make(map[string]hashfs.UpdateEntry)
+	if restat {
+		// retrieve entries stored in hashfs.
+		// TODO: record this before local execution.
+		entries := hfs.RetrieveUpdateEntries(ctx, root, inputs)
+		for _, ent := range entries {
+			m[ent.Entry.Name] = ent
+		}
+	}
+
+	// forget and retrieve entries from local disk.
+	hfs.Forget(ctx, root, inputs)
+	entries := hfs.RetrieveUpdateEntries(ctx, root, inputs)
+
+	// Set cmdhash, updatedTime.
+	// also isChanged=true if entry has been changed.
+	for i, ent := range entries {
+		ent.CmdHash = cmdhash
+		ent.UpdatedTime = updatedTime
+		ent.IsLocal = true
+		pent := m[ent.Entry.Name]
+		if !restat {
+			ent.ModTime = updatedTime
+			ent.IsChanged = true
+		} else if !pent.ModTime.Equal(ent.ModTime) {
+			// TODO: check digest too?
+			ent.IsChanged = true
+		}
+		entries[i] = ent
+	}
+	// store in hashfs.
+	return hfs.Update(ctx, root, entries)
+}
+
+func TestUpdate_FromLocal(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
 	dir, err := filepath.EvalSymlinks(dir)
@@ -582,9 +617,9 @@ func TestUpdateFromLocal(t *testing.T) {
 	h := sha256.New()
 	h.Write([]byte("command line"))
 	cmdhash := h.Sum(nil)
-	err = hfs.UpdateFromLocal(ctx, dir, []string{fname}, false, now, cmdhash)
+	err = updateFromLocal(ctx, hfs, dir, []string{fname}, false, now, cmdhash)
 	if err != nil {
-		t.Errorf("UpdateFromLocal(ctx, %q, {%q}, %v, cmdhash)=%v; want nil err", dir, fname, now, err)
+		t.Errorf("updateFromLocal(ctx, %q, {%q}, %v, cmdhash)=%v; want nil err", dir, fname, now, err)
 	}
 	fi, err := hfs.Stat(ctx, dir, fname)
 	if err != nil {
@@ -625,9 +660,9 @@ func TestUpdateFromLocal(t *testing.T) {
 	}
 }
 
-// Test IsChanged is true after UpdateFromLocal with restat,
+// Test IsChanged is true after Update from local with restat,
 // if stamp file didn't exist before.
-func TestUpdateFromLocal_Restat_update(t *testing.T) {
+func TestUpdate_FromLocal_Restat_update(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
 	dir, err := filepath.EvalSymlinks(dir)
@@ -671,9 +706,9 @@ func TestUpdateFromLocal_Restat_update(t *testing.T) {
 	h := sha256.New()
 	h.Write([]byte("command line"))
 	cmdhash := h.Sum(nil)
-	err = hfs.UpdateFromLocal(ctx, dir, []string{fname}, true, now, cmdhash)
+	err = updateFromLocal(ctx, hfs, dir, []string{fname}, true, now, cmdhash)
 	if err != nil {
-		t.Errorf("UpdateFromLocal(ctx, %q, {%q}, %v, cmdhash)=%v; want nil err", dir, fname, now, err)
+		t.Errorf("updateFromLocal(ctx, %q, {%q}, %v, cmdhash)=%v; want nil err", dir, fname, now, err)
 	}
 	fi, err := hfs.Stat(ctx, dir, fname)
 	if err != nil {
@@ -714,9 +749,9 @@ func TestUpdateFromLocal_Restat_update(t *testing.T) {
 	}
 }
 
-// Test IsChanged is false after UpdateFromLocal with restat,
+// Test IsChanged is false after Update from local with restat,
 // if stamp file is not changed.
-func TestUpdateFromLocal_Restat_noupdate(t *testing.T) {
+func TestUpdate_FromLocal_Restat_noupdate(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
 	dir, err := filepath.EvalSymlinks(dir)
@@ -760,9 +795,9 @@ func TestUpdateFromLocal_Restat_noupdate(t *testing.T) {
 	h := sha256.New()
 	h.Write([]byte("command line"))
 	cmdhash := h.Sum(nil)
-	err = hfs.UpdateFromLocal(ctx, dir, []string{fname}, true, now, cmdhash)
+	err = updateFromLocal(ctx, hfs, dir, []string{fname}, true, now, cmdhash)
 	if err != nil {
-		t.Errorf("UpdateFromLocal(ctx, %q, {%q}, %v, cmdhash)=%v; want nil err", dir, fname, now, err)
+		t.Errorf("updateFromLocal(ctx, %q, {%q}, %v, cmdhash)=%v; want nil err", dir, fname, now, err)
 	}
 	fi, err := hfs.Stat(ctx, dir, fname)
 	if err != nil {
@@ -803,7 +838,7 @@ func TestUpdateFromLocal_Restat_noupdate(t *testing.T) {
 	}
 }
 
-func TestUpdateFromLocal_Dir(t *testing.T) {
+func TestUpdate_FromLocal_Dir(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
 	dir, err := filepath.EvalSymlinks(dir)
@@ -835,9 +870,9 @@ func TestUpdateFromLocal_Dir(t *testing.T) {
 	h.Write([]byte("command line"))
 	cmdhash := h.Sum(nil)
 	now := time.Now()
-	err = hfs.UpdateFromLocal(ctx, dir, []string{outname, outdirname}, false, now, cmdhash)
+	err = updateFromLocal(ctx, hfs, dir, []string{outname, outdirname}, false, now, cmdhash)
 	if err != nil {
-		t.Errorf("UpdateFromLocal(ctx, %q, {%q, %q}, %v, cmdhash)=%v; want nil err", dir, outname, outdirname, now, err)
+		t.Errorf("updateFromLocal(ctx, %q, {%q, %q}, %v, cmdhash)=%v; want nil err", dir, outname, outdirname, now, err)
 	}
 
 	// make sure outdirname not clobber outname entry.
@@ -878,7 +913,7 @@ func TestUpdateFromLocal_Dir(t *testing.T) {
 	}
 }
 
-func TestUpdateFromLocal_AbsSymlink(t *testing.T) {
+func TestUpdate_FromLocal_AbsSymlink(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("no symlink test on windows")
 		return
@@ -946,9 +981,9 @@ func TestUpdateFromLocal_AbsSymlink(t *testing.T) {
 	h.Write([]byte("command line"))
 	cmdhash := h.Sum(nil)
 	now := time.Now()
-	err = hfs.UpdateFromLocal(ctx, dir, []string{outname}, true, now, cmdhash)
+	err = updateFromLocal(ctx, hfs, dir, []string{outname}, true, now, cmdhash)
 	if err != nil {
-		t.Errorf("UpdateFromLocal(ctx, %q, {%q}, %v, cmdhash)=%v, want nil err", dir, outname, now, err)
+		t.Errorf("updateFromLocal(ctx, %q, {%q}, %v, cmdhash)=%v, want nil err", dir, outname, now, err)
 	}
 	stats := hfs.IOMetrics.Stats()
 	fi, err := hfs.Stat(ctx, dir, outname)
@@ -1021,7 +1056,7 @@ func TestUpdateFromLocal_AbsSymlink(t *testing.T) {
 	}
 }
 
-func TestUpdateFromLocal_NonLocalSymlink(t *testing.T) {
+func TestUpdate_FromLocal_NonLocalSymlink(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("no symlink test on windows")
 		return
@@ -1094,9 +1129,9 @@ func TestUpdateFromLocal_NonLocalSymlink(t *testing.T) {
 	h.Write([]byte("command line"))
 	cmdhash := h.Sum(nil)
 	now := time.Now()
-	err = hfs.UpdateFromLocal(ctx, dir, []string{outname}, true, now, cmdhash)
+	err = updateFromLocal(ctx, hfs, dir, []string{outname}, true, now, cmdhash)
 	if err != nil {
-		t.Errorf("UpdateFromLocal(ctx, %q, {%q}, %v, cmdhash)=%v, want nil err", dir, outname, now, err)
+		t.Errorf("updateFromLocal(ctx, %q, {%q}, %v, cmdhash)=%v, want nil err", dir, outname, now, err)
 	}
 	fi, err := hfs.Stat(ctx, dir, outname)
 	if err != nil {
@@ -1808,7 +1843,35 @@ func TestWriteDataFlush(t *testing.T) {
 	}
 }
 
-func TestUpdateWithLocalFlush(t *testing.T) {
+func update(ctx context.Context, hfs *hashfs.HashFS, execRoot string, entries []merkletree.Entry, mtime time.Time, cmdhash []byte, action digest.Digest) error {
+	ents := make([]hashfs.UpdateEntry, 0, len(entries))
+	for _, ent := range entries {
+		mode := fs.FileMode(0644)
+		switch {
+		case !ent.Data.IsZero():
+			if ent.IsExecutable {
+				mode |= 0111
+			}
+		case ent.Target != "":
+			mode = 0644 | fs.ModeSymlink
+		default: // directory
+			mode = 0755 | fs.ModeDir
+		}
+
+		ents = append(ents, hashfs.UpdateEntry{
+			Entry:       ent,
+			Mode:        mode,
+			ModTime:     mtime,
+			CmdHash:     cmdhash,
+			Action:      action,
+			UpdatedTime: mtime,
+			IsChanged:   true,
+		})
+	}
+	return hfs.Update(ctx, execRoot, ents)
+}
+
+func TestUpdate_WithLocalFlush(t *testing.T) {
 	ctx := context.Background()
 	var m iometrics.IOMetrics
 
@@ -1827,14 +1890,14 @@ func TestUpdateWithLocalFlush(t *testing.T) {
 			if err != nil {
 				t.Fatalf("digest.FromLocalFile(ctx, {%q})=%v, %v; want nil err", filepath.Join(dir, name), data, err)
 			}
-			err = hashFS.Update(ctx, dir, []merkletree.Entry{
+			err = update(ctx, hashFS, dir, []merkletree.Entry{
 				{
 					Name: name,
 					Data: data,
 				},
 			}, now, []byte("new-cmd-hash"), digest.Digest{})
 			if err != nil {
-				t.Fatalf("Update(ctx, dir, []{%q}, now, cmdhash, actionDigest)=%v; want nil err", name, err)
+				t.Fatalf("update(ctx, dir, []{%q}, now, cmdhash, actionDigest)=%v; want nil err", name, err)
 			}
 			fi, err := hashFS.Stat(ctx, dir, name)
 			if err != nil {

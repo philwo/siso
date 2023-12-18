@@ -10,6 +10,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -22,6 +23,7 @@ import (
 
 	"infra/build/siso/hashfs"
 	"infra/build/siso/o11y/clog"
+	"infra/build/siso/o11y/trace"
 	"infra/build/siso/reapi/digest"
 	"infra/build/siso/reapi/merkletree"
 )
@@ -670,33 +672,99 @@ func (c *Cmd) entriesFromResult(ctx context.Context, ds hashfs.DataSource, resul
 	return entries, depEntries
 }
 
+func hashfsUpdate(ctx context.Context, hfs *hashfs.HashFS, execRoot string, entries []merkletree.Entry, mtime time.Time, cmdhash []byte, action digest.Digest) error {
+	ents := make([]hashfs.UpdateEntry, 0, len(entries))
+	for _, ent := range entries {
+		mode := fs.FileMode(0644)
+		switch {
+		case !ent.Data.IsZero():
+			if ent.IsExecutable {
+				mode |= 0111
+			}
+		case ent.Target != "":
+			mode = 0644 | fs.ModeSymlink
+		default: // directory
+			mode = 0755 | fs.ModeDir
+		}
+
+		ents = append(ents, hashfs.UpdateEntry{
+			Entry:       ent,
+			Mode:        mode,
+			ModTime:     mtime,
+			CmdHash:     cmdhash,
+			Action:      action,
+			UpdatedTime: mtime,
+			IsChanged:   true,
+		})
+	}
+	return hfs.Update(ctx, execRoot, ents)
+}
+
 // RecordOutputs records cmd's outputs from action result in hashfs.
 func (c *Cmd) RecordOutputs(ctx context.Context, ds hashfs.DataSource, now time.Time) error {
 	entries, depEntries := c.entriesFromResult(ctx, ds, c.actionResult)
 	clog.Infof(ctx, "output entries %d+%d", len(entries), len(depEntries))
-	err := c.HashFS.Update(ctx, c.ExecRoot, entries, now, c.CmdHash, c.actionDigest)
+	err := hashfsUpdate(ctx, c.HashFS, c.ExecRoot, entries, now, c.CmdHash, c.actionDigest)
 	if err != nil {
 		return fmt.Errorf("failed to update hashfs from remote: %w", err)
 	}
 	if len(depEntries) == 0 {
 		return nil
 	}
-	err = c.HashFS.Update(ctx, c.ExecRoot, depEntries, now, nil, c.actionDigest)
+	err = hashfsUpdate(ctx, c.HashFS, c.ExecRoot, depEntries, now, nil, c.actionDigest)
 	if err != nil {
 		return fmt.Errorf("failed to update hashfs from remote[depfile]: %w", err)
 	}
 	return nil
 }
 
+func hashfsUpdateFromLocal(ctx context.Context, hfs *hashfs.HashFS, root string, inputs []string, restat bool, updatedTime time.Time, cmdhash []byte) error {
+	ctx, span := trace.NewSpan(ctx, "fs-update-local")
+	defer span.Close(nil)
+
+	m := make(map[string]hashfs.UpdateEntry)
+	if restat {
+		// retrieve entries stored in hashfs.
+		// TODO: record this before local execution.
+		entries := hfs.RetrieveUpdateEntries(ctx, root, inputs)
+		for _, ent := range entries {
+			m[ent.Entry.Name] = ent
+		}
+	}
+
+	// forget and retrieve entries from local disk.
+	hfs.Forget(ctx, root, inputs)
+	entries := hfs.RetrieveUpdateEntries(ctx, root, inputs)
+
+	// Set cmdhash, updatedTime.
+	// also isChanged=true if entry has been changed.
+	for i, ent := range entries {
+		ent.CmdHash = cmdhash
+		ent.UpdatedTime = updatedTime
+		ent.IsLocal = true
+		pent := m[ent.Entry.Name]
+		if !restat {
+			ent.ModTime = updatedTime
+			ent.IsChanged = true
+		} else if !pent.ModTime.Equal(ent.ModTime) {
+			// TODO: check digest too?
+			ent.IsChanged = true
+		}
+		entries[i] = ent
+	}
+	// store in hashfs.
+	return hfs.Update(ctx, root, entries)
+}
+
 // RecordOutputsFromLocal records cmd's outputs from local disk in hashfs.
 func (c *Cmd) RecordOutputsFromLocal(ctx context.Context, now time.Time) error {
 	if c.Depfile != "" {
-		err := c.HashFS.UpdateFromLocal(ctx, c.ExecRoot, []string{c.Depfile}, c.Restat, now, nil)
+		err := hashfsUpdateFromLocal(ctx, c.HashFS, c.ExecRoot, []string{c.Depfile}, c.Restat, now, nil)
 		if err != nil {
 			return fmt.Errorf("failed to update hashfs from local[depfile]: %w", err)
 		}
 	}
-	err := c.HashFS.UpdateFromLocal(ctx, c.ExecRoot, c.Outputs, c.Restat, now, c.CmdHash)
+	err := hashfsUpdateFromLocal(ctx, c.HashFS, c.ExecRoot, c.Outputs, c.Restat, now, c.CmdHash)
 	if err != nil {
 		return fmt.Errorf("failed to update hashfs from local: %w", err)
 	}

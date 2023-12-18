@@ -117,7 +117,7 @@ func TestState_Dir(t *testing.T) {
 	cmdhashStr := hex.EncodeToString(cmdhash)
 	d := digest.FromBytes("action digest", []byte("action proto")).Digest()
 	t.Logf("record gen/generate_all dir. mtime=%s cmdhash=%s d=%s", mtime, cmdhashStr, d)
-	err = hashFS.Update(ctx, dir, []merkletree.Entry{
+	err = update(ctx, hashFS, dir, []merkletree.Entry{
 		{
 			Name: "gen/generate_all",
 		},

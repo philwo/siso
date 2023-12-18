@@ -735,7 +735,8 @@ func (hfs *HashFS) Entries(ctx context.Context, root string, inputs []string) ([
 	return entries, nil
 }
 
-type updateEntry struct {
+// UpdateEntry is an entry for Update.
+type UpdateEntry struct {
 	Entry       merkletree.Entry
 	Mode        fs.FileMode
 	ModTime     time.Time
@@ -746,7 +747,8 @@ type updateEntry struct {
 	IsChanged   bool
 }
 
-func (hfs *HashFS) update(ctx context.Context, execRoot string, entries []updateEntry) error {
+// Update updates cache information for entries under execRoot.
+func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []UpdateEntry) error {
 	ctx, span := trace.NewSpan(ctx, "fs-update")
 	defer span.Close(nil)
 	hfs.clean = false
@@ -856,50 +858,22 @@ func (hfs *HashFS) update(ctx context.Context, execRoot string, entries []update
 	return nil
 }
 
-// Update updates cache information for entries under execRoot with mtime and cmdhash.
-func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []merkletree.Entry, mtime time.Time, cmdhash []byte, action digest.Digest) error {
-	ents := make([]updateEntry, 0, len(entries))
-	for _, ent := range entries {
-		mode := fs.FileMode(0644)
-		switch {
-		case !ent.Data.IsZero():
-			if ent.IsExecutable {
-				mode |= 0111
-			}
-		case ent.Target != "":
-			mode = 0644 | fs.ModeSymlink
-		default: // directory
-			mode = 0755 | fs.ModeDir
-		}
-
-		ents = append(ents, updateEntry{
-			Entry:       ent,
-			Mode:        mode,
-			ModTime:     mtime,
-			CmdHash:     cmdhash,
-			Action:      action,
-			UpdatedTime: mtime,
-			IsChanged:   true,
-		})
-	}
-	return hfs.update(ctx, execRoot, ents)
-}
-
-func (hfs *HashFS) updateEntries(ctx context.Context, root string, fnames []string) []updateEntry {
+// RetrieveUpdateEntries gets UpdateEntry for fnames at root.
+func (hfs *HashFS) RetrieveUpdateEntries(ctx context.Context, root string, fnames []string) []UpdateEntry {
 	ctx, span := trace.NewSpan(ctx, "fs-update-entries")
 	defer span.Close(nil)
 	ents, err := hfs.Entries(ctx, root, fnames)
 	if err != nil {
 		clog.Warningf(ctx, "failed to get entries: %v", err)
 	}
-	entries := make([]updateEntry, 0, len(ents))
+	entries := make([]UpdateEntry, 0, len(ents))
 	for _, ent := range ents {
 		fi, err := hfs.Stat(ctx, root, ent.Name)
 		if err != nil {
 			clog.Warningf(ctx, "failed to stat %s: %v", ent.Name, err)
 			continue
 		}
-		entries = append(entries, updateEntry{
+		entries = append(entries, UpdateEntry{
 			Entry:       ent,
 			Mode:        fi.Mode(),
 			ModTime:     fi.ModTime(),
@@ -910,47 +884,6 @@ func (hfs *HashFS) updateEntries(ctx context.Context, root string, fnames []stri
 		})
 	}
 	return entries
-}
-
-// UpdateFromLocal updates cache information for inputs under execRoot with cmdhash from local disk and record it as updated at updatedTime.
-// when restat=true, it keeps mtime of local file.
-// otherwise, it will update mtime.
-func (hfs *HashFS) UpdateFromLocal(ctx context.Context, root string, inputs []string, restat bool, updatedTime time.Time, cmdhash []byte) error {
-	ctx, span := trace.NewSpan(ctx, "fs-update-local")
-	defer span.Close(nil)
-
-	m := make(map[string]updateEntry)
-	if restat {
-		// retrieve entries stored in hashfs.
-		// TODO: record this before local execution.
-		entries := hfs.updateEntries(ctx, root, inputs)
-		for _, ent := range entries {
-			m[ent.Entry.Name] = ent
-		}
-	}
-
-	// forget and retrieve entries from local disk.
-	hfs.Forget(ctx, root, inputs)
-	entries := hfs.updateEntries(ctx, root, inputs)
-
-	// Set cmdhash, updatedTime.
-	// also isChanged=true if entry has been changed.
-	for i, ent := range entries {
-		ent.CmdHash = cmdhash
-		ent.UpdatedTime = updatedTime
-		ent.IsLocal = true
-		pent := m[ent.Entry.Name]
-		if !restat {
-			ent.ModTime = updatedTime
-			ent.IsChanged = true
-		} else if !pent.ModTime.Equal(ent.ModTime) {
-			// TODO: check digest too?
-			ent.IsChanged = true
-		}
-		entries[i] = ent
-	}
-	// store in hashfs.
-	return hfs.update(ctx, root, entries)
 }
 
 type noSource struct {
