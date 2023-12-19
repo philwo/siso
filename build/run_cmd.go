@@ -9,8 +9,8 @@ import (
 
 	log "github.com/golang/glog"
 
+	"infra/build/siso/hashfs"
 	"infra/build/siso/o11y/clog"
-	"infra/build/siso/reapi/merkletree"
 )
 
 func (b *Builder) runStrategy(ctx context.Context, step *Step) func(context.Context, *Step) error {
@@ -71,13 +71,6 @@ func (b *Builder) fixMissingInputs(ctx context.Context, step *Step) {
 // cause ERROR_SHARING_VIOLATION when running command on Windows.
 // to prevent the error, compute digest before running step.
 // TODO: use this to enable restat for remote execution.
-func (b *Builder) prevOutputEntries(ctx context.Context, step *Step) ([]merkletree.Entry, error) {
-	allOutputs := step.cmd.AllOutputs()
-	outputs := make([]string, 0, len(allOutputs))
-	for _, out := range allOutputs {
-		if _, err := b.hashFS.Stat(ctx, b.path.ExecRoot, out); err == nil {
-			outputs = append(outputs, out)
-		}
-	}
-	return b.hashFS.Entries(ctx, b.path.ExecRoot, outputs)
+func (b *Builder) prevOutputEntries(ctx context.Context, step *Step) []hashfs.UpdateEntry {
+	return b.hashFS.RetrieveUpdateEntries(ctx, b.path.ExecRoot, step.cmd.AllOutputs())
 }
