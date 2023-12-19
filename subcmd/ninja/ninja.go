@@ -180,7 +180,10 @@ func (c *ninjaCmdRun) Run(a subcommands.Application, args []string, env subcomma
 				suggest += fmt.Sprintf("\n or %s", c.logFilename(c.sisoInfoLog))
 			}
 			if c.failedCommandsFile != "" {
-				suggest += fmt.Sprintf("\nuse %s to re-run failed commands", c.logFilename(c.failedCommandsFile))
+				_, err := os.Stat(c.failedCommandsFile)
+				if err == nil {
+					suggest += fmt.Sprintf("\nuse %s to re-run failed commands", c.logFilename(c.failedCommandsFile))
+				}
 			}
 			if ui.IsTerminal() {
 				suggest = ui.SGR(ui.Bold, suggest)
@@ -439,6 +442,10 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 			}
 			var stepError build.StepError
 			if !errors.As(errBuild.err, &stepError) {
+				rerr := os.Remove(c.failedCommandsFile)
+				if rerr != nil {
+					clog.Warningf(ctx, "failed to remove failed command file: %v", rerr)
+				}
 				return
 			}
 			// store failed targets only when build steps failed.
@@ -1024,7 +1031,7 @@ func (c *ninjaCmdRun) logFilename(fname string) string {
 	if err != nil || !filepath.IsLocal(rel) {
 		return fname
 	}
-	return rel
+	return "." + string(os.PathSeparator) + rel
 }
 
 // glogFilename returns filename of glog logfile. i.e. siso.INFO.
