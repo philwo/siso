@@ -809,7 +809,7 @@ func (s *StepDef) Handle(ctx context.Context, cmd *execute.Cmd) error {
 	cmd.Inputs = s.expandLabels(ctx, cmd.Inputs)
 
 	// Add executables to REProxyConfig.ToolchainInputs to send Linux executables from Windows.
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == "windows" && cmd.REProxyConfig != nil {
 		var ok bool
 		for _, in := range cmd.Inputs {
 			_, ok = s.globals.executables[in]
