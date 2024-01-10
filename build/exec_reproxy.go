@@ -21,8 +21,6 @@ import (
 	"infra/build/siso/execute/reproxyexec"
 	"infra/build/siso/o11y/clog"
 	"infra/build/siso/o11y/trace"
-	"infra/build/siso/toolsupport/gccutil"
-	"infra/build/siso/toolsupport/msvcutil"
 )
 
 func (b *Builder) execReproxy(ctx context.Context, step *Step) error {
@@ -36,14 +34,6 @@ func (b *Builder) execReproxy(ctx context.Context, step *Step) error {
 	b.fixMissingInputs(ctx, step)
 	err := b.prepareLocalInputs(ctx, step)
 	if err != nil && !experiments.Enabled("ignore-missing-local-inputs", "step %s missing inputs: %v", step, err) {
-		return err
-	}
-	err = b.prepareLocalIncludeDirs(ctx, step)
-	if err != nil {
-		return err
-	}
-	err = b.prepareLocalOutdirs(ctx, step)
-	if err != nil {
 		return err
 	}
 	err = allowWriteOutputs(ctx, step.cmd)
@@ -121,50 +111,6 @@ func allowWriteOutputs(ctx context.Context, cmd *execute.Cmd) error {
 			err = os.Chmod(fname, fi.Mode()|0200)
 			if err != nil {
 				return err
-			}
-		}
-	}
-	return nil
-}
-
-// prepareLocalIncludeDirs make sure that the include directories in a compile command exist.
-// b/289175336 - In Reproxy mode, the same compile command ends up with different input trees
-// due to empty input directories. Those directories are created by generator actions,
-// but not always used by compile actions.
-// It's better to have the include directories regardless of timing.
-func (b *Builder) prepareLocalIncludeDirs(ctx context.Context, step *Step) error {
-	args := step.cmd.Args
-
-	var err error
-	var dirs []string
-	switch step.cmd.Deps {
-	case "gcc":
-		_, dirs, _, _, err = gccutil.ScanDepsParams(ctx, args, nil)
-	case "msvc":
-		_, _, dirs, _, _, err = msvcutil.ScanDepsParams(ctx, args, nil)
-	default:
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("failed to parse compile commmand flags: %w", err)
-	}
-
-	seen := make(map[string]bool)
-	for _, dir := range dirs {
-		if seen[dir] {
-			continue
-		}
-		seen[dir] = true
-		if !filepath.IsLocal(dir) {
-			// Do not touch source tree or system dirs outside the build dir.
-			continue
-		}
-		d := b.path.MaybeFromWD(dir)
-		if _, err := b.hashFS.Stat(ctx, b.path.ExecRoot, d); errors.Is(err, fs.ErrNotExist) {
-			clog.Infof(ctx, "prepare include dir %s", dir)
-			err = b.hashFS.Mkdir(ctx, b.path.ExecRoot, d, nil)
-			if err != nil {
-				clog.Warningf(ctx, "failed to create include dir %s: %v", dir, err)
 			}
 		}
 	}

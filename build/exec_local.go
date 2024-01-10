@@ -9,7 +9,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"path/filepath"
 	"time"
 
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
@@ -35,10 +34,6 @@ func (b *Builder) execLocal(ctx context.Context, step *Step) error {
 	b.fixMissingInputs(ctx, step)
 	err := b.prepareLocalInputs(ctx, step)
 	if err != nil && !experiments.Enabled("ignore-missing-local-inputs", "step %s missing inputs: %v", step, err) {
-		return err
-	}
-	err = b.prepareLocalOutdirs(ctx, step)
-	if err != nil {
 		return err
 	}
 	b.prevOutputEntries(ctx, step)
@@ -140,27 +135,6 @@ func (b *Builder) prepareLocalInputs(ctx context.Context, step *Step) error {
 	err := b.hashFS.Flush(ctx, step.cmd.ExecRoot, inputs)
 	clog.Infof(ctx, "prepare-local-inputs %d %s: %v", len(inputs), time.Since(start), err)
 	return err
-}
-
-func (b *Builder) prepareLocalOutdirs(ctx context.Context, step *Step) error {
-	ctx, span := trace.NewSpan(ctx, "prepare-local-outdirs")
-	defer span.Close(nil)
-
-	seen := make(map[string]bool)
-	for _, out := range step.cmd.Outputs {
-		outdir := filepath.Dir(out)
-		if seen[outdir] {
-			continue
-		}
-		clog.Infof(ctx, "prepare outdirs %s", outdir)
-		err := b.hashFS.Mkdir(ctx, b.path.ExecRoot, outdir, nil)
-		if err != nil {
-			return fmt.Errorf("prepare outdirs %s: %w", outdir, err)
-		}
-		seen[outdir] = true
-	}
-	b.hashFS.Forget(ctx, b.path.ExecRoot, step.cmd.Outputs)
-	return nil
 }
 
 func (b *Builder) captureLocalOutputs(ctx context.Context, step *Step) error {

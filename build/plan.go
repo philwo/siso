@@ -77,6 +77,7 @@ type plan struct {
 	closed    bool
 	ready     []*Step
 	waits     map[Target][]*Step
+	outputs   map[Target]struct{}
 	npendings int
 }
 
@@ -217,8 +218,9 @@ func newScheduler(ctx context.Context, opt schedulerOption) *scheduler {
 		plan: &plan{
 			m: make(map[Target]bool),
 			// preallocate capacity for performance optimization.
-			q:     make(chan *Step, 10000),
-			waits: make(map[Target][]*Step),
+			q:       make(chan *Step, 10000),
+			waits:   make(map[Target][]*Step),
+			outputs: make(map[Target]struct{}),
 		},
 		scanned:     make(map[Target]bool),
 		enableTrace: opt.EnableTrace,
@@ -276,6 +278,9 @@ func (s *scheduler) add(ctx context.Context, graph Graph, stepDef StepDef, waits
 	}()
 	s.total++
 	step := newStep(stepDef, len(waits), outputs)
+	for _, output := range outputs {
+		s.plan.outputs[output] = struct{}{}
+	}
 	if step.ReadyToRun("", nil) {
 		if log.V(1) {
 			clog.Infof(ctx, "step state: %s ready to run", step.String())
