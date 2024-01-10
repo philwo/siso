@@ -40,7 +40,7 @@ func (b *Builder) execReproxy(ctx context.Context, step *Step) error {
 	if err != nil {
 		return err
 	}
-	b.prevOutputEntries(ctx, step)
+	step.cmd.RecordPreOutputs(ctx)
 	err = b.reproxySema.Do(ctx, func(ctx context.Context) error {
 		started := time.Now()
 		step.metrics.ActionStartTime = IntervalMetric(started.Sub(b.start))

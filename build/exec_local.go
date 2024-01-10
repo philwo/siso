@@ -36,7 +36,7 @@ func (b *Builder) execLocal(ctx context.Context, step *Step) error {
 	if err != nil && !experiments.Enabled("ignore-missing-local-inputs", "step %s missing inputs: %v", step, err) {
 		return err
 	}
-	b.prevOutputEntries(ctx, step)
+	step.cmd.RecordPreOutputs(ctx)
 
 	stateMessage := "local exec"
 	sema := b.localSema

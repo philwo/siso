@@ -200,6 +200,9 @@ type Cmd struct {
 	// running.  localexec only.
 	Console bool
 
+	// preOutputEntries is update entries of outputs before execution.
+	preOutputEntries []hashfs.UpdateEntry
+
 	stdoutBuffer, stderrBuffer *bytes.Buffer
 
 	actionDigest digest.Digest
@@ -698,6 +701,15 @@ func hashfsUpdate(ctx context.Context, hfs *hashfs.HashFS, execRoot string, entr
 		})
 	}
 	return hfs.Update(ctx, execRoot, ents)
+}
+
+// RecordPreOutputs records output entries before running command.
+// hashfs would lazily compute digest of files, so it would
+// cause ERROR_SHARING_VIOLATION when running command on Windows.
+// to prevent the error, compute digest before running step.
+// TODO: use this to enable restat for remote execution.
+func (c *Cmd) RecordPreOutputs(ctx context.Context) {
+	c.preOutputEntries = c.HashFS.RetrieveUpdateEntries(ctx, c.ExecRoot, c.AllOutputs())
 }
 
 // RecordOutputs records cmd's outputs from action result in hashfs.

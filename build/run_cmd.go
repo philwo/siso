@@ -9,7 +9,6 @@ import (
 
 	log "github.com/golang/glog"
 
-	"infra/build/siso/hashfs"
 	"infra/build/siso/o11y/clog"
 )
 
@@ -64,13 +63,4 @@ func (b *Builder) fixMissingInputs(ctx context.Context, step *Step) {
 		clog.Infof(ctx, "deps remove missing inputs %d -> %d", len(step.cmd.Inputs), len(inputs))
 		step.cmd.Inputs = inputs
 	}
-}
-
-// compute previous output entries before running command.
-// hashfs would lazily compute digest of files, so it would
-// cause ERROR_SHARING_VIOLATION when running command on Windows.
-// to prevent the error, compute digest before running step.
-// TODO: use this to enable restat for remote execution.
-func (b *Builder) prevOutputEntries(ctx context.Context, step *Step) []hashfs.UpdateEntry {
-	return b.hashFS.RetrieveUpdateEntries(ctx, b.path.ExecRoot, step.cmd.AllOutputs())
 }
