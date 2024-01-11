@@ -40,19 +40,11 @@ const maxSymlinks = 40
 // FlushSemaphore is a semaphore to control concurrent flushes.
 var FlushSemaphore = semaphore.New("fs-flush", runtime.NumCPU()*2)
 
-func isExecutable(fi fs.FileInfo, fname string) bool {
+func isExecutable(fi fs.FileInfo, fname string, m map[string]bool) bool {
 	if fi.Mode()&0111 != 0 {
 		return true
 	}
-	if runtime.GOOS != "windows" {
-		return false
-	}
-	// siso-toolchain-chromium-browser-clang creates an executables
-	// marker file, so check it.
-	// TODO: Use StepConfig.Executables instead of the ".is_executable" file.
-	_, err := os.Stat(fname + ".is_executable")
-
-	return err == nil
+	return m[fname]
 }
 
 // NotifyFunc is the type of the function to notify the filesystem changes.
@@ -74,6 +66,8 @@ type HashFS struct {
 	// holds generated files in previous builds.
 	// key: full path, value: true
 	previouslyGeneratedFiles *sync.Map
+
+	executables map[string]bool
 }
 
 // New creates a HashFS.
@@ -122,6 +116,12 @@ func New(ctx context.Context, opt Option) (*HashFS, error) {
 // Notify causes the hashfs to relay filesystem motification to f.
 func (hfs *HashFS) Notify(f NotifyFunc) {
 	hfs.notifies = append(hfs.notifies, f)
+}
+
+// SetExecutables sets a map of full paths for files to be
+// considered as executable, even if it is not executable on local disk.
+func (hfs *HashFS) SetExecutables(m map[string]bool) {
+	hfs.executables = m
 }
 
 // Close closes the HashFS.
@@ -288,7 +288,7 @@ func (hfs *HashFS) Stat(ctx context.Context, root, fname string) (FileInfo, erro
 	}
 	fname = filepath.ToSlash(fname)
 	e = newLocalEntry()
-	e.init(ctx, fname, hfs.IOMetrics)
+	e.init(ctx, fname, hfs.executables, hfs.IOMetrics)
 	clog.Infof(ctx, "stat new entry %s %s", fname, e)
 	if log.V(9) {
 		clog.Infof(ctx, "store %s %s in %s", fname, e, dir)
@@ -331,7 +331,7 @@ func (hfs *HashFS) ReadDir(ctx context.Context, root, name string) (dents []DirE
 	e, _, ok := hfs.directory.lookup(ctx, dname)
 	if !ok {
 		e = newLocalEntry()
-		e.init(ctx, dname, hfs.IOMetrics)
+		e.init(ctx, dname, hfs.executables, hfs.IOMetrics)
 		var err error
 		e, err = hfs.directory.store(ctx, dname, e)
 		if err != nil {
@@ -384,7 +384,7 @@ func (hfs *HashFS) ReadFile(ctx context.Context, root, fname string) ([]byte, er
 	e, _, ok := hfs.directory.lookup(ctx, fname)
 	if !ok {
 		e = newLocalEntry()
-		e.init(ctx, fname, hfs.IOMetrics)
+		e.init(ctx, fname, hfs.executables, hfs.IOMetrics)
 		var err error
 		e, err = hfs.directory.store(ctx, fname, e)
 		if err != nil {
@@ -486,7 +486,7 @@ func (hfs *HashFS) Copy(ctx context.Context, root, src, dst string, mtime time.T
 		if log.V(9) {
 			clog.Infof(ctx, "new entry for copy src %s", srcfname)
 		}
-		e.init(ctx, srcfname, hfs.IOMetrics)
+		e.init(ctx, srcfname, hfs.executables, hfs.IOMetrics)
 		var err error
 		e, err := hfs.directory.store(ctx, srcfname, e)
 		if err != nil {
@@ -644,7 +644,7 @@ func (hfs *HashFS) Entries(ctx context.Context, root string, inputs []string) ([
 			continue
 		}
 		e = newLocalEntry()
-		e.init(ctx, fname, hfs.IOMetrics)
+		e.init(ctx, fname, hfs.executables, hfs.IOMetrics)
 		if log.V(1) {
 			clog.Infof(ctx, "tree new entry %s", fname)
 		}
@@ -701,7 +701,7 @@ func (hfs *HashFS) Entries(ctx context.Context, root string, inputs []string) ([
 					}
 				} else {
 					elink = newLocalEntry()
-					elink.init(ctx, name, hfs.IOMetrics)
+					elink.init(ctx, name, hfs.executables, hfs.IOMetrics)
 					if log.V(1) {
 						clog.Infof(ctx, "tree new entry %s", name)
 					}
@@ -1028,7 +1028,7 @@ func (e *entry) String() string {
 	return fmt.Sprintf("size:%d mode:%s mtime:%s", e.size, e.mode, e.getMtime())
 }
 
-func (e *entry) init(ctx context.Context, fname string, m *iometrics.IOMetrics) {
+func (e *entry) init(ctx context.Context, fname string, executables map[string]bool, m *iometrics.IOMetrics) {
 	fi, err := os.Lstat(fname)
 	m.OpsDone(err)
 	if errors.Is(err, fs.ErrNotExist) {
@@ -1062,7 +1062,7 @@ func (e *entry) init(ctx context.Context, fname string, m *iometrics.IOMetrics) 
 		}
 	case fi.Mode().IsRegular():
 		e.mode = 0644
-		if isExecutable(fi, fname) {
+		if isExecutable(fi, fname, executables) {
 			e.mode |= 0111
 		}
 		e.size = fi.Size()

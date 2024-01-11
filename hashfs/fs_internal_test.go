@@ -65,7 +65,7 @@ func TestDirectoryLookup_Symlink(t *testing.T) {
 		t.Fatalf("d.lookup(ctx, %q): %t; want false", fname, ok)
 	}
 	e := newLocalEntry()
-	e.init(ctx, fname, &m)
+	e.init(ctx, fname, nil, &m)
 	_, err = d.store(ctx, fname, e)
 	if err != nil {
 		t.Fatalf("d.store(ctx, %q) %v; want nil err", fname, err)
@@ -77,7 +77,7 @@ func TestDirectoryLookup_Symlink(t *testing.T) {
 		t.Fatalf("d.lookup(ctx, %q): %t; want false", fname, ok)
 	}
 	e = newLocalEntry()
-	e.init(ctx, fname, &m)
+	e.init(ctx, fname, nil, &m)
 	_, err = d.store(ctx, fname, e)
 	if err != nil {
 		t.Fatalf("d.store(ctx, %q) %v; want nil err", fname, err)

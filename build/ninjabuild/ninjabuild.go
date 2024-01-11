@@ -252,9 +252,18 @@ func (g *Graph) initGlobals(ctx context.Context) {
 		g.globals.caseSensitives[cif] = append(g.globals.caseSensitives[cif], f)
 	}
 	// initialize executables.
+	hfsExecutables := make(map[string]bool)
 	for _, f := range g.globals.stepConfig.Executables {
 		g.globals.executables[f] = true
+		absPath := f
+		if !filepath.IsAbs(absPath) {
+			absPath = filepath.Join(g.globals.path.ExecRoot, f)
+		}
+		absPath = filepath.ToSlash(absPath)
+		hfsExecutables[absPath] = true
+		clog.Infof(ctx, "set executable %q %q", f, absPath)
 	}
+	g.globals.hashFS.SetExecutables(hfsExecutables)
 
 	// infer gn target.
 	// gn target will be node that is phony target and contains ":"
