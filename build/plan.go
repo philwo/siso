@@ -278,8 +278,11 @@ func (s *scheduler) add(ctx context.Context, graph Graph, stepDef StepDef, waits
 	}()
 	s.total++
 	step := newStep(stepDef, len(waits), outputs)
-	for _, output := range outputs {
-		s.plan.outputs[output] = struct{}{}
+	if !stepDef.IsPhony() {
+		// don't add output for phony targets. https://crbug.com/1517575
+		for _, output := range outputs {
+			s.plan.outputs[output] = struct{}{}
+		}
 	}
 	if step.ReadyToRun("", nil) {
 		if log.V(1) {

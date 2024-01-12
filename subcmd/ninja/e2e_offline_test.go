@@ -39,28 +39,54 @@ func TestBuild_offline(t *testing.T) {
 	limits.FastLocal = 0
 	build.SetDefaultForTest(limits)
 
-	setupFiles(t, dir, t.Name(), nil)
-	err = os.Chdir(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	ninja := &ninjaCmdRun{}
-	ninja.init()
-	err = ninja.Flags.Parse([]string{"-C", "out/siso", "--offline"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	stats, err := ninja.run(ctx)
-	if err != nil {
-		t.Errorf("ninja run failed: %v", err)
-	}
-	if stats.Done != stats.Total {
-		t.Errorf("ninja stats.Done=%d; want=%d", stats.Done, stats.Total)
-	}
-	if stats.Local+stats.Skipped != stats.Total {
-		t.Errorf("ninja stats.Local=%d + Skipped=%d; want=%d", stats.Local, stats.Skipped, stats.Total)
-	}
-	if stats.Fail != 0 {
-		t.Errorf("ninja stats.Fail=%d; want=0", stats.Fail)
+	testName := t.Name()
+
+	for _, tc := range []struct {
+		name string
+		args []string
+	}{
+		{
+			name: "basic",
+		},
+		{
+			name: "phony",
+			// intermediate dir of phony targets should not be created.
+			args: []string{"output2", "output2/foo:foo"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			setupFiles(t, dir, testName, nil)
+			err = os.Chdir(dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() {
+				err = os.Chdir(wd)
+				if err != nil {
+					t.Error(err)
+				}
+			}()
+			ninja := &ninjaCmdRun{}
+			ninja.init()
+			args := []string{"-C", "out/siso", "--offline"}
+			args = append(args, tc.args...)
+			err = ninja.Flags.Parse(args)
+			if err != nil {
+				t.Fatal(err)
+			}
+			stats, err := ninja.run(ctx)
+			if err != nil {
+				t.Errorf("ninja run failed: %v", err)
+			}
+			if stats.Done != stats.Total {
+				t.Errorf("ninja stats.Done=%d; want=%d", stats.Done, stats.Total)
+			}
+			if stats.Local+stats.Skipped != stats.Total {
+				t.Errorf("ninja stats.Local=%d + Skipped=%d; want=%d", stats.Local, stats.Skipped, stats.Total)
+			}
+			if stats.Fail != 0 {
+				t.Errorf("ninja stats.Fail=%d; want=0", stats.Fail)
+			}
+		})
 	}
 }

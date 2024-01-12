@@ -10,6 +10,8 @@ rule gen2
   command = python3 ../../tools/gen.py --input=${in} --output=${out}
 build output2: gen2 output1
 
+build output2/foo$:foo: phony output2
+
 build all: phony output2
 
 build build.ninja: phony
