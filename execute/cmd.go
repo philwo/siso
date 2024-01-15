@@ -23,7 +23,6 @@ import (
 
 	"infra/build/siso/hashfs"
 	"infra/build/siso/o11y/clog"
-	"infra/build/siso/o11y/trace"
 	"infra/build/siso/reapi/digest"
 	"infra/build/siso/reapi/merkletree"
 )
@@ -730,31 +729,35 @@ func (c *Cmd) RecordOutputs(ctx context.Context, ds hashfs.DataSource, now time.
 	return nil
 }
 
-func hashfsUpdateFromLocal(ctx context.Context, hfs *hashfs.HashFS, root string, inputs []string, restat bool, updatedTime time.Time, cmdhash []byte) error {
-	ctx, span := trace.NewSpan(ctx, "fs-update-local")
-	defer span.Close(nil)
+func retrieveLocalOutputEntries(ctx context.Context, hfs *hashfs.HashFS, root string, inputs []string) []hashfs.UpdateEntry {
+	// forget and retrieve entries from local disk
+	// because files on local disk have been updated by command execution.
+	hfs.Forget(ctx, root, inputs)
+	return hfs.RetrieveUpdateEntries(ctx, root, inputs)
+}
 
-	m := make(map[string]hashfs.UpdateEntry)
+// computeOutputEntries computes output entries to have updatedTime and cmdhash.
+// if restat is true, it checks preOutputEntries recorded by
+// RecordPreOutputs and don't update mtime/is_changed
+// if all entries are the same as before.
+func (c *Cmd) computeOutputEntries(ctx context.Context, entries []hashfs.UpdateEntry, restat bool, updatedTime time.Time, cmdhash []byte) []hashfs.UpdateEntry {
+	pre := make(map[string]hashfs.UpdateEntry)
 	if restat {
-		// retrieve entries stored in hashfs.
-		// TODO: record this before local execution.
-		entries := hfs.RetrieveUpdateEntries(ctx, root, inputs)
-		for _, ent := range entries {
-			m[ent.Entry.Name] = ent
+		// check with previous content recorded by
+		// RecordPreOutputs before execution.
+		for _, ent := range c.preOutputEntries {
+			pre[ent.Entry.Name] = ent
 		}
 	}
 
-	// forget and retrieve entries from local disk.
-	hfs.Forget(ctx, root, inputs)
-	entries := hfs.RetrieveUpdateEntries(ctx, root, inputs)
-
+	ret := make([]hashfs.UpdateEntry, 0, len(entries))
 	// Set cmdhash, updatedTime.
 	// also isChanged=true if entry has been changed.
-	for i, ent := range entries {
+	for _, ent := range entries {
 		ent.CmdHash = cmdhash
 		ent.UpdatedTime = updatedTime
 		ent.IsLocal = true
-		pent := m[ent.Entry.Name]
+		pent := pre[ent.Entry.Name]
 		if !restat {
 			ent.ModTime = updatedTime
 			ent.IsChanged = true
@@ -762,21 +765,24 @@ func hashfsUpdateFromLocal(ctx context.Context, hfs *hashfs.HashFS, root string,
 			// TODO: check digest too?
 			ent.IsChanged = true
 		}
-		entries[i] = ent
+		ret = append(ret, ent)
 	}
-	// store in hashfs.
-	return hfs.Update(ctx, root, entries)
+	return ret
 }
 
 // RecordOutputsFromLocal records cmd's outputs from local disk in hashfs.
 func (c *Cmd) RecordOutputsFromLocal(ctx context.Context, now time.Time) error {
 	if c.Depfile != "" {
-		err := hashfsUpdateFromLocal(ctx, c.HashFS, c.ExecRoot, []string{c.Depfile}, c.Restat, now, nil)
+		entries := retrieveLocalOutputEntries(ctx, c.HashFS, c.ExecRoot, []string{c.Depfile})
+		entries = c.computeOutputEntries(ctx, entries, c.Restat, now, nil)
+		err := c.HashFS.Update(ctx, c.ExecRoot, entries)
 		if err != nil {
 			return fmt.Errorf("failed to update hashfs from local[depfile]: %w", err)
 		}
 	}
-	err := hashfsUpdateFromLocal(ctx, c.HashFS, c.ExecRoot, c.Outputs, c.Restat, now, c.CmdHash)
+	entries := retrieveLocalOutputEntries(ctx, c.HashFS, c.ExecRoot, c.Outputs)
+	entries = c.computeOutputEntries(ctx, entries, c.Restat, now, c.CmdHash)
+	err := c.HashFS.Update(ctx, c.ExecRoot, entries)
 	if err != nil {
 		return fmt.Errorf("failed to update hashfs from local: %w", err)
 	}
