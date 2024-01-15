@@ -32,13 +32,15 @@ func cmdFSExport() *subcommands.Command {
 
 type exportRun struct {
 	subcommands.CommandRunBase
-	dir    string
-	format string
+	dir       string
+	format    string
+	stateFile string
 }
 
 func (c *exportRun) init() {
 	c.Flags.StringVar(&c.dir, "C", ".", "ninja running directory")
 	c.Flags.StringVar(&c.format, "format", "json", "output format. json or prototext")
+	c.Flags.StringVar(&c.stateFile, "fs_state", stateFile, "fs state filename")
 }
 
 func (c *exportRun) Run(a subcommands.Application, args []string, env subcommands.Env) int {
@@ -50,9 +52,9 @@ func (c *exportRun) Run(a subcommands.Application, args []string, env subcommand
 		return 1
 	}
 
-	st, err := hashfs.Load(ctx, stateFile)
+	st, err := hashfs.Load(ctx, c.stateFile)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to load %s: %v\n", stateFile, err)
+		fmt.Fprintf(os.Stderr, "failed to load %s: %v\n", c.stateFile, err)
 		return 1
 	}
 	var buf []byte
