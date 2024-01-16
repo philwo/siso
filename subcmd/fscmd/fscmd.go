@@ -29,6 +29,7 @@ func Cmd(authOpts cred.Options) *subcommands.Command {
 					Name:  "siso fs",
 					Title: "tool to access siso hashfs data",
 					Commands: []*subcommands.Command{
+						cmdFSDiff(),
 						cmdFSExport(),
 						cmdFSImport(),
 						subcommands.CmdHelp,
