@@ -86,17 +86,9 @@ func (c *diffRun) Run(a subcommands.Application, args []string, env subcommands.
 		cur := stm[s.Name]
 		base := stBaseM[s.Name]
 
-		if entryEqual(cur, base) {
+		diff, found := checkDiff(s.Name, cur, base)
+		if !found {
 			continue
-		}
-		var diff = struct {
-			Name string    `json:"name"`
-			Cur  *pb.Entry `json:"cur"`
-			Base *pb.Entry `json:"base,omitempty"`
-		}{
-			Name: s.Name,
-			Cur:  cur,
-			Base: base,
 		}
 		buf, err := json.MarshalIndent(diff, "", " ")
 		if err != nil {
@@ -108,22 +100,44 @@ func (c *diffRun) Run(a subcommands.Application, args []string, env subcommands.
 	return 0
 }
 
-func entryEqual(a, b *pb.Entry) bool {
-	// a never nil
-	if b == nil {
-		return false
+type entryDiff struct {
+	Name     string    `json:"name"`
+	DiffType string    `json:"diff_type"`
+	Cur      *pb.Entry `json:"cur"`
+	Base     *pb.Entry `json:"base,omitempty"`
+}
+
+func checkDiff(name string, cur, base *pb.Entry) (entryDiff, bool) {
+	var diffType string
+	switch {
+	case proto.Equal(cur, base):
+		return entryDiff{}, false
+		// cur should not be nil.
+	case base == nil:
+		diffType = "new"
+	case !proto.Equal(cur.Digest, base.Digest):
+		diffType = "content_modified"
+	case cur.IsExecutable != base.IsExecutable:
+		diffType = "mode_modified"
+	case cur.Target != base.Target:
+		diffType = "symlink_modified"
+
+		// followings will be restattable?
+	case !bytes.Equal(cur.CmdHash, base.CmdHash):
+		diffType = "cmdline_modified"
+	case !proto.Equal(cur.Action, base.Action):
+		diffType = "action_modified"
+	case cur.Id.GetModTime() != base.Id.GetModTime():
+		diffType = "mtime_modified"
+	case cur.UpdatedTime != base.UpdatedTime:
+		diffType = "clean_updated"
+	default:
+		diffType = "unknown"
 	}
-	if !proto.Equal(a.Digest, b.Digest) {
-		return false
-	}
-	if a.IsExecutable != b.IsExecutable {
-		return false
-	}
-	if a.Target != b.Target {
-		return false
-	}
-	if !bytes.Equal(a.CmdHash, b.CmdHash) {
-		return false
-	}
-	return proto.Equal(a.Action, b.Action)
+	return entryDiff{
+		Name:     name,
+		DiffType: diffType,
+		Cur:      cur,
+		Base:     base,
+	}, true
 }
