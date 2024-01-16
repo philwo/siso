@@ -560,6 +560,7 @@ func (c *Cmd) commandDigest(ctx context.Context, ds *digest.Store) (digest.Diges
 		}
 		outs = append(outs, filepath.ToSlash(rout))
 	}
+	sort.Strings(outs)
 	args, err := c.RemoteArgs()
 	if err != nil {
 		return digest.Digest{}, err
