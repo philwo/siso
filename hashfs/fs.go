@@ -138,6 +138,9 @@ func (hfs *HashFS) Close(ctx context.Context) error {
 	err := Save(ctx, hfs.opt.StateFile, hfs.State(ctx))
 	if err != nil {
 		clog.Errorf(ctx, "Failed to save fs state in %s: %v", hfs.opt.StateFile, err)
+		if rerr := os.Remove(hfs.opt.StateFile); rerr != nil && !errors.Is(rerr, fs.ErrNotExist) {
+			clog.Errorf(ctx, "Failed to remove stale fs state %s: %v", hfs.opt.StateFile, err)
+		}
 		return err
 	}
 	clog.Infof(ctx, "Saved fs state in %s", hfs.opt.StateFile)
