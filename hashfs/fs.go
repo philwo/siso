@@ -616,6 +616,7 @@ func (hfs *HashFS) Forget(ctx context.Context, root string, inputs []string) {
 }
 
 // Entries gets merkletree entries for inputs at root.
+// it won't return entries symlink escaped from root.
 func (hfs *HashFS) Entries(ctx context.Context, root string, inputs []string) ([]merkletree.Entry, error) {
 	ctx, span := trace.NewSpan(ctx, "fs-entries")
 	defer span.Close(nil)
@@ -685,7 +686,11 @@ func (hfs *HashFS) Entries(ctx context.Context, root string, inputs []string) ([
 			name := filepath.Join(root, fname)
 			elink := e
 			for j := 0; j < maxSymlinks; j++ {
-				tname = filepath.Join(filepath.Dir(name), elink.target)
+				if filepath.IsAbs(elink.target) {
+					tname = elink.target
+				} else {
+					tname = filepath.Join(filepath.Dir(name), elink.target)
+				}
 				if log.V(1) {
 					clog.Infof(ctx, "symlink %s -> %s", name, tname)
 				}
@@ -723,7 +728,7 @@ func (hfs *HashFS) Entries(ctx context.Context, root string, inputs []string) ([
 				clog.Infof(ctx, "resolve symlink %s to %s", fname, name)
 				target = elink.target
 				hfs.digester.compute(ctx, name, elink)
-				d := e.digest()
+				d := elink.digest()
 				data = digest.NewData(elink.src, d)
 				isExecutable = elink.mode&0111 != 0
 			}

@@ -2014,3 +2014,106 @@ func TestRemoveFlush(t *testing.T) {
 		})
 	}
 }
+
+func TestEntries_EscapedSymlink(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skipf("no symlink on windows")
+	}
+	ctx := context.Background()
+	execRoot := t.TempDir()
+	extDir := t.TempDir()
+	extRel, err := filepath.Rel(execRoot, extDir)
+	if err != nil || filepath.IsLocal(extRel) {
+		t.Fatalf("extDir %q is not out of execRoot %q: rel=%s, %v", extDir, execRoot, extRel, err)
+	}
+	t.Logf("execRoot=%s extDir=%s extRel=%s", execRoot, extDir, extRel)
+
+	hashFS, err := hashfs.New(ctx, hashfs.Option{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		err := hashFS.Close(ctx)
+		if err != nil {
+			t.Error(err)
+		}
+	}()
+
+	createFile := func(root, name, data string) merkletree.Entry {
+		err := hashFS.WriteFile(ctx, root, name, []byte(data), false, time.Now(), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ents, err := hashFS.Entries(ctx, root, []string{name})
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Logf("%s/%s=%s", root, name, ents[0].Data.Digest())
+		return ents[0]
+	}
+	createSymlink := func(root, name, target string) {
+		err := hashFS.Symlink(ctx, root, target, name, time.Now(), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	entMap := make(map[string]merkletree.Entry)
+
+	entMap["/ext/file"] = createFile(extDir, "file", "/ext/file")
+	entMap["/ext/subdir/file"] = createFile(extDir, "subdir/file", "/ext/subdir/file")
+	createSymlink(execRoot, "absEscapedSymlink", filepath.Join(extDir, "file"))
+	createSymlink(execRoot, "absEscapedSymlinkDir", extDir)
+	createSymlink(execRoot, "escapedSymlink", filepath.Join(extRel, "file"))
+	createSymlink(execRoot, "escapedSymlinkDir", extRel)
+
+	entMap["file"] = createFile(execRoot, "file", "file")
+	createSymlink(execRoot, "localSymlink", "file")
+	entMap["subdir/file"] = createFile(execRoot, "subdir/file", "subdir/file")
+	createSymlink(execRoot, "subdir/localSymlink", "../file")
+
+	ents, err := hashFS.Entries(ctx, execRoot, []string{
+		"absEscapedSymlink",
+		"absEscapedSymlinkDir",
+		"absEscapedSymlinkDir/file",
+		"absEscapedSymlinkDir/subdir/file",
+		"escapedSymlink",
+		"escapedSymlinkDir",
+		"escapedSymlinkDir/file",
+		"escapedSymlinkDir/subdir/file",
+		"file",
+		"localSymlink",
+		"subdir/file",
+		"subdir/localSymlink",
+	})
+	if err != nil {
+		t.Fatalf("hashFS.Entries()=%v; want nil err", err)
+	}
+
+	entForPath := func(key, name string) merkletree.Entry {
+		ent := entMap[key]
+		ent.Name = name
+		return ent
+	}
+
+	want := []merkletree.Entry{
+		entForPath("/ext/file", "absEscapedSymlink"),
+		{Name: "absEscapedSymlinkDir"},
+		entForPath("/ext/file", "absEscapedSymlinkDir/file"),
+		entForPath("/ext/subdir/file", "absEscapedSymlinkDir/subdir/file"),
+		entForPath("/ext/file", "escapedSymlink"),
+		{Name: "escapedSymlinkDir"},
+		entForPath("/ext/file", "escapedSymlinkDir/file"),
+		entForPath("/ext/subdir/file", "escapedSymlinkDir/subdir/file"),
+		entForPath("file", "file"),
+		{Name: "localSymlink", Target: "file"},
+		entForPath("subdir/file", "subdir/file"),
+		{Name: "subdir/localSymlink", Target: "../file"},
+	}
+
+	if diff := cmp.Diff(want, ents, cmp.Transformer("digest", func(d digest.Data) digest.Digest {
+		return d.Digest()
+	})); diff != "" {
+		t.Errorf("inputRoot: -want +got:\n%s", diff)
+	}
+}
