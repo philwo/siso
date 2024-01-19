@@ -244,3 +244,147 @@ func TestBuild_Restat(t *testing.T) {
 
 	}()
 }
+
+// Test restat=1 behavior for multiple output.
+// some output may keep mtime, but some output was updated.
+func TestBuild_RestatMultiout(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+
+	exists := func(fname string) error {
+		_, err := os.Stat(filepath.Join(dir, "out/siso", fname))
+		return err
+	}
+
+	hashfsOpts := hashfs.Option{
+		StateFile: ".siso_fs_state",
+	}
+
+	func() {
+		t.Logf("first build")
+		setupFiles(t, dir, t.Name(), nil)
+		opt, graph, cleanup := setupBuild(ctx, t, dir, hashfsOpts)
+		defer cleanup()
+
+		b, err := build.New(ctx, graph, opt)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() {
+			err := b.Close()
+			if err != nil {
+				t.Errorf("b.Close()=%v", err)
+			}
+		}()
+		err = b.Build(ctx, "build", "all")
+		if err != nil {
+			t.Fatalf(`b.Build(ctx, "build", "all")=%v; want nil err`, err)
+		}
+		if err := exists("foo.out"); err != nil {
+			t.Errorf("foo.out doesn't exist: %v", err)
+		}
+		if err := exists("foo.out2"); err != nil {
+			t.Errorf("foo.out2 doesn't exist: %v", err)
+		}
+		if err := exists("bar.out"); err != nil {
+			t.Errorf("bar.out doesn't exist: %v", err)
+		}
+	}()
+
+	st, err := hashfs.Load(ctx, filepath.Join(dir, "out/siso/.siso_fs_state"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	stmap := hashfs.StateMap(st)
+
+	touch := func(fname string) {
+		t.Logf("touch %s", fname)
+		t.Helper()
+		fullname := filepath.Join(dir, fname)
+		fi, err := os.Stat(fullname)
+		if errors.Is(err, fs.ErrNotExist) {
+			err = os.WriteFile(fullname, nil, 0644)
+			if err != nil {
+				t.Fatal(err)
+			}
+		} else if err != nil {
+			t.Fatal(err)
+		}
+		for {
+			err = os.Chtimes(fullname, time.Now(), time.Now())
+			if err != nil {
+				t.Fatal(err)
+			}
+			nfi, err := os.Stat(fullname)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if fi.ModTime().Equal(nfi.ModTime()) {
+				time.Sleep(1 * time.Millisecond)
+				continue
+			}
+			return
+		}
+	}
+
+	touch("base/foo.in")
+
+	func() {
+		t.Logf("second build. touch base/foo.in, expect only foo.out2 is updated and bar.out is updated")
+		opt, graph, cleanup := setupBuild(ctx, t, dir, hashfsOpts)
+		defer cleanup()
+		b, err := build.New(ctx, graph, opt)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() {
+			err := b.Close()
+			if err != nil {
+				t.Errorf("b.Close()=%v", err)
+			}
+		}()
+
+		err = b.Build(ctx, "build", "all")
+		if err != nil {
+			t.Fatalf(`b.Build(ctx, "build", "all")=%v; want nil err`, err)
+		}
+		stat := b.Stats()
+		if stat.Skipped != 1 { // all(phony)
+			t.Errorf("Skipped=%d; want 1", stat.Skipped)
+		}
+	}()
+
+	nst, err := hashfs.Load(ctx, filepath.Join(dir, "out/siso/.siso_fs_state"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	nstmap := hashfs.StateMap(nst)
+
+	fname := filepath.Join(dir, "out/siso/foo.out")
+	first := stmap[fname]
+	second := nstmap[fname]
+	if x, y := first.GetId().GetModTime(), second.GetId().GetModTime(); x == y {
+		t.Errorf("foo.out mtime %d; want not %d", x, y)
+	}
+	if x, y := first.GetUpdatedTime(), second.GetUpdatedTime(); x >= y {
+		t.Errorf("foo.out updated time %d; want < %d", x, y)
+	}
+	fname = filepath.Join(dir, "out/siso/foo.out2")
+	first = stmap[fname]
+	second = nstmap[fname]
+	if x, y := first.GetId().GetModTime(), second.GetId().GetModTime(); x >= y {
+		t.Errorf("foo.out2 mtime %d; want < %d", x, y)
+	}
+	if x, y := first.GetUpdatedTime(), second.GetUpdatedTime(); x >= y {
+		t.Errorf("foo.out2 updated time %d; want < %d", x, y)
+	}
+	fname = filepath.Join(dir, "out/siso/bar.out")
+	first = stmap[fname]
+	second = nstmap[fname]
+	if x, y := first.GetId().GetModTime(), second.GetId().GetModTime(); x >= y {
+		t.Errorf("bar.out mtime %d; want < %d", x, y)
+	}
+	if x, y := first.GetUpdatedTime(), second.GetUpdatedTime(); x >= y {
+		t.Errorf("bar.out updated time %d; want < %d", x, y)
+	}
+}
