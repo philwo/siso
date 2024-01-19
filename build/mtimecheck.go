@@ -36,15 +36,14 @@ func (b *Builder) checkUpToDate(ctx context.Context, stepDef StepDef, outputs []
 
 	outname := b.path.MaybeToWD(out0)
 	lastInName := b.path.MaybeToWD(lastIn)
-	if errors.Is(err, errDirty) {
+	if err != nil {
 		clog.Infof(ctx, "need %v", err)
-		span.SetAttr("run-reason", "dirty")
-		fmt.Fprintf(b.explainWriter, "deps for %s is dirty: %v\n", outname, err)
-	} else if err != nil {
-		// missing inputs in deps file? maybe need to rebuild.
-		clog.Infof(ctx, "need: %v", err)
-		span.SetAttr("run-reason", "missing-inputs")
-		fmt.Fprintf(b.explainWriter, "deps for %s is missing: %v\n", outname, err)
+		reason := "missing-inputs"
+		if errors.Is(err, errDirty) {
+			reason = "dirty"
+		}
+		span.SetAttr("run-reason", reason)
+		fmt.Fprintf(b.explainWriter, "deps for %s is %s: %v\n", outname, reason, err)
 		return false
 	}
 	if outmtime.IsZero() {
