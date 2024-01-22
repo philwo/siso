@@ -213,21 +213,21 @@ type LocalFileSource struct {
 }
 
 type localFile struct {
-	*os.File
-	m *iometrics.IOMetrics
-	n int
+	file *os.File
+	m    *iometrics.IOMetrics
+	n    int
 }
 
 // Read reads the content of the local file.
 func (f *localFile) Read(buf []byte) (int, error) {
-	n, err := f.File.Read(buf)
+	n, err := f.file.Read(buf)
 	f.n += n
 	return n, err
 }
 
 // Close closes the local file.
 func (f *localFile) Close() error {
-	err := f.File.Close()
+	err := f.file.Close()
 	if f.m != nil {
 		f.m.ReadDone(f.n, err)
 	}
@@ -237,7 +237,7 @@ func (f *localFile) Close() error {
 // Open opens local file.
 func (s LocalFileSource) Open(ctx context.Context) (io.ReadCloser, error) {
 	r, err := os.Open(s.Fname)
-	return &localFile{File: r, m: s.IOMetrics}, err
+	return &localFile{file: r, m: s.IOMetrics}, err
 }
 
 // String returns the source name with "file://" prefix.
