@@ -143,18 +143,15 @@ func (r *Rule) hasBinding(key string) bool {
 }
 
 // BindingEnv is an implementation of the Env interface which holds mappings of
-// binding names to values, mappings of rule names to rules (which also hold
-// bindings), and a pointer to a parent BindingEnv.
+// binding names to values, and a pointer to a parent BindingEnv.
 // TODO(b/267409605): Add tests for BindingEnv methods.
 type BindingEnv struct {
-	rules    map[string]*Rule
 	bindings map[string]string
 	parent   *BindingEnv
 }
 
 func newBindingEnv(parent *BindingEnv) *BindingEnv {
 	return &BindingEnv{
-		rules:    make(map[string]*Rule),
 		bindings: make(map[string]string),
 		parent:   parent,
 	}
@@ -170,28 +167,6 @@ func (b *BindingEnv) Lookup(key string) string {
 		return b.parent.Lookup(key)
 	}
 	return ""
-}
-
-func (b *BindingEnv) addRule(rule *Rule) {
-	b.rules[rule.Name()] = rule
-}
-
-// LookupRule looks up rules in the binding env.
-func (b *BindingEnv) LookupRule(ruleName string) (*Rule, bool) {
-	r, ok := b.rules[ruleName]
-	if ok {
-		return r, true
-	}
-	if b.parent != nil {
-		return b.parent.LookupRule(ruleName)
-	}
-	return nil, false
-}
-
-// LookupRuleCurrentScope looks up rules in the current scope in the binding env.
-func (b *BindingEnv) LookupRuleCurrentScope(ruleName string) (*Rule, bool) {
-	r, ok := b.rules[ruleName]
-	return r, ok
 }
 
 // AddBinding adds binding to the binding env.
@@ -212,4 +187,39 @@ func (b *BindingEnv) LookupWithFallback(key string, v EvalString, env Env) strin
 		return b.parent.Lookup(key)
 	}
 	return ""
+}
+
+// ruleBinding is a mappings of rule names to rules.
+type ruleBinding struct {
+	rules  map[string]*Rule
+	parent *ruleBinding
+}
+
+func newRuleBinding(parent *ruleBinding) *ruleBinding {
+	return &ruleBinding{
+		rules:  make(map[string]*Rule),
+		parent: parent,
+	}
+}
+
+func (b *ruleBinding) addRule(rule *Rule) {
+	b.rules[rule.Name()] = rule
+}
+
+// lookupRule looks up rules in the binding env.
+func (b *ruleBinding) lookupRule(ruleName string) (*Rule, bool) {
+	r, ok := b.rules[ruleName]
+	if ok {
+		return r, true
+	}
+	if b.parent != nil {
+		return b.parent.lookupRule(ruleName)
+	}
+	return nil, false
+}
+
+// lookupRuleCurrentScope looks up rules in the current scope in the binding env.
+func (b *ruleBinding) lookupRuleCurrentScope(ruleName string) (*Rule, bool) {
+	r, ok := b.rules[ruleName]
+	return r, ok
 }

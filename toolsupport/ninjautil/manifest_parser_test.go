@@ -34,9 +34,9 @@ build result: cat in_1.cc in-2.O
 	if err != nil {
 		t.Errorf("parse %v", err)
 	}
-	rule, ok := state.bindings.rules["cat"]
+	rule, ok := p.rules.rules["cat"]
 	if !ok {
-		t.Errorf("missing cat rule %v", state.bindings.rules)
+		t.Errorf("missing cat rule %v", p.rules.rules)
 	}
 	if rule.Name() != "cat" {
 		t.Errorf("rule.Name=%q; want=%q", rule.Name(), "cat")
@@ -49,9 +49,9 @@ build result: cat in_1.cc in-2.O
 	if cmd.String() != want {
 		t.Errorf("rule cat command=%q; want=%q", cmd, want)
 	}
-	rule, ok = state.bindings.rules["date"]
+	rule, ok = p.rules.rules["date"]
 	if !ok {
-		t.Errorf("missing date rule %v", state.bindings.rules)
+		t.Errorf("missing date rule %v", p.rules.rules)
 	}
 	if rule.Name() != "date" {
 		t.Errorf("rule.Name=%q; want=%q", rule.Name(), "date")

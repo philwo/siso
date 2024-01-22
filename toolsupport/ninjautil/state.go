@@ -60,7 +60,6 @@ type State struct {
 // NewState creates new state.
 func NewState() *State {
 	bindings := newBindingEnv(nil)
-	bindings.addRule(phonyRule)
 	return &State{
 		pools: map[string]*Pool{
 			"":        defaultPool,

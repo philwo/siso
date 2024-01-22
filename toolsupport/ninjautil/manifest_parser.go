@@ -25,15 +25,21 @@ type ManifestParser struct {
 	state *State
 	// Shortcut for state.bindings.
 	env *BindingEnv
+
+	// current rule bindings
+	rules *ruleBinding
 	// Lexer instance used to parse the .ninja file.
 	lexer *lexer
 }
 
 // NewManifestParser creates a new manifest parser.
 func NewManifestParser(state *State) *ManifestParser {
+	rules := newRuleBinding(nil)
+	rules.addRule(phonyRule)
 	return &ManifestParser{
 		state: state,
 		env:   state.bindings,
+		rules: rules,
 	}
 }
 
@@ -215,7 +221,7 @@ func (p *ManifestParser) parseEdge() error {
 	if err != nil {
 		return p.lexer.errorf("expected build command name: %v", err)
 	}
-	rule, ok := p.env.LookupRule(ruleName.String())
+	rule, ok := p.rules.lookupRule(ruleName.String())
 	if !ok {
 		return p.lexer.errorf("unknown build rule %s", ruleName)
 	}
@@ -335,7 +341,7 @@ func (p *ManifestParser) parseRule() error {
 	if err != nil {
 		return err
 	}
-	_, found := p.env.LookupRuleCurrentScope(name.String())
+	_, found := p.rules.lookupRuleCurrentScope(name.String())
 	if found {
 		return p.lexer.errorf("duplicate rule %q", name)
 	}
@@ -354,7 +360,7 @@ func (p *ManifestParser) parseRule() error {
 	if !rule.hasBinding("command") {
 		return p.lexer.errorf("expected 'command =' line")
 	}
-	p.env.addRule(rule)
+	p.rules.addRule(rule)
 	return nil
 }
 
@@ -418,9 +424,11 @@ func (p *ManifestParser) parseFileInclude(ctx context.Context, newScope bool) er
 	subparser := NewManifestParser(p.state)
 	if newScope {
 		subparser.env = newBindingEnv(p.env)
+		subparser.rules = newRuleBinding(p.rules)
 		op = "subninja"
 	} else {
 		subparser.env = p.env
+		subparser.rules = p.rules
 	}
 
 	select {
