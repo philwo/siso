@@ -45,7 +45,6 @@ func (n *Node) InEdge() (*Edge, bool) {
 type Edge struct {
 	rule *Rule
 
-	// For now, setting pool doesn't affect Siso builds as all because Siso utilizes remote computation resources.
 	pool    *Pool
 	env     *BindingEnv
 	inputs  []*Node
