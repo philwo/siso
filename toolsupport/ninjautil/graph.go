@@ -94,7 +94,7 @@ func (e *edgeEnv) Lookup(key string) string {
 		e.lookups = append(e.lookups, key)
 	}
 	e.recursive = true
-	return e.edge.env.LookupWithFallback(key, val, e)
+	return e.edge.env.lookupWithFallback(key, val, e)
 }
 
 func (e *edgeEnv) pathList(paths []*Node, sep string) string {

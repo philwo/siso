@@ -92,7 +92,7 @@ func (p *ManifestParser) parse(ctx context.Context, l *lexer) error {
 			}
 			val := string(letval.Evaluate(p.env))
 			// TODO(ukai): check ninja version if name == "ninja_required_version"
-			p.env.AddBinding(name, val)
+			p.env.addBinding(name, val)
 		case tokenInclude:
 			err := p.parseFileInclude(ctx, false)
 			if err != nil {
@@ -287,7 +287,7 @@ func (p *ManifestParser) parseEdge() error {
 		if err != nil {
 			return err
 		}
-		env.AddBinding(key, string(val.Evaluate(env)))
+		env.addBinding(key, string(val.Evaluate(env)))
 		hasIndent = p.lexer.Peek(tokenIndent{})
 	}
 
@@ -352,7 +352,7 @@ func (p *ManifestParser) parseRule() error {
 			return err
 		}
 		// TODO(ukai): check reserved binding?
-		rule.AddBinding(key, value)
+		rule.addBinding(key, value)
 	}
 	if rule.hasBinding("rspfile") != rule.hasBinding("rspfile_content") {
 		return p.lexer.errorf("rspfile and rspfile_content need to be both specified")

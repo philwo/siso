@@ -126,8 +126,8 @@ func newRule(name string) *Rule {
 // Name returns rule's name.
 func (r *Rule) Name() string { return r.name }
 
-// AddBinding adds bindings to the rule.
-func (r *Rule) AddBinding(key string, val EvalString) {
+// addBinding adds bindings to the rule.
+func (r *Rule) addBinding(key string, val EvalString) {
 	r.bindings[key] = val
 }
 
@@ -169,13 +169,13 @@ func (b *BindingEnv) Lookup(key string) string {
 	return ""
 }
 
-// AddBinding adds binding to the binding env.
-func (b *BindingEnv) AddBinding(key, val string) {
+// addBinding adds binding to the binding env.
+func (b *BindingEnv) addBinding(key, val string) {
 	b.bindings[key] = val
 }
 
-// LookupWithFallback looks up binding env and fallback to v in env if not found.
-func (b *BindingEnv) LookupWithFallback(key string, v EvalString, env Env) string {
+// lookupWithFallback looks up binding env and fallback to v in env if not found.
+func (b *BindingEnv) lookupWithFallback(key string, v EvalString, env Env) string {
 	val, ok := b.bindings[key]
 	if ok {
 		return val

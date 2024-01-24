@@ -101,8 +101,8 @@ func (s *State) addEdge(rule *Rule) *Edge {
 	return edge
 }
 
-// Node returns a node.
-func (s *State) Node(path []byte) *Node {
+// node returns a node.
+func (s *State) node(path []byte) *Node {
 	n, ok := s.paths[string(path)]
 	if ok {
 		return n
@@ -125,14 +125,14 @@ func (s *State) LookupNode(path string) (*Node, bool) {
 }
 
 func (s *State) addIn(edge *Edge, path []byte) {
-	n := s.Node(path)
+	n := s.node(path)
 	edge.inputs = append(edge.inputs, n)
 	n.addOutEdge(edge)
 }
 
 func (s *State) addOut(edge *Edge, path []byte) bool {
 	// Nodes can only have one incoming edge
-	n := s.Node(path)
+	n := s.node(path)
 	if n.hasInEdge() {
 		return false
 	}
@@ -189,7 +189,7 @@ func (s *State) PhonyNodes() []*Node {
 
 // AddBinding adds bindings.
 func (s *State) AddBinding(name, value string) {
-	s.bindings.AddBinding(name, value)
+	s.bindings.addBinding(name, value)
 }
 
 // LookupBinding looks up binding.
