@@ -324,7 +324,7 @@ func (g *Graph) initGlobals(ctx context.Context) {
 				pref:   0,
 			}
 
-			rule := ne.Rule().Name()
+			rule := ne.RuleName()
 			pref := rulePref(rule)
 			for _, cn := range ne.Ins() {
 				ce, ok := cn.InEdge()

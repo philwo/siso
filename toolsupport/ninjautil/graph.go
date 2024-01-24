@@ -43,7 +43,7 @@ func (n *Node) InEdge() (*Edge, bool) {
 // Edge represents an edge (action) in build graph.
 // TODO(b/267409605): Add tests for Edge methods.
 type Edge struct {
-	rule *Rule
+	rule *rule
 
 	pool    *Pool
 	env     *BindingEnv
@@ -150,9 +150,9 @@ func (e *Edge) RawBinding(name string) string {
 	return val.RawString()
 }
 
-// Rule returns a rule of the edge.
-func (e *Edge) Rule() *Rule {
-	return e.rule
+// RuleName returns a rule name used by the edge.
+func (e *Edge) RuleName() string {
+	return e.rule.Name()
 }
 
 // Pool returns a pool associated to the edge.

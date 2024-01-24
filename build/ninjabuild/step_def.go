@@ -139,7 +139,7 @@ func (s *StepDef) RuleName() string {
 
 // ActionName returns action name of the step.
 func (s *StepDef) ActionName() string {
-	return s.edge.Rule().Name()
+	return s.edge.RuleName()
 }
 
 // Args returns command line arguments of the step.
@@ -735,7 +735,7 @@ func (s *StepDef) ExpandedInputs(ctx context.Context) []string {
 // appendIndirectInputs appends indirect inputs edge into inputs that matches with filter function, and updates seen.
 func (s *StepDef) appendIndirectInputs(ctx context.Context, filter func(context.Context, string, bool) bool, edge *ninjautil.Edge, inputs []string, seen map[string]bool) []string {
 
-	edgeName := edge.Rule().Name()
+	edgeName := edge.RuleName()
 	globals := s.globals
 	// allow to use outputs of the edge.
 	for _, out := range edge.Outputs() {

@@ -346,7 +346,7 @@ func (sc StepConfig) Lookup(ctx context.Context, bpath *build.Path, edge *ninjau
 		out = bpath.MaybeFromWD(edge.Outputs()[0].Path())
 		outConfig = toConfigPath(bpath, out)
 	}
-	actionName := edge.Rule().Name()
+	actionName := edge.RuleName()
 	command := edge.RawBinding("command")
 	args0, args, ok := strings.Cut(command, " ")
 	// ptyhon3.exe may be absolute path in depot_tools, but

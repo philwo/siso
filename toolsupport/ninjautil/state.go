@@ -91,7 +91,7 @@ func (s *State) Pools() map[string]*Pool {
 	return m
 }
 
-func (s *State) addEdge(rule *Rule) *Edge {
+func (s *State) addEdge(rule *rule) *Edge {
 	edge := &Edge{
 		rule: rule,
 		pool: defaultPool,
