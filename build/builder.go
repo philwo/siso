@@ -547,7 +547,8 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 	}
 
 	var wg sync.WaitGroup
-	var errs []error
+	var nerrs int
+	var stuck bool
 	errch := make(chan error, 1000)
 
 loop:
@@ -578,20 +579,19 @@ loop:
 			if err != nil {
 				clog.Infof(ctx, "err from errch: %v", err)
 				if !errors.Is(err, context.Canceled) {
-					errs = append(errs, err)
+					nerrs++
 				}
 			}
 			numServs := b.stepSema.NumServs()
 			hasReady := b.plan.hasReady()
 			// no active steps and no ready steps?
-			stuck := numServs == 0 && !hasReady
-			if stuck && len(errs) > 0 {
-				errs = append([]error{errors.New("cannot make progress due to previous errors")}, errs...)
+			if !stuck {
+				stuck = numServs == 0 && !hasReady
 			}
 			if log.V(1) {
-				clog.Infof(ctx, "errs=%d numServs=%d hasReady=%t stuck=%t", len(errs), numServs, hasReady, stuck)
+				clog.Infof(ctx, "errs=%d numServs=%d hasReady=%t stuck=%t", nerrs, numServs, hasReady, stuck)
 			}
-			if len(errs) >= b.failuresAllowed || stuck {
+			if nerrs >= b.failuresAllowed || stuck {
 				cancel()
 				break loop
 			}
@@ -638,14 +638,25 @@ loop:
 	errdone := make(chan error)
 	go func() {
 		for e := range errch {
-			if len(errs) >= b.failuresAllowed {
+			if nerrs >= b.failuresAllowed {
 				continue
 			}
 			if e != nil && !errors.Is(e, context.Canceled) {
-				errs = append(errs, e)
+				nerrs++
 			}
 		}
-		errdone <- errors.Join(errs...)
+		// step error is already reported in run_step.
+		// report errStuck if it coulddn't progress.
+		// otherwise, report just number of errors.
+		if nerrs == 0 {
+			errdone <- nil
+			return
+		}
+		if stuck {
+			errdone <- fmt.Errorf("cannot make progress due to previous %d errors", nerrs)
+			return
+		}
+		errdone <- fmt.Errorf("%d steps failed", nerrs)
 	}()
 	wg.Wait()
 	close(errch)
