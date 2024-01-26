@@ -615,6 +615,24 @@ func (hfs *HashFS) Forget(ctx context.Context, root string, inputs []string) {
 	}
 }
 
+// ForgetMissings forgets cached entry for input under root
+// if it doesn't exist on local disk, and returns valid inputs.
+func (hfs *HashFS) ForgetMissings(ctx context.Context, root string, inputs []string) []string {
+	availables := make([]string, 0, len(inputs))
+	for _, fname := range inputs {
+		fullname := filepath.Join(root, fname)
+		fullname = filepath.ToSlash(fullname)
+		_, err := os.Lstat(fullname)
+		if errors.Is(err, fs.ErrNotExist) {
+			clog.Infof(ctx, "forget missing %s", fullname)
+			hfs.directory.delete(ctx, fullname)
+			continue
+		}
+		availables = append(availables, fname)
+	}
+	return availables
+}
+
 // Entries gets merkletree entries for inputs at root.
 // it won't return entries symlink escaped from root.
 func (hfs *HashFS) Entries(ctx context.Context, root string, inputs []string) ([]merkletree.Entry, error) {

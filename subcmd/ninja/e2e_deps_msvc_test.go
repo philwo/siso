@@ -6,6 +6,8 @@ package ninja
 
 import (
 	"context"
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
@@ -18,6 +20,7 @@ import (
 	"infra/build/siso/execute/reproxyexec/reproxytest"
 	"infra/build/siso/hashfs"
 	"infra/build/siso/reapi"
+	"infra/build/siso/toolsupport/ninjautil"
 )
 
 func TestBuild_DepsMSVC(t *testing.T) {
@@ -299,4 +302,130 @@ func TestBuild_DepsMSVC_fastlocal(t *testing.T) {
 			t.Errorf("deps for foo.o: diff -want +got:\n%s", diff)
 		}
 	}()
+}
+
+// regression test for b/322270122
+func TestBuild_DepsMSVC_InstallerRC(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+
+	ninja := func(t *testing.T, dryRun bool) (build.Stats, error) {
+		t.Helper()
+		opt, graph, cleanup := setupBuild(ctx, t, dir, hashfs.Option{
+			StateFile: ".siso_fs_state",
+		})
+		defer cleanup()
+		opt.DryRun = dryRun
+		return runNinja(ctx, "build.ninja", graph, opt, nil, runNinjaOpts{})
+	}
+
+	deps := func(t *testing.T, output string) []string {
+		t.Helper()
+		depsLog, err := ninjautil.NewDepsLog(ctx, filepath.Join(dir, "out/siso/.siso_deps"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() {
+			if err := depsLog.Close(); err != nil {
+				t.Errorf("depsLog.Close=%v", err)
+			}
+		}()
+		deps, _, err := depsLog.Get(ctx, output)
+		if err != nil {
+			t.Fatalf("deps %s: %v", output, err)
+		}
+		return deps
+	}
+	checkFSState := func(t *testing.T, fname string) bool {
+		t.Helper()
+		st, err := hashfs.Load(ctx, filepath.Join(dir, "out/siso/.siso_fs_state"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		m := hashfs.StateMap(st)
+		_, ok := m[filepath.Join(dir, fname)]
+		return ok
+	}
+
+	setupFiles(t, dir, t.Name(), nil)
+	t.Logf("first build")
+	stats, err := ninja(t, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.Done != 6 || stats.Local != 5 {
+		t.Errorf("done=%d local=%d; want done=5 local=4", stats.Done, stats.Local)
+	}
+	got := deps(t, "gen/installer/packed_files.res")
+	want := []string{
+		filepath.ToSlash(filepath.Join(dir, "out/siso/gen/installer/foo/base.dll")),
+		filepath.ToSlash(filepath.Join(dir, "out/siso/gen/installer/bar/base.dll")),
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("deps gen/installer/packed_files.res -want +got:\n%s", diff)
+	}
+	if _, err := os.Lstat(filepath.Join(dir, "out/siso/gen/installer/foo/base.dll")); err != nil {
+		t.Errorf("stat(out/siso/gen/installer/foo/base.dll)=%v", err)
+	}
+
+	t.Logf("second build to make sure foo/base.dll captured by siso")
+	stats, err = ninja(t, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.Done != stats.Total || stats.Local != 0 || stats.Skipped != stats.Total {
+		t.Errorf("done=%d local=%d skip=%d; want done=%d local=0 skip=%d", stats.Done, stats.Local, stats.Skipped, stats.Total, stats.Total)
+	}
+	if _, err := os.Lstat(filepath.Join(dir, "out/siso/gen/installer/foo/base.dll")); err != nil {
+		t.Errorf("stat(out/siso/gen/installer/foo/base.dll)=%v", err)
+	}
+	if !checkFSState(t, "out/siso/gen/installer/foo/base.dll") {
+		t.Errorf("out/siso/gen/installer/foo/base.dll not in .siso_fs_state")
+	}
+
+	t.Logf("change build to generate different temp files")
+	err = os.Rename(filepath.Join(dir, "out/siso/build.ninja"), filepath.Join(dir, "out/siso/build.ninja.old"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = os.Rename(filepath.Join(dir, "out/siso/build.ninja.new"), filepath.Join(dir, "out/siso/build.ninja"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// foo/base.dll disappears by create_installer_archive.py
+
+	t.Logf("third build")
+	stats, err = ninja(t, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.Done != 5 || stats.Local != 3 {
+		t.Errorf("done=%d local=%d; want done=5 local=3", stats.Done, stats.Local)
+	}
+
+	got = deps(t, "gen/installer/packed_files.res")
+	// deps for foo/base.dll should be disappeared
+	want = []string{
+		filepath.ToSlash(filepath.Join(dir, "out/siso/gen/installer/bar/base.dll")),
+		"gen/installer/bar/base.dll",
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("deps gen/installer/packed_files.res -want +got:\n%s", diff)
+	}
+	if _, err := os.Lstat(filepath.Join(dir, "out/siso/gen/installer/foo/base.dll")); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("stat(out/siso/gen/installer/foo/base.dll)=%v", err)
+	}
+	if checkFSState(t, "out/siso/gen/installer/foo/base.dll") {
+		t.Errorf("out/siso/gen/installer/foo/base.dll should be removed from .siso_fs_state")
+	}
+
+	t.Logf("confirm no-op")
+	stats, err = ninja(t, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.Done != stats.Total || stats.Local != 0 || stats.Skipped != stats.Total {
+		t.Errorf("done=%d local=%d skip=%d; want done=%d local=0 skip=%d", stats.Done, stats.Local, stats.Skipped, stats.Total, stats.Total)
+	}
+
 }

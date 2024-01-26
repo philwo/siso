@@ -6,10 +6,6 @@ package build
 
 import (
 	"context"
-
-	log "github.com/golang/glog"
-
-	"infra/build/siso/o11y/clog"
 )
 
 func (b *Builder) runStrategy(ctx context.Context, step *Step) func(context.Context, *Step) error {
@@ -45,22 +41,4 @@ func (b *Builder) runLocal(ctx context.Context, step *Step) error {
 	dedupInputs(ctx, step.cmd)
 	// TODO: use local cache?
 	return b.execLocal(ctx, step)
-}
-
-func (b *Builder) fixMissingInputs(ctx context.Context, step *Step) {
-	// for reproxy and local, no need to scan deps.
-	// but need to remove missing inputs from cmd.Inputs
-	// because we'll record header inputs for deps=msvc in deps log.
-	inputs := make([]string, 0, len(step.cmd.Inputs))
-	for _, in := range step.cmd.Inputs {
-		if _, err := b.hashFS.Stat(ctx, b.path.ExecRoot, in); err == nil {
-			inputs = append(inputs, in)
-		} else if log.V(1) {
-			clog.Infof(ctx, "remove missing inputs %s: %v", in, err)
-		}
-	}
-	if len(inputs) != len(step.cmd.Inputs) {
-		clog.Infof(ctx, "deps remove missing inputs %d -> %d", len(step.cmd.Inputs), len(inputs))
-		step.cmd.Inputs = inputs
-	}
 }

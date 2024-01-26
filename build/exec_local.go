@@ -31,7 +31,6 @@ func (b *Builder) execLocal(ctx context.Context, step *Step) error {
 	// expand inputs to get full action inputs,
 	// before preparing inputs on local disk for local action.
 	depsExpandInputs(ctx, b, step)
-	b.fixMissingInputs(ctx, step)
 	err := b.prepareLocalInputs(ctx, step)
 	if err != nil && !experiments.Enabled("ignore-missing-local-inputs", "step %s missing inputs: %v", step, err) {
 		return err
@@ -134,6 +133,16 @@ func (b *Builder) prepareLocalInputs(ctx context.Context, step *Step) error {
 	}
 	err := b.hashFS.Flush(ctx, step.cmd.ExecRoot, inputs)
 	clog.Infof(ctx, "prepare-local-inputs %d %s: %v", len(inputs), time.Since(start), err)
+	// now, all inputs are expected to be on disk.
+	// for reproxy and local, no need to scan deps.
+	// but need to remove missing inputs from cmd.Inputs
+	// because we'll record header inputs for deps=msvc in deps log.
+	// we need to check this against local disk, not hashfs.
+	inputs = b.hashFS.ForgetMissings(ctx, step.cmd.ExecRoot, step.cmd.Inputs)
+	if len(inputs) != len(step.cmd.Inputs) {
+		clog.Infof(ctx, "deps remove missing inputs %d -> %d", len(step.cmd.Inputs), len(inputs))
+		step.cmd.Inputs = inputs
+	}
 	return err
 }
 
