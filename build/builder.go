@@ -139,6 +139,9 @@ type Builder struct {
 	plan  *plan
 	stats *stats
 
+	// record dirty phony targets.
+	dirtyPhony sync.Map
+
 	stepSema *semaphore.Semaphore
 
 	preprocSema *semaphore.Semaphore

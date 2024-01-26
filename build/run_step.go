@@ -93,7 +93,7 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 		step.cmd = nil
 	}(span)
 
-	if step.def.IsPhony() || b.checkUpToDate(ctx, step.def, step.outputs) {
+	if !b.needToRun(ctx, step.def, step.outputs) {
 		step.metrics.skip = true
 		b.plan.done(ctx, step)
 		b.stats.update(ctx, &step.metrics, true)

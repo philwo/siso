@@ -18,6 +18,28 @@ import (
 	"infra/build/siso/o11y/trace"
 )
 
+// needToRun checks whether step needs to run or not.
+func (b *Builder) needToRun(ctx context.Context, stepDef StepDef, outputs []Target) bool {
+	if stepDef.IsPhony() {
+		_, _, err := inputMtime(ctx, b, stepDef)
+		if errors.Is(err, errDirty) {
+			// if phony's inputs are dirty, mark this phony's output as dirty.
+			for _, out := range outputs {
+				outpath, err := b.graph.TargetPath(out)
+				if err != nil {
+					clog.Warningf(ctx, "failed to get targetpath for %v: %v", out, err)
+					continue
+				}
+				b.dirtyPhony.Store(outpath, true)
+				clog.Infof(ctx, "phony output %s dirty", outpath)
+			}
+		}
+		// nothing to run for phony target.
+		return false
+	}
+	return !b.checkUpToDate(ctx, stepDef, outputs)
+}
+
 // checkUpToDate returns true if outputs are already up-to-date and
 // no need to run command.
 func (b *Builder) checkUpToDate(ctx context.Context, stepDef StepDef, outputs []Target) bool {
@@ -196,6 +218,9 @@ func inputMtime(ctx context.Context, b *Builder, stepDef StepDef) (string, time.
 		return "", inmtime, fmt.Errorf("failed to load deps: %w", err)
 	}
 	for _, in := range ins {
+		if _, ok := b.dirtyPhony.Load(in); ok {
+			return "", inmtime, fmt.Errorf("input %s (phony): %w", in, errDirty)
+		}
 		fi, err := b.hashFS.Stat(ctx, b.path.ExecRoot, in)
 		if err != nil {
 			return "", inmtime, fmt.Errorf("missing input %s: %w", in, err)
