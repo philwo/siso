@@ -16,7 +16,7 @@ func Split(cmdline string) ([]string, error) {
 	var args []string
 	sb := bytes.NewBuffer(make([]byte, 0, len(cmdline)))
 	escaped := false
-	inquote := false
+	var qch rune // 0, '"', '\''
 	inspace := false
 	si := 0
 	for i, ch := range cmdline {
@@ -26,13 +26,10 @@ func Split(cmdline string) ([]string, error) {
 			si = i + 1
 			continue
 		}
-		if inquote {
-			switch ch {
-			case '"':
-				inquote = false
-				si = i + 1
-				continue
-			default:
+		if qch != 0 {
+			if qch == ch {
+				qch = 0
+			} else {
 				sb.WriteRune(ch)
 			}
 			si = i + 1
@@ -47,12 +44,12 @@ func Split(cmdline string) ([]string, error) {
 			escaped = true
 			si = i + 1
 			continue
-		case '"':
+		case '"', '\'':
 			if si < i {
 				sb.WriteString(cmdline[si:i])
 			}
 			inspace = false
-			inquote = true
+			qch = ch
 			si = i + 1
 			continue
 		case ' ':
@@ -71,7 +68,7 @@ func Split(cmdline string) ([]string, error) {
 			si = i + 1
 			args = append(args, arg)
 			continue
-		case ';', '&', '|', '<', '>', '$', '#', '`', '\'':
+		case ';', '&', '|', '<', '>', '$', '#', '`':
 			return nil, fmt.Errorf("failed to split: cmdline contains shell metachar %c", ch)
 		default:
 			if !inspace && sb.Len() > 0 {

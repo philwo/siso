@@ -62,6 +62,27 @@ func TestSplit(t *testing.T) {
 				"obj/third_party/abseil/abseil/ostringstream.o",
 			},
 		},
+		{
+			cmdline: `python3 ../../build/toolchain/clang_code_coverage_wrapper.py --files-to-instrument=../../.code-coverage/files_to_instrument.txt --target-os=mac ../../third_party/llvm-build/Release+Asserts/bin/clang -MMD -MF 'clang_arm64_v8_x64/obj/third_party/xnnpack/amalgam_arch=armv8.2-a+i8mm+fp16/neoni8mm.o'.d -DDCHECK_ALWAYS_ON=1 -D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_EXTENSIVE -DCR_XCODE_VERSION=1500 -DCR_CLANG_REVISION=\"llvmorg-18-init-16072-gc4146121e940-5\" -c ../../third_party/xnnpack/src/src/amalgam/gen/neoni8mm.c -o 'clang_arm64_v8_x64/obj/third_party/xnnpack/amalgam_arch=armv8.2-a+i8mm+fp16/neoni8mm.o'`,
+			want: []string{
+				"python3",
+				"../../build/toolchain/clang_code_coverage_wrapper.py",
+				"--files-to-instrument=../../.code-coverage/files_to_instrument.txt",
+				"--target-os=mac",
+				"../../third_party/llvm-build/Release+Asserts/bin/clang",
+				"-MMD",
+				"-MF",
+				"clang_arm64_v8_x64/obj/third_party/xnnpack/amalgam_arch=armv8.2-a+i8mm+fp16/neoni8mm.o.d",
+				"-DDCHECK_ALWAYS_ON=1",
+				"-D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_EXTENSIVE",
+				"-DCR_XCODE_VERSION=1500",
+				`-DCR_CLANG_REVISION="llvmorg-18-init-16072-gc4146121e940-5"`,
+				"-c",
+				"../../third_party/xnnpack/src/src/amalgam/gen/neoni8mm.c",
+				"-o",
+				"clang_arm64_v8_x64/obj/third_party/xnnpack/amalgam_arch=armv8.2-a+i8mm+fp16/neoni8mm.o",
+			},
+		},
 	} {
 		args, err := Split(tc.cmdline)
 		if err != nil {
