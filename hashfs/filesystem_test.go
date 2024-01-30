@@ -233,4 +233,38 @@ func TestFilesystemSub_SymlinkDir(t *testing.T) {
 	if err != nil {
 		t.Errorf("sub.Stat(%q)=_, %v; want nil err", fname, err)
 	}
+
+	otherDir := t.TempDir()
+	setupDirInOtherDir := func(dirname string) {
+		t.Helper()
+		fullpath := filepath.Join(otherDir, dirname)
+		err := os.MkdirAll(fullpath, 0755)
+		if err != nil {
+			t.Fatalf("os.MkdirAll(%q,0755)=%v; want nil err", fullpath, err)
+		}
+	}
+	setupFileInOtherDir := func(fname string) {
+		t.Helper()
+		setupDirInOtherDir(filepath.Dir(fname))
+		fullpath := filepath.Join(otherDir, fname)
+		err := os.WriteFile(fullpath, nil, 0644)
+		if err != nil {
+			t.Fatalf("os.WriteFile(%q, nil, 0644)=%v; want nil err", fullpath, err)
+		}
+	}
+
+	setupFileInOtherDir("MacOSX.sdk/SDKSettings.json")
+	setupSymlink("build/xcode_links/MacOSX.sdk", filepath.Join(otherDir, "MacOSX.sdk"))
+
+	subdir = "build/xcode_links/MacOSX.sdk"
+	sub, err = fsys.Sub(subdir)
+	if err != nil {
+		t.Fatalf("fsys.Sub(%q)=_, %v; want nil err", subdir, err)
+	}
+	fname = "SDKSettings.json"
+	_, err = fs.Stat(sub, fname)
+	if err != nil {
+		t.Errorf("sub.Stat(%q)=_, %v; want nil err", fname, err)
+	}
+
 }

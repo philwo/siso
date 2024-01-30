@@ -187,11 +187,8 @@ func (fsys FileSystem) Sub(dir string) (fs.FS, error) {
 			if hfi, ok := fi.(FileInfo); ok && hfi.Target() != "" {
 				target := hfi.Target()
 				if filepath.IsAbs(target) {
-					return nil, &fs.PathError{
-						Op:   "sub",
-						Path: origDir,
-						Err:  fmt.Errorf("symlink to abs path %s", target),
-					}
+					dir = target
+					continue
 				}
 				dir = filepath.Join(filepath.Dir(dir), target)
 				continue
@@ -202,10 +199,13 @@ func (fsys FileSystem) Sub(dir string) (fs.FS, error) {
 				Err:  fmt.Errorf("not directory: %s", dir),
 			}
 		}
+		if !filepath.IsAbs(dir) {
+			dir = filepath.Join(fsys.dir, dir)
+		}
 		return FileSystem{
 			hashFS: fsys.hashFS,
 			ctx:    fsys.ctx,
-			dir:    filepath.Join(fsys.dir, dir),
+			dir:    dir,
 		}, nil
 	}
 	return nil, &fs.PathError{
