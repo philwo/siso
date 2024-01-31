@@ -1292,7 +1292,11 @@ func (e *entry) flush(ctx context.Context, fname, xattrname string, m *iometrics
 			removeReason = "hardlink"
 		} else if !fi.Mode().IsRegular() {
 			removeReason = fmt.Sprintf("non-regular file %s", fi.Mode())
-		} else {
+		} else if fi.Size() == d.SizeBytes {
+			// check existing file and hashfs entry are identical
+			// or not by checking digest.
+			// if size differs, no need to check and force
+			// to write hashfs entry to the disk.
 			var fileDigest digest.Digest
 			src := digest.LocalFileSource{Fname: fname, IOMetrics: m}
 			ld, err := localDigest(ctx, src, fname, xattrname, fi.Size())
@@ -1308,12 +1312,12 @@ func (e *entry) flush(ctx context.Context, fname, xattrname string, m *iometrics
 				}
 			}
 			clog.Warningf(ctx, "flush %s: exists but mismatch size:%d!=%d mtime:%s!=%s d:%v!=%v", fname, fi.Size(), d.SizeBytes, fi.ModTime(), mtime, fileDigest, d)
-			if fi.Mode()&0200 == 0 {
-				// need to be writable. otherwise os.WriteFile fails with permission denied.
-				err = os.Chmod(fname, fi.Mode()|0200)
-				m.OpsDone(err)
-				clog.Warningf(ctx, "flush %s: not writable? %s: %v", fname, fi.Mode(), err)
-			}
+		}
+		if removeReason == "" && fi.Mode()&0200 == 0 {
+			// need to be writable. otherwise os.WriteFile fails with permission denied.
+			err = os.Chmod(fname, fi.Mode()|0200)
+			m.OpsDone(err)
+			clog.Warningf(ctx, "flush %s: not writable? %s: %v", fname, fi.Mode(), err)
 		}
 	}
 	err = os.MkdirAll(filepath.Dir(fname), 0755)
@@ -1342,27 +1346,61 @@ func (e *entry) flush(ctx context.Context, fname, xattrname string, m *iometrics
 		return nil
 	}
 	buf := e.buf
-	var sourceFrom string
+	removeBeforeWrite := func() {
+		if removeReason != "" {
+			err = os.Remove(fname)
+			m.OpsDone(err)
+			clog.Infof(ctx, "flush %s: remove %s: %v", fname, removeReason, err)
+		}
+	}
 	if len(buf) == 0 {
 		if e.d.IsZero() {
 			return fmt.Errorf("no data: retrieve %s: ", fname)
 		}
-		buf, err = digest.DataToBytes(ctx, digest.NewData(e.src, d))
-		if err != nil {
-			return fmt.Errorf("flush %s size=%d: %w", fname, d.SizeBytes, err)
-		}
-		sourceFrom = fmt.Sprintf("%s from source", d)
+		err = func() error {
+			// check if hashfs entry is copy of local file,
+			// i.e. created by hashfs Copy method.
+			// if hashfs entry is set by remote action,
+			// it would not be digest.LocalFileSource.
+			lsrc, ok := e.src.(digest.LocalFileSource)
+			if ok && clonefile != nil {
+				if lsrc.Fname == fname {
+					err = os.Chmod(fname, e.mode)
+					m.OpsDone(err)
+					return err
+				}
+				removeBeforeWrite()
+				clog.Infof(ctx, "flush %s %s clone from source %s", fname, d, lsrc.Fname)
+				err := clonefile(lsrc.Fname, fname)
+				m.OpsDone(err)
+				if err == nil {
+					err = os.Chmod(fname, e.mode)
+					m.OpsDone(err)
+					return err
+				}
+				// clonefile err, fallback to normal copy
+				clog.Warningf(ctx, "clonefile failed: %v", err)
+			}
+			var srcname string
+			if ok {
+				srcname = lsrc.Fname
+			}
+			buf, err := digest.DataToBytes(ctx, digest.NewData(e.src, d))
+			if err != nil {
+				return fmt.Errorf("flush %s size=%d: %w", fname, d.SizeBytes, err)
+			}
+			removeBeforeWrite()
+			clog.Infof(ctx, "flush %s %s from source %s", fname, d, srcname)
+			err = os.WriteFile(fname, buf, e.mode)
+			m.WriteDone(len(buf), err)
+			return err
+		}()
 	} else {
-		sourceFrom = "from embedded buf"
+		removeBeforeWrite()
+		clog.Infof(ctx, "flush %s from embedded buf", fname)
+		err = os.WriteFile(fname, buf, e.mode)
+		m.WriteDone(len(buf), err)
 	}
-	if removeReason != "" {
-		err = os.Remove(fname)
-		m.OpsDone(err)
-		clog.Infof(ctx, "flush %s: remove %s: %v", fname, removeReason, err)
-	}
-	clog.Infof(ctx, "flush %s %s", fname, sourceFrom)
-	err = os.WriteFile(fname, buf, e.mode)
-	m.WriteDone(len(buf), err)
 	if err != nil {
 		return err
 	}
