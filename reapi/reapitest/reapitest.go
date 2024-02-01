@@ -45,37 +45,6 @@ func (f *Fake) Execute(action *rpb.Action) (*rpb.ActionResult, error) {
 	return f.ExecuteFunc(f, action)
 }
 
-// Fetch fetches content identified by d from cas.
-func Fetch(ctx context.Context, cas *blobstore.ContentAddressableStorage, d *rpb.Digest) ([]byte, error) {
-	dd, err := digest.NewFromProto(d)
-	if err != nil {
-		return nil, err
-	}
-	b, err := cas.Get(dd)
-	if err != nil {
-		return nil, err
-	}
-	return b, nil
-}
-
-// SetContent sets content in cas.
-func SetContent(ctx context.Context, cas *blobstore.ContentAddressableStorage, data []byte) (*rpb.Digest, error) {
-	dd, err := cas.Put(data)
-	if err != nil {
-		return nil, err
-	}
-	return dd.ToProto(), nil
-}
-
-// FetchProto fetches proto message identified by d from cas.
-func FetchProto(ctx context.Context, cas *blobstore.ContentAddressableStorage, d *rpb.Digest, m proto.Message) error {
-	b, err := Fetch(ctx, cas, d)
-	if err != nil {
-		return err
-	}
-	return proto.Unmarshal(b, m)
-}
-
 type server struct {
 	addr     string
 	cleanups []func()
@@ -174,7 +143,15 @@ type InputTree struct {
 }
 
 func (t InputTree) get(ctx context.Context, d *rpb.Digest, m proto.Message) error {
-	return FetchProto(ctx, t.CAS, d, m)
+	dd, err := digest.NewFromProto(d)
+	if err != nil {
+		return err
+	}
+	b, err := t.CAS.Get(dd)
+	if err != nil {
+		return err
+	}
+	return proto.Unmarshal(b, m)
 }
 
 // LookupFileNode looks up name's file node in tree.
@@ -187,9 +164,6 @@ func (t InputTree) LookupFileNode(ctx context.Context, name string) (*rpb.FileNo
 	var elems []string
 pathElements:
 	for _, elem := range strings.Split(path.Dir(name), "/") {
-		if elem == "." {
-			continue
-		}
 		for _, s := range dir.Directories {
 			if elem == s.Name {
 				subdir := &rpb.Directory{}
