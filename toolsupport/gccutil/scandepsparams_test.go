@@ -13,18 +13,11 @@ import (
 
 func TestScanDepsParams(t *testing.T) {
 	ctx := context.Background()
-	type result struct {
-		Files    []string
-		Dirs     []string
-		Sysroots []string
-		Defines  map[string]string
-		Err      error
-	}
 	for _, tc := range []struct {
 		name string
 		args []string
 		env  []string
-		want result
+		want ScanDepsParams
 	}{
 		{
 			name: "clang++",
@@ -47,7 +40,7 @@ func TestScanDepsParams(t *testing.T) {
 				"-o",
 				"obj/base/base/base64.o",
 			},
-			want: result{
+			want: ScanDepsParams{
 				Files: []string{
 					"../../base/base64.cc",
 				},
@@ -83,7 +76,7 @@ func TestScanDepsParams(t *testing.T) {
 				"-o",
 				"obj/base/base/base64.o",
 			},
-			want: result{
+			want: ScanDepsParams{
 				Files: []string{
 					"../../base/base64.cc",
 				},
@@ -117,7 +110,7 @@ func TestScanDepsParams(t *testing.T) {
 				"-o",
 				"obj/third_party/abseil-cpp/absl/strings/str_format_internal/arg.o",
 			},
-			want: result{
+			want: ScanDepsParams{
 				Files: []string{
 					"../../third_party/abseil-cpp/absl/strings/internal/str_format/arg.cc",
 				},
@@ -134,12 +127,55 @@ func TestScanDepsParams(t *testing.T) {
 				Defines: map[string]string{},
 			},
 		},
+		{
+			name: "clang_ios",
+			args: []string{
+				"../../third_party/llvm-build/Release+Asserts/bin/clang",
+				"-MMD",
+				"-MF",
+				"obj/ios/third_party/earl_grey2/test_lib/TCXTestCase+GREYTest.o.d",
+				"-DDCHECK_ALWAYS_ON=1",
+				"-I../..",
+				"-Igen",
+				"-isysroot",
+				"sdk/xcode_links/iPhoneSimulator16.4.sdk",
+				"-iframework",
+				"sdk/xcode_links/iPhoneSimulator.platform/Developer/Library/Frameworks",
+				"-iframework",
+				"sdk/xcode_links/iPhoneSimulator16.4.sdk/Developer/Library/Frameworks",
+				"-isystem../../third_party/libc++/src/include",
+				"-isystem../../third_party/libc++abi/src/include",
+				"-c",
+				"../../base/test/ios/google_test_runner.mm",
+				"-o",
+				"obj/base/test/goolge_test_runner/goolge_test_runner.o",
+			},
+			want: ScanDepsParams{
+				Files: []string{
+					"../../base/test/ios/google_test_runner.mm",
+				},
+				Dirs: []string{
+					"../..",
+					"gen",
+					"../../third_party/libc++/src/include",
+					"../../third_party/libc++abi/src/include",
+				},
+				Frameworks: []string{
+					"sdk/xcode_links/iPhoneSimulator.platform/Developer/Library/Frameworks",
+					"sdk/xcode_links/iPhoneSimulator16.4.sdk/Developer/Library/Frameworks",
+				},
+				Sysroots: []string{
+					"../../third_party/llvm-build/Release+Asserts",
+					"sdk/xcode_links/iPhoneSimulator16.4.sdk",
+				},
+				Defines: map[string]string{},
+			},
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			var got result
-			got.Files, got.Dirs, got.Sysroots, got.Defines, got.Err = ScanDepsParams(ctx, tc.args, tc.env)
+			got := ExtractScanDepsParams(ctx, tc.args, tc.env)
 			if diff := cmp.Diff(tc.want, got); diff != "" {
-				t.Errorf("ScanDepsParams(ctx, %q, %q): diff -want +got:\n%s", tc.args, tc.env, diff)
+				t.Errorf("ExtractScanDepsParams(ctx, %q, %q): diff -want +got:\n%s", tc.args, tc.env, diff)
 			}
 		})
 	}

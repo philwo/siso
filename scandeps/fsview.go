@@ -32,7 +32,8 @@ type fsview struct {
 	execRoot  string
 	inputDeps map[string][]string
 
-	sysroots []string
+	// precomputed trees for this include dirs (framework, sysroots).
+	precomputedTrees []string
 
 	// search path: i.e. -I
 	searchPaths []string
@@ -60,9 +61,9 @@ func (fv *fsview) addDir(ctx context.Context, dir string, searchPath bool) {
 		return
 	}
 	var sysinc string
-	for _, sysinc = range fv.sysroots {
+	for _, sysinc = range fv.precomputedTrees {
 		if dir == sysinc || strings.HasPrefix(dir, sysinc+"/") {
-			// use precomputed subtree (sysroot)
+			// use precomputed subtree (sysroot or framework)
 			// for this directory, so no need to handle this dir.
 			return
 		}

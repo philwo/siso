@@ -72,17 +72,17 @@ type scanResult struct {
 	err      error
 }
 
-func (fsys *filesystem) scanner(ctx context.Context, execRoot string, inputDeps map[string][]string, sysroots []string) *scanner {
+func (fsys *filesystem) scanner(ctx context.Context, execRoot string, inputDeps map[string][]string, precomputedTrees []string) *scanner {
 	s := &scanner{
 		fsview: &fsview{
-			fs:        fsys,
-			execRoot:  execRoot,
-			inputDeps: inputDeps,
-			sysroots:  sysroots,
-			visited:   make(map[string]bool),
-			dirs:      make(map[string]bool),
-			files:     make(map[string]*scanResult),
-			topEnts:   make(map[string]*sync.Map),
+			fs:               fsys,
+			execRoot:         execRoot,
+			inputDeps:        inputDeps,
+			precomputedTrees: precomputedTrees,
+			visited:          make(map[string]bool),
+			dirs:             make(map[string]bool),
+			files:            make(map[string]*scanResult),
+			topEnts:          make(map[string]*sync.Map),
 		},
 		macros:       make(map[string][]string),
 		included:     make(map[string]map[string]bool),
@@ -91,7 +91,7 @@ func (fsys *filesystem) scanner(ctx context.Context, execRoot string, inputDeps 
 		macroDirs:    make(map[string][]string),
 		nameDirs:     make(map[string]int),
 	}
-	for _, dir := range sysroots {
+	for _, dir := range precomputedTrees {
 		s.fsview.addDir(ctx, dir, false)
 	}
 	return s

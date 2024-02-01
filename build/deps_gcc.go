@@ -43,25 +43,27 @@ func (gcc depsGCC) DepsFastCmd(ctx context.Context, b *Builder, cmd *execute.Cmd
 }
 
 func (gcc depsGCC) fixCmdInputs(ctx context.Context, b *Builder, cmd *execute.Cmd) ([]string, error) {
-	_, dirs, sysroots, _, err := gccutil.ScanDepsParams(ctx, cmd.Args, cmd.Env)
-	if err != nil {
-		return nil, err
+	params := gccutil.ExtractScanDepsParams(ctx, cmd.Args, cmd.Env)
+	for i := range params.Dirs {
+		params.Dirs[i] = b.path.MaybeFromWD(params.Dirs[i])
 	}
-	for i := range dirs {
-		dirs[i] = b.path.MaybeFromWD(dirs[i])
+	for i := range params.Frameworks {
+		params.Dirs[i] = b.path.MaybeFromWD(params.Frameworks[i])
 	}
-	for i := range sysroots {
-		sysroots[i] = b.path.MaybeFromWD(sysroots[i])
+	for i := range params.Sysroots {
+		params.Sysroots[i] = b.path.MaybeFromWD(params.Sysroots[i])
 	}
 	var inputs []string
 	// include directory must be included, even if no include files there.
 	// without the dir, it may fail for `#include "../config.h"`
-	inputs = append(inputs, dirs...)
+	inputs = append(inputs, params.Dirs...)
+	// also frameworks include dirs.
+	inputs = append(inputs, params.Frameworks...)
 	// sysroot directory must be included, even if no include files there.
 	// or error with
 	// clang++: error: no such sysroot directory: ...
 	// [-Werror, -Wmissing-sysroot]
-	inputs = append(inputs, sysroots...)
+	inputs = append(inputs, params.Sysroots...)
 	inputs = b.expandInputs(ctx, inputs)
 
 	fn := func(ctx context.Context, dir string) (merkletree.TreeEntry, error) {
@@ -70,7 +72,10 @@ func (gcc depsGCC) fixCmdInputs(ctx context.Context, b *Builder, cmd *execute.Cm
 	if gcc.treeInput != nil {
 		fn = gcc.treeInput
 	}
-	cmd.TreeInputs = append(cmd.TreeInputs, treeInputs(ctx, fn, sysroots, dirs)...)
+	precomputedDirs := make([]string, 0, len(params.Sysroots)+len(params.Frameworks))
+	precomputedDirs = append(precomputedDirs, params.Sysroots...)
+	precomputedDirs = append(precomputedDirs, params.Frameworks...)
+	cmd.TreeInputs = append(cmd.TreeInputs, treeInputs(ctx, fn, precomputedDirs, params.Dirs)...)
 	return inputs, nil
 }
 
@@ -154,30 +159,31 @@ func (gcc depsGCC) depsInputs(ctx context.Context, b *Builder, step *Step) ([]st
 func (depsGCC) scandeps(ctx context.Context, b *Builder, step *Step) ([]string, error) {
 	var ins []string
 	err := b.scanDepsSema.Do(ctx, func(ctx context.Context) error {
-		var err error
-		files, dirs, sysroots, defines, err := gccutil.ScanDepsParams(ctx, step.cmd.Args, step.cmd.Env)
-		if err != nil {
-			return err
+		params := gccutil.ExtractScanDepsParams(ctx, step.cmd.Args, step.cmd.Env)
+		for i := range params.Files {
+			params.Files[i] = b.path.MaybeFromWD(params.Files[i])
 		}
-		for i := range files {
-			files[i] = b.path.MaybeFromWD(files[i])
+		for i := range params.Dirs {
+			params.Dirs[i] = b.path.MaybeFromWD(params.Dirs[i])
 		}
-		for i := range dirs {
-			dirs[i] = b.path.MaybeFromWD(dirs[i])
+		for i := range params.Frameworks {
+			params.Frameworks[i] = b.path.MaybeFromWD(params.Frameworks[i])
 		}
-		for i := range sysroots {
-			sysroots[i] = b.path.MaybeFromWD(sysroots[i])
+		for i := range params.Sysroots {
+			params.Sysroots[i] = b.path.MaybeFromWD(params.Sysroots[i])
 		}
 		req := scandeps.Request{
-			Defines:  defines,
-			Sources:  files,
-			Dirs:     dirs,
-			Sysroots: sysroots,
+			Defines:    params.Defines,
+			Sources:    params.Files,
+			Dirs:       params.Dirs,
+			Frameworks: params.Frameworks,
+			Sysroots:   params.Sysroots,
 		}
 		if log.V(1) {
 			clog.Infof(ctx, "scandeps req=%#v", req)
 		}
 		started := time.Now()
+		var err error
 		ins, err = b.scanDeps.Scan(ctx, b.path.ExecRoot, req)
 		if log.V(1) {
 			clog.Infof(ctx, "scandeps %d %s: %v", len(ins), time.Since(started), err)

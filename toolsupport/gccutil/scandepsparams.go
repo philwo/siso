@@ -10,13 +10,32 @@ import (
 	"strings"
 )
 
-// ScanDepsParams parses args and returns files, dirs, sysroots and defines
-// for scandeps.
+// ScanDepsParams holds parameters used for scandeps.
+type ScanDepsParams struct {
+	// Files are input files.
+	Files []string
+
+	// Dirs are include directories.
+	Dirs []string
+
+	// Frameworks are framework directories.
+	Frameworks []string
+
+	// Sysroots are sysroot directories and toolchain root directories.
+	Sysroots []string
+
+	// Defines are defined macros.
+	Defines map[string]string
+}
+
+// ExtractScanDepsParams parses args and returns ScanDepsParams for scandeps.
 // It only parses major command line flags used in chromium.
 // full set of command line flags for include dirs can be found in
 // https://clang.llvm.org/docs/ClangCommandLineReference.html#include-path-management
-func ScanDepsParams(ctx context.Context, args, env []string) (files, dirs, sysroots []string, defines map[string]string, err error) {
-	defines = make(map[string]string)
+func ExtractScanDepsParams(ctx context.Context, args, env []string) ScanDepsParams {
+	res := ScanDepsParams{
+		Defines: make(map[string]string),
+	}
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		if !strings.HasPrefix(arg, "-") {
@@ -29,46 +48,52 @@ func ScanDepsParams(ctx context.Context, args, env []string) (files, dirs, sysro
 				strings.HasSuffix(cmdname, "gcc"),
 				strings.HasSuffix(cmdname, "g++"):
 				// add toolchain top dir as sysroots too
-				sysroots = append(sysroots, filepath.ToSlash(filepath.Dir(filepath.Dir(arg))))
+				res.Sysroots = append(res.Sysroots, filepath.ToSlash(filepath.Dir(filepath.Dir(arg))))
 			}
 		}
 		switch arg {
 		case "-I", "--include-directory", "-isystem", "-iquote":
 			i++
-			dirs = append(dirs, args[i])
+			res.Dirs = append(res.Dirs, args[i])
+			continue
+		case "-iframework":
+			i++
+			res.Frameworks = append(res.Frameworks, args[i])
 			continue
 		case "-isysroot":
 			i++
-			sysroots = append(sysroots, args[i])
+			res.Sysroots = append(res.Sysroots, args[i])
 			continue
 		case "-D":
 			i++
-			defineMacro(defines, args[i])
+			defineMacro(res.Defines, args[i])
 			continue
 		}
 		switch {
 		case strings.HasPrefix(arg, "-I"):
-			dirs = append(dirs, strings.TrimPrefix(arg, "-I"))
+			res.Dirs = append(res.Dirs, strings.TrimPrefix(arg, "-I"))
 		case strings.HasPrefix(arg, "--include-directory="):
-			dirs = append(dirs, strings.TrimPrefix(arg, "--include-directory="))
+			res.Dirs = append(res.Dirs, strings.TrimPrefix(arg, "--include-directory="))
 		case strings.HasPrefix(arg, "-iquote"):
-			dirs = append(dirs, strings.TrimPrefix(arg, "-iquote"))
+			res.Dirs = append(res.Dirs, strings.TrimPrefix(arg, "-iquote"))
 		case strings.HasPrefix(arg, "-isystem"):
-			dirs = append(dirs, strings.TrimPrefix(arg, "-isystem"))
+			res.Dirs = append(res.Dirs, strings.TrimPrefix(arg, "-isystem"))
+		case strings.HasPrefix(arg, "-iframework"):
+			res.Frameworks = append(res.Frameworks, strings.TrimPrefix(arg, "-iframework"))
 		case strings.HasPrefix(arg, "--sysroot="):
-			sysroots = append(sysroots, strings.TrimPrefix(arg, "--sysroot="))
+			res.Sysroots = append(res.Sysroots, strings.TrimPrefix(arg, "--sysroot="))
 		case strings.HasPrefix(arg, "-D"):
-			defineMacro(defines, strings.TrimPrefix(arg, "-D"))
+			defineMacro(res.Defines, strings.TrimPrefix(arg, "-D"))
 
 		case !strings.HasPrefix(arg, "-"):
 			ext := filepath.Ext(arg)
 			switch ext {
 			case ".c", ".cc", ".cxx", ".cpp", ".m", ".mm", ".S":
-				files = append(files, arg)
+				res.Files = append(res.Files, arg)
 			}
 		}
 	}
-	return files, dirs, sysroots, defines, nil
+	return res
 }
 
 func defineMacro(defines map[string]string, arg string) {

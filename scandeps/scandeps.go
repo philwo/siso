@@ -50,12 +50,13 @@ type Request struct {
 	// Includes are additional include files (i.e. -include or /FI).
 	Includes []string
 
-	// Dirs are include directory (search paths).
+	// Dirs are include directories (search paths).
 	Dirs []string
 
-	// TODO: Frameworks []string
+	// Frameworks are framework directories (search paths).
+	Frameworks []string
 
-	// Sysroots are sysroot directory.
+	// Sysroots are sysroot directories.
 	// It also includes toolchain root directory.
 	Sysroots []string
 }
@@ -67,7 +68,12 @@ func (s *ScanDeps) Scan(ctx context.Context, execRoot string, req Request) ([]st
 
 	started := time.Now()
 
-	scanner := s.fs.scanner(ctx, execRoot, s.inputDeps, req.Sysroots)
+	// Assume precomputed tree is used for frameworks and sysroots.
+	var precomputedTrees []string
+	precomputedTrees = append(precomputedTrees, req.Frameworks...)
+	precomputedTrees = append(precomputedTrees, req.Sysroots...)
+
+	scanner := s.fs.scanner(ctx, execRoot, s.inputDeps, precomputedTrees)
 	scanner.setMacros(ctx, req.Defines)
 
 	for _, s := range req.Includes {
