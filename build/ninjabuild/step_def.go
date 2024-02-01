@@ -13,6 +13,7 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	log "github.com/golang/glog"
@@ -48,8 +49,37 @@ type StepDef struct {
 }
 
 type edgeRule struct {
-	edge                *ninjautil.Edge
+	edge *ninjautil.Edge
+
+	mu          sync.Mutex
+	ruleChecked bool
+	// replace, accumulate are valid once ruleChecked.
+	// these are StepConfig's Replace and Accumulate respectively.
 	replace, accumulate bool
+}
+
+// ensure ensures edgeRule checks pure/replace/accumulate of siso rule for the edge.
+// siso rule might not be checked for the edge when it was skipped.
+func (er *edgeRule) ensure(ctx context.Context, globals *globals) (gotRule bool, rule StepRule, pure bool) {
+	er.mu.Lock()
+	defer er.mu.Unlock()
+	if er.ruleChecked {
+		return false, StepRule{}, false
+	}
+	er.ruleChecked = true
+	rule, pure = globals.stepConfig.Lookup(ctx, globals.path, er.edge)
+	if !pure {
+		// remove edgeRule for all outputs of the edge from edgeRules
+		// for non-pure step.
+		for _, output := range er.edge.Outputs() {
+			outPath := globals.targetPath(output)
+			globals.edgeRules.Delete(outPath)
+		}
+		return true, rule, false
+	}
+	er.replace = rule.Replace
+	er.accumulate = rule.Accumulate
+	return true, rule, true
 }
 
 func (g *Graph) newStepDef(ctx context.Context, edge *ninjautil.Edge, next build.StepDef) *StepDef {
@@ -60,12 +90,9 @@ func (g *Graph) newStepDef(ctx context.Context, edge *ninjautil.Edge, next build
 		next:    next,
 		globals: g.globals,
 	}
-	if edge.Binding("solibs") != "" {
-		// solibs is required to run the executable generated
-		// by this step.
-		// We'll add this when a step requires the executable
-		// in ExpandedInputs later.
-		// https://gn.googlesource.com/gn/+/main/docs/reference.md#:~:text=extension.%0A%20%20%20%20%20%20%20%20Example%3A%20%22.so%22%0A%0A%20%20%20%20%7B%7B-,solibs,-%7D%7D%0A%20%20%20%20%20%20%20%20Extra%20libraries%20from
+	if !edge.IsPhony() {
+		// always sets edgeRule.
+		// it will check siso_rule later.
 		er := &edgeRule{
 			edge: edge,
 		}
@@ -74,43 +101,45 @@ func (g *Graph) newStepDef(ctx context.Context, edge *ninjautil.Edge, next build
 			outPath := globals.targetPath(out)
 			globals.edgeRules.Store(outPath, er)
 			if log.V(1) {
-				clog.Infof(ctx, "add edgeRule for %s [solibs]", outPath)
+				clog.Infof(ctx, "add edgeRule for %s [newStepDef]", outPath)
+
 			}
 		}
 	}
 	return stepDef
 }
 
+// EnsureRule ensures siso rule for StepDef when it needs to run.
+// It may not be called when skipped.
 func (s *StepDef) EnsureRule(ctx context.Context) {
 	if s.ruleReady {
 		return
 	}
 	s.ruleReady = true
-	var rule StepRule
-	var pure bool
-	globals := s.globals
-	if !s.edge.IsPhony() {
-		rule, pure = globals.stepConfig.Lookup(ctx, globals.path, s.edge)
+	if s.edge.IsPhony() {
+		return
+	}
+	outputs := s.edge.Outputs()
+	if len(outputs) == 0 {
+		return
+	}
+	outPath := s.globals.targetPath(outputs[0])
+	// *edgeRule is stored in newStepDef for all outputs of the edge.
+	v, ok := s.globals.edgeRules.Load(outPath)
+	if !ok {
+		// *edgeRule was removed by er.ensure by other output of the edge?
+		clog.Warningf(ctx, "edgeRule not found for %s: pure=%t", outPath, s.pure)
+		return
+	}
+	er := v.(*edgeRule)
+	var gotRule bool
+	gotRule, s.rule, s.pure = er.ensure(ctx, s.globals)
+	if !gotRule {
+		s.rule, s.pure = s.globals.stepConfig.Lookup(ctx, s.globals.path, s.edge)
 		if log.V(1) {
-			clog.Infof(ctx, "rule:%t", pure)
+			clog.Infof(ctx, "rule:%t", s.pure)
 		}
 	}
-	if pure {
-		er := &edgeRule{
-			edge:       s.edge,
-			replace:    rule.Replace,
-			accumulate: rule.Accumulate,
-		}
-		for _, out := range s.edge.Outputs() {
-			outPath := globals.targetPath(out)
-			globals.edgeRules.Store(outPath, er)
-			if log.V(1) {
-				clog.Infof(ctx, "add edgeRules for %s replace:%t accumulate:%t", outPath, er.replace, er.accumulate)
-			}
-		}
-	}
-	s.rule = rule
-	s.pure = pure
 }
 
 // String returns step id.
@@ -657,6 +686,8 @@ func (s *StepDef) ExpandedInputs(ctx context.Context) []string {
 			continue
 		}
 		er := v.(*edgeRule)
+		// check siso rule if it was not checked when input's step was skipped
+		er.ensure(ctx, globals)
 		if s.rule.Debug {
 			clog.Infof(ctx, "check edgeRule for %s inputs=%d solibs=%d replace=%t accumulate=%t", inputs[i], len(er.edge.Inputs()), len(edgeSolibs(er.edge)), er.replace, er.accumulate)
 		}
