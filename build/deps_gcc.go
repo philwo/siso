@@ -48,7 +48,7 @@ func (gcc depsGCC) fixCmdInputs(ctx context.Context, b *Builder, cmd *execute.Cm
 		params.Dirs[i] = b.path.MaybeFromWD(params.Dirs[i])
 	}
 	for i := range params.Frameworks {
-		params.Dirs[i] = b.path.MaybeFromWD(params.Frameworks[i])
+		params.Frameworks[i] = b.path.MaybeFromWD(params.Frameworks[i])
 	}
 	for i := range params.Sysroots {
 		params.Sysroots[i] = b.path.MaybeFromWD(params.Sysroots[i])
