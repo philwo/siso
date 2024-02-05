@@ -137,6 +137,37 @@ func New(ctx context.Context, t *testing.T, fake *Fake) *reapi.Client {
 	return client
 }
 
+// Fetch fetches content identified by d from cas.
+func (f *Fake) Fetch(ctx context.Context, d *rpb.Digest) ([]byte, error) {
+	dd, err := digest.NewFromProto(d)
+	if err != nil {
+		return nil, err
+	}
+	b, err := f.CAS.Get(dd)
+	if err != nil {
+		return nil, err
+	}
+	return b, nil
+}
+
+// FetchProto fetches proto message identified by d from cas.
+func (f *Fake) FetchProto(ctx context.Context, d *rpb.Digest, m proto.Message) error {
+	b, err := f.Fetch(ctx, d)
+	if err != nil {
+		return err
+	}
+	return proto.Unmarshal(b, m)
+}
+
+// Put puts data in CAS (for output of exec).
+func (f *Fake) Put(ctx context.Context, data []byte) (*rpb.Digest, error) {
+	d, err := f.CAS.Put(data)
+	if err != nil {
+		return nil, err
+	}
+	return d.ToProto(), nil
+}
+
 type InputTree struct {
 	CAS  *blobstore.ContentAddressableStorage
 	Root *rpb.Digest
@@ -164,6 +195,9 @@ func (t InputTree) LookupFileNode(ctx context.Context, name string) (*rpb.FileNo
 	var elems []string
 pathElements:
 	for _, elem := range strings.Split(path.Dir(name), "/") {
+		if elem == "." {
+			continue
+		}
 		for _, s := range dir.Directories {
 			if elem == s.Name {
 				subdir := &rpb.Directory{}
