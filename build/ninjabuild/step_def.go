@@ -520,8 +520,12 @@ func fixInputs(ctx context.Context, stepDef *StepDef, inputs, excludes []string)
 	return r
 }
 
-// ExpandedCaseSensitives gets expanded inputs for the case sensitive FS.
+// ExpandedCaseSensitives returns expanded filenames if platform is case-sensitive.
 func (s StepDef) ExpandedCaseSensitives(ctx context.Context, inputs []string) []string {
+	if s.Platform()["OSFamily"] == "Windows" {
+		// Nothing to do on case-insensitive platform.
+		return inputs
+	}
 	ctx, span := trace.NewSpan(ctx, "stepdef-expand-case-sensitives")
 	defer span.Close(nil)
 	if len(s.globals.caseSensitives) == 0 {
