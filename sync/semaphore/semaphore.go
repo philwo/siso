@@ -9,17 +9,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sync"
 	"sync/atomic"
 
 	"google.golang.org/grpc/status"
 
 	"infra/build/siso/o11y/trace"
-)
-
-var (
-	mu         sync.Mutex
-	semaphores = map[string]*Semaphore{}
 )
 
 // Semaphore is a semaphore.
@@ -34,17 +28,6 @@ type Semaphore struct {
 	reqs  atomic.Int64
 }
 
-// Lookup returns a semaphore for the name, or error if not registered.
-func Lookup(name string) (*Semaphore, error) {
-	mu.Lock()
-	defer mu.Unlock()
-	s, ok := semaphores[name]
-	if !ok {
-		return nil, fmt.Errorf("semaphore %q does not exist", name)
-	}
-	return s, nil
-}
-
 // New creates a new semaphore with name and capacity.
 func New(name string, n int) *Semaphore {
 	ch := make(chan int, n)
@@ -52,14 +35,11 @@ func New(name string, n int) *Semaphore {
 		ch <- i + 1 // tid
 	}
 	s := &Semaphore{
-		name:         name,
+		name:         fmt.Sprintf("%s/%d", name, n),
 		ch:           ch,
 		waitSpanName: fmt.Sprintf("wait:%s", name),
 		servSpanName: fmt.Sprintf("serv:%s", name),
 	}
-	mu.Lock()
-	semaphores[name] = s
-	mu.Unlock()
 	return s
 }
 

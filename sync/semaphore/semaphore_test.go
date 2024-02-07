@@ -15,25 +15,6 @@ import (
 	"infra/build/siso/sync/semaphore"
 )
 
-func TestLookup(t *testing.T) {
-	sema := semaphore.New(t.Name(), 3)
-	if name := sema.Name(); name != t.Name() {
-		t.Errorf("Name=%q; want %q", name, t.Name())
-	}
-	if n := sema.Capacity(); n != 3 {
-		t.Errorf("Capacity=%d; want %d", n, 3)
-	}
-	got, err := semaphore.Lookup(t.Name())
-	if err != nil || got != sema {
-		t.Errorf("Lookup(%q)=%p, %v; want %p, nil", t.Name(), got, err, sema)
-	}
-	badName := t.Name() + "_not_created"
-	_, err = semaphore.Lookup(badName)
-	if err == nil {
-		t.Errorf("Lookup(%q)=_, %v; want err", badName, err)
-	}
-}
-
 func TestWaitAcquire(t *testing.T) {
 	ctx := context.Background()
 	sema := semaphore.New(t.Name(), 3)

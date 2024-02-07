@@ -19,7 +19,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
-	"strconv"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -48,7 +47,6 @@ import (
 	"infra/build/siso/o11y/trace"
 	"infra/build/siso/reapi"
 	"infra/build/siso/reapi/digest"
-	"infra/build/siso/sync/semaphore"
 	"infra/build/siso/toolsupport/ninjautil"
 	"infra/build/siso/ui"
 )
@@ -1227,17 +1225,12 @@ func dumpResourceUsageTable(ctx context.Context, semaTraces map[string]semaTrace
 	fmt.Fprintf(utw, "resource/capa\tused(err)\twait-avg\t|   s m |\tserv-avg\t|   s m |\t\n")
 	for _, key := range semaNames {
 		t := semaTraces[key]
-		s, _ := semaphore.Lookup(t.name)
-		c := "nil"
-		if s != nil {
-			c = strconv.Itoa(s.Capacity())
-		}
-		fmt.Fprintf(ltw, "%s/%s\t%d(%d)\t%s\t%s\t%s\t%s\t\n", t.name, c, t.n, t.nerr, t.waitAvg.Round(time.Millisecond), histogram(t.waitBuckets), t.servAvg.Round(time.Millisecond), histogram(t.servBuckets))
+		fmt.Fprintf(ltw, "%s\t%d(%d)\t%s\t%s\t%s\t%s\t\n", t.name, t.n, t.nerr, t.waitAvg.Round(time.Millisecond), histogram(t.waitBuckets), t.servAvg.Round(time.Millisecond), histogram(t.servBuckets))
 		// bucket 5 = [1m,10m)
 		// bucket 6 = [10m,*)
 		if t.waitBuckets[5] > 0 || t.waitBuckets[6] > 0 || t.servBuckets[5] > 0 || t.servBuckets[6] > 0 {
 			needToShow = true
-			fmt.Fprintf(utw, "%s/%s\t%d(%d)\t%s\t%s\t%s\t%s\t\n", t.name, c, t.n, t.nerr, ui.FormatDuration(t.waitAvg), histogram(t.waitBuckets), ui.FormatDuration(t.servAvg), histogram(t.servBuckets))
+			fmt.Fprintf(utw, "%s\t%d(%d)\t%s\t%s\t%s\t%s\t\n", t.name, t.n, t.nerr, ui.FormatDuration(t.waitAvg), histogram(t.waitBuckets), ui.FormatDuration(t.servAvg), histogram(t.servBuckets))
 		}
 	}
 	ltw.Flush()
