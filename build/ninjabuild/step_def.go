@@ -7,8 +7,10 @@ package ninjabuild
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
+	"io/fs"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -457,8 +459,17 @@ func fixInputs(ctx context.Context, stepDef *StepDef, inputs, excludes []string)
 	newInputs := make([]string, 0, len(inputs))
 	for _, in := range inputs {
 		if stepDef.globals.phony[in] {
-			clog.Infof(ctx, "inputs %s is phony", in)
-			continue
+			_, err := stepDef.globals.hashFS.Stat(ctx, stepDef.globals.path.ExecRoot, in)
+			if err != nil {
+				if errors.Is(err, fs.ErrNotExist) {
+					clog.Infof(ctx, "input %s is phony", in)
+					continue
+				}
+				clog.Warningf(ctx, "input %s is phony: %v", in, err)
+				continue
+
+			}
+			clog.Infof(ctx, "input %s is phony, but exists", in)
 		}
 		newInputs = append(newInputs, in)
 	}
