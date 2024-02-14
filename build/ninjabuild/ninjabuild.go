@@ -359,47 +359,13 @@ func (g *Graph) Filenames() []string {
 // Targets returns targets for ninja args.
 // If args is not given, returns default build targets.
 func (g *Graph) Targets(ctx context.Context, args ...string) ([]build.Target, error) {
-	if len(args) == 0 {
-		nodes, err := g.nstate.DefaultNodes()
-		if err != nil {
-			return nil, err
-		}
-		targets := make([]build.Target, 0, len(nodes))
-		for _, n := range nodes {
-			targets = append(targets, build.Target(n))
-		}
-		return targets, nil
+	nodes, err := g.nstate.Targets(args)
+	if err != nil {
+		return nil, err
 	}
-	targets := make([]build.Target, 0, len(args))
-	for _, t := range args {
-		t := filepath.ToSlash(t)
-		var node *ninjautil.Node
-		if strings.HasSuffix(t, "^") {
-			// Special syntax: "foo.cc^" means "the first output of foo.cc".
-			t = strings.TrimSuffix(t, "^")
-			n, ok := g.nstate.LookupNode(t)
-			if !ok {
-				return nil, fmt.Errorf("unknown target %q", t)
-			}
-			outs := n.OutEdges()
-			if len(outs) == 0 {
-				// TODO(b/289309062): deps log first reverse deps node?
-				return nil, fmt.Errorf("no outs for %q", t)
-			}
-			edge := outs[0]
-			outputs := edge.Outputs()
-			if len(outputs) == 0 {
-				return nil, fmt.Errorf("out edge of %q has no output", t)
-			}
-			node = outputs[0]
-		} else {
-			n, ok := g.nstate.LookupNode(t)
-			if !ok {
-				return nil, fmt.Errorf("unknown target %q", t)
-			}
-			node = n
-		}
-		targets = append(targets, build.Target(node))
+	targets := make([]build.Target, 0, len(nodes))
+	for _, n := range nodes {
+		targets = append(targets, build.Target(n))
 	}
 	return targets, nil
 }

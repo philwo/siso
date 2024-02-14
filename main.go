@@ -31,6 +31,7 @@ import (
 	"infra/build/siso/subcmd/help"
 	"infra/build/siso/subcmd/metricscmd"
 	"infra/build/siso/subcmd/ninja"
+	"infra/build/siso/subcmd/query"
 	"infra/build/siso/subcmd/recall"
 	"infra/build/siso/subcmd/report"
 	"infra/build/siso/subcmd/scandeps"
@@ -56,6 +57,7 @@ func getApplication(authOpts cred.Options) *cli.Application {
 		Commands: []*subcommands.Command{
 			help.Cmd(),
 			ninja.Cmd(authOpts),
+			query.Cmd(),
 			digraph.Cmd(),
 			fscmd.Cmd(authOpts),
 			recall.Cmd(authOpts),

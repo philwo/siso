@@ -6,6 +6,8 @@ package ninjautil
 
 import (
 	"fmt"
+	"path/filepath"
+	"strings"
 )
 
 var (
@@ -174,6 +176,48 @@ func (s *State) DefaultNodes() ([]*Node, error) {
 		return ns, nil
 	}
 	return s.RootNodes()
+}
+
+// Targets returns target nodes for given args.
+// If args is empty, returns default nodes.
+// If arg has ^-suffix, it is treated as source of target.
+// e.g. "foo.cc^" will be "foo.o", which is generated from foo.cc
+func (s *State) Targets(args []string) ([]*Node, error) {
+	if len(args) == 0 {
+		return s.DefaultNodes()
+	}
+	nodes := make([]*Node, 0, len(args))
+	for _, t := range args {
+		t := filepath.ToSlash(t)
+		var node *Node
+		if strings.HasSuffix(t, "^") {
+			// Special syntax: "foo.cc^" means "the first output of foo.cc".
+			t = strings.TrimSuffix(t, "^")
+			n, ok := s.LookupNode(t)
+			if !ok {
+				return nil, fmt.Errorf("unknown target %q", t)
+			}
+			outs := n.OutEdges()
+			if len(outs) == 0 {
+				// TODO(b/289309062): deps log first reverse deps node?
+				return nil, fmt.Errorf("no outs for %q", t)
+			}
+			edge := outs[0]
+			outputs := edge.Outputs()
+			if len(outputs) == 0 {
+				return nil, fmt.Errorf("out edge of %q has no output", t)
+			}
+			node = outputs[0]
+		} else {
+			n, ok := s.LookupNode(t)
+			if !ok {
+				return nil, fmt.Errorf("unknown target %q", t)
+			}
+			node = n
+		}
+		nodes = append(nodes, node)
+	}
+	return nodes, nil
 }
 
 // PhonyNodes returns phony's output nodes.
