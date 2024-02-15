@@ -22,8 +22,8 @@ func Cmd() *subcommands.Command {
 					Name:  "siso query",
 					Title: "tool to access ninja build graph",
 					Commands: []*subcommands.Command{
+						cmdDigraph(),
 						cmdIDEAnalysis(),
-						// TODO: move digraph to here.
 						// TODO: add more subcommands (ninja's tool like commands, etc.
 						subcommands.CmdHelp,
 					},

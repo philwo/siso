@@ -1,10 +1,8 @@
-// Copyright 2023 The Chromium Authors
+// Copyright 2024 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// Package digraph is digraph subcommand to show digraph of build.ninja
-// for https://pkg.go.dev/golang.org/x/tools/cmd/digraph
-package digraph
+package query
 
 import (
 	"context"
@@ -21,9 +19,9 @@ import (
 	"infra/build/siso/toolsupport/ninjautil"
 )
 
-const usage = `show digraph
+const digraphUsage = `show digraph
 
- $ siso digraph -C <dir> <targets>
+ $ siso query digraph -C <dir> <targets>
 
 prints directed graph for <targets> of build.ninja.
 If <targets> is not give, it will print directed graph for default target specified by build.ninja.
@@ -37,40 +35,40 @@ See https://pkg.go.dev/golang.org/x/tools/cmd/digraph
 for digraph command.
 `
 
-// Cmd returns the Command for the `digraph` subcommand provided by this package.
-func Cmd() *subcommands.Command {
+// cmdDigraph returns the Command for the `digraph` subcommand provided by this package.
+func cmdDigraph() *subcommands.Command {
 	return &subcommands.Command{
 		UsageLine: "digraph [-C <dir>] [<targets>...]",
 		ShortDesc: "show digraph",
-		LongDesc:  usage,
+		LongDesc:  digraphUsage,
 		Advanced:  true,
 		CommandRun: func() subcommands.CommandRun {
-			c := &run{}
+			c := &digraphRun{}
 			c.init()
 			return c
 		},
 	}
 }
 
-type run struct {
+type digraphRun struct {
 	subcommands.CommandRunBase
 
 	dir   string
 	fname string
 }
 
-func (c *run) init() {
+func (c *digraphRun) init() {
 	c.Flags.StringVar(&c.dir, "C", ".", "ninja running directory to find build.ninja")
 	c.Flags.StringVar(&c.fname, "f", "build.ninja", "input build filename (relative to -C)")
 }
 
-func (c *run) Run(a subcommands.Application, args []string, env subcommands.Env) int {
+func (c *digraphRun) Run(a subcommands.Application, args []string, env subcommands.Env) int {
 	ctx := cli.GetContext(a, c, env)
 	err := c.run(ctx, args)
 	if err != nil {
 		switch {
 		case errors.Is(err, flag.ErrHelp):
-			fmt.Fprintf(os.Stderr, "%v\n%s\n", err, usage)
+			fmt.Fprintf(os.Stderr, "%v\n%s\n", err, digraphUsage)
 		default:
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		}
@@ -79,7 +77,7 @@ func (c *run) Run(a subcommands.Application, args []string, env subcommands.Env)
 	return 0
 }
 
-func (c *run) run(ctx context.Context, args []string) error {
+func (c *digraphRun) run(ctx context.Context, args []string) error {
 	state := ninjautil.NewState()
 	p := ninjautil.NewManifestParser(state)
 	err := os.Chdir(c.dir)
