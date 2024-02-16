@@ -75,6 +75,9 @@ func TestIDEAnalysis(t *testing.T) {
 		},
 	})
 
+	// This c.analysis call is equivalent with invocation of
+	//  ./build/util/ide_query --out-dir out/siso --source foo/foo.cc
+
 	c := &ideAnalysisRun{}
 	c.init()
 	c.dir = "out/siso"
@@ -88,7 +91,7 @@ func TestIDEAnalysis(t *testing.T) {
 		BuildArtifactRoot: "out/siso",
 		Sources: []SourceFile{
 			{
-				Path:       "../../foo/foo.cc",
+				Path:       "foo/foo.cc",
 				WorkingDir: "out/siso",
 				CompilerArguments: []string{
 					"clang++",
