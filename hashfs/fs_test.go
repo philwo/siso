@@ -1750,6 +1750,9 @@ func TestWriteEmptyFlush(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Stat(ctx, dir, %q)=%v, %v; want nil err", name, fi, err)
 			}
+			if !fi.IsChanged() {
+				t.Errorf("IsChanged=%t; want true", fi.IsChanged())
+			}
 			mtime := fi.ModTime()
 			if !mtime.Equal(now) {
 				t.Errorf("mtime %v != %v", mtime, now)
@@ -1804,6 +1807,10 @@ func TestWriteDataFlush(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Stat(ctx, dir, %q)=%v, %v; want nil err", name, fi, err)
 			}
+			if !fi.IsChanged() {
+				t.Errorf("IsChanged=%t; want true", fi.IsChanged())
+			}
+
 			mtime := fi.ModTime()
 			if !mtime.Equal(now) {
 				t.Errorf("mtime %v != %v", mtime, now)

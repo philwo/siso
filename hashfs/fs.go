@@ -433,14 +433,16 @@ func (hfs *HashFS) WriteFile(ctx context.Context, root, fname string, b []byte, 
 		mode |= 0111
 	}
 	e := &entry{
-		lready:  lready,
-		size:    data.Digest().SizeBytes,
-		mtime:   mtime,
-		mode:    mode,
-		src:     data,
-		d:       data.Digest(),
-		buf:     b,
-		cmdhash: cmdhash,
+		lready:      lready,
+		size:        data.Digest().SizeBytes,
+		mtime:       mtime,
+		mode:        mode,
+		src:         data,
+		d:           data.Digest(),
+		buf:         b,
+		cmdhash:     cmdhash,
+		updatedTime: time.Now(),
+		isChanged:   true,
 	}
 	err := hfs.dirStoreAndNotify(ctx, fname, e)
 	clog.Infof(ctx, "writefile %s x:%t mtime:%s: %v", fname, isExecutable, mtime, err)
@@ -458,11 +460,13 @@ func (hfs *HashFS) Symlink(ctx context.Context, root, target, linkpath string, m
 	lready := make(chan bool, 1)
 	lready <- true
 	e := &entry{
-		lready:  lready,
-		mtime:   mtime,
-		mode:    0644 | fs.ModeSymlink,
-		cmdhash: cmdhash,
-		target:  target,
+		lready:      lready,
+		mtime:       mtime,
+		mode:        0644 | fs.ModeSymlink,
+		cmdhash:     cmdhash,
+		target:      target,
+		updatedTime: time.Now(),
+		isChanged:   true,
 	}
 	err := hfs.dirStoreAndNotify(ctx, linkfname, e)
 	clog.Infof(ctx, "symlink @%s %s -> %s: %v", root, linkpath, target, err)
@@ -518,9 +522,11 @@ func (hfs *HashFS) Copy(ctx context.Context, root, src, dst string, mtime time.T
 		cmdhash: cmdhash,
 		target:  e.target,
 		// use the same data source as src if any.
-		src: e.src,
-		d:   e.d,
-		buf: e.buf,
+		src:         e.src,
+		d:           e.d,
+		buf:         e.buf,
+		updatedTime: time.Now(),
+		isChanged:   true,
 	}
 	err := hfs.dirStoreAndNotify(ctx, dstfname, newEnt)
 	if err != nil {
@@ -571,6 +577,7 @@ func (hfs *HashFS) Mkdir(ctx context.Context, root, dirname string, cmdhash []by
 		cmdhash:     cmdhash,
 		directory:   &directory{},
 		updatedTime: time.Now(),
+		isChanged:   true,
 	}
 	err = hfs.dirStoreAndNotify(ctx, dirname, e)
 	var serr storeRaceError
@@ -1607,6 +1614,7 @@ func (d *directory) storeEntry(ctx context.Context, fname string, e *entry) (*en
 				if ee.updatedTime.Before(e.updatedTime) {
 					ee.updatedTime = e.updatedTime
 				}
+				ee.isChanged = e.isChanged
 				ee.mu.Unlock()
 				lv := struct {
 					origFname   string
