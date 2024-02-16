@@ -206,6 +206,12 @@ func createRequest(ctx context.Context, cmd *execute.Cmd, execTimeout, reclientT
 	// cmd.AllInputs are already checked
 	inputs = append(inputs, cmd.AllInputs()...)
 
+	// Propagate InputRootAbsolutePath to Reproxy.
+	inputRoot, ok := cmd.Platform["InputRootAbsolutePath"]
+	if ok {
+		cmd.REProxyConfig.Platform["InputRootAbsolutePath"] = inputRoot
+	}
+
 	c := &cpb.Command{
 		Identifiers: &cpb.Identifiers{
 			CommandId: cmd.ID,
