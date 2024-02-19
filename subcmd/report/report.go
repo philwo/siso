@@ -15,6 +15,7 @@ import (
 	"io/fs"
 	"os"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/maruel/subcommands"
@@ -98,7 +99,18 @@ func (c *run) collect(ctx context.Context) (map[string]digest.Data, error) {
 		}
 		for _, fname := range matches {
 			ui.Default.PrintLines(fmt.Sprintf("reading %s", fname))
-			src := digest.LocalFileSource{Fname: fname, IOMetrics: &m}
+			localFname := fname
+			if strings.HasSuffix(fname, ".redirected") {
+				buf, err := os.ReadFile(fname)
+				if err != nil {
+					clog.Warningf(ctx, "failed to read %s: %v", fname, err)
+					continue
+				}
+				localFname = string(buf)
+				fname = strings.TrimSuffix(fname, ".redirected")
+				clog.Infof(ctx, "%s -> %s", fname, localFname)
+			}
+			src := digest.LocalFileSource{Fname: localFname, IOMetrics: &m}
 			data, err := digest.FromLocalFile(ctx, src)
 			if err != nil {
 				clog.Errorf(ctx, "Error to calculate digest %s: %v", fname, err)

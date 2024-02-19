@@ -1284,6 +1284,12 @@ func (c *ninjaCmdRun) logSymlink(ctx context.Context) error {
 	err = os.Symlink(logfiles[0], logFilename)
 	if err != nil {
 		clog.Warningf(ctx, "failed to create %s: %v", logFilename, err)
+		// On Windows, it failed to create symlink.
+		// just same filename in *.redirected file.
+		err = os.WriteFile(logFilename+".redirected", []byte(logfiles[0]), 0644)
+		if err != nil {
+			clog.Warningf(ctx, "failed to write %s.redirected: %v", logFilename, err)
+		}
 		c.sisoInfoLog = logfiles[0]
 		return nil
 	}
