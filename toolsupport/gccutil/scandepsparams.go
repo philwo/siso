@@ -60,6 +60,10 @@ func ExtractScanDepsParams(ctx context.Context, args, env []string) ScanDepsPara
 			i++
 			res.Frameworks = append(res.Frameworks, args[i])
 			continue
+		case "-include":
+			i++
+			res.Files = append(res.Files, args[i])
+			continue
 		case "-isysroot":
 			i++
 			res.Sysroots = append(res.Sysroots, args[i])
