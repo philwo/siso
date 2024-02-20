@@ -37,6 +37,10 @@ import (
 // see: https://lwn.net/Articles/650786/
 const maxSymlinks = 40
 
+// ForgetMissingsSemaphore is a semaphore to control concurrent ForgetMissings.
+// os.Lstat in ForgetMissings would create lots of thread. b/325565625
+var ForgetMissingsSemaphore = semaphore.New("fs-forget", runtime.NumCPU()*2)
+
 // FlushSemaphore is a semaphore to control concurrent flushes.
 var FlushSemaphore = semaphore.New("fs-flush", runtime.NumCPU()*2)
 
@@ -626,16 +630,39 @@ func (hfs *HashFS) Forget(ctx context.Context, root string, inputs []string) {
 // if it doesn't exist on local disk, and returns valid inputs.
 func (hfs *HashFS) ForgetMissings(ctx context.Context, root string, inputs []string) []string {
 	availables := make([]string, 0, len(inputs))
+	needCheck := make([]string, 0, len(inputs))
 	for _, fname := range inputs {
-		fullname := filepath.Join(root, fname)
-		fullname = filepath.ToSlash(fullname)
-		_, err := os.Lstat(fullname)
+		fi, err := hfs.Stat(ctx, root, fname)
 		if errors.Is(err, fs.ErrNotExist) {
-			clog.Infof(ctx, "forget missing %s", fullname)
-			hfs.directory.delete(ctx, fullname)
+			// If it doesn't exist in hashfs,
+			// no need to check with os.Lstat.
 			continue
 		}
-		availables = append(availables, fname)
+		if fi.IsChanged() {
+			// it is explicit generated file.
+			// no need to check on disk.
+			availables = append(availables, fname)
+			continue
+		}
+		needCheck = append(needCheck, fname)
+	}
+
+	err := ForgetMissingsSemaphore.Do(ctx, func(ctx context.Context) error {
+		for _, fname := range needCheck {
+			fullname := filepath.Join(root, fname)
+			fullname = filepath.ToSlash(fullname)
+			_, err := os.Lstat(fullname)
+			if errors.Is(err, fs.ErrNotExist) {
+				clog.Infof(ctx, "forget missing %s", fullname)
+				hfs.directory.delete(ctx, fullname)
+				continue
+			}
+			availables = append(availables, fname)
+		}
+		return nil
+	})
+	if err != nil {
+		clog.Warningf(ctx, "forget missings: %v", err)
 	}
 	return availables
 }

@@ -502,6 +502,7 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 		b.cacheSema,
 		b.cache.sema,
 		hashfs.FlushSemaphore,
+		hashfs.ForgetMissingsSemaphore,
 		remoteexec.Semaphore,
 	}
 	b.traceEvents.Start(ctx, semas, []*iometrics.IOMetrics{
