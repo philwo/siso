@@ -12,6 +12,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/maruel/subcommands"
@@ -276,31 +278,25 @@ func (c *ideAnalysisRun) analysis(ctx context.Context, args []string) (IDEAnalys
 			out = node.Path()
 		}
 		seen := make(map[string]bool)
-		addInputs := func(fname string, needGenerated bool) {
+
+		addInputs := func(fname string) {
+			// fname is cur dir relative
+			// i.e. build_artifact_root relative.
 			if seen[fname] {
 				return
 			}
 			seen[fname] = true
-			source.Deps = append(source.Deps, fname)
-			if !needGenerated {
-				return
-			}
 			generated := GeneratedFile{
 				Path: fname,
 			}
 			fullpath := filepath.Join(execRoot, c.dir, fname)
 			ent, ok := fsm[fullpath]
-			if !ok {
-				clog.Infof(ctx, "%s %s: not in hashfs entry %s", source.Path, fname, fullpath)
-				// generated file, but not yet generated?
-				source.Generated = append(source.Generated, generated)
-				return
-			}
-			if len(ent.CmdHash) == 0 {
+			if ok && len(ent.CmdHash) == 0 {
 				// source file
 				clog.Infof(ctx, "%s %s: not generated", source.Path, fname)
 				return
 			}
+			source.Deps = append(source.Deps, c.getDeps(ctx, state, fsm, execRoot, fname)...)
 			// TODO: fetch content from RBE-CAS by digest if needed.
 			buf, err := os.ReadFile(fullpath)
 			if err != nil {
@@ -320,21 +316,23 @@ func (c *ideAnalysisRun) analysis(ctx context.Context, args []string) (IDEAnalys
 			}
 			source.Generated = append(source.Generated, generated)
 		}
-		needGenerated := true
+		depsLogUsed := false
 		if out != "" {
 			deps, _, err := depsLog.Get(ctx, out)
 			if err != nil {
 				clog.Warningf(ctx, "deps %s: %v", out, err)
 			} else {
 				for _, in := range deps {
-					addInputs(in, needGenerated)
+					addInputs(in)
 				}
 				// If deps is available, check generated from deps only.
-				needGenerated = false
+				depsLogUsed = true
 			}
 		}
-		for _, node := range outEdge.Inputs() {
-			addInputs(node.Path(), needGenerated)
+		if !depsLogUsed {
+			for _, node := range outEdge.Inputs() {
+				addInputs(node.Path())
+			}
 		}
 
 		command := outEdge.Binding("command")
@@ -343,10 +341,70 @@ func (c *ideAnalysisRun) analysis(ctx context.Context, args []string) (IDEAnalys
 			cmdArgs = []string{"/bin/sh", "-c", command}
 		}
 		source.CompilerArguments = cmdArgs
+		// TODO: add deps that would change compiler arguments?
+		slices.Sort(source.Deps)
+		source.Deps = slices.Compact(source.Deps)
 
 		source.Status.Code = Ok
 		analysis.Sources = append(analysis.Sources, source)
 
 	}
 	return analysis, nil
+}
+
+// getDeps returns deps for fname (generated file).
+// fname is working dir relative, but deps are repo root relative.
+// e.g. *.proto for *.pb.h
+// ref: http://shortn/_GgVRbmzqOx
+// TOOD: could be chromium specific. use starlark to support various cases?
+func (c *ideAnalysisRun) getDeps(ctx context.Context, state *ninjautil.State, fsm map[string]*pb.Entry, execRoot, fname string) []string {
+	// by default, all source inputs of generated file as deps.
+	filter := func(in *ninjautil.Node) (string, bool) {
+		fname := in.Path()
+		fullpath := filepath.Join(execRoot, c.dir, fname)
+		ent, ok := fsm[fullpath]
+		if ok && len(ent.CmdHash) > 0 {
+			// generated file
+			// TODO: better to collect all indirect source input?
+			return "", false
+		}
+		return filepath.ToSlash(filepath.Join(c.dir, fname)), true
+	}
+	switch {
+	case strings.HasSuffix(fname, ".pb.h"):
+		// use *.proto for *.pb.h
+		filter = func(in *ninjautil.Node) (string, bool) {
+			fname := in.Path()
+			if !strings.HasSuffix(fname, ".proto") {
+				return "", false
+			}
+			fullpath := filepath.Join(execRoot, c.dir, fname)
+			ent, ok := fsm[fullpath]
+			if ok && len(ent.CmdHash) > 0 {
+				// generated file
+				// TODO: recursively check input *.proto, or its source?
+				return "", false
+			}
+			return filepath.ToSlash(filepath.Join(c.dir, fname)), true
+		}
+	}
+	node, ok := state.LookupNode(fname)
+	if !ok {
+		clog.Warningf(ctx, "not found %s in build graph", fname)
+		return nil
+	}
+	edge, ok := node.InEdge()
+	if !ok {
+		clog.Warningf(ctx, "no in-edge for %s", fname)
+		return nil
+	}
+	// edge is proto gen
+	var deps []string
+	for _, in := range edge.Inputs() {
+		dep, ok := filter(in)
+		if ok {
+			deps = append(deps, dep)
+		}
+	}
+	return deps
 }
