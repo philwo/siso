@@ -74,7 +74,7 @@ func (er *edgeRule) ensure(ctx context.Context, globals *globals) (gotRule bool,
 		// remove edgeRule for all outputs of the edge from edgeRules
 		// for non-pure and no solibs step.
 		for _, output := range er.edge.Outputs() {
-			outPath := globals.targetPath(output)
+			outPath := globals.targetPath(ctx, output)
 			globals.edgeRules.Delete(outPath)
 		}
 		return true, rule, false
@@ -100,7 +100,7 @@ func (g *Graph) newStepDef(ctx context.Context, edge *ninjautil.Edge, next build
 		}
 		globals := g.globals
 		for _, out := range edge.Outputs() {
-			outPath := globals.targetPath(out)
+			outPath := globals.targetPath(ctx, out)
 			globals.edgeRules.Store(outPath, er)
 			if log.V(1) {
 				clog.Infof(ctx, "add edgeRule for %s [newStepDef]", outPath)
@@ -125,7 +125,7 @@ func (s *StepDef) EnsureRule(ctx context.Context) {
 	if len(outputs) == 0 {
 		return
 	}
-	outPath := s.globals.targetPath(outputs[0])
+	outPath := s.globals.targetPath(ctx, outputs[0])
 	// *edgeRule is stored in newStepDef for all outputs of the edge.
 	v, ok := s.globals.edgeRules.Load(outPath)
 	if !ok {
@@ -283,21 +283,21 @@ func (s *StepDef) Binding(name string) string {
 }
 
 // Depfile returns exec-root relative depfile path or empty if not set.
-func (s *StepDef) Depfile() string {
+func (s *StepDef) Depfile(ctx context.Context) string {
 	depfile := s.edge.UnescapedBinding("depfile")
 	if depfile == "" {
 		return ""
 	}
-	return s.globals.path.MaybeFromWD(depfile)
+	return s.globals.path.MaybeFromWD(ctx, depfile)
 }
 
 // Rspfile returns exec-root relative rspfile path or empty if not set.
-func (s *StepDef) Rspfile() string {
+func (s *StepDef) Rspfile(ctx context.Context) string {
 	rspfile := s.edge.UnescapedBinding("rspfile")
 	if rspfile == "" {
 		return ""
 	}
-	return s.globals.path.MaybeFromWD(rspfile)
+	return s.globals.path.MaybeFromWD(ctx, rspfile)
 }
 
 func edgeSolibs(edge *ninjautil.Edge) []string {
@@ -325,7 +325,7 @@ func (s *StepDef) Inputs(ctx context.Context) []string {
 	var targets []string
 	globals := s.globals
 	for _, in := range s.edge.Inputs() {
-		p := globals.targetPath(in)
+		p := globals.targetPath(ctx, in)
 		if seen[p] {
 			continue
 		}
@@ -334,7 +334,7 @@ func (s *StepDef) Inputs(ctx context.Context) []string {
 	}
 	for _, p := range edgeSolibs(s.edge) {
 		clog.Infof(ctx, "solib %s", p)
-		p := globals.path.MaybeFromWD(p)
+		p := globals.path.MaybeFromWD(ctx, p)
 		if seen[p] {
 			continue
 		}
@@ -355,7 +355,7 @@ func (s *StepDef) TriggerInputs(ctx context.Context) ([]string, error) {
 	var targets []string
 	globals := s.globals
 	for _, in := range s.edge.TriggerInputs() {
-		p := globals.targetPath(in)
+		p := globals.targetPath(ctx, in)
 		if seen[p] {
 			continue
 		}
@@ -412,7 +412,7 @@ func depInputs(ctx context.Context, s *StepDef) ([]string, error) {
 		if depfile == "" {
 			return nil, nil
 		}
-		df := s.globals.path.MaybeFromWD(depfile)
+		df := s.globals.path.MaybeFromWD(ctx, depfile)
 		if s.edge.Binding("generator") != "" {
 			// e.g. rule gn.
 			// generator runs locally, so believe a local file
@@ -434,7 +434,7 @@ func depInputs(ctx context.Context, s *StepDef) ([]string, error) {
 	}
 	var inputs []string
 	for _, in := range deps {
-		rin := s.globals.path.MaybeFromWD(in)
+		rin := s.globals.path.MaybeFromWD(ctx, in)
 		inputs = append(inputs, rin)
 	}
 	return inputs, nil
@@ -447,7 +447,7 @@ func (s *StepDef) ToolInputs(ctx context.Context) []string {
 
 	var inputs []string
 	for _, in := range s.rule.Inputs {
-		inputs = append(inputs, fromConfigPath(s.globals.path, in))
+		inputs = append(inputs, fromConfigPath(ctx, s.globals.path, in))
 	}
 	return s.globals.stepConfig.ExpandInputs(ctx, s.globals.path, s.globals.hashFS, inputs)
 }
@@ -613,7 +613,7 @@ func (s *StepDef) expandLabels(ctx context.Context, inputs []string) []string {
 			clog.Infof(ctx, "expand %s", cpath)
 		}
 		for _, dep := range deps {
-			dep := fromConfigPath(p, dep)
+			dep := fromConfigPath(ctx, p, dep)
 			inputs = append(inputs, dep)
 		}
 	}
@@ -640,7 +640,7 @@ func (s *StepDef) ExpandedInputs(ctx context.Context) []string {
 	var inputs []string
 	globals := s.globals
 	for _, in := range s.edge.Inputs() {
-		p := globals.targetPath(in)
+		p := globals.targetPath(ctx, in)
 		if seen[p] {
 			continue
 		}
@@ -651,7 +651,7 @@ func (s *StepDef) ExpandedInputs(ctx context.Context) []string {
 		inputs = append(inputs, p)
 	}
 	for _, p := range edgeSolibs(s.edge) {
-		p = globals.path.MaybeFromWD(p)
+		p = globals.path.MaybeFromWD(ctx, p)
 		if seen[p] {
 			continue
 		}
@@ -708,7 +708,7 @@ func (s *StepDef) ExpandedInputs(ctx context.Context) []string {
 		}
 		var ins []string
 		for _, in := range er.edge.Inputs() {
-			p := globals.targetPath(in)
+			p := globals.targetPath(ctx, in)
 			if seen[p] {
 				continue
 			}
@@ -727,7 +727,7 @@ func (s *StepDef) ExpandedInputs(ctx context.Context) []string {
 		newInputs = append(newInputs, inputs[i])
 		var solibsIns []string
 		for _, in := range edgeSolibs(er.edge) {
-			in = globals.path.MaybeFromWD(in)
+			in = globals.path.MaybeFromWD(ctx, in)
 			if seen[in] {
 				continue
 			}
@@ -746,12 +746,12 @@ func (s *StepDef) ExpandedInputs(ctx context.Context) []string {
 		}
 		// when accumulate expands inputs/outputs.
 		edgeOuts := er.edge.Outputs()
-		if inputs[i] == globals.targetPath(edgeOuts[0]) {
+		if inputs[i] == globals.targetPath(ctx, edgeOuts[0]) {
 			// associates additional outputs to main output.
 			// so step depends on the main output of this step can access
 			// additional outputs of this step (in local run).
 			for _, out := range edgeOuts[1:] {
-				o := globals.targetPath(out)
+				o := globals.targetPath(ctx, out)
 				if seen[o] {
 					continue
 				}
@@ -785,7 +785,7 @@ func (s *StepDef) appendIndirectInputs(ctx context.Context, filter func(context.
 	globals := s.globals
 	// allow to use outputs of the edge.
 	for _, out := range edge.Outputs() {
-		p := globals.targetPath(out)
+		p := globals.targetPath(ctx, out)
 		if seen[p] {
 			continue
 		}
@@ -803,7 +803,7 @@ func (s *StepDef) appendIndirectInputs(ctx context.Context, filter func(context.
 	}
 	var nextEdges []*ninjautil.Edge
 	for _, in := range edge.Inputs() {
-		p := globals.targetPath(in)
+		p := globals.targetPath(ctx, in)
 		if seen[p] {
 			continue
 		}
@@ -868,12 +868,12 @@ func (s *StepDef) Handle(ctx context.Context, cmd *execute.Cmd) error {
 }
 
 // Outputs returns outputs of the step.
-func (s *StepDef) Outputs() []string {
+func (s *StepDef) Outputs(ctx context.Context) []string {
 	seen := make(map[string]bool)
 	var targets []string
 	globals := s.globals
 	for _, out := range s.edge.Outputs() {
-		p := globals.targetPath(out)
+		p := globals.targetPath(ctx, out)
 		if seen[p] {
 			continue
 		}
@@ -885,9 +885,9 @@ func (s *StepDef) Outputs() []string {
 }
 
 // LocalOutputs returns outputs of the step that should be written to local disk.
-func (s *StepDef) LocalOutputs() []string {
+func (s *StepDef) LocalOutputs(ctx context.Context) []string {
 	if s.rule.OutputLocal {
-		return s.Outputs()
+		return s.Outputs(ctx)
 	}
 	return nil
 }
@@ -912,8 +912,8 @@ func (s *StepDef) RuleFix(ctx context.Context, inadds, outadds []string) []byte 
 	rule := s.rule
 	rule.ActionName = s.ActionName()
 	var actionOut string
-	if len(s.Outputs()) > 0 {
-		actionOut = toConfigPath(s.globals.path, s.Outputs()[0])
+	if len(s.Outputs(ctx)) > 0 {
+		actionOut = toConfigPath(s.globals.path, s.Outputs(ctx)[0])
 	}
 	rule.ActionOuts = nil
 	rule.CommandPrefix = strings.Join(s.Args(ctx), " ")

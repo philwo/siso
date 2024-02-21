@@ -103,9 +103,9 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 	step.init(ctx, b)
 	description := stepDescription(step.def)
 	prevStepOut := b.prevStepOut(ctx, step)
-	stepStartLog(logger, step, description, spanName)
+	stepStartLog(ctx, logger, step, description, spanName)
 	step.metrics.init(ctx, b, step, stepStart, prevStepOut)
-	b.stepSpanInit(span, step, description, spanName, prevStepOut)
+	b.stepSpanInit(ctx, span, step, description, spanName, prevStepOut)
 
 	ctx, span = trace.NewSpan(ctx, "run-step")
 	defer span.Close(nil)
@@ -182,7 +182,7 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 			b.logOutput(ctx, msgs, step.cmd.Console)
 		}
 		return StepError{
-			Target: b.path.MaybeToWD(step.cmd.Outputs[0]),
+			Target: b.path.MaybeToWD(ctx, step.cmd.Outputs[0]),
 			Cause:  err,
 		}
 	}
@@ -202,7 +202,7 @@ func (b *Builder) prevStepOut(ctx context.Context, step *Step) string {
 	if step.prevStepOut == nil {
 		return ""
 	}
-	s, err := b.graph.TargetPath(step.prevStepOut)
+	s, err := b.graph.TargetPath(ctx, step.prevStepOut)
 	if err != nil {
 		clog.Warningf(ctx, "failed to get target path: %v", err)
 		return ""
@@ -210,7 +210,7 @@ func (b *Builder) prevStepOut(ctx context.Context, step *Step) string {
 	return s
 }
 
-func stepStartLog(logger *clog.Logger, step *Step, description, spanName string) {
+func stepStartLog(ctx context.Context, logger *clog.Logger, step *Step, description, spanName string) {
 	logEntry := logger.Entry(logging.Info, description)
 	logEntry.Labels = map[string]string{
 		"id":          step.def.String(),
@@ -218,12 +218,12 @@ func stepStartLog(logger *clog.Logger, step *Step, description, spanName string)
 		"description": description,
 		"action":      step.def.ActionName(),
 		"span_name":   spanName,
-		"output0":     step.def.Outputs()[0],
+		"output0":     step.def.Outputs(ctx)[0],
 	}
 	logger.Log(logEntry)
 }
 
-func (b *Builder) stepSpanInit(span *trace.Span, step *Step, description, spanName, prevStepOut string) {
+func (b *Builder) stepSpanInit(ctx context.Context, span *trace.Span, step *Step, description, spanName, prevStepOut string) {
 	span.SetAttr("ready_time", time.Since(step.readyTime).Milliseconds())
 	span.SetAttr("prev", step.prevStepID)
 	span.SetAttr("prev_out", prevStepOut)
@@ -235,14 +235,14 @@ func (b *Builder) stepSpanInit(span *trace.Span, step *Step, description, spanNa
 	span.SetAttr("description", description)
 	span.SetAttr("action", step.def.ActionName())
 	span.SetAttr("span_name", spanName)
-	span.SetAttr("output0", step.def.Outputs()[0])
+	span.SetAttr("output0", step.def.Outputs(ctx)[0])
 	if next := step.def.Next(); next != nil {
 		span.SetAttr("next_id", step.def.Next().String())
 	}
 	if step.metrics.GNTarget != "" {
 		span.SetAttr("gn_target", step.metrics.GNTarget)
 	}
-	span.SetAttr("backtraces", stepBacktraces(step))
+	span.SetAttr("backtraces", stepBacktraces(ctx, step))
 }
 
 func (b *Builder) handleStep(ctx context.Context, step *Step) (bool, error) {

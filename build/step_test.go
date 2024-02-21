@@ -40,8 +40,8 @@ func (f fakeStepDef) Binding(b string) string {
 	return ""
 }
 
-func (f fakeStepDef) Depfile() string { return "" }
-func (f fakeStepDef) Rspfile() string { return "" }
+func (f fakeStepDef) Depfile(context.Context) string { return "" }
+func (f fakeStepDef) Rspfile(context.Context) string { return "" }
 
 func (fakeStepDef) Inputs(context.Context) []string                 { return nil }
 func (fakeStepDef) TriggerInputs(context.Context) ([]string, error) { return nil, nil }
@@ -61,13 +61,13 @@ func (fakeStepDef) RemoteInputs() map[string]string            { return nil }
 func (fakeStepDef) REProxyConfig() *execute.REProxyConfig      { return &execute.REProxyConfig{} }
 func (fakeStepDef) Handle(context.Context, *execute.Cmd) error { return nil }
 
-func (f fakeStepDef) Outputs() []string {
+func (f fakeStepDef) Outputs(context.Context) []string {
 	return f.outputs
 }
 
-func (fakeStepDef) LocalOutputs() []string      { return nil }
-func (fakeStepDef) Pure() bool                  { return false }
-func (fakeStepDef) Platform() map[string]string { return nil }
+func (fakeStepDef) LocalOutputs(context.Context) []string { return nil }
+func (fakeStepDef) Pure() bool                            { return false }
+func (fakeStepDef) Platform() map[string]string           { return nil }
 func (fakeStepDef) RecordDeps(context.Context, string, time.Time, []string) (bool, error) {
 	return false, nil
 }

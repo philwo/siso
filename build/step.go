@@ -50,10 +50,10 @@ type StepDef interface {
 	Binding(string) string
 
 	// Depfile returns exec-root relative depfile path, or empty if not set.
-	Depfile() string
+	Depfile(context.Context) string
 
 	// Rspfile returns exec-root relative rspfile path, or empty if not set.
-	Rspfile() string
+	Rspfile(context.Context) string
 
 	// Inputs returns inputs of the step.
 	Inputs(context.Context) []string
@@ -88,10 +88,10 @@ type StepDef interface {
 	Handle(context.Context, *execute.Cmd) error
 
 	// Outputs returns outputs of the step.
-	Outputs() []string
+	Outputs(context.Context) []string
 
 	// LocalOutputs returns outputs of the step that should be written to the local disk.
-	LocalOutputs() []string
+	LocalOutputs(context.Context) []string
 
 	// Pure indicates the step is pure or not.
 	Pure() bool
@@ -274,11 +274,11 @@ func stepSpanName(stepDef StepDef) string {
 	return cmd
 }
 
-func stepBacktraces(step *Step) []string {
+func stepBacktraces(ctx context.Context, step *Step) []string {
 	var locs []string
 	var prev string
 	for s := step.def; s != nil; s = s.Next() {
-		outs := s.Outputs()
+		outs := s.Outputs(ctx)
 		loc := stepSpanName(s)
 		if len(outs) > 0 {
 			out := outs[0]
@@ -313,7 +313,7 @@ func newCmd(ctx context.Context, b *Builder, stepDef StepDef) *execute.Cmd {
 	cmdline := stepDef.Binding("command")
 	rspfileContent := stepDef.Binding("rspfile_content")
 
-	outputs := stepDef.Outputs()
+	outputs := stepDef.Outputs(ctx)
 	// add build.ninja as outputs of gn step.
 	// gn uses
 	//
@@ -329,7 +329,7 @@ func newCmd(ctx context.Context, b *Builder, stepDef StepDef) *execute.Cmd {
 	// correctly managed by Siso.
 	// This workaround is needed to make second build as null build.
 	if stepDef.ActionName() == "gn" && len(outputs) == 1 && filepath.Base(outputs[0]) == "build.ninja.stamp" {
-		outputs = append(outputs, b.path.MaybeFromWD("build.ninja"))
+		outputs = append(outputs, b.path.MaybeFromWD(ctx, "build.ninja"))
 	}
 
 	cmd := &execute.Cmd{
@@ -338,7 +338,7 @@ func newCmd(ctx context.Context, b *Builder, stepDef StepDef) *execute.Cmd {
 		ActionName: stepDef.ActionName(),
 		Args:       b.argTab.InternSlice(stepDef.Args(ctx)),
 		// we don't pass environment variables.
-		RSPFile:        stepDef.Rspfile(),
+		RSPFile:        stepDef.Rspfile(ctx),
 		RSPFileContent: []byte(rspfileContent),
 		CmdHash:        calculateCmdHash(cmdline, rspfileContent),
 		ExecRoot:       b.path.ExecRoot, // use step binding?
@@ -349,7 +349,7 @@ func newCmd(ctx context.Context, b *Builder, stepDef StepDef) *execute.Cmd {
 		// TODO(b/266518906): enable UseSystemInput
 		// UseSystemInput: stepDef.Binding("use_system_input") != "",
 		Deps:    stepDef.Binding("deps"),
-		Depfile: stepDef.Depfile(),
+		Depfile: stepDef.Depfile(ctx),
 		Restat:  stepDef.Binding("restat") != "",
 
 		Pure: stepDef.Pure(),

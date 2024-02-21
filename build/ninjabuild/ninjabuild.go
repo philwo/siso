@@ -371,20 +371,20 @@ func (g *Graph) Targets(ctx context.Context, args ...string) ([]build.Target, er
 }
 
 // TargetPath returns exec-root relative path of the target.
-func (g *Graph) TargetPath(target build.Target) (string, error) {
+func (g *Graph) TargetPath(ctx context.Context, target build.Target) (string, error) {
 	node, ok := target.(*ninjautil.Node)
 	if !ok {
 		return "", fmt.Errorf("unexpected target type %T", target)
 	}
-	return g.globals.targetPath(node), nil
+	return g.globals.targetPath(ctx, node), nil
 }
 
-func (g *globals) targetPath(node *ninjautil.Node) string {
+func (g *globals) targetPath(ctx context.Context, node *ninjautil.Node) string {
 	p, ok := g.targetPaths.Load(node)
 	if ok {
 		return p.(string)
 	}
-	s := g.path.MaybeFromWD(node.Path())
+	s := g.path.MaybeFromWD(ctx, node.Path())
 	p, _ = g.targetPaths.LoadOrStore(node, s)
 	return p.(string)
 }
@@ -406,7 +406,7 @@ func (g *Graph) StepDef(ctx context.Context, target build.Target, next build.Ste
 	}
 	g.visited[edge] = true
 	if edge.IsPhony() {
-		g.globals.phony[g.globals.targetPath(n)] = true
+		g.globals.phony[g.globals.targetPath(ctx, n)] = true
 	}
 	stepDef := g.newStepDef(ctx, edge, next)
 	edgeInputs := edge.Inputs()

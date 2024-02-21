@@ -142,7 +142,7 @@ build all: phony exe
 		}
 		var got []string
 		for _, target := range targets {
-			p, err := g.TargetPath(target)
+			p, err := g.TargetPath(ctx, target)
 			if err != nil {
 				t.Errorf("g.TargetPath(%q)=%v, %v; want nil err", target, p, err)
 			}

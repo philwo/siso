@@ -25,7 +25,7 @@ func (b *Builder) needToRun(ctx context.Context, stepDef StepDef, outputs []Targ
 		if errors.Is(err, errDirty) {
 			// if phony's inputs are dirty, mark this phony's output as dirty.
 			for _, out := range outputs {
-				outpath, err := b.graph.TargetPath(out)
+				outpath, err := b.graph.TargetPath(ctx, out)
 				if err != nil {
 					clog.Warningf(ctx, "failed to get targetpath for %v: %v", out, err)
 					continue
@@ -56,8 +56,8 @@ func (b *Builder) checkUpToDate(ctx context.Context, stepDef StepDef, outputs []
 
 	// TODO(b/288419130): make sure it covers all cases as ninja does.
 
-	outname := b.path.MaybeToWD(out0)
-	lastInName := b.path.MaybeToWD(lastIn)
+	outname := b.path.MaybeToWD(ctx, out0)
+	lastInName := b.path.MaybeToWD(ctx, lastIn)
 	if err != nil {
 		clog.Infof(ctx, "need %v", err)
 		reason := "missing-inputs"
@@ -98,14 +98,14 @@ func (b *Builder) checkUpToDate(ctx context.Context, stepDef StepDef, outputs []
 	}
 	if b.outputLocal != nil {
 		numOuts := len(outputs)
-		depFile := stepDef.Depfile()
+		depFile := stepDef.Depfile(ctx)
 		if depFile != "" {
 			numOuts++
 		}
 		localOutputs := make([]string, 0, numOuts)
 		seen := make(map[string]bool)
 		for _, out := range outputs {
-			outPath, err := b.graph.TargetPath(out)
+			outPath, err := b.graph.TargetPath(ctx, out)
 			if err != nil {
 				clog.Warningf(ctx, "bad target %v", err)
 				continue
@@ -157,7 +157,7 @@ func outputMtime(ctx context.Context, b *Builder, outputs []Target, restat bool)
 	var outcmdhash []byte
 	out0 := ""
 	for i, out := range outputs {
-		outPath, err := b.graph.TargetPath(out)
+		outPath, err := b.graph.TargetPath(ctx, out)
 		if err != nil {
 			if oerr == nil {
 				oerr = err

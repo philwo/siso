@@ -45,13 +45,13 @@ func (gcc depsGCC) DepsFastCmd(ctx context.Context, b *Builder, cmd *execute.Cmd
 func (gcc depsGCC) fixCmdInputs(ctx context.Context, b *Builder, cmd *execute.Cmd) ([]string, error) {
 	params := gccutil.ExtractScanDepsParams(ctx, cmd.Args, cmd.Env)
 	for i := range params.Dirs {
-		params.Dirs[i] = b.path.MaybeFromWD(params.Dirs[i])
+		params.Dirs[i] = b.path.MaybeFromWD(ctx, params.Dirs[i])
 	}
 	for i := range params.Frameworks {
-		params.Frameworks[i] = b.path.MaybeFromWD(params.Frameworks[i])
+		params.Frameworks[i] = b.path.MaybeFromWD(ctx, params.Frameworks[i])
 	}
 	for i := range params.Sysroots {
-		params.Sysroots[i] = b.path.MaybeFromWD(params.Sysroots[i])
+		params.Sysroots[i] = b.path.MaybeFromWD(ctx, params.Sysroots[i])
 	}
 	var inputs []string
 	// include directory must be included, even if no include files there.
@@ -161,16 +161,16 @@ func (depsGCC) scandeps(ctx context.Context, b *Builder, step *Step) ([]string, 
 	err := b.scanDepsSema.Do(ctx, func(ctx context.Context) error {
 		params := gccutil.ExtractScanDepsParams(ctx, step.cmd.Args, step.cmd.Env)
 		for i := range params.Files {
-			params.Files[i] = b.path.MaybeFromWD(params.Files[i])
+			params.Files[i] = b.path.MaybeFromWD(ctx, params.Files[i])
 		}
 		for i := range params.Dirs {
-			params.Dirs[i] = b.path.MaybeFromWD(params.Dirs[i])
+			params.Dirs[i] = b.path.MaybeFromWD(ctx, params.Dirs[i])
 		}
 		for i := range params.Frameworks {
-			params.Frameworks[i] = b.path.MaybeFromWD(params.Frameworks[i])
+			params.Frameworks[i] = b.path.MaybeFromWD(ctx, params.Frameworks[i])
 		}
 		for i := range params.Sysroots {
-			params.Sysroots[i] = b.path.MaybeFromWD(params.Sysroots[i])
+			params.Sysroots[i] = b.path.MaybeFromWD(ctx, params.Sysroots[i])
 		}
 		req := scandeps.Request{
 			Defines:    params.Defines,

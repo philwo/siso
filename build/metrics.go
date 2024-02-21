@@ -133,7 +133,7 @@ func (m *StepMetric) init(ctx context.Context, b *Builder, step *Step, stepStart
 	m.StepID = step.def.String()
 	m.Rule = step.def.RuleName()
 	m.Action = step.def.ActionName()
-	m.Output = step.def.Outputs()[0]
+	m.Output = step.def.Outputs(ctx)[0]
 	m.GNTarget = step.def.Binding("gn_target")
 	m.PrevStepID = step.prevStepID
 	m.PrevStepOut = prevStepOut

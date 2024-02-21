@@ -744,7 +744,7 @@ func stepLogEntry(ctx context.Context, logger *clog.Logger, step *Step, duration
 		Request: &http.Request{
 			Method: http.MethodPost,
 			URL: &url.URL{
-				Path: path.Join("/step", step.def.ActionName(), filepath.ToSlash(step.def.Outputs()[0])),
+				Path: path.Join("/step", step.def.ActionName(), filepath.ToSlash(step.def.Outputs(ctx)[0])),
 			},
 		},
 		Status: httpStatus,
@@ -854,7 +854,7 @@ func (b *Builder) outputs(ctx context.Context, step *Step) error {
 		}
 	}
 
-	localOutputs := step.def.LocalOutputs()
+	localOutputs := step.def.LocalOutputs(ctx)
 	span.SetAttr("outputs-local", len(localOutputs))
 	seen := make(map[string]bool)
 	for _, o := range localOutputs {
@@ -865,7 +865,7 @@ func (b *Builder) outputs(ctx context.Context, step *Step) error {
 	}
 
 	clog.Infof(ctx, "outputs %d->%d", len(outputs), len(localOutputs))
-	defOutputs := step.def.Outputs()
+	defOutputs := step.def.Outputs(ctx)
 	// need to check against step.cmd.Outputs, not step.def.Outputs, since
 	// handler may add to step.cmd.Outputs.
 	for _, out := range outputs {
@@ -970,7 +970,7 @@ func (b *Builder) updateDeps(ctx context.Context, step *Step) error {
 	span.SetAttr("deps", len(deps))
 	span.SetAttr("updated", updated)
 	for i := range deps {
-		deps[i] = b.path.MaybeFromWD(deps[i])
+		deps[i] = b.path.MaybeFromWD(ctx, deps[i])
 	}
 	depsFixCmd(ctx, b, step, deps)
 	return nil
@@ -988,7 +988,7 @@ func (b *Builder) prepareAllOutDirs(ctx context.Context) error {
 	seen := make(map[string]struct{})
 	// Collect only the deepest directories to avoid redundant `os.MkdirAll`.
 	for target := range b.plan.outputs {
-		p, err := b.graph.TargetPath(target)
+		p, err := b.graph.TargetPath(ctx, target)
 		if err != nil {
 			return err
 		}

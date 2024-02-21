@@ -43,7 +43,7 @@ type Graph interface {
 	Targets(context.Context, ...string) ([]Target, error)
 
 	// TargetPath returns exec-root relative path of target.
-	TargetPath(Target) (string, error)
+	TargetPath(context.Context, Target) (string, error)
 
 	// StepDef creates new StepDef for the target and its inputs/outputs targets.
 	// if err is ErrTargetIsSource, target is source and no step to
@@ -229,7 +229,7 @@ func newScheduler(ctx context.Context, opt schedulerOption) *scheduler {
 
 // mark marks target (exec root relative) as source file.
 func (s *scheduler) mark(ctx context.Context, graph Graph, target Target) error {
-	fname, err := graph.TargetPath(target)
+	fname, err := graph.TargetPath(ctx, target)
 	if err != nil {
 		return err
 	}
@@ -443,7 +443,7 @@ func (p *plan) dump(ctx context.Context, graph Graph) {
 		}
 	}
 	for _, s := range steps {
-		for _, o := range s.def.Outputs() {
+		for _, o := range s.def.Outputs(ctx) {
 			if !waits[o] {
 				clog.Infof(ctx, "step %s output:%s no trigger", s, o)
 				continue
@@ -453,7 +453,7 @@ func (p *plan) dump(ctx context.Context, graph Graph) {
 	}
 	outs := make([]string, 0, len(waits))
 	for k := range waits {
-		out, err := graph.TargetPath(k)
+		out, err := graph.TargetPath(ctx, k)
 		if err != nil {
 			clog.Warningf(ctx, "failed to get target path: %v", err)
 			continue

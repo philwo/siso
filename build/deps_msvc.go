@@ -48,10 +48,10 @@ func (msvc depsMSVC) fixCmdInputs(ctx context.Context, b *Builder, cmd *execute.
 		return nil, err
 	}
 	for i := range dirs {
-		dirs[i] = b.path.MaybeFromWD(dirs[i])
+		dirs[i] = b.path.MaybeFromWD(ctx, dirs[i])
 	}
 	for i := range sysroots {
-		sysroots[i] = b.path.MaybeFromWD(sysroots[i])
+		sysroots[i] = b.path.MaybeFromWD(ctx, sysroots[i])
 	}
 	clog.Infof(ctx, "fixCmdInputs dirs=%q sysroots=%q", dirs, sysroots)
 	var inputs []string
@@ -116,7 +116,7 @@ func (depsMSVC) DepsAfterRun(ctx context.Context, b *Builder, step *Step) ([]str
 			// and break no-op check.
 			continue
 		}
-		in = b.path.MaybeToWD(in)
+		in = b.path.MaybeToWD(ctx, in)
 		if m[in] {
 			continue
 		}
@@ -181,13 +181,13 @@ func (depsMSVC) scandeps(ctx context.Context, b *Builder, step *Step) ([]string,
 			return err
 		}
 		for i := range files {
-			files[i] = b.path.MaybeFromWD(files[i])
+			files[i] = b.path.MaybeFromWD(ctx, files[i])
 		}
 		for i := range dirs {
-			dirs[i] = b.path.MaybeFromWD(dirs[i])
+			dirs[i] = b.path.MaybeFromWD(ctx, dirs[i])
 		}
 		for i := range sysroots {
-			sysroots[i] = b.path.MaybeFromWD(sysroots[i])
+			sysroots[i] = b.path.MaybeFromWD(ctx, sysroots[i])
 		}
 		req := scandeps.Request{
 			Defines:  defines,

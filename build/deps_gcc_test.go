@@ -32,7 +32,7 @@ func (fakeGraph) Targets(ctx context.Context, args ...string) ([]Target, error) 
 	return targets, nil
 }
 
-func (fakeGraph) TargetPath(target Target) (string, error) {
+func (fakeGraph) TargetPath(ctx context.Context, target Target) (string, error) {
 	t, ok := target.(string)
 	if !ok {
 		return "", fmt.Errorf("unexpected target type %T", target)
