@@ -295,3 +295,60 @@ func TestScanDeps_IncludeByDifferentMacroValue(t *testing.T) {
 		t.Errorf("scandeps diff -want +got:\n%s", diff)
 	}
 }
+
+func TestScanDeps_Framework(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+
+	for fname, content := range map[string]string{
+		"app/app.mm": `
+#import <Foo/Bar.h>
+`,
+		"out/siso/Foo.framework/Headers/Bar.h": `
+// Bar.h
+`,
+	} {
+		fname := filepath.Join(dir, fname)
+		err := os.MkdirAll(filepath.Dir(fname), 0755)
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = os.WriteFile(fname, []byte(content), 0644)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	inputDeps := map[string][]string{}
+
+	hashFS, err := hashfs.New(ctx, hashfs.Option{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	scanDeps := New(hashFS, inputDeps)
+
+	req := Request{
+		Sources: []string{
+			"app/app.mm",
+		},
+		Dirs: []string{},
+		Frameworks: []string{
+			"out/siso",
+		},
+		Sysroots: []string{},
+	}
+	got, err := scanDeps.Scan(ctx, dir, req)
+	if err != nil {
+		t.Errorf("scandeps()=%v, %v; want nil err", got, err)
+	}
+
+	want := []string{
+		"app",
+		"app/app.mm",
+		"out/siso",
+		"out/siso/Foo.framework/Headers",
+		"out/siso/Foo.framework/Headers/Bar.h",
+	}
+	if diff := cmp.Diff(want, got, cmpopts.SortSlices(func(a, b string) bool { return a < b })); diff != "" {
+		t.Errorf("scandeps diff -want +got:\n%s", diff)
+	}
+}

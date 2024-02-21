@@ -10,6 +10,7 @@ import (
 	"io/fs"
 	"path"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	log "github.com/golang/glog"
@@ -96,7 +97,7 @@ func (fsys *filesystem) scanner(ctx context.Context, execRoot string, inputDeps 
 		hmaps:        make(map[string][]string),
 	}
 	for _, dir := range precomputedTrees {
-		s.fsview.addDir(ctx, dir, false)
+		s.fsview.addDir(ctx, dir, noSearchPath)
 	}
 	return s
 }
@@ -186,7 +187,11 @@ func (s *scanner) addSource(ctx context.Context, fname string) {
 }
 
 func (s *scanner) addDir(ctx context.Context, dir string) {
-	s.fsview.addDir(ctx, dir, true)
+	s.fsview.addDir(ctx, dir, includeSearchPath)
+}
+
+func (s *scanner) addFrameworkDir(ctx context.Context, dir string) {
+	s.fsview.addDir(ctx, dir, frameworkSearchPath)
 }
 
 func (s *scanner) pushDir(ctx context.Context, dir string) {
@@ -194,7 +199,7 @@ func (s *scanner) pushDir(ctx context.Context, dir string) {
 	if len(s.dirstack) > s.maxDirstack {
 		s.maxDirstack = len(s.dirstack)
 	}
-	s.fsview.addDir(ctx, dir, false)
+	s.fsview.addDir(ctx, dir, noSearchPath)
 	if log.V(1) {
 		clog.Infof(ctx, "push dir <- %s", dir)
 	}
@@ -243,50 +248,86 @@ func (s *scanner) find(ctx context.Context, name string) (string, error) {
 	ds = append(ds, s.macroDirs[name]...)
 	mi := len(ds)
 	ds = append(ds, s.fsview.searchPaths[s.nameDirs[name]:]...)
-	if len(ds) == 0 {
-		return "", nil
-	}
-	if log.V(1) {
-		clog.Infof(ctx, "find %q dirs:%d", name, len(ds))
-		clog.Infof(ctx, "dirs %d %d %q", qi, mi, ds)
-	}
-	// TODO: lookup hmap appropriately.
-	s.ds = ds
-	for i, dir := range ds {
-		if included[dir] {
-			continue
-		}
-		included[dir] = true
+	if len(ds) > 0 {
 		if log.V(1) {
-			clog.Infof(ctx, "find check %s/%s", dir, name)
+			clog.Infof(ctx, "find %q dirs:%d", name, len(ds))
+			clog.Infof(ctx, "dirs %d %d %q", qi, mi, ds)
 		}
-		incpath, sr, err := s.fsview.get(ctx, dir, name)
-		if err != nil {
-			continue
-		}
-		s.macroCheck(ctx, dir, name, incpath, sr.includes)
+		// TODO: lookup hmap appropriately.
+		s.ds = ds
+		for i, dir := range ds {
+			if included[dir] {
+				continue
+			}
+			included[dir] = true
+			if log.V(1) {
+				clog.Infof(ctx, "find check %s/%s", dir, name)
+			}
+			incpath, sr, err := s.fsview.get(ctx, dir, name)
+			if err != nil {
+				continue
+			}
+			s.macroCheck(ctx, dir, name, incpath, sr.includes)
 
-		// `#include "xx"` in incpath may include "xx"
-		// from the dir of incpath.
-		dir := path.Dir(incpath)
-		s.pushDir(ctx, dir)
+			// `#include "xx"` in incpath may include "xx"
+			// from the dir of incpath.
+			dir := path.Dir(incpath)
+			s.pushDir(ctx, dir)
 
-		if log.V(1) {
-			clog.Infof(ctx, "find %s -> includes:%q defines:%q", incpath, sr.includes, sr.defines)
-		}
+			if log.V(1) {
+				clog.Infof(ctx, "find %s -> includes:%q defines:%q", incpath, sr.includes, sr.defines)
+			}
 
-		s.updateMacros(ctx, sr.defines)
-		if i >= qi && i < mi {
-			s.pushMacroInputs(sr.includes...)
-		} else {
-			s.pushInputs(sr.includes...)
+			s.updateMacros(ctx, sr.defines)
+			if i >= qi && i < mi {
+				s.pushMacroInputs(sr.includes...)
+			} else {
+				s.pushInputs(sr.includes...)
+			}
+			if i > mi {
+				s.nameDirs[name] += i - mi
+			}
+			return incpath, nil
 		}
-		if i > mi {
-			s.nameDirs[name] += i - mi
-		}
-		return incpath, nil
+		s.nameDirs[name] = len(ds) - mi
 	}
-	s.nameDirs[name] = len(ds) - mi
+	if len(s.fsview.frameworkPaths) > 0 {
+		fwdir, base, found := strings.Cut(name, "/")
+		if found {
+			// framework import "Foo/Bar.h" -> "Foo.framework/Headers/Bar.h"
+			fwname := path.Join(fwdir+".framework", "Headers", base)
+			if log.V(1) {
+				clog.Infof(ctx, "check framework %s -> %s : %s", name, fwname, s.fsview.frameworkPaths)
+			}
+			for _, dir := range s.fsview.frameworkPaths {
+				if included[dir] {
+					continue
+				}
+				included[dir] = true
+				if log.V(1) {
+					clog.Infof(ctx, "find check %s/%s", dir, fwname)
+				}
+				incpath, sr, err := s.fsview.get(ctx, dir, fwname)
+				if err != nil {
+					continue
+				}
+				s.macroCheck(ctx, dir, name, incpath, sr.includes)
+
+				// `#include "xx"` in incpath may include "xx"
+				// from the dir of incpath.
+				dir := path.Dir(incpath)
+				s.pushDir(ctx, dir)
+
+				if log.V(1) {
+					clog.Infof(ctx, "find %s -> includes:%q defines:%q", incpath, sr.includes, sr.defines)
+				}
+
+				s.updateMacros(ctx, sr.defines)
+				s.pushInputs(sr.includes...)
+				return incpath, nil
+			}
+		}
+	}
 	if log.V(1) {
 		clog.Infof(ctx, "find %s %v", name, fs.ErrNotExist)
 	}

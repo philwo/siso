@@ -56,7 +56,7 @@ func ExtractScanDepsParams(ctx context.Context, args, env []string) ScanDepsPara
 			i++
 			res.Dirs = append(res.Dirs, args[i])
 			continue
-		case "-iframework":
+		case "-F", "-iframework":
 			i++
 			res.Frameworks = append(res.Frameworks, args[i])
 			continue
@@ -82,6 +82,8 @@ func ExtractScanDepsParams(ctx context.Context, args, env []string) ScanDepsPara
 			res.Dirs = append(res.Dirs, strings.TrimPrefix(arg, "-iquote"))
 		case strings.HasPrefix(arg, "-isystem"):
 			res.Dirs = append(res.Dirs, strings.TrimPrefix(arg, "-isystem"))
+		case strings.HasPrefix(arg, "-F"):
+			res.Frameworks = append(res.Frameworks, strings.TrimPrefix(arg, "-F"))
 		case strings.HasPrefix(arg, "-iframework"):
 			res.Frameworks = append(res.Frameworks, strings.TrimPrefix(arg, "-iframework"))
 		case strings.HasPrefix(arg, "--sysroot="):

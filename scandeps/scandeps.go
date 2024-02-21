@@ -69,10 +69,11 @@ func (s *ScanDeps) Scan(ctx context.Context, execRoot string, req Request) ([]st
 
 	started := time.Now()
 
-	// Assume precomputed tree is used for frameworks and sysroots.
+	// Assume sysroots use precomputed tree.
 	var precomputedTrees []string
-	precomputedTrees = append(precomputedTrees, req.Frameworks...)
 	precomputedTrees = append(precomputedTrees, req.Sysroots...)
+	// framework, or some system include dirs may also use precomputed tree
+	// if precomputed tree is defined for the dir (in addDir later).
 
 	scanner := s.fs.scanner(ctx, execRoot, s.inputDeps, precomputedTrees)
 	scanner.setMacros(ctx, req.Defines)
@@ -88,6 +89,9 @@ func (s *ScanDeps) Scan(ctx context.Context, execRoot string, req Request) ([]st
 			continue
 		}
 		scanner.addDir(ctx, dir)
+	}
+	for _, dir := range req.Frameworks {
+		scanner.addFrameworkDir(ctx, dir)
 	}
 
 	setupDur := time.Since(started)

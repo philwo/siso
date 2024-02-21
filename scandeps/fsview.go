@@ -38,6 +38,9 @@ type fsview struct {
 	// search path: i.e. -I
 	searchPaths []string
 
+	// framework search path: i.e. -F
+	frameworkPaths []string
+
 	// true:exist false:notExist noEntry:not-checked-yet
 	dirs  map[string]bool
 	files map[string]*scanResult
@@ -53,7 +56,15 @@ type fsview struct {
 	pathbuf bytes.Buffer
 }
 
-func (fv *fsview) addDir(ctx context.Context, dir string, searchPath bool) {
+type searchPathType int
+
+const (
+	noSearchPath searchPathType = iota
+	includeSearchPath
+	frameworkSearchPath
+)
+
+func (fv *fsview) addDir(ctx context.Context, dir string, searchPath searchPathType) {
 	dirheaders := dir + ":headers"
 	if _, ok := fv.inputDeps[dirheaders]; ok {
 		// use precomputed subtree for this directory,
@@ -68,7 +79,9 @@ func (fv *fsview) addDir(ctx context.Context, dir string, searchPath bool) {
 			return
 		}
 	}
-	if searchPath {
+	switch searchPath {
+	case noSearchPath:
+	case includeSearchPath:
 		// dir may be added to dir stack, but not in searchPaths yet?
 		seen := false
 		for _, p := range fv.searchPaths {
@@ -81,6 +94,20 @@ func (fv *fsview) addDir(ctx context.Context, dir string, searchPath bool) {
 			fv.searchPaths = append(fv.searchPaths, dir)
 			if log.V(1) {
 				clog.Infof(ctx, "add dir:%d %s", len(fv.searchPaths), dir)
+			}
+		}
+	case frameworkSearchPath:
+		seen := false
+		for _, p := range fv.frameworkPaths {
+			if dir == p {
+				seen = true
+				break
+			}
+		}
+		if !seen {
+			fv.frameworkPaths = append(fv.frameworkPaths, dir)
+			if log.V(1) {
+				clog.Infof(ctx, "add dir[framework]:%d %s", len(fv.frameworkPaths), dir)
 			}
 		}
 	}
