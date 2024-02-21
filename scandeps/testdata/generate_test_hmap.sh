@@ -7,18 +7,13 @@
 # build/config/ios/write_framework_hmap.py
 
 set -e
-
-if [ ! -f "${CHROMIUM_SRC_DIR}/build/config/ios/write_framework_hmap.py" ]; then
-    echo "build/config/ios/write_framework_hmap.py does not exist " \
-         "in \${CHROMIUM_SRC_DIR}" 1>&2
-    echo "set CHROMIUM_SRC_DIR and re-run" 1>&2
-    exit 1
-fi
+this_dir="$(cd $(dirname "$0"); pwd)"
 
 # expected to run this on MacOSX. /tmp -> /private/tmp
 mkdir -p /private/tmp/siso-scandeps-test/out/siso
 (cd /private/tmp/siso-scandeps-test/out/siso && \
- python3 "${CHROMIUM_SRC_DIR}/build/config/ios/write_framework_hmap.py" \
+ repodir="${this_dir}/../../subcmd/ninja/testdata/TestBuild_Hmap"
+ python3 "${repodir}/build/config/ios/write_framework_hmap.py" \
     test.hmap \
     Foo.framework \
     ../../ios/fooFramework/Foo.h \

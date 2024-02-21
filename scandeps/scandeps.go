@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"hash/maphash"
+	"strings"
 	"time"
 
 	log "github.com/golang/glog"
@@ -50,7 +51,7 @@ type Request struct {
 	// Includes are additional include files (i.e. -include or /FI).
 	Includes []string
 
-	// Dirs are include directories (search paths).
+	// Dirs are include directories (search paths) or hmap paths.
 	Dirs []string
 
 	// Frameworks are framework directories (search paths).
@@ -83,6 +84,9 @@ func (s *ScanDeps) Scan(ctx context.Context, execRoot string, req Request) ([]st
 		scanner.addSource(ctx, s)
 	}
 	for _, dir := range req.Dirs {
+		if strings.HasSuffix(dir, ".hmap") && scanner.addHmap(ctx, dir) {
+			continue
+		}
 		scanner.addDir(ctx, dir)
 	}
 

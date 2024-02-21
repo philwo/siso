@@ -316,3 +316,21 @@ func (fv *fsview) pathJoin(dir, fname string) string {
 	fv.pathbuf.WriteString(fname)
 	return fv.pathbuf.String()
 }
+
+// getHmap returns hmap excluding files that aren't under execRoot.
+func (fv *fsview) getHmap(ctx context.Context, hmap string) (map[string]string, bool) {
+	m, ok := fv.fs.getHmap(ctx, fv.execRoot, hmap)
+	mm := make(map[string]string)
+	for k, v := range m {
+		if filepath.IsAbs(v) {
+			rel, err := filepath.Rel(fv.execRoot, v)
+			if err != nil || !filepath.IsLocal(rel) {
+				clog.Warningf(ctx, "unacceptable dir for %s in hmap %s: %s: %v", k, hmap, v, err)
+				continue
+			}
+			v = rel
+		}
+		mm[k] = v
+	}
+	return mm, ok
+}

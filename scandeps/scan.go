@@ -58,6 +58,9 @@ type scanner struct {
 	// so no need to process it again.
 	nameDirs map[string]int
 
+	// hmap data: incpath -> filenames.
+	hmaps map[string][]string
+
 	// allocation
 	ds    []string
 	names []string
@@ -90,6 +93,7 @@ func (fsys *filesystem) scanner(ctx context.Context, execRoot string, inputDeps 
 		macroInclude: make(map[string]bool),
 		macroDirs:    make(map[string][]string),
 		nameDirs:     make(map[string]int),
+		hmaps:        make(map[string][]string),
 	}
 	for _, dir := range precomputedTrees {
 		s.fsview.addDir(ctx, dir, false)
@@ -207,6 +211,17 @@ func (s *scanner) popDir(ctx context.Context) {
 	}
 }
 
+func (s *scanner) addHmap(ctx context.Context, hmap string) bool {
+	m, ok := s.fsview.getHmap(ctx, hmap)
+	if !ok {
+		return false
+	}
+	for k, v := range m {
+		s.hmaps[k] = append(s.hmaps[k], v)
+	}
+	return true
+}
+
 func (s *scanner) find(ctx context.Context, name string) (string, error) {
 	if name == "" {
 		return "", io.EOF
@@ -235,6 +250,7 @@ func (s *scanner) find(ctx context.Context, name string) (string, error) {
 		clog.Infof(ctx, "find %q dirs:%d", name, len(ds))
 		clog.Infof(ctx, "dirs %d %d %q", qi, mi, ds)
 	}
+	// TODO: lookup hmap appropriately.
 	s.ds = ds
 	for i, dir := range ds {
 		if included[dir] {
@@ -315,5 +331,11 @@ func (s *scanner) macroAllUsed(ctx context.Context, macro string) bool {
 }
 
 func (s *scanner) results() []string {
-	return s.fsview.results()
+	res := s.fsview.results()
+	// add all files referred by hmap
+	// TODO: add only used header in hmap.
+	for _, v := range s.hmaps {
+		res = append(res, v...)
+	}
+	return res
 }
