@@ -6,6 +6,7 @@ package scandeps
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"io/fs"
 	"path"
@@ -238,6 +239,26 @@ func (s *scanner) find(ctx context.Context, name string) (string, error) {
 		included = make(map[string]bool)
 		s.included[name] = included
 	}
+	if filepath.IsAbs(name) {
+		rel, err := filepath.Rel(s.fsview.execRoot, name)
+		if err != nil || !filepath.IsLocal(rel) {
+			return "", fmt.Errorf("unacceptable abs include path %q: %w", name, err)
+		}
+		if s.fsview.topEnts["."] == nil {
+			s.fsview.addDir(ctx, ".", includeSearchPath)
+		}
+		incpath, sr, err := s.fsview.get(ctx, ".", rel)
+		if err != nil {
+			return "", err
+		}
+		s.macroCheck(ctx, ".", rel, incpath, sr.includes)
+		dir := path.Dir(incpath)
+		s.pushDir(ctx, dir)
+		s.updateMacros(ctx, sr.defines)
+		s.pushInputs(sr.includes...)
+		return incpath, nil
+	}
+
 	ds := s.ds[:0]
 	if form == '"' {
 		for i := len(s.dirstack) - 1; i >= 0; i-- {
