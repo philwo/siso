@@ -36,6 +36,7 @@ import (
 	"infra/build/siso/reapi/digest"
 	"infra/build/siso/reapi/merkletree/exporter"
 	"infra/build/siso/reapi/merkletree/importer"
+	rbepb "infra/build/siso/reapi/proto"
 )
 
 const usage = `recall action by digest, or remote exec call to run.
@@ -354,6 +355,32 @@ func (c *run) call(ctx context.Context, reopt reapi.Option, credential cred.Cred
 	fmt.Printf("    input: %s\n", inputTime)
 	fmt.Printf("    exec: %s\n", execTime)
 	fmt.Printf("    output: %s\n", outputTime)
+	auxes := md.GetAuxiliaryMetadata()
+	if len(auxes) > 0 {
+		fmt.Printf("  auxiliary:\n")
+		for _, aux := range auxes {
+			fmt.Printf("   %s\n", aux.GetTypeUrl())
+			any, err := aux.UnmarshalNew()
+			if err != nil {
+				log.Errorf("failed to unmarshal aux %s: %v", aux, err)
+				continue
+			}
+			switch m := any.(type) {
+			case *rbepb.AuxiliaryMetadata:
+				log.Infof("metadata %T: %s", m, m)
+				fmt.Printf("    version: %s\n", m.GetVersions())
+				fmt.Printf("    pool: %s\n", m.GetPool())
+				fmt.Printf("    resource_usage:\n")
+				ru := m.GetUsage()
+				fmt.Printf("      cpu peak: %4.2f%%\n", 100*ru.GetCpuPercentagePeak())
+				fmt.Printf("      cpu avg : %4.2f%%\n", 100*ru.GetCpuPercentageAverage())
+				fmt.Printf("      mem peak: %4.2f%%\n", 100*ru.GetMemoryPercentagePeak())
+				fmt.Printf("      mem avg : %4.2f%%\n", 100*ru.GetMemoryPercentageAverage())
+			default:
+				log.Infof("metadata %T: %s", m, m)
+			}
+		}
+	}
 	return err
 }
 
