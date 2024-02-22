@@ -21,6 +21,7 @@ import (
 	"infra/build/siso/reapi"
 	"infra/build/siso/reapi/digest"
 	"infra/build/siso/reapi/merkletree"
+	_ "infra/build/siso/reapi/proto" // for auxiliary metadata
 	"infra/build/siso/sync/semaphore"
 )
 
@@ -147,6 +148,14 @@ func (re *RemoteExec) recordExecuteMetadata(ctx context.Context, cmd *execute.Cm
 		wspan.Add(ctx, output)
 	}
 	clog.Infof(ctx, "execution metadata: %s queue=%s worker=%s input=%s exec=%s output=%s", md.GetWorker(), queue.Duration(), worker.Duration(), input.Duration(), exec.Duration(), output.Duration())
+	for _, aux := range md.GetAuxiliaryMetadata() {
+		amd, err := aux.UnmarshalNew()
+		if err != nil {
+			clog.Warningf(ctx, "unknown aux metadata %s: %v", aux.GetTypeUrl(), err)
+			continue
+		}
+		clog.Infof(ctx, "execution auxiliary metadata %T: %s", amd, amd)
+	}
 }
 
 func (re *RemoteExec) processResult(ctx context.Context, action digest.Digest, cmd *execute.Cmd, result *rpb.ActionResult, cached bool, err error) error {
