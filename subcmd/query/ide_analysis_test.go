@@ -13,10 +13,12 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"google.golang.org/protobuf/testing/protocmp"
 
 	"infra/build/siso/hashfs"
-	pb "infra/build/siso/hashfs/proto"
+	fspb "infra/build/siso/hashfs/proto"
 	"infra/build/siso/reapi/digest"
+	pb "infra/build/siso/toolsupport/ciderutil/proto"
 	"infra/build/siso/toolsupport/ninjautil"
 )
 
@@ -112,9 +114,9 @@ func TestIDEAnalysis(t *testing.T) {
 		t.Errorf(`analysis(ctx, "../../foo/foo.cc^")=%v, %v; want nil er`, got, err)
 	}
 
-	want := IDEAnalysis{
+	want := &pb.IdeAnalysis{
 		BuildArtifactRoot: "out/siso",
-		Sources: []SourceFile{
+		Sources: []*pb.SourceFile{
 			{
 				Path:       "foo/foo.cc",
 				WorkingDir: "out/siso",
@@ -129,27 +131,27 @@ func TestIDEAnalysis(t *testing.T) {
 					"-o",
 					"obj/foo.o",
 				},
-				Generated: []GeneratedFile{
+				Generated: []*pb.GeneratedFile{
 					{
 						Path:     "gen/bar/bar.h",
-						Contents: barH,
+						Contents: []byte(barH),
 					},
 					{
 						Path:     "gen/base/test/test.pb.h",
-						Contents: testPBH,
+						Contents: []byte(testPBH),
 					},
 				},
 				Deps: []string{
 					"bar/bar.in",
 					"base/test/test.proto",
 				},
-				Status: Status{
-					Code: Ok,
+				Status: &pb.Status{
+					Code: pb.Status_OK,
 				},
 			},
 		},
 	}
-	if diff := cmp.Diff(want, got); diff != "" {
+	if diff := cmp.Diff(want, got, protocmp.Transform()); diff != "" {
 		t.Errorf(`analysis(ctx, "../../foo/foo.cc^") diff -want +got:\n%s`, diff)
 	}
 
@@ -216,10 +218,10 @@ func setupFileState(t *testing.T, topdir, fname string, files map[string]fileSta
 	ctx := context.Background()
 	srcMtime := time.Now().Add(-10 * time.Second)
 	cmdHash := []byte("someCommandHash")
-	state := &pb.State{
-		Entries: []*pb.Entry{
+	state := &fspb.State{
+		Entries: []*fspb.Entry{
 			{
-				Id: &pb.FileID{
+				Id: &fspb.FileID{
 					ModTime: srcMtime.UnixNano(),
 				},
 				Name: filepath.ToSlash(topdir),
@@ -240,8 +242,8 @@ func setupFileState(t *testing.T, topdir, fname string, files map[string]fileSta
 			return
 		}
 		seen[dirname] = true
-		state.Entries = append(state.Entries, &pb.Entry{
-			Id: &pb.FileID{
+		state.Entries = append(state.Entries, &fspb.Entry{
+			Id: &fspb.FileID{
 				ModTime: mtime.UnixNano(),
 			},
 			Name: dirname,
@@ -251,12 +253,12 @@ func setupFileState(t *testing.T, topdir, fname string, files map[string]fileSta
 	writeFile := func(fname, content string, mtime time.Time, generated bool) {
 		mkdirAll(filepath.Dir(fname), mtime)
 		d := digest.FromBytes(fname, []byte(content))
-		ent := &pb.Entry{
-			Id: &pb.FileID{
+		ent := &fspb.Entry{
+			Id: &fspb.FileID{
 				ModTime: mtime.UnixNano(),
 			},
 			Name: fname,
-			Digest: &pb.Digest{
+			Digest: &fspb.Digest{
 				Hash:      d.Digest().Hash,
 				SizeBytes: d.Digest().SizeBytes,
 			},
