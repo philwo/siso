@@ -250,9 +250,10 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 	if (opts.Limits == Limits{}) {
 		opts.Limits = DefaultLimits(ctx)
 	}
-	// on many cores machine, it would hit default max thread limit = 10000
-	// usually, it would require 1/3 threads of stepLimit (cache miss case?)
-	maxThreads := opts.Limits.Step / 3
+	// On many cores machine, it would hit default max thread limit = 10000.
+	// Usually, it would require 1/3 of stepLimit threads (cache miss case?).
+	// For safe, sets 1/2 of stepLimit for max threads. b/325565625
+	maxThreads := opts.Limits.Step / 2
 	if maxThreads > 10000 {
 		debug.SetMaxThreads(maxThreads)
 	} else {
