@@ -95,16 +95,49 @@ type Client struct {
 	m *iometrics.IOMetrics
 }
 
-// New creates new remote exec API client.
-func New(ctx context.Context, cred cred.Cred, opt Option) (*Client, error) {
-	if opt.Address == "" {
-		return nil, errors.New("no reapi address")
-	}
-	if opt.Instance == "" {
-		return nil, errors.New("no reapi instance")
-	}
-	clog.Infof(ctx, "address: %q instance: %q", opt.Address, opt.Instance)
+// serviceConfig is gRPC service config for RE API.
+var serviceConfig = fmt.Sprintf(`
+{
+	"loadBalancingConfig": [{%q:{}}],
+	"methodConfig": [
+	  {
+		"name": [
+                  { "service": "build.bazel.remote.execution.v2.Execution" }
+                ],
+		"timeout": "600s",
+		"retryPolicy": {
+			"maxAttempts": 5,
+			"initialBackoff": "1s",
+			"maxBackoff": "120s",
+			"backoffMultiplier": 1.6,
+			"retryableStatusCodes": [
+				"RESOURCE_EXHAUSTED",
+				"UNAVAILABLE"
+			]
+		}
+	  },
+	  {
+		"name": [
+                  { "service": "build.bazel.remote.execution.v2.ContentAddressableStorage" },
+                  { "service": "build.bazel.remote.execution.v2.Capabilities" },
+                  { "service": "google.bytestream.ByteStream" }
+                ],
+		"timeout": "600s",
+		"retryPolicy": {
+			"maxAttempts": 5,
+			"initialBackoff": "0.1s",
+			"maxBackoff": "1s",
+			"backoffMultiplier": 1.6,
+			"retryableStatusCodes": [
+				"RESOURCE_EXHAUSTED",
+				"UNAVAILABLE"
+			]
+		}
+	  }
+	]
+}`, balancer.Name)
 
+func dialOptions(keepAliveParams keepalive.ClientParameters) []grpc.DialOption {
 	// TODO(b/273639326): handle auth failures gracefully.
 
 	// github.com/bazelbuild/remote-apis-sdks/go/pkg/balancer
@@ -132,53 +165,28 @@ func New(ctx context.Context, cred cred.Cred, opt Option) (*Client, error) {
 	// https://github.com/grpc/grpc/blob/c16338581dba2b054bf52484266b79e6934bbc1c/doc/service_config.md
 	// https://github.com/grpc/proposal/blob/9f993b522267ed297fe54c9ee32cfc13699166c7/A6-client-retries.md
 	// timeout=300s may cause deadline exceeded to fetch large *.so file?
-	dopts := append(cred.GRPCDialOptions(),
+	dopts := append([]grpc.DialOption(nil),
 		grpc.WithUnaryInterceptor(grpcInt.GCPUnaryClientInterceptor),
 		grpc.WithStreamInterceptor(grpcInt.GCPStreamClientInterceptor),
-		grpc.WithKeepaliveParams(opt.KeepAliveParams),
+		grpc.WithKeepaliveParams(keepAliveParams),
 		grpc.WithDisableServiceConfig(),
 		// no retry for ActionCache
-		grpc.WithDefaultServiceConfig(fmt.Sprintf(`
-{
-	"loadBalancingConfig": [{%q:{}}],
-	"methodConfig": [
-	  {
-		"name": [
-                  { "service": "build.bazel.remote.execution.v2.Execution" }
-                ],
-		"timeout": "600s",
-		"retryPolicy": {
-			"maxAttempts": 5,
-			"initialBackoff": "1s",
-			"maxBackoff": "120s",
-			"backoffMultiplier": 1.6,
-			"retriableStatusCodes": [
-				"RESOURCE_EXHAUSTED",
-				"UNAVAILABLE"
-			]
-		}
-	  },
-	  {
-		"name": [
-                  { "service": "build.bazel.remote.execution.v2.ContentAddressableStorage" },
-                  { "service": "build.bazel.remote.execution.v2.Capabilities" },
-                  { "service": "google.bytestream.ByteStream" }
-                ],
-		"timeout": "600s",
-		"retryPolicy": {
-			"maxAttempts": 5,
-			"initialBackoff": "0.1s",
-			"maxBackoff": "1s",
-			"backoffMultiplier": 1.6,
-			"retriableStatusCodes": [
-				"RESOURCE_EXHAUSTED",
-				"UNAVAILABLE"
-			]
-		}
-	  }
-	]
-}`, balancer.Name)))
+		grpc.WithDefaultServiceConfig(serviceConfig),
+	)
+	return dopts
+}
 
+// New creates new remote exec API client.
+func New(ctx context.Context, cred cred.Cred, opt Option) (*Client, error) {
+	if opt.Address == "" {
+		return nil, errors.New("no reapi address")
+	}
+	if opt.Instance == "" {
+		return nil, errors.New("no reapi instance")
+	}
+	clog.Infof(ctx, "address: %q instance: %q", opt.Address, opt.Instance)
+
+	dopts := append(cred.GRPCDialOptions(), dialOptions(opt.KeepAliveParams)...)
 	conn, err := grpc.DialContext(ctx, opt.Address, dopts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to dial %s: %w", opt.Address, err)
