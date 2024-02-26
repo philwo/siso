@@ -294,9 +294,10 @@ func processResponse(ctx context.Context, cmd *execute.Cmd, response *ppb.RunRes
 	// Log Reproxy's execution ID to associate it with Siso's command ID for debugging purposes.
 	clog.Infof(ctx, "RunResponse.ExecutionId=%s", response.GetExecutionId())
 
+	al := response.GetActionLog()
 	cached := response.GetResult().GetStatus() == cpb.CommandResultStatus_CACHE_HIT
 	if response.GetResult().GetExitCode() == 0 {
-		clog.Infof(ctx, "exit=%d cache=%t", response.GetResult().GetExitCode(), cached)
+		clog.Infof(ctx, "exit=%d cache=%t completion_status=%s action=%s", response.GetResult().GetExitCode(), cached, al.GetCompletionStatus(), al.GetRemoteMetadata().GetActionDigest())
 	} else {
 		clog.Warningf(ctx, "exit=%d cache=%t response=%v", response.GetResult().GetExitCode(), cached, response)
 	}
@@ -309,7 +310,6 @@ func processResponse(ctx context.Context, cmd *execute.Cmd, response *ppb.RunRes
 		// TODO(b/273407069): this is nowhere near a complete ExecutedActionMetadata. add extra info where siso needs it.
 		ExecutionMetadata: &rpb.ExecutedActionMetadata{},
 	}
-	al := response.GetActionLog()
 	// Completion status
 	remoteSuccess := false
 	switch cs := al.GetCompletionStatus(); cs {
