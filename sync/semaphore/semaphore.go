@@ -37,8 +37,8 @@ func New(name string, n int) *Semaphore {
 	s := &Semaphore{
 		name:         fmt.Sprintf("%s/%d", name, n),
 		ch:           ch,
-		waitSpanName: fmt.Sprintf("wait:%s", name),
-		servSpanName: fmt.Sprintf("serv:%s", name),
+		waitSpanName: fmt.Sprintf("wait:%s/%d", name, n),
+		servSpanName: fmt.Sprintf("serv:%s/%d", name, n),
 	}
 	return s
 }
