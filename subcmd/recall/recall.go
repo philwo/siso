@@ -49,16 +49,17 @@ To recall action identified by <digest> in <dir>.
 In <dir>, you'll get "action.txt", "command.txt" and "root/".
 
 You may modify *.txt or files in root/.
-From in the <dir>,
+
+If you don't specify <digest>, it will run action in <dir>.
+You can omit <dir> if it is current directory ".".
+
  - To issue remote exec call to run the command.
 
- $ siso recall -project <project> -reapi_instance <instance> \
-	    <dir>
+ $ siso recall -project <project> -reapi_instance <instance> <dir>
 
  - To re-run the command on a remote worker without fetching cache.
 
- $ siso recall -project <project> -reapi_instance <instance> -re_cache_enable_read=false \
-	    <dir>
+ $ siso recall -project <project> -reapi_instance <instance> -re_cache_enable_read=false <dir>
 
  - To use local docker to run the command.
 
