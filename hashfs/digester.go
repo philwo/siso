@@ -8,10 +8,12 @@ import (
 	"context"
 	"runtime"
 	"sync"
+	"time"
 
 	"github.com/pkg/xattr"
 
 	"infra/build/siso/o11y/clog"
+	"infra/build/siso/o11y/trace"
 	"infra/build/siso/reapi/digest"
 	"infra/build/siso/sync/semaphore"
 )
@@ -31,6 +33,9 @@ var (
 )
 
 func localDigest(ctx context.Context, src digest.Source, fname, xattrname string, size int64) (digest.Data, error) {
+	ctx, span := trace.NewSpan(ctx, "local-digest")
+	defer span.Close(nil)
+
 	digestLock.Lock()
 	digestFnames[fname] = struct{}{}
 	digestLock.Unlock()
@@ -50,7 +55,13 @@ func localDigest(ctx context.Context, src digest.Source, fname, xattrname string
 			}), nil
 		}
 	}
-	return digest.FromLocalFile(ctx, src)
+	started := time.Now()
+	d, err := digest.FromLocalFile(ctx, src)
+	if dur := time.Since(started); dur >= 1*time.Minute {
+		clog.Warningf(ctx, "too slow local digest %s %s in %s: %v", fname, d, dur, err)
+	}
+	return d, err
+
 }
 
 type digestReq struct {
