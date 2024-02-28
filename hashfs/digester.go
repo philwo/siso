@@ -57,8 +57,8 @@ func localDigest(ctx context.Context, src digest.Source, fname, xattrname string
 	}
 	started := time.Now()
 	d, err := digest.FromLocalFile(ctx, src)
-	if dur := time.Since(started); dur >= 1*time.Minute {
-		clog.Warningf(ctx, "too slow local digest %s %s in %s: %v", fname, d, dur, err)
+	if dur := time.Since(started); dur >= 10*time.Second {
+		clog.Warningf(ctx, "too slow local digest %s %s in %s, err=%v", fname, d.Digest(), dur, err)
 	}
 	return d, err
 
