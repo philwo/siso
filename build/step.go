@@ -388,13 +388,17 @@ func newCmd(ctx context.Context, b *Builder, stepDef StepDef) *execute.Cmd {
 }
 
 func stepTimeout(ctx context.Context, d string) time.Duration {
+	const defaultTimeout = 1 * time.Hour
 	if d == "" {
-		return 0
+		return defaultTimeout
 	}
 	dur, err := time.ParseDuration(d)
 	if err != nil {
 		clog.Warningf(ctx, "failed to parse duration %q: %v", d, err)
-		return 0
+		return defaultTimeout
+	}
+	if experiments.Enabled("no-fallback", "no-fallback: >=1h timeout avoid deadline exceeded error") {
+		return max(defaultTimeout, dur)
 	}
 	return dur
 }
