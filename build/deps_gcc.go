@@ -178,6 +178,7 @@ func (depsGCC) scandeps(ctx context.Context, b *Builder, step *Step) ([]string, 
 			Dirs:       params.Dirs,
 			Frameworks: params.Frameworks,
 			Sysroots:   params.Sysroots,
+			Timeout:    step.cmd.Timeout,
 		}
 		if log.V(1) {
 			clog.Infof(ctx, "scandeps req=%#v", req)

@@ -60,6 +60,9 @@ type Request struct {
 	// Sysroots are sysroot directories.
 	// It also includes toolchain root directory.
 	Sysroots []string
+
+	// To mitigate scanning that does not terminate.
+	Timeout time.Duration
 }
 
 // Scan scans C/C++ source/header files for req to get C/C++ dependencies.
@@ -107,7 +110,7 @@ func (s *ScanDeps) Scan(ctx context.Context, execRoot string, req Request) ([]st
 	// it was introduced to mitigate scanning that does not terminate,
 	// but we see such scan recently, so set sufficient large timeout
 	// to avoid scan failure due to timed out.
-	const scanTimeout = 150 * time.Second
+	scanTimeout := max(req.Timeout, 60*time.Second)
 
 	icnt := 0
 	ncnt := 0

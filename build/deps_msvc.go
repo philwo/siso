@@ -195,6 +195,7 @@ func (depsMSVC) scandeps(ctx context.Context, b *Builder, step *Step) ([]string,
 			Includes: includes,
 			Dirs:     dirs,
 			Sysroots: sysroots,
+			Timeout:  step.cmd.Timeout,
 		}
 		if log.V(1) {
 			clog.Infof(ctx, "scandeps req=%#v", req)
