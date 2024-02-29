@@ -1853,6 +1853,7 @@ func TestWriteDataFlush(t *testing.T) {
 func update(ctx context.Context, hfs *hashfs.HashFS, execRoot string, entries []merkletree.Entry, mtime time.Time, cmdhash []byte, action digest.Digest) error {
 	ents := make([]hashfs.UpdateEntry, 0, len(entries))
 	for _, ent := range entries {
+		ent := ent // loop var per iteration
 		mode := fs.FileMode(0644)
 		switch {
 		case !ent.Data.IsZero():
@@ -1866,7 +1867,8 @@ func update(ctx context.Context, hfs *hashfs.HashFS, execRoot string, entries []
 		}
 
 		ents = append(ents, hashfs.UpdateEntry{
-			Entry:       ent,
+			Name:        ent.Name,
+			Entry:       &ent,
 			Mode:        mode,
 			ModTime:     mtime,
 			CmdHash:     cmdhash,

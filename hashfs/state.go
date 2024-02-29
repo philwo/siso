@@ -427,8 +427,14 @@ func (hfs *HashFS) State(ctx context.Context) *pb.State {
 						Action:       fromDigest(e.action),
 						UpdatedTime:  e.updatedTime.UnixNano(),
 					})
-				} else if log.V(1) {
-					clog.Infof(ctx, "ignore %s: not file?", name)
+				} else if len(e.cmdhash) > 0 && e.directory == nil {
+					// cmdhash is set for generated file.
+					// digest is set, it's regular file.
+					// target is set, it's symlink.
+					// directory is not nil, it's directory.
+					// so, this would be generated file, but digest is not yet calculated.
+					// digest should be known after digester.stop, so it should not happen.
+					clog.Infof(ctx, "ignore %s: missing digest? cmdhash=%s", name, e.cmdhash)
 				}
 			}
 			if e.directory != nil {
