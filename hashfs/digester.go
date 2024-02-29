@@ -120,20 +120,9 @@ func (d *digester) worker() {
 	}
 }
 
-func (d *digester) stop(ctx context.Context) {
+func (d *digester) stop() {
 	close(d.quit)
-	clog.Infof(ctx, "wait for workers")
 	<-d.done
-	close(d.q)
-	clog.Infof(ctx, "run pending digest chan:%d + queue:%d", len(d.q), len(d.queue))
-	for req := range d.q {
-		d.compute(req.ctx, req.fname, req.e)
-	}
-	for _, req := range d.queue {
-		d.compute(req.ctx, req.fname, req.e)
-	}
-	d.queue = nil
-	clog.Infof(ctx, "finish digester")
 }
 
 func (d *digester) lazyCompute(ctx context.Context, fname string, e *entry) {

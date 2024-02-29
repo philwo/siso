@@ -678,7 +678,6 @@ func (c *Cmd) entriesFromResult(ctx context.Context, ds hashfs.DataSource, resul
 func hashfsUpdate(ctx context.Context, hfs *hashfs.HashFS, execRoot string, entries []merkletree.Entry, mtime time.Time, cmdhash []byte, action digest.Digest) error {
 	ents := make([]hashfs.UpdateEntry, 0, len(entries))
 	for _, ent := range entries {
-		ent := ent // loop var per iteration
 		mode := fs.FileMode(0644)
 		switch {
 		case !ent.Data.IsZero():
@@ -692,8 +691,7 @@ func hashfsUpdate(ctx context.Context, hfs *hashfs.HashFS, execRoot string, entr
 		}
 
 		ents = append(ents, hashfs.UpdateEntry{
-			Name:        ent.Name,
-			Entry:       &ent,
+			Entry:       ent,
 			Mode:        mode,
 			ModTime:     mtime,
 			CmdHash:     cmdhash,
@@ -733,7 +731,10 @@ func (c *Cmd) RecordOutputs(ctx context.Context, ds hashfs.DataSource, now time.
 }
 
 func retrieveLocalOutputEntries(ctx context.Context, hfs *hashfs.HashFS, root string, inputs []string) []hashfs.UpdateEntry {
-	return hfs.RetrieveUpdateEntriesFromLocal(ctx, root, inputs)
+	// forget and retrieve entries from local disk
+	// because files on local disk have been updated by command execution.
+	hfs.Forget(ctx, root, inputs)
+	return hfs.RetrieveUpdateEntries(ctx, root, inputs)
 }
 
 // computeOutputEntries computes output entries to have updatedTime and cmdhash.
@@ -746,7 +747,7 @@ func (c *Cmd) computeOutputEntries(ctx context.Context, entries []hashfs.UpdateE
 		// check with previous content recorded by
 		// RecordPreOutputs before execution.
 		for _, ent := range c.preOutputEntries {
-			pre[ent.Name] = ent
+			pre[ent.Entry.Name] = ent
 		}
 	}
 
@@ -757,7 +758,7 @@ func (c *Cmd) computeOutputEntries(ctx context.Context, entries []hashfs.UpdateE
 		ent.CmdHash = cmdhash
 		ent.UpdatedTime = updatedTime
 		ent.IsLocal = true
-		pent := pre[ent.Name]
+		pent := pre[ent.Entry.Name]
 		if !restat {
 			ent.ModTime = updatedTime
 			ent.IsChanged = true
