@@ -135,8 +135,16 @@ func (b *Builder) prepareLocalInputs(ctx context.Context, step *Step) error {
 	// for reproxy and local, no need to scan deps.
 	// but need to remove missing inputs from cmd.Inputs
 	// because we'll record header inputs for deps=msvc in deps log.
-	// we need to check this against local disk, not hashfs.
-	inputs = b.hashFS.ForgetMissings(ctx, step.cmd.ExecRoot, step.cmd.Inputs)
+	// TODO: b/322712783 - minimize local disk check.
+	if step.cmd.Deps == "msvc" {
+		// we need to check this against local disk, not hashfs.
+		// because command may add/remove files that are not
+		// known in ninja build graph.
+		inputs = b.hashFS.ForgetMissings(ctx, step.cmd.ExecRoot, step.cmd.Inputs)
+	} else {
+		// if deps is not "msvc", just check against hashfs.
+		inputs = b.hashFS.Availables(ctx, step.cmd.ExecRoot, step.cmd.Inputs)
+	}
 	if len(inputs) != len(step.cmd.Inputs) {
 		clog.Infof(ctx, "deps remove missing inputs %d -> %d", len(step.cmd.Inputs), len(inputs))
 		step.cmd.Inputs = inputs

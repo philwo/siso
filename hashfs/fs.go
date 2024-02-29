@@ -628,6 +628,8 @@ func (hfs *HashFS) Forget(ctx context.Context, root string, inputs []string) {
 
 // ForgetMissings forgets cached entry for input under root
 // if it doesn't exist on local disk, and returns valid inputs.
+// It is currently used for deps=msvc only to workaround clang-cl issue.
+// https://github.com/llvm/llvm-project/issues/58726
 func (hfs *HashFS) ForgetMissings(ctx context.Context, root string, inputs []string) []string {
 	availables := make([]string, 0, len(inputs))
 	needCheck := make([]string, 0, len(inputs))
@@ -636,6 +638,7 @@ func (hfs *HashFS) ForgetMissings(ctx context.Context, root string, inputs []str
 		if errors.Is(err, fs.ErrNotExist) {
 			// If it doesn't exist in hashfs,
 			// no need to check with os.Lstat.
+			clog.Infof(ctx, "remove from inputs %s: %v", fname, err)
 			continue
 		}
 		if fi.IsChanged() {
@@ -663,6 +666,22 @@ func (hfs *HashFS) ForgetMissings(ctx context.Context, root string, inputs []str
 	})
 	if err != nil {
 		clog.Warningf(ctx, "forget missings: %v", err)
+	}
+	return availables
+}
+
+// Availables returns valid inputs (i.e. exist in hashfs).
+func (hfs *HashFS) Availables(ctx context.Context, root string, inputs []string) []string {
+	availables := make([]string, 0, len(inputs))
+	for _, fname := range inputs {
+		_, err := hfs.Stat(ctx, root, fname)
+		if errors.Is(err, fs.ErrNotExist) {
+			// If it doesn't exist in hashfs,
+			// no need to check with os.Lstat.
+			clog.Infof(ctx, "remove from inputs %s: %v", fname, err)
+			continue
+		}
+		availables = append(availables, fname)
 	}
 	return availables
 }
