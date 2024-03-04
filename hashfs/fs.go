@@ -132,7 +132,7 @@ func (hfs *HashFS) SetExecutables(m map[string]bool) {
 // Persists current state in opt.StateFile.
 func (hfs *HashFS) Close(ctx context.Context) error {
 	clog.Infof(ctx, "fs close")
-	hfs.digester.stop()
+	hfs.digester.stop(ctx)
 	if hfs.opt.StateFile == "" {
 		return nil
 	}
@@ -239,12 +239,13 @@ func (hfs *HashFS) dirLookup(ctx context.Context, root, fname string) (*entry, *
 }
 
 func (hfs *HashFS) dirStoreAndNotify(ctx context.Context, fullname string, e *entry) error {
-	_, err := hfs.directory.store(ctx, fullname, e)
+	ee, err := hfs.directory.store(ctx, fullname, e)
 	if err != nil {
 		return err
 	}
+	hfs.digester.lazyCompute(ctx, fullname, ee)
 	for _, f := range hfs.notifies {
-		f(ctx, &FileInfo{fname: fullname, e: e})
+		f(ctx, &FileInfo{fname: fullname, e: ee})
 	}
 	return nil
 }
@@ -816,14 +817,22 @@ func (hfs *HashFS) Entries(ctx context.Context, root string, inputs []string) ([
 
 // UpdateEntry is an entry for Update.
 type UpdateEntry struct {
-	Entry       merkletree.Entry
+	Name string
+
+	// if Entry is nil, use local disk (from RetrieveUpdateEntriesFromLocal), so need to calculate digest from file.
+	// If Entry is not nil, use digest in Entry, rather than calculating digest from file.
+	Entry *merkletree.Entry
+
 	Mode        fs.FileMode
 	ModTime     time.Time
 	CmdHash     []byte
 	Action      digest.Digest
 	UpdatedTime time.Time
-	IsLocal     bool
 	IsChanged   bool
+
+	// IsLocal=true uses Entry, but assumes file exists on local,
+	// to avoid unnecessary flush operation.
+	IsLocal bool
 }
 
 // Update updates cache information for entries under execRoot.
@@ -834,12 +843,57 @@ func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []Update
 
 	// sort inputs, so update dir containing files first. b/300385880
 	sort.Slice(entries, func(i, j int) bool {
-		return entries[i].Entry.Name < entries[j].Entry.Name
+		return entries[i].Name < entries[j].Name
 	})
 
 	for _, ent := range entries {
-		fname := filepath.Join(execRoot, ent.Entry.Name)
+		clog.Infof(ctx, "update %v", ent)
+		fname := filepath.Join(execRoot, ent.Name)
 		fname = filepath.ToSlash(fname)
+		if ent.Entry == nil {
+			// UpdateEntry was captured by RetrieveUpdateEntriesFromLocal
+			// so the entry should exists in hfs.directory.
+			e, _, ok := hfs.dirLookup(ctx, execRoot, ent.Name)
+			if !ok {
+				clog.Warningf(ctx, "failed to update: no entry %s", ent.Name)
+				continue
+			}
+			if e.getMtime().Equal(ent.ModTime) || e.getDir() != nil {
+				e.mu.Lock()
+				e.mtime = ent.ModTime
+				e.mode = ent.Mode
+				e.cmdhash = ent.CmdHash
+				e.action = ent.Action
+				e.updatedTime = ent.UpdatedTime
+				e.isChanged = ent.IsChanged
+				e.mu.Unlock()
+			} else {
+				e = newLocalEntry()
+				e.init(ctx, fname, hfs.executables, hfs.IOMetrics)
+				e.mtime = ent.ModTime
+				e.cmdhash = ent.CmdHash
+				e.action = ent.Action
+				e.updatedTime = ent.UpdatedTime
+				e.isChanged = ent.IsChanged
+			}
+			// notify this output to scandeps.
+			err := hfs.dirStoreAndNotify(ctx, fname, e)
+			if err != nil {
+				return err
+			}
+			if ent.IsLocal && e.isChanged {
+				err := os.Chtimes(fname, time.Now(), e.getMtime())
+				hfs.IOMetrics.OpsDone(err)
+				if errors.Is(err, fs.ErrNotExist) {
+					clog.Warningf(ctx, "failed to update mtime of %s: %v", fname, err)
+					continue
+				}
+				if err != nil {
+					return fmt.Errorf("failed to update mtime of %s: %w", fname, err)
+				}
+			}
+			continue
+		}
 		switch {
 		case !ent.Entry.Data.IsZero():
 			lready := make(chan bool, 1)
@@ -947,13 +1001,15 @@ func (hfs *HashFS) RetrieveUpdateEntries(ctx context.Context, root string, fname
 	}
 	entries := make([]UpdateEntry, 0, len(ents))
 	for _, ent := range ents {
+		ent := ent // loop var per iteration
 		fi, err := hfs.Stat(ctx, root, ent.Name)
 		if err != nil {
 			clog.Warningf(ctx, "failed to stat %s: %v", ent.Name, err)
 			continue
 		}
 		entries = append(entries, UpdateEntry{
-			Entry:       ent,
+			Name:        ent.Name,
+			Entry:       &ent,
 			Mode:        fi.Mode(),
 			ModTime:     fi.ModTime(),
 			CmdHash:     fi.CmdHash(),
@@ -963,6 +1019,55 @@ func (hfs *HashFS) RetrieveUpdateEntries(ctx context.Context, root string, fname
 		})
 	}
 	return entries
+}
+
+// RetrieveUpdateEntriesFromLocal gets UpdateEntry for fnames at root from local disk.
+// It is intended to be used for local execution outputs in cmd.RecordOutputsFromLocal.
+// It won't wait for digest calculation for entries, so UpdateEntry's Entry
+// will be nil.
+// It will forget recorded enties when err (doesn't exist or so).
+func (hfs *HashFS) RetrieveUpdateEntriesFromLocal(ctx context.Context, root string, fnames []string) []UpdateEntry {
+	ctx, span := trace.NewSpan(ctx, "fs-update-entries-from-local")
+	defer span.Close(nil)
+
+	ents := make([]UpdateEntry, 0, len(fnames))
+	for _, fname := range fnames {
+		fullname := filepath.Join(root, fname)
+		fullname = filepath.ToSlash(fullname)
+		lfi, err := os.Lstat(fullname)
+		hfs.IOMetrics.OpsDone(err)
+		if errors.Is(err, fs.ErrNotExist) {
+			clog.Warningf(ctx, "missing local %s: %v", fname, err)
+			hfs.directory.delete(ctx, fullname)
+			continue
+		} else if err != nil {
+			clog.Warningf(ctx, "failed to access local %s: %v", fname, err)
+			hfs.directory.delete(ctx, fullname)
+			continue
+		}
+		ent := UpdateEntry{
+			Name:    fname,
+			Mode:    lfi.Mode(),
+			ModTime: lfi.ModTime(),
+			IsLocal: true,
+		}
+		fi, err := hfs.Stat(ctx, root, fname)
+		if err != nil {
+			clog.Warningf(ctx, "invalidate %s: %v", fname, err)
+			hfs.directory.delete(ctx, fullname)
+			_, err = hfs.Stat(ctx, root, fname)
+			if err != nil {
+				clog.Warningf(ctx, "failed to stat after invalidate %s: %v", fname, err)
+			}
+		} else {
+			ent.CmdHash = fi.CmdHash()
+			ent.Action = fi.Action()
+			ent.UpdatedTime = fi.UpdatedTime()
+			ent.IsChanged = fi.IsChanged()
+		}
+		ents = append(ents, ent)
+	}
+	return ents
 }
 
 type noSource struct {
@@ -1616,6 +1721,10 @@ func (d *directory) storeEntry(ctx context.Context, fname string, e *entry) (*en
 			}
 			// check whether there is an update from previous entry.
 			ee := v.(*entry)
+			if e == ee {
+				// if storing entry `e` is the same as stored entry `ee`, no need to update.
+				return e, "", nil
+			}
 			eed := ee.digest()
 			// old entry has cmdhash, but new entry has no cmdhash&action (not by Update*).
 			if len(ee.cmdhash) > 0 && len(e.cmdhash) == 0 && e.action.IsZero() {

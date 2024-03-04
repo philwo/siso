@@ -115,11 +115,9 @@ func (b *Builder) execLocal(ctx context.Context, step *Step) error {
 	if err != nil {
 		return err
 	}
-	err = b.captureLocalOutputs(ctx, step)
-	if err != nil {
-		return err
-	}
-	return b.outputs(ctx, step)
+	return b.checkLocalOutputs(ctx, step)
+	// no need to call b.outputs, as all outputs are already on disk
+	// so no need to flush.
 }
 
 func (b *Builder) prepareLocalInputs(ctx context.Context, step *Step) error {
@@ -154,7 +152,10 @@ func (b *Builder) prepareLocalInputs(ctx context.Context, step *Step) error {
 	return err
 }
 
-func (b *Builder) captureLocalOutputs(ctx context.Context, step *Step) error {
+// checkLocalOutputs checks if all outputs are on local disk.
+// If not, it returns error.
+// It ignores missing outputs added by siso config.
+func (b *Builder) checkLocalOutputs(ctx context.Context, step *Step) error {
 	ctx, span := trace.NewSpan(ctx, "capture-local-outputs")
 	defer span.Close(nil)
 	span.SetAttr("outputs", len(step.cmd.Outputs))
@@ -162,27 +163,27 @@ func (b *Builder) captureLocalOutputs(ctx context.Context, step *Step) error {
 	if result.GetExitCode() != 0 {
 		return nil
 	}
-	entries, err := step.cmd.HashFS.Entries(ctx, step.cmd.ExecRoot, step.cmd.Outputs)
-	if err != nil {
-		return fmt.Errorf("failed to get output fs entries %s: %w", step, err)
-	}
-	for _, entry := range entries {
-		switch {
-		case entry.IsDir():
-			clog.Warningf(ctx, "unexpected output directory %s", entry.Name)
-		case entry.IsSymlink():
-			result.OutputFileSymlinks = append(result.OutputFileSymlinks, &rpb.OutputSymlink{
-				Path:   entry.Name,
-				Target: entry.Target,
-			})
-		default:
-			result.OutputFiles = append(result.OutputFiles, &rpb.OutputFile{
-				Path:         entry.Name,
-				Digest:       entry.Data.Digest().Proto(),
-				IsExecutable: entry.IsExecutable,
-			})
+	defOutputs := step.def.Outputs(ctx)
+
+	for _, out := range step.cmd.Outputs {
+		_, err := step.cmd.HashFS.Stat(ctx, step.cmd.ExecRoot, out)
+		if err != nil {
+			required := false
+			for _, o := range defOutputs {
+				if out == o {
+					required = true
+					break
+				}
+			}
+			if !required {
+				clog.Warningf(ctx, "ignore missing outputs %s: %v", out, err)
+				continue
+			}
+			return fmt.Errorf("missing outputs %s: %w", out, err)
 		}
 	}
+	// don't set result.OutputFiles etc to lazily calculate digest
+	// for outputs. b/311312613
 	return nil
 }
 

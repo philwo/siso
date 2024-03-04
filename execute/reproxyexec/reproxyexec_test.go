@@ -279,16 +279,7 @@ func TestRun_LocalFallback(t *testing.T) {
 		t.Errorf("Run(ctx, cmd)=%v; want nil", err)
 	}
 
-	// HashFS reads out/siso/obj/base/base.o to calculate the digest.
-	got := hashFS.IOMetrics.Stats()
-	want := iometrics.Stats{
-		Ops:    2,
-		ROps:   1,
-		RBytes: int64(len(testOut)),
-	}
-	if diff := cmp.Diff(want, got); diff != "" {
-		t.Errorf("hashFS.IOMetrics.Stats(): diff -want +got:\n%s", diff)
-	}
+	// HashFS may or may not reads out/siso/obj/base/base.o to calculate the digest at this point.
 
 	// Check the output digests.
 	entries, err := hashFS.Entries(ctx, dir, []string{"out/siso/obj/base/base.o"})
