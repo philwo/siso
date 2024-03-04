@@ -17,7 +17,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
-	"sync"
 	"sync/atomic"
 	"syscall"
 	"testing"
@@ -46,22 +45,16 @@ func TestStamp(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New=%v", err)
 	}
-	var wg sync.WaitGroup
 	defer func() {
-		go func() {
-			wg.Wait()
-			err := hfs.Close(ctx)
-			if err != nil {
-				t.Errorf("hfs.Close=%v", err)
-			}
-		}()
+		err := hfs.Close(ctx)
+		if err != nil {
+			t.Fatalf("hfs.Close=%v", err)
+		}
 	}()
 	// `go test -count=1000` would easily catch the race.
 	for i := 0; i < 100; i++ {
 		fname := filepath.ToSlash(filepath.Join("obj/components", fmt.Sprintf("%d.stamp", i)))
-		wg.Add(1)
 		t.Run(fname, func(t *testing.T) {
-			defer wg.Done()
 			t.Parallel()
 			var cmdhash []byte
 			now := time.Now()
@@ -545,29 +538,39 @@ func TestStat_Dir(t *testing.T) {
 	}
 }
 
-func computeUpdateEntries(ctx context.Context, pre, post []hashfs.UpdateEntry, restat bool, updatedTime time.Time, cmdHash []byte) []hashfs.UpdateEntry {
-	// match with execute.(*Cmd).computeOutputEntries
+func updateFromLocal(ctx context.Context, hfs *hashfs.HashFS, root string, inputs []string, restat bool, updatedTime time.Time, cmdhash []byte) error {
 	m := make(map[string]hashfs.UpdateEntry)
 	if restat {
-		for _, ent := range pre {
-			m[ent.Name] = ent
+		// retrieve entries stored in hashfs.
+		// TODO: record this before local execution.
+		entries := hfs.RetrieveUpdateEntries(ctx, root, inputs)
+		for _, ent := range entries {
+			m[ent.Entry.Name] = ent
 		}
 	}
-	entries := make([]hashfs.UpdateEntry, 0, len(post))
-	for _, ent := range post {
-		ent.CmdHash = cmdHash
+
+	// forget and retrieve entries from local disk.
+	hfs.Forget(ctx, root, inputs)
+	entries := hfs.RetrieveUpdateEntries(ctx, root, inputs)
+
+	// Set cmdhash, updatedTime.
+	// also isChanged=true if entry has been changed.
+	for i, ent := range entries {
+		ent.CmdHash = cmdhash
 		ent.UpdatedTime = updatedTime
 		ent.IsLocal = true
-		pent := m[ent.Name]
+		pent := m[ent.Entry.Name]
 		if !restat {
 			ent.ModTime = updatedTime
 			ent.IsChanged = true
 		} else if !pent.ModTime.Equal(ent.ModTime) {
+			// TODO: check digest too?
 			ent.IsChanged = true
 		}
-		entries = append(entries, ent)
+		entries[i] = ent
 	}
-	return entries
+	// store in hashfs.
+	return hfs.Update(ctx, root, entries)
 }
 
 func TestUpdate_FromLocal(t *testing.T) {
@@ -599,9 +602,6 @@ func TestUpdate_FromLocal(t *testing.T) {
 	if !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("Stat(ctx, %q,%q)=%v; want %v", dir, fname, err, fs.ErrNotExist)
 	}
-
-	pre := hfs.RetrieveUpdateEntries(ctx, dir, []string{fname})
-
 	setupFiles(t, dir, map[string]string{
 		fname: "",
 	})
@@ -617,12 +617,9 @@ func TestUpdate_FromLocal(t *testing.T) {
 	h := sha256.New()
 	h.Write([]byte("command line"))
 	cmdhash := h.Sum(nil)
-
-	post := hfs.RetrieveUpdateEntriesFromLocal(ctx, dir, []string{fname})
-	entries := computeUpdateEntries(ctx, pre, post, false, now, cmdhash)
-	err = hfs.Update(ctx, dir, entries)
+	err = updateFromLocal(ctx, hfs, dir, []string{fname}, false, now, cmdhash)
 	if err != nil {
-		t.Errorf("Update(ctx, %q, {%q}, %v, cmdhash)=%v; want nil err", dir, fname, now, err)
+		t.Errorf("updateFromLocal(ctx, %q, {%q}, %v, cmdhash)=%v; want nil err", dir, fname, now, err)
 	}
 	fi, err := hfs.Stat(ctx, dir, fname)
 	if err != nil {
@@ -694,8 +691,6 @@ func TestUpdate_FromLocal_Restat_update(t *testing.T) {
 	if !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("Stat(ctx, %q,%q)=%v; want %v", dir, fname, err, fs.ErrNotExist)
 	}
-	pre := hfs.RetrieveUpdateEntries(ctx, dir, []string{fname})
-
 	setupFiles(t, dir, map[string]string{
 		fname: "",
 	})
@@ -711,11 +706,9 @@ func TestUpdate_FromLocal_Restat_update(t *testing.T) {
 	h := sha256.New()
 	h.Write([]byte("command line"))
 	cmdhash := h.Sum(nil)
-	post := hfs.RetrieveUpdateEntriesFromLocal(ctx, dir, []string{fname})
-	entries := computeUpdateEntries(ctx, pre, post, true, now, cmdhash)
-	err = hfs.Update(ctx, dir, entries)
+	err = updateFromLocal(ctx, hfs, dir, []string{fname}, true, now, cmdhash)
 	if err != nil {
-		t.Errorf("Update(ctx, %q, {%q}, %v, cmdhash)=%v; want nil err", dir, fname, now, err)
+		t.Errorf("updateFromLocal(ctx, %q, {%q}, %v, cmdhash)=%v; want nil err", dir, fname, now, err)
 	}
 	fi, err := hfs.Stat(ctx, dir, fname)
 	if err != nil {
@@ -794,8 +787,6 @@ func TestUpdate_FromLocal_Restat_noupdate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("lstat(%q)=%v; want nil", fullname, err)
 	}
-	pre := hfs.RetrieveUpdateEntries(ctx, dir, []string{fname})
-
 	time.Sleep(1 * time.Microsecond)
 	now := time.Now()
 	if now.Equal(lfi.ModTime()) {
@@ -804,11 +795,9 @@ func TestUpdate_FromLocal_Restat_noupdate(t *testing.T) {
 	h := sha256.New()
 	h.Write([]byte("command line"))
 	cmdhash := h.Sum(nil)
-	post := hfs.RetrieveUpdateEntriesFromLocal(ctx, dir, []string{fname})
-	entries := computeUpdateEntries(ctx, pre, post, true, now, cmdhash)
-	err = hfs.Update(ctx, dir, entries)
+	err = updateFromLocal(ctx, hfs, dir, []string{fname}, true, now, cmdhash)
 	if err != nil {
-		t.Errorf("Update(ctx, %q, {%q}, %v, cmdhash)=%v; want nil err", dir, fname, now, err)
+		t.Errorf("updateFromLocal(ctx, %q, {%q}, %v, cmdhash)=%v; want nil err", dir, fname, now, err)
 	}
 	fi, err := hfs.Stat(ctx, dir, fname)
 	if err != nil {
@@ -874,8 +863,6 @@ func TestUpdate_FromLocal_Dir(t *testing.T) {
 
 	outname := "out/siso/gen/foo.stamp"
 	outdirname := "out/siso/gen"
-	pre := hfs.RetrieveUpdateEntries(ctx, dir, []string{outname, outdirname})
-
 	setupFiles(t, dir, map[string]string{
 		outname: "",
 	})
@@ -883,12 +870,9 @@ func TestUpdate_FromLocal_Dir(t *testing.T) {
 	h.Write([]byte("command line"))
 	cmdhash := h.Sum(nil)
 	now := time.Now()
-
-	post := hfs.RetrieveUpdateEntriesFromLocal(ctx, dir, []string{outname, outdirname})
-	entries := computeUpdateEntries(ctx, pre, post, false, now, cmdhash)
-	err = hfs.Update(ctx, dir, entries)
+	err = updateFromLocal(ctx, hfs, dir, []string{outname, outdirname}, false, now, cmdhash)
 	if err != nil {
-		t.Errorf("Update(ctx, %q, {%q, %q}, %v, cmdhash)=%v; want nil err", dir, outname, outdirname, now, err)
+		t.Errorf("updateFromLocal(ctx, %q, {%q, %q}, %v, cmdhash)=%v; want nil err", dir, outname, outdirname, now, err)
 	}
 
 	// make sure outdirname not clobber outname entry.
@@ -993,18 +977,13 @@ func TestUpdate_FromLocal_AbsSymlink(t *testing.T) {
 	}()
 
 	outname := "out/siso/sdk/xcode_links/x.app/Info.plist"
-
-	pre := hfs.RetrieveUpdateEntries(ctx, dir, []string{outname})
 	h := sha256.New()
 	h.Write([]byte("command line"))
 	cmdhash := h.Sum(nil)
 	now := time.Now()
-
-	post := hfs.RetrieveUpdateEntriesFromLocal(ctx, dir, []string{outname})
-	entries := computeUpdateEntries(ctx, pre, post, true, now, cmdhash)
-	err = hfs.Update(ctx, dir, entries)
+	err = updateFromLocal(ctx, hfs, dir, []string{outname}, true, now, cmdhash)
 	if err != nil {
-		t.Errorf("Update(ctx, %q, {%q}, %v, cmdhash)=%v, want nil err", dir, outname, now, err)
+		t.Errorf("updateFromLocal(ctx, %q, {%q}, %v, cmdhash)=%v, want nil err", dir, outname, now, err)
 	}
 	stats := hfs.IOMetrics.Stats()
 	fi, err := hfs.Stat(ctx, dir, outname)
@@ -1146,16 +1125,13 @@ func TestUpdate_FromLocal_NonLocalSymlink(t *testing.T) {
 	}()
 
 	outname := "out/siso/sdk/xcode_links/x.app/Info.plist"
-	pre := hfs.RetrieveUpdateEntries(ctx, dir, []string{outname})
 	h := sha256.New()
 	h.Write([]byte("command line"))
 	cmdhash := h.Sum(nil)
 	now := time.Now()
-	post := hfs.RetrieveUpdateEntriesFromLocal(ctx, dir, []string{outname})
-	entries := computeUpdateEntries(ctx, pre, post, true, now, cmdhash)
-	err = hfs.Update(ctx, dir, entries)
+	err = updateFromLocal(ctx, hfs, dir, []string{outname}, true, now, cmdhash)
 	if err != nil {
-		t.Errorf("Update(ctx, %q, {%q}, %v, cmdhash)=%v, want nil err", dir, outname, now, err)
+		t.Errorf("updateFromLocal(ctx, %q, {%q}, %v, cmdhash)=%v, want nil err", dir, outname, now, err)
 	}
 	fi, err := hfs.Stat(ctx, dir, outname)
 	if err != nil {
@@ -1877,7 +1853,6 @@ func TestWriteDataFlush(t *testing.T) {
 func update(ctx context.Context, hfs *hashfs.HashFS, execRoot string, entries []merkletree.Entry, mtime time.Time, cmdhash []byte, action digest.Digest) error {
 	ents := make([]hashfs.UpdateEntry, 0, len(entries))
 	for _, ent := range entries {
-		ent := ent // loop var per iteration
 		mode := fs.FileMode(0644)
 		switch {
 		case !ent.Data.IsZero():
@@ -1891,8 +1866,7 @@ func update(ctx context.Context, hfs *hashfs.HashFS, execRoot string, entries []
 		}
 
 		ents = append(ents, hashfs.UpdateEntry{
-			Name:        ent.Name,
-			Entry:       &ent,
+			Entry:       ent,
 			Mode:        mode,
 			ModTime:     mtime,
 			CmdHash:     cmdhash,

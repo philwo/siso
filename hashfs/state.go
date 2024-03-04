@@ -409,58 +409,43 @@ func (hfs *HashFS) State(ctx context.Context) *pb.State {
 					name += `\`
 				}
 			}
-			if e.directory != nil {
-				// TODO(b/253541407): record mtime for other directory?
-				dirs = append(dirs, d{name: name, dir: e.directory})
-			}
 			if e.mtime.IsZero() {
-				if len(e.cmdhash) > 0 {
-					clog.Warningf(ctx, "wrong entry for %s: mtime is zero, but cmdhash set %s", name, e.cmdhash)
-				} else if log.V(1) {
+				if log.V(1) {
 					clog.Infof(ctx, "ignore %s: no mtime", name)
 				}
-				continue
-			}
-			if len(e.cmdhash) > 0 {
-				// need to record the entry for incremental build
-				if e.directory == nil && e.target == "" && e.d.IsZero() {
-					// digest is not calculated yet?
-					if e.src == nil {
-						clog.Warningf(ctx, "wrong entry for %s?", name)
-					} else {
-						err := e.compute(ctx, name, hfs.opt.DigestXattrName)
-						if err != nil {
-							clog.Warningf(ctx, "failed to calculate digest for %s: %v", name, err)
-						}
-					}
+			} else {
+				if !e.d.IsZero() || e.target != "" {
+					state.Entries = append(state.Entries, &pb.Entry{
+						Id: &pb.FileID{
+							ModTime: e.mtime.UnixNano(),
+						},
+						Name:         name,
+						Digest:       fromDigest(e.d),
+						IsExecutable: e.mode&0111 != 0,
+						Target:       e.target,
+						CmdHash:      e.cmdhash,
+						Action:       fromDigest(e.action),
+						UpdatedTime:  e.updatedTime.UnixNano(),
+					})
+				} else if log.V(1) {
+					clog.Infof(ctx, "ignore %s: not file?", name)
 				}
 			}
-			if !e.d.IsZero() || e.target != "" {
-				state.Entries = append(state.Entries, &pb.Entry{
-					Id: &pb.FileID{
-						ModTime: e.mtime.UnixNano(),
-					},
-					Name:         name,
-					Digest:       fromDigest(e.d),
-					IsExecutable: e.mode&0111 != 0,
-					Target:       e.target,
-					CmdHash:      e.cmdhash,
-					Action:       fromDigest(e.action),
-					UpdatedTime:  e.updatedTime.UnixNano(),
-				})
-			} else if e.directory != nil && len(e.cmdhash) > 0 {
-				// preserve dir for cmdhash
-				state.Entries = append(state.Entries, &pb.Entry{
-					Id: &pb.FileID{
-						ModTime: e.mtime.UnixNano(),
-					},
-					Name:        name,
-					CmdHash:     e.cmdhash,
-					Action:      fromDigest(e.action),
-					UpdatedTime: e.updatedTime.UnixNano(),
-				})
-			} else if len(e.cmdhash) > 0 {
-				clog.Warningf(ctx, "wrong entry for %s: cmdhash is set, but no digest?", name)
+			if e.directory != nil {
+				if len(e.cmdhash) > 0 {
+					// preserve dir for cmdhash
+					state.Entries = append(state.Entries, &pb.Entry{
+						Id: &pb.FileID{
+							ModTime: e.mtime.UnixNano(),
+						},
+						Name:        name,
+						CmdHash:     e.cmdhash,
+						Action:      fromDigest(e.action),
+						UpdatedTime: e.updatedTime.UnixNano(),
+					})
+				}
+				// TODO(b/253541407): record mtime for other directory?
+				dirs = append(dirs, d{name: name, dir: e.directory})
 			}
 		}
 	}
