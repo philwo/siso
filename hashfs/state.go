@@ -40,11 +40,15 @@ const defaultDigestXattr = "google.digest.sha256"
 // OutputLocalFunc returns true if given fname needs to be on local disk.
 type OutputLocalFunc func(context.Context, string) bool
 
+// IgnoreFunc returns true if given fname should be ignored in hashfs.
+type IgnoreFunc func(context.Context, string) bool
+
 // Option is an option for HashFS.
 type Option struct {
 	StateFile       string
 	DataSource      DataSource
 	OutputLocal     OutputLocalFunc
+	Ignore          IgnoreFunc
 	DigestXattrName string
 }
 
@@ -152,6 +156,10 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 			h := ent.CmdHash
 			if runtime.GOOS == "windows" {
 				ent.Name = strings.TrimPrefix(ent.Name, `\`)
+			}
+			if hfs.opt.Ignore(ctx, ent.Name) {
+				clog.Infof(ctx, "ignore %s", ent.Name)
+				return nil
 			}
 			fi, err := os.Lstat(ent.Name)
 			if errors.Is(err, os.ErrNotExist) {

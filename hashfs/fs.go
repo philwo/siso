@@ -79,6 +79,9 @@ func New(ctx context.Context, opt Option) (*HashFS, error) {
 	if opt.OutputLocal == nil {
 		opt.OutputLocal = func(context.Context, string) bool { return false }
 	}
+	if opt.Ignore == nil {
+		opt.Ignore = func(context.Context, string) bool { return false }
+	}
 	if opt.DataSource == nil {
 		opt.DataSource = noDataSource{}
 	}
@@ -1347,6 +1350,9 @@ func (e *entry) updateDir(ctx context.Context, hfs *HashFS, dname string) []stri
 		// it may cause race on windows.
 		// b/294318963
 		if strings.HasSuffix(name, ".tmp") {
+			continue
+		}
+		if hfs.opt.Ignore(ctx, filepath.Join(dname, name)) {
 			continue
 		}
 		// update entry in e.directory.

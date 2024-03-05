@@ -412,6 +412,40 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	if err != nil {
 		return stats, err
 	}
+	if c.logDir == "." || c.logDir == filepath.Join(execRoot, c.dir) {
+		cwd := filepath.Join(execRoot, c.dir)
+		// ignore siso files not to be captured by ReadDir
+		// (i.g. scandeps for -I.)
+		clog.Infof(ctx, "ignore siso files in %s", cwd)
+		c.fsopt.Ignore = func(ctx context.Context, fname string) bool {
+			dir, base := filepath.Split(fname)
+			// allow siso prefix in other dir.
+			// e.g. siso.gni exists in build/config/siso.
+			if filepath.Clean(dir) != cwd {
+				return false
+			}
+			if strings.HasPrefix(base, ".siso_") {
+				return true
+			}
+			if strings.HasPrefix(base, "siso.") {
+				return true
+			}
+			if strings.HasPrefix(base, "siso_") {
+				return true
+			}
+			if base == ".ninja_log" {
+				return true
+			}
+			return false
+		}
+	} else {
+		// expect logDir is out of exec root.
+		clog.Infof(ctx, "ignore .ninja_log")
+		ninjaLogFname := filepath.Join(execRoot, c.dir, ".ninja_log")
+		c.fsopt.Ignore = func(ctx context.Context, fname string) bool {
+			return fname == ninjaLogFname
+		}
+	}
 	spin.Start("loading fs state")
 
 	hashFS, err := hashfs.New(ctx, *c.fsopt)
