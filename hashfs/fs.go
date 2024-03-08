@@ -1042,6 +1042,7 @@ func (hfs *HashFS) RetrieveUpdateEntriesFromLocal(ctx context.Context, root stri
 	for _, fname := range fnames {
 		fullname := filepath.Join(root, fname)
 		fullname = filepath.ToSlash(fullname)
+
 		lfi, err := os.Lstat(fullname)
 		hfs.IOMetrics.OpsDone(err)
 		if errors.Is(err, fs.ErrNotExist) {
@@ -1053,6 +1054,11 @@ func (hfs *HashFS) RetrieveUpdateEntriesFromLocal(ctx context.Context, root stri
 			hfs.directory.delete(ctx, fullname)
 			continue
 		}
+		if !lfi.IsDir() {
+			// forget old entries unless dir.
+			// need to keep dir to keep other files in the dir.
+			hfs.directory.delete(ctx, fullname)
+		}
 		ent := UpdateEntry{
 			Name:    fname,
 			Mode:    lfi.Mode(),
@@ -1061,12 +1067,7 @@ func (hfs *HashFS) RetrieveUpdateEntriesFromLocal(ctx context.Context, root stri
 		}
 		fi, err := hfs.Stat(ctx, root, fname)
 		if err != nil {
-			clog.Warningf(ctx, "invalidate %s: %v", fname, err)
-			hfs.directory.delete(ctx, fullname)
-			_, err = hfs.Stat(ctx, root, fname)
-			if err != nil {
-				clog.Warningf(ctx, "failed to stat after invalidate %s: %v", fname, err)
-			}
+			clog.Warningf(ctx, "failed to stat after invalidate %s: %v", fname, err)
 		} else {
 			ent.CmdHash = fi.CmdHash()
 			ent.Action = fi.Action()

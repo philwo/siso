@@ -663,6 +663,120 @@ func TestUpdate_FromLocal(t *testing.T) {
 	}
 }
 
+func TestUpdate_FromLocal_update(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	dir, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	opt := hashfs.Option{}
+	hfs, err := hashfs.New(ctx, opt)
+	if err != nil {
+		t.Fatalf("New=%v", err)
+	}
+	defer func() {
+		if hfs == nil {
+			return
+		}
+		err := hfs.Close(ctx)
+		if err != nil {
+			t.Fatalf("hfs.Close=%v", err)
+		}
+	}()
+
+	fname := "out/siso/gen/foo.stamp"
+	setupFiles(t, dir, map[string]string{
+		fname: "0",
+	})
+	fullname := filepath.Join(dir, fname)
+	_, err = hfs.Stat(ctx, dir, fname)
+	if err != nil {
+		t.Fatalf("Stat(ctx, %q,%q)=%v; want nil", dir, fname, err)
+	}
+	pre := hfs.RetrieveUpdateEntries(ctx, dir, []string{fname})
+
+	if pre[0].Entry.Data.Digest().IsZero() {
+		t.Fatalf("digest for %s is zero?", pre[0].Entry.Data.Digest())
+	}
+
+	time.Sleep(1 * time.Microsecond)
+	setupFiles(t, dir, map[string]string{
+		fname: "1",
+	})
+	h := sha256.New()
+	h.Write([]byte("command line"))
+	cmdhash := h.Sum(nil)
+	post := hfs.RetrieveUpdateEntriesFromLocal(ctx, dir, []string{fname})
+	now := time.Now()
+	entries := computeUpdateEntries(ctx, pre, post, false, now, cmdhash)
+	err = hfs.Update(ctx, dir, entries)
+	if err != nil {
+		t.Errorf("Update(ctx, %q, {%q}, %v, cmdhash)=%v; want nil err", dir, fname, now, err)
+	}
+
+	pre = hfs.RetrieveUpdateEntries(ctx, dir, []string{fname})
+	time.Sleep(1 * time.Microsecond)
+	setupFiles(t, dir, map[string]string{
+		fname: "2",
+	})
+	post = hfs.RetrieveUpdateEntriesFromLocal(ctx, dir, []string{fname})
+	now = time.Now()
+	entries = computeUpdateEntries(ctx, pre, post, false, now, cmdhash)
+	err = hfs.Update(ctx, dir, entries)
+	if err != nil {
+		t.Errorf("Update(ctx, %q, {%q}, %v, cmdhash)=%v; want nil err", dir, fname, now, err)
+	}
+
+	ents, err := hfs.Entries(ctx, dir, []string{fname})
+	if err != nil || len(ents) != 1 {
+		t.Fatalf("enties %d, %v: want 1, nil", len(ents), err)
+	}
+	t.Logf("digest %s -> %s", pre[0].Entry.Data.Digest(), ents[0].Data.Digest())
+	if pre[0].Entry.Data.Digest() == ents[0].Data.Digest() {
+		t.Errorf("digest not changed? %s", pre[0].Entry.Data.Digest())
+	}
+
+	fi, err := hfs.Stat(ctx, dir, fname)
+	if err != nil {
+		t.Fatalf("Stat(ctx, %q, %q)=_, %v; want nil err", dir, fname, err)
+	}
+	if !now.Equal(fi.ModTime()) {
+		t.Errorf("fi.ModTime: %v should equal to now: %v", fi.ModTime(), now)
+	}
+	if !now.Equal(fi.UpdatedTime()) {
+		t.Errorf("fi.UpdatedTime: %v should equal to now: %v", fi.UpdatedTime(), now)
+	}
+	if !fi.IsChanged() {
+		t.Errorf("fi.IsChanged()=%t; want true", fi.IsChanged())
+	}
+	m := hashfs.StateMap(hfs.State(ctx))
+	hfs = nil
+	e, ok := m[fullname]
+	if !ok {
+		var keys []string
+		for k := range m {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		t.Fatalf("entry for %s not found: %q", fullname, keys)
+	}
+	if e.Id.ModTime != now.UnixNano() {
+		t.Errorf("entry modtime=%d want=%d", e.Id.ModTime, now.UnixNano())
+	}
+	if !bytes.Equal(e.CmdHash, cmdhash) {
+		t.Errorf("entry cmdhash=%q want=%q", hex.EncodeToString(e.CmdHash), hex.EncodeToString(cmdhash))
+	}
+	lfi, err := os.Lstat(fullname)
+	if err != nil {
+		t.Fatalf("lstat(%q)=%v; want nil", fullname, err)
+	}
+	if e.Id.ModTime != lfi.ModTime().UnixNano() {
+		t.Errorf("entry modtime=%d lfi=%d", e.Id.ModTime, lfi.ModTime().UnixNano())
+	}
+}
+
 // Test IsChanged is true after Update from local with restat,
 // if stamp file didn't exist before.
 func TestUpdate_FromLocal_Restat_update(t *testing.T) {
