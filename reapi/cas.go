@@ -200,13 +200,32 @@ func (c *Client) UploadAll(ctx context.Context, ds *digest.Store) (int, error) {
 	defer span.Close(nil)
 	blobs := ds.List()
 	span.SetAttr("blobs", len(blobs))
-	missings, err := c.Missing(ctx, blobs)
+	var missings []digest.Digest
+	// TODO(b/328332495): grpc should retry by service config?
+	err := retry.Do(ctx, func() error {
+		var err error
+		missings, err = c.Missing(ctx, blobs)
+		if err != nil {
+			return fmt.Errorf("missings: %w", err)
+		}
+		return nil
+	})
 	if err != nil {
 		return 0, err
 	}
 	clog.Infof(ctx, "upload %d -> missing %d", len(blobs), len(missings))
 	span.SetAttr("missings", len(missings))
-	return c.Upload(ctx, ds, missings)
+	var nuploads int
+	// TODO(b/328332495): grpc should retry by service config?
+	err = retry.Do(ctx, func() error {
+		var err error
+		nuploads, err = c.Upload(ctx, ds, missings)
+		if err != nil {
+			return fmt.Errorf("upload: %w", err)
+		}
+		return nil
+	})
+	return nuploads, err
 }
 
 var (
@@ -249,7 +268,7 @@ func (c *Client) Upload(ctx context.Context, ds *digest.Store, blobs []digest.Di
 	// Upload small blobs with BatchUpdateBlobs rpc.
 	missingBlobs, err := c.uploadWithBatchUpdateBlobs(ctx, smalls, ds, byteLimit)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("upload batch: %w", err)
 	}
 	missing := missingError{Blobs: missingBlobs}
 
