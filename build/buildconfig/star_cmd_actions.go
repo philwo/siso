@@ -167,6 +167,17 @@ func starActionsCopy(thread *starlark.Thread, fn *starlark.Builtin, args starlar
 		return starlark.None, err
 	}
 	if recursive {
+		// TODO: handler explicitly call ctx.actions.remove or so?
+		// Not sure it is good idea to provide remove in handler,
+		// as it would not be recommended action and may be abused
+		// if it is available.
+		// Until when we find legid use case of remove, just remove
+		// target dir of copy, as it would be ok to use copy
+		// to replace a directory hierarchy.
+		err = c.cmd.HashFS.RemoveAll(c.ctx, c.cmd.ExecRoot, dst)
+		if err != nil {
+			return starlark.None, err
+		}
 		var files []string
 		files, err = actionsCopyRecursively(c.ctx, c.cmd, src, dst, time.Now(), c.cmd.CmdHash)
 		if err == nil && len(files) > 0 {

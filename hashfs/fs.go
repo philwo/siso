@@ -617,6 +617,30 @@ func (hfs *HashFS) Remove(ctx context.Context, root, fname string) error {
 	return err
 }
 
+// RemoveAll removes all files under root/name.
+// Also removes from the disk at the same time.
+func (hfs *HashFS) RemoveAll(ctx context.Context, root, name string) error {
+	if log.V(1) {
+		clog.Infof(ctx, "removeAll @%s %s", root, name)
+	}
+	hfs.clean = false
+	name = filepath.Join(root, name)
+	name = filepath.ToSlash(name)
+	err := os.RemoveAll(name)
+	if err == nil {
+		err = fs.ErrNotExist
+	}
+	lready := make(chan bool, 1)
+	lready <- true
+	e := &entry{
+		lready: lready,
+		err:    err,
+	}
+	_, err = hfs.directory.store(ctx, name, e)
+	clog.Infof(ctx, "removeAll %s [%v]: %v", name, e.err, err)
+	return err
+}
+
 // Forget forgets cached entry for inputs under root.
 func (hfs *HashFS) Forget(ctx context.Context, root string, inputs []string) {
 	for _, fname := range inputs {
