@@ -178,8 +178,8 @@ func TestRun_RemoteSuccess(t *testing.T) {
 
 	// No IO operations should be taken by HashFS.
 	wantStats := iometrics.Stats{}
-	if diff := cmp.Diff(wantStats, hashFS.IOMetrics.Stats()); diff != "" {
-		t.Errorf("hashFS.IOMetrics.Stats(): diff -want +got:\n%s", diff)
+	if diff := cmp.Diff(wantStats, hashFS.OS.IOMetrics.Stats()); diff != "" {
+		t.Errorf("hashFS.OS.IOMetrics.Stats(): diff -want +got:\n%s", diff)
 	}
 
 	// Check if the output digests are taken from RunResponse.

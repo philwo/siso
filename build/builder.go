@@ -469,6 +469,11 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 			ui.Default.PrintLines(ninjaNoWorkToDo)
 			return
 		}
+		fsstat := b.hashFS.OS.IOMetrics.Stats()
+		fsstatLine := fmt.Sprintf("fs: ops: %d(err:%d) / r:%d(err:%d) %s / w:%d(err:%d) %s\n",
+			fsstat.Ops, fsstat.OpsErrs,
+			fsstat.ROps, fsstat.RErrs, numBytes(fsstat.RBytes),
+			fsstat.WOps, fsstat.WErrs, numBytes(fsstat.WBytes))
 		var depsStatLine string
 		var restatLine string
 		if b.reapiclient != nil {
@@ -490,7 +495,8 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 				fmt.Sprintf("\nlocal:%d remote:%d cache:%d fallback:%d skip:%d\n",
 					stat.Local+stat.NoExec, stat.Remote, stat.CacheHit, stat.LocalFallback, stat.Skipped)+
 					depsStatLine+
-					restatLine)
+					restatLine+
+					fsstatLine)
 		} else {
 			ui.Default.PrintLines("\n", "\n")
 		}
@@ -507,7 +513,7 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 		remoteexec.Semaphore,
 	}
 	b.traceEvents.Start(ctx, semas, []*iometrics.IOMetrics{
-		b.hashFS.IOMetrics,
+		b.hashFS.OS.IOMetrics,
 		b.reapiclient.IOMetrics(),
 		// TODO: cache iometrics?
 	})

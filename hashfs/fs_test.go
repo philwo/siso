@@ -27,7 +27,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"infra/build/siso/hashfs"
-	"infra/build/siso/o11y/iometrics"
+	"infra/build/siso/osfs"
 	"infra/build/siso/reapi/digest"
 	"infra/build/siso/reapi/merkletree"
 )
@@ -1120,7 +1120,7 @@ func TestUpdate_FromLocal_AbsSymlink(t *testing.T) {
 	if err != nil {
 		t.Errorf("Update(ctx, %q, {%q}, %v, cmdhash)=%v, want nil err", dir, outname, now, err)
 	}
-	stats := hfs.IOMetrics.Stats()
+	stats := hfs.OS.IOMetrics.Stats()
 	fi, err := hfs.Stat(ctx, dir, outname)
 	if err != nil {
 		t.Fatalf("Stat(ctx, %q, %q)=_, %v; want nil err", dir, outname, err)
@@ -1135,7 +1135,7 @@ func TestUpdate_FromLocal_AbsSymlink(t *testing.T) {
 	if !now.Equal(fi.UpdatedTime()) {
 		t.Errorf("fi.UpdatedTime=%v; want=%v", fi.UpdatedTime(), now)
 	}
-	nstats := hfs.IOMetrics.Stats()
+	nstats := hfs.OS.IOMetrics.Stats()
 	if stats.Ops != nstats.Ops {
 		t.Errorf("Stat access fs? old=%#v new=%#v", stats, nstats)
 	}
@@ -1275,7 +1275,7 @@ func TestUpdate_FromLocal_NonLocalSymlink(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Stat(ctx, %q, %q)=_, %v; want nil err", dir, outname, err)
 	}
-	stats := hfs.IOMetrics.Stats()
+	stats := hfs.OS.IOMetrics.Stats()
 	if fi.IsChanged() {
 		// restat=true, so no update
 		t.Errorf("fi.IsChanged()=%t; want false", fi.IsChanged())
@@ -1286,7 +1286,7 @@ func TestUpdate_FromLocal_NonLocalSymlink(t *testing.T) {
 	if !now.Equal(fi.UpdatedTime()) {
 		t.Errorf("fi.UpdatedTime=%v; want=%v", fi.UpdatedTime(), now)
 	}
-	nstats := hfs.IOMetrics.Stats()
+	nstats := hfs.OS.IOMetrics.Stats()
 	if stats.Ops != nstats.Ops {
 		t.Errorf("Stat access fs? old=%#v new=%#v", stats, nstats)
 	}
@@ -1624,7 +1624,7 @@ func TestXattr(t *testing.T) {
 	if got := ents[0].Data.Digest(); got != wantDigest {
 		t.Errorf("digest %v; want %v", got, wantDigest)
 	}
-	stats := hashFS.IOMetrics.Stats()
+	stats := hashFS.OS.IOMetrics.Stats()
 	if stats.RBytes > 0 {
 		t.Errorf("read %d; want 0", stats.RBytes)
 	}
@@ -2020,7 +2020,7 @@ func update(ctx context.Context, hfs *hashfs.HashFS, execRoot string, entries []
 
 func TestUpdate_WithLocalFlush(t *testing.T) {
 	ctx := context.Background()
-	var m iometrics.IOMetrics
+	osfs := osfs.New("fs")
 
 	for _, name := range flushTestNames {
 		t.Run(name, func(t *testing.T) {
@@ -2030,10 +2030,7 @@ func TestUpdate_WithLocalFlush(t *testing.T) {
 			case "empty-dir", "subdir", "new-entry":
 				return
 			}
-			data, err := digest.FromLocalFile(ctx, digest.LocalFileSource{
-				Fname:     filepath.Join(dir, name),
-				IOMetrics: &m,
-			})
+			data, err := digest.FromLocalFile(ctx, osfs.FileSource(filepath.Join(dir, name)))
 			if err != nil {
 				t.Fatalf("digest.FromLocalFile(ctx, {%q})=%v, %v; want nil err", filepath.Join(dir, name), data, err)
 			}

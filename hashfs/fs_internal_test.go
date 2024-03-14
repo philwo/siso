@@ -11,7 +11,7 @@ import (
 	"runtime"
 	"testing"
 
-	"infra/build/siso/o11y/iometrics"
+	"infra/build/siso/osfs"
 )
 
 func TestDirectoryLookup_Symlink(t *testing.T) {
@@ -57,7 +57,7 @@ func TestDirectoryLookup_Symlink(t *testing.T) {
 	setupSymlink(symlinkName, "MacOSX.sdk")
 
 	d := &directory{}
-	var m iometrics.IOMetrics
+	osfs := osfs.New("fs")
 
 	fname := filepath.Join(dir, symlinkName)
 	_, _, ok := d.lookup(ctx, fname)
@@ -65,7 +65,7 @@ func TestDirectoryLookup_Symlink(t *testing.T) {
 		t.Fatalf("d.lookup(ctx, %q): %t; want false", fname, ok)
 	}
 	e := newLocalEntry()
-	e.init(ctx, fname, nil, &m)
+	e.init(ctx, fname, nil, osfs)
 	_, err = d.store(ctx, fname, e)
 	if err != nil {
 		t.Fatalf("d.store(ctx, %q) %v; want nil err", fname, err)
@@ -77,7 +77,7 @@ func TestDirectoryLookup_Symlink(t *testing.T) {
 		t.Fatalf("d.lookup(ctx, %q): %t; want false", fname, ok)
 	}
 	e = newLocalEntry()
-	e.init(ctx, fname, nil, &m)
+	e.init(ctx, fname, nil, osfs)
 	_, err = d.store(ctx, fname, e)
 	if err != nil {
 		t.Fatalf("d.store(ctx, %q) %v; want nil err", fname, err)

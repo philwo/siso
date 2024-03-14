@@ -24,7 +24,7 @@ import (
 	"go.chromium.org/luci/common/system/signals"
 
 	"infra/build/siso/o11y/clog"
-	"infra/build/siso/o11y/iometrics"
+	"infra/build/siso/osfs"
 	"infra/build/siso/reapi/digest"
 	"infra/build/siso/ui"
 )
@@ -90,7 +90,7 @@ func (c *run) run(ctx context.Context) error {
 func (c *run) collect(ctx context.Context) (map[string]digest.Data, error) {
 	report := make(map[string]digest.Data)
 	fsys := os.DirFS(".")
-	var m iometrics.IOMetrics
+	osfs := osfs.New("fs")
 
 	for _, pat := range []string{"siso*", ".siso*", "args.gn"} {
 		matches, err := fs.Glob(fsys, pat)
@@ -110,7 +110,7 @@ func (c *run) collect(ctx context.Context) (map[string]digest.Data, error) {
 				fname = strings.TrimSuffix(fname, ".redirected")
 				clog.Infof(ctx, "%s -> %s", fname, localFname)
 			}
-			src := digest.LocalFileSource{Fname: localFname, IOMetrics: &m}
+			src := osfs.FileSource(localFname)
 			data, err := digest.FromLocalFile(ctx, src)
 			if err != nil {
 				clog.Errorf(ctx, "Error to calculate digest %s: %v", fname, err)
@@ -133,7 +133,7 @@ func (c *run) collect(ctx context.Context) (map[string]digest.Data, error) {
 			return nil
 		}
 		ui.Default.PrintLines(fmt.Sprintf("reading %s", fname))
-		src := digest.LocalFileSource{Fname: fname, IOMetrics: &m}
+		src := osfs.FileSource(fname)
 		data, err := digest.FromLocalFile(ctx, src)
 		if err != nil {
 			clog.Errorf(ctx, "Error to calculate digest %s: %v", fname, err)

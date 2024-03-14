@@ -28,7 +28,7 @@ import (
 
 	pb "infra/build/siso/hashfs/proto"
 	"infra/build/siso/o11y/clog"
-	"infra/build/siso/o11y/iometrics"
+	"infra/build/siso/osfs"
 	"infra/build/siso/reapi/digest"
 )
 
@@ -178,7 +178,7 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 					return nil
 				}
 
-				e, _ := newStateEntry(ent, time.Time{}, hfs.opt.DataSource, hfs.IOMetrics)
+				e, _ := newStateEntry(ent, time.Time{}, hfs.opt.DataSource, hfs.OS)
 				e.cmdhash = h
 				e.action = toDigest(ent.Action)
 				_, err = hfs.directory.store(gctx, filepath.ToSlash(ent.Name), e)
@@ -193,7 +193,7 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 				dirty.Store(true)
 				return nil
 			}
-			e, et := newStateEntry(ent, fi.ModTime(), hfs.opt.DataSource, hfs.IOMetrics)
+			e, et := newStateEntry(ent, fi.ModTime(), hfs.opt.DataSource, hfs.OS)
 			e.cmdhash = h
 			e.action = toDigest(ent.Action)
 			ftype := "file"
@@ -210,13 +210,12 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 				// check digest is the same and fix mtime if it matches.
 				// don't reconcile for source (non-generated file),
 				// as user may want to trigger build by touch.
-				src := digest.LocalFileSource{Fname: ent.Name, IOMetrics: hfs.IOMetrics}
+				src := hfs.OS.FileSource(ent.Name)
 				data, err := localDigest(ctx, src, ent.Name, hfs.opt.DigestXattrName, fi.Size())
 				if err == nil && data.Digest() == e.d {
 					et = entryEqLocal
-					err = os.Chtimes(ent.Name, time.Now(), e.mtime)
-					hfs.IOMetrics.OpsDone(err)
-					clog.Infof(ctx, "reconcile mtime %s %v -> %v", ent.Name, fi.ModTime(), e.mtime)
+					err = hfs.OS.Chtimes(ctx, ent.Name, time.Now(), e.mtime)
+					clog.Infof(ctx, "reconcile mtime %s %v -> %v: %v", ent.Name, fi.ModTime(), e.mtime, err)
 				} else {
 					clog.Warningf(ctx, "failed to reconcile mtime %s digest %s(state) != %s(local) err: %v", ent.Name, e.d, data.Digest(), err)
 				}
@@ -274,7 +273,7 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 	return nil
 }
 
-func newStateEntry(ent *pb.Entry, ftime time.Time, dataSource DataSource, m *iometrics.IOMetrics) (*entry, entryStateType) {
+func newStateEntry(ent *pb.Entry, ftime time.Time, dataSource DataSource, osfs *osfs.OSFS) (*entry, entryStateType) {
 	lready := make(chan bool, 1)
 	entTime := time.Unix(0, ent.Id.ModTime)
 	var entType entryStateType
@@ -302,7 +301,7 @@ func newStateEntry(ent *pb.Entry, ftime time.Time, dataSource DataSource, m *iom
 	entDigest := toDigest(ent.Digest)
 	if !entDigest.IsZero() {
 		if entType == entryEqLocal {
-			src = digest.LocalFileSource{Fname: ent.Name, IOMetrics: m}
+			src = osfs.FileSource(ent.Name)
 		} else {
 			// not the same as local, but digest is in state.
 			// probably, exists in RBE side, or local cache.

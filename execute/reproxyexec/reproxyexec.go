@@ -27,8 +27,8 @@ import (
 
 	"infra/build/siso/execute"
 	"infra/build/siso/o11y/clog"
-	"infra/build/siso/o11y/iometrics"
 	"infra/build/siso/o11y/trace"
+	"infra/build/siso/osfs"
 	"infra/build/siso/reapi/digest"
 )
 
@@ -375,7 +375,7 @@ func processResponse(ctx context.Context, cmd *execute.Cmd, response *ppb.RunRes
 	// update outputs file only step succeeded.
 	updatedTime := time.Now()
 	if remoteSuccess {
-		ds := &reproxyOutputsDataSource{execRoot: cmd.ExecRoot, iometrics: cmd.HashFS.IOMetrics}
+		ds := &reproxyOutputsDataSource{execRoot: cmd.ExecRoot, osfs: cmd.HashFS.OS}
 		return cmd.RecordOutputs(ctx, ds, updatedTime)
 	}
 	return cmd.RecordOutputsFromLocal(ctx, updatedTime)
@@ -397,13 +397,13 @@ func resultErr(response *ppb.RunResponse) error {
 // This allows cmd.RecordOutputs() to skip calculating
 // digests.
 type reproxyOutputsDataSource struct {
-	execRoot  string
-	iometrics *iometrics.IOMetrics
+	execRoot string
+	osfs     *osfs.OSFS
 }
 
 func (ds reproxyOutputsDataSource) Source(_ digest.Digest, fname string) digest.Source {
 	path := filepath.Join(ds.execRoot, fname)
-	return digest.LocalFileSource{Fname: path, IOMetrics: ds.iometrics}
+	return ds.osfs.FileSource(path)
 }
 
 func setOutputsFromActionLog(actionLog *lpb.LogRecord, actionResult *rpb.ActionResult) error {

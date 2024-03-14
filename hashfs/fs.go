@@ -26,8 +26,8 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"infra/build/siso/o11y/clog"
-	"infra/build/siso/o11y/iometrics"
 	"infra/build/siso/o11y/trace"
+	"infra/build/siso/osfs"
 	"infra/build/siso/reapi/digest"
 	"infra/build/siso/reapi/merkletree"
 	"infra/build/siso/sync/semaphore"
@@ -61,8 +61,8 @@ type HashFS struct {
 
 	notifies []NotifyFunc
 
-	// IOMetrics stores the metrics of I/O operations on the HashFS.
-	IOMetrics *iometrics.IOMetrics
+	// OS wraps of OS I/O operations in the HashFS.
+	OS *osfs.OSFS
 
 	digester digester
 	clean    bool
@@ -94,7 +94,7 @@ func New(ctx context.Context, opt Option) (*HashFS, error) {
 	fsys := &HashFS{
 		opt:       opt,
 		directory: &directory{isRoot: true},
-		IOMetrics: iometrics.New("fs"),
+		OS:        osfs.New("fs"),
 
 		digester: digester{
 			xattrname: opt.DigestXattrName,
@@ -268,8 +268,7 @@ func (hfs *HashFS) Stat(ctx context.Context, root, fname string) (FileInfo, erro
 			// where hashfs doesn't know. e.g. add new file
 			// in the directory by local run.
 			fullname := filepath.Join(root, fname)
-			lfi, err := os.Lstat(fullname)
-			hfs.IOMetrics.OpsDone(err)
+			lfi, err := hfs.OS.Lstat(ctx, fullname)
 			switch {
 			case errors.Is(err, fs.ErrNotExist):
 				// virtually created dir in hashfs,
@@ -299,7 +298,7 @@ func (hfs *HashFS) Stat(ctx context.Context, root, fname string) (FileInfo, erro
 	}
 	fname = filepath.ToSlash(fname)
 	e = newLocalEntry()
-	e.init(ctx, fname, hfs.executables, hfs.IOMetrics)
+	e.init(ctx, fname, hfs.executables, hfs.OS)
 	clog.Infof(ctx, "stat new entry %s %s", fname, e)
 	if log.V(9) {
 		clog.Infof(ctx, "store %s %s in %s", fname, e, dir)
@@ -342,7 +341,7 @@ func (hfs *HashFS) ReadDir(ctx context.Context, root, name string) (dents []DirE
 	e, _, ok := hfs.directory.lookup(ctx, dname)
 	if !ok {
 		e = newLocalEntry()
-		e.init(ctx, dname, hfs.executables, hfs.IOMetrics)
+		e.init(ctx, dname, hfs.executables, hfs.OS)
 		var err error
 		e, err = hfs.directory.store(ctx, dname, e)
 		if err != nil {
@@ -395,7 +394,7 @@ func (hfs *HashFS) ReadFile(ctx context.Context, root, fname string) ([]byte, er
 	e, _, ok := hfs.directory.lookup(ctx, fname)
 	if !ok {
 		e = newLocalEntry()
-		e.init(ctx, fname, hfs.executables, hfs.IOMetrics)
+		e.init(ctx, fname, hfs.executables, hfs.OS)
 		var err error
 		e, err = hfs.directory.store(ctx, fname, e)
 		if err != nil {
@@ -501,7 +500,7 @@ func (hfs *HashFS) Copy(ctx context.Context, root, src, dst string, mtime time.T
 		if log.V(9) {
 			clog.Infof(ctx, "new entry for copy src %s", srcfname)
 		}
-		e.init(ctx, srcfname, hfs.executables, hfs.IOMetrics)
+		e.init(ctx, srcfname, hfs.executables, hfs.OS)
 		var err error
 		e, err := hfs.directory.store(ctx, srcfname, e)
 		if err != nil {
@@ -552,22 +551,19 @@ func (hfs *HashFS) Mkdir(ctx context.Context, root, dirname string, cmdhash []by
 	hfs.clean = false
 	dirname = filepath.Join(root, dirname)
 	dirname = filepath.ToSlash(dirname)
-	fi, err := os.Lstat(dirname)
-	hfs.IOMetrics.OpsDone(err)
+	fi, err := hfs.OS.Lstat(ctx, dirname)
 	mtime := time.Now()
 	if err == nil && fi.IsDir() {
-		err := os.Chtimes(dirname, time.Now(), mtime)
-		hfs.IOMetrics.OpsDone(err)
+		err := hfs.OS.Chtimes(ctx, dirname, time.Now(), mtime)
 		if err != nil {
 			clog.Warningf(ctx, "failed to set dir mtime %s: %v: %v", dirname, mtime, err)
 		}
 	} else {
-		err := os.MkdirAll(dirname, 0755)
-		hfs.IOMetrics.OpsDone(err)
+		err := hfs.OS.MkdirAll(ctx, dirname, 0755)
 		if err != nil {
 			return err
 		}
-		fi, err := os.Lstat(dirname)
+		fi, err := hfs.OS.Lstat(ctx, dirname)
 		if err != nil {
 			return err
 		}
@@ -723,7 +719,7 @@ func (hfs *HashFS) Entries(ctx context.Context, root string, inputs []string) ([
 			continue
 		}
 		e = newLocalEntry()
-		e.init(ctx, fname, hfs.executables, hfs.IOMetrics)
+		e.init(ctx, fname, hfs.executables, hfs.OS)
 		if log.V(1) {
 			clog.Infof(ctx, "tree new entry %s", fname)
 		}
@@ -784,7 +780,7 @@ func (hfs *HashFS) Entries(ctx context.Context, root string, inputs []string) ([
 					}
 				} else {
 					elink = newLocalEntry()
-					elink.init(ctx, name, hfs.executables, hfs.IOMetrics)
+					elink.init(ctx, name, hfs.executables, hfs.OS)
 					if log.V(1) {
 						clog.Infof(ctx, "tree new entry %s", name)
 					}
@@ -872,7 +868,7 @@ func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []Update
 				e.mu.Unlock()
 			} else {
 				e = newLocalEntry()
-				e.init(ctx, fname, hfs.executables, hfs.IOMetrics)
+				e.init(ctx, fname, hfs.executables, hfs.OS)
 				e.mtime = ent.ModTime
 				e.cmdhash = ent.CmdHash
 				e.action = ent.Action
@@ -890,8 +886,7 @@ func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []Update
 				// since os.Chtimes updates the mtime of target
 				// and it makes the target invalidated
 				// in .siso_fs_state since mtime doesn't match.
-				err := os.Chtimes(fname, time.Now(), e.getMtime())
-				hfs.IOMetrics.OpsDone(err)
+				err := hfs.OS.Chtimes(ctx, fname, time.Now(), e.getMtime())
 				if errors.Is(err, fs.ErrNotExist) {
 					clog.Warningf(ctx, "failed to update mtime of %s: %v", fname, err)
 					continue
@@ -931,8 +926,7 @@ func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []Update
 				return err
 			}
 			if ent.IsLocal && e.isChanged {
-				err = os.Chtimes(fname, time.Now(), e.getMtime())
-				hfs.IOMetrics.OpsDone(err)
+				err = hfs.OS.Chtimes(ctx, fname, time.Now(), e.getMtime())
 				if errors.Is(err, fs.ErrNotExist) {
 					clog.Warningf(ctx, "failed to update mtime of %s: %v", fname, err)
 					continue
@@ -989,8 +983,7 @@ func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []Update
 			if err != nil {
 				return err
 			}
-			err = os.Chtimes(fname, time.Now(), ent.ModTime)
-			hfs.IOMetrics.OpsDone(err)
+			err = hfs.OS.Chtimes(ctx, fname, time.Now(), ent.ModTime)
 			if err != nil {
 				clog.Warningf(ctx, "failed to update dir mtime %s: %v", fname, err)
 			}
@@ -1042,9 +1035,7 @@ func (hfs *HashFS) RetrieveUpdateEntriesFromLocal(ctx context.Context, root stri
 	for _, fname := range fnames {
 		fullname := filepath.Join(root, fname)
 		fullname = filepath.ToSlash(fullname)
-
-		lfi, err := os.Lstat(fullname)
-		hfs.IOMetrics.OpsDone(err)
+		lfi, err := hfs.OS.Lstat(ctx, fullname)
 		if errors.Is(err, fs.ErrNotExist) {
 			clog.Warningf(ctx, "missing local %s: %v", fname, err)
 			hfs.directory.delete(ctx, fullname)
@@ -1159,7 +1150,7 @@ func (hfs *HashFS) Flush(ctx context.Context, execRoot string, files []string) e
 		}
 		eg.Go(func() (err error) {
 			defer func() { done(err) }()
-			return e.flush(ctx, fname, hfs.opt.DigestXattrName, hfs.IOMetrics)
+			return e.flush(ctx, fname, hfs.opt.DigestXattrName, hfs.OS)
 		})
 	}
 	return eg.Wait()
@@ -1225,9 +1216,8 @@ func (e *entry) String() string {
 	return fmt.Sprintf("size:%d mode:%s mtime:%s", e.size, e.mode, e.getMtime())
 }
 
-func (e *entry) init(ctx context.Context, fname string, executables map[string]bool, m *iometrics.IOMetrics) {
-	fi, err := os.Lstat(fname)
-	m.OpsDone(err)
+func (e *entry) init(ctx context.Context, fname string, executables map[string]bool, osfs *osfs.OSFS) {
+	fi, err := osfs.Lstat(ctx, fname)
 	if errors.Is(err, fs.ErrNotExist) {
 		if log.V(1) {
 			clog.Infof(ctx, "not exist %s", fname)
@@ -1249,8 +1239,7 @@ func (e *entry) init(ctx context.Context, fname string, executables map[string]b
 		e.mode = 0644 | fs.ModeDir
 	case fi.Mode().Type() == fs.ModeSymlink:
 		e.mode = 0644 | fs.ModeSymlink
-		e.target, err = os.Readlink(fname)
-		m.OpsDone(err)
+		e.target, err = osfs.Readlink(ctx, fname)
 		if err != nil {
 			e.err = err
 		}
@@ -1263,7 +1252,7 @@ func (e *entry) init(ctx context.Context, fname string, executables map[string]b
 			e.mode |= 0111
 		}
 		e.size = fi.Size()
-		e.src = digest.LocalFileSource{Fname: fname, IOMetrics: m}
+		e.src = osfs.FileSource(fname)
 	default:
 		e.err = fmt.Errorf("unexpected filetype not regular %s: %s", fi.Mode(), fname)
 		clog.Errorf(ctx, "tree entry %s: unknown filetype %s", fname, fi.Mode())
@@ -1379,7 +1368,7 @@ func (e *entry) getDir() *directory {
 	return e.directory
 }
 
-func (e *entry) flush(ctx context.Context, fname, xattrname string, m *iometrics.IOMetrics) error {
+func (e *entry) flush(ctx context.Context, fname, xattrname string, osfs *osfs.OSFS) error {
 	defer close(e.lready)
 
 	if errors.Is(e.err, fs.ErrNotExist) {
@@ -1393,9 +1382,8 @@ func (e *entry) flush(ctx context.Context, fname, xattrname string, m *iometrics
 			// wait if digest calculation on fname is under progress
 			digestCond.Wait()
 		}
-		err := os.Remove(fname)
+		err := osfs.Remove(ctx, fname)
 		digestLock.Unlock()
-		m.OpsDone(err)
 		clog.Infof(ctx, "flush remove %s: %v", fname, err)
 		return err
 	}
@@ -1404,37 +1392,33 @@ func (e *entry) flush(ctx context.Context, fname, xattrname string, m *iometrics
 	switch {
 	case e.directory != nil:
 		// directory
-		fi, err := os.Lstat(fname)
-		m.OpsDone(err)
+		fi, err := osfs.Lstat(ctx, fname)
 		if err == nil && fi.IsDir() && fi.ModTime().Equal(mtime) {
 			if log.V(1) {
 				clog.Infof(ctx, "flush dir %s: already exist", fname)
 			}
 			return nil
 		}
-		err = os.MkdirAll(fname, 0755)
-		m.OpsDone(err)
+		err = osfs.MkdirAll(ctx, fname, 0755)
 		if err != nil {
 			clog.Infof(ctx, "flush dir %s: %v", fname, err)
 		} else {
-			err = os.Chtimes(fname, time.Now(), mtime)
-			m.OpsDone(err)
+			err = osfs.Chtimes(ctx, fname, time.Now(), mtime)
 			clog.Infof(ctx, "flush dir chtime %s %v: %v", fname, mtime, err)
 		}
 		return err
 	case d.IsZero() && e.target != "":
-		target, err := os.Readlink(fname)
+		target, err := osfs.Readlink(ctx, fname)
 		if err == nil && e.target == target {
 			return nil
 		}
 		e.mu.Lock()
-		err = os.Symlink(e.target, fname)
-		m.OpsDone(err)
+		err = osfs.Symlink(ctx, e.target, fname)
 		if errors.Is(err, fs.ErrExist) {
-			err = os.Remove(fname)
-			m.OpsDone(err)
-			err = os.Symlink(e.target, fname)
-			m.OpsDone(err)
+			err = osfs.Remove(ctx, fname)
+			if err == nil {
+				err = osfs.Symlink(ctx, e.target, fname)
+			}
 		}
 		e.mu.Unlock()
 		clog.Infof(ctx, "flush symlink %s -> %s: %v", fname, e.target, err)
@@ -1442,8 +1426,7 @@ func (e *entry) flush(ctx context.Context, fname, xattrname string, m *iometrics
 		return err
 	default:
 	}
-	fi, err := os.Lstat(fname)
-	m.OpsDone(err)
+	fi, err := osfs.Lstat(ctx, fname)
 	// need to remove the file after it reads from data source,
 	// since data source will read from the local disk.
 	var removeReason string
@@ -1472,15 +1455,14 @@ func (e *entry) flush(ctx context.Context, fname, xattrname string, m *iometrics
 			// if size differs, no need to check and force
 			// to write hashfs entry to the disk.
 			var fileDigest digest.Digest
-			src := digest.LocalFileSource{Fname: fname, IOMetrics: m}
+			src := osfs.FileSource(fname)
 			ld, err := localDigest(ctx, src, fname, xattrname, fi.Size())
 			if err == nil {
 				fileDigest = ld.Digest()
 				if fileDigest == d {
 					clog.Infof(ctx, "flush %s: already exist - hash match", fname)
 					if !fi.ModTime().Equal(mtime) {
-						err = os.Chtimes(fname, time.Now(), mtime)
-						m.OpsDone(err)
+						err = osfs.Chtimes(ctx, fname, time.Now(), mtime)
 					}
 					return err
 				}
@@ -1489,31 +1471,26 @@ func (e *entry) flush(ctx context.Context, fname, xattrname string, m *iometrics
 		}
 		if removeReason == "" && fi.Mode()&0200 == 0 {
 			// need to be writable. otherwise os.WriteFile fails with permission denied.
-			err = os.Chmod(fname, fi.Mode()|0200)
-			m.OpsDone(err)
+			err = osfs.Chmod(ctx, fname, fi.Mode()|0200)
 			clog.Warningf(ctx, "flush %s: not writable? %s: %v", fname, fi.Mode(), err)
 		}
 	}
-	err = os.MkdirAll(filepath.Dir(fname), 0755)
-	m.OpsDone(err)
+	err = osfs.MkdirAll(ctx, filepath.Dir(fname), 0755)
 	if err != nil {
 		clog.Warningf(ctx, "flush %s: mkdir: %v", fname, err)
 		return fmt.Errorf("failed to create directory for %s: %w", fname, err)
 	}
 	if d.SizeBytes == 0 {
 		if removeReason != "" {
-			err = os.Remove(fname)
-			m.OpsDone(err)
+			err = osfs.Remove(ctx, fname)
 			clog.Infof(ctx, "flush %s: remove %s: %v", fname, removeReason, err)
 		}
 		clog.Infof(ctx, "flush %s: empty file", fname)
-		err := os.WriteFile(fname, nil, 0644)
-		m.WriteDone(0, err)
+		err := osfs.WriteFile(ctx, fname, nil, 0644)
 		if err != nil {
 			return err
 		}
-		err = os.Chtimes(fname, time.Now(), mtime)
-		m.OpsDone(err)
+		err = osfs.Chtimes(ctx, fname, time.Now(), mtime)
 		if err != nil {
 			return err
 		}
@@ -1522,8 +1499,7 @@ func (e *entry) flush(ctx context.Context, fname, xattrname string, m *iometrics
 	buf := e.buf
 	removeBeforeWrite := func() {
 		if removeReason != "" {
-			err = os.Remove(fname)
-			m.OpsDone(err)
+			err = osfs.Remove(ctx, fname)
 			clog.Infof(ctx, "flush %s: remove %s: %v", fname, removeReason, err)
 		}
 	}
@@ -1535,21 +1511,23 @@ func (e *entry) flush(ctx context.Context, fname, xattrname string, m *iometrics
 			// check if hashfs entry is copy of local file,
 			// i.e. created by hashfs Copy method.
 			// if hashfs entry is set by remote action,
-			// it would not be digest.LocalFileSource.
-			lsrc, ok := e.src.(digest.LocalFileSource)
-			if ok && clonefile != nil {
+			// it would not be osfs.FileSource
+			lsrc, ok := osfs.AsFileSource(e.src)
+			type clonefiler interface {
+				Clonefile(context.Context, string, string) error
+			}
+			var osfsany any = osfs
+			osfsc, cok := osfsany.(clonefiler)
+			if ok && cok {
 				if lsrc.Fname == fname {
-					err = os.Chmod(fname, e.mode)
-					m.OpsDone(err)
+					err = osfs.Chmod(ctx, fname, e.mode)
 					return err
 				}
 				removeBeforeWrite()
 				clog.Infof(ctx, "flush %s %s clone from source %s", fname, d, lsrc.Fname)
-				err := clonefile(lsrc.Fname, fname)
-				m.OpsDone(err)
+				err := osfsc.Clonefile(ctx, lsrc.Fname, fname)
 				if err == nil {
-					err = os.Chmod(fname, e.mode)
-					m.OpsDone(err)
+					err = osfs.Chmod(ctx, fname, e.mode)
 					return err
 				}
 				// clonefile err, fallback to normal copy
@@ -1565,21 +1543,18 @@ func (e *entry) flush(ctx context.Context, fname, xattrname string, m *iometrics
 			}
 			removeBeforeWrite()
 			clog.Infof(ctx, "flush %s %s from source %s", fname, d, srcname)
-			err = os.WriteFile(fname, buf, e.mode)
-			m.WriteDone(len(buf), err)
+			err = osfs.WriteFile(ctx, fname, buf, e.mode)
 			return err
 		}()
 	} else {
 		removeBeforeWrite()
 		clog.Infof(ctx, "flush %s from embedded buf", fname)
-		err = os.WriteFile(fname, buf, e.mode)
-		m.WriteDone(len(buf), err)
+		err = osfs.WriteFile(ctx, fname, buf, e.mode)
 	}
 	if err != nil {
 		return err
 	}
-	err = os.Chtimes(fname, time.Now(), mtime)
-	m.OpsDone(err)
+	err = osfs.Chtimes(ctx, fname, time.Now(), mtime)
 	if err != nil {
 		return err
 	}

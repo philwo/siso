@@ -105,6 +105,19 @@ func TestByteSource(t *testing.T) {
 	}
 }
 
+type localFileSource struct {
+	name string
+}
+
+func (localFileSource) IsLocal() {}
+func (l localFileSource) Open(context.Context) (io.ReadCloser, error) {
+	f, err := os.Open(l.name)
+	return f, err
+}
+func (l localFileSource) String() string {
+	return fmt.Sprintf("file://%s", l.name)
+}
+
 func TestLocalFileSource(t *testing.T) {
 	ctx := context.Background()
 
@@ -116,7 +129,7 @@ func TestLocalFileSource(t *testing.T) {
 		t.Fatalf("failed to write file %q. %v", fname, err)
 	}
 
-	d, err := FromLocalFile(ctx, LocalFileSource{fname, nil})
+	d, err := FromLocalFile(ctx, localFileSource{fname})
 	if err != nil {
 		t.Fatalf("FromLocalFile(...) = _, %v, want nil error", err)
 	}

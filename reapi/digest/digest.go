@@ -15,12 +15,10 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
-	"os"
 
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
 	"google.golang.org/protobuf/proto"
 
-	"infra/build/siso/o11y/iometrics"
 	"infra/build/siso/reapi/retry"
 )
 
@@ -207,40 +205,7 @@ func FromLocalFile(ctx context.Context, src Source) (Data, error) {
 }
 
 // LocalFileSource is a source for local file.
-type LocalFileSource struct {
-	Fname     string
-	IOMetrics *iometrics.IOMetrics
-}
-
-type localFile struct {
-	file *os.File
-	m    *iometrics.IOMetrics
-	n    int
-}
-
-// Read reads the content of the local file.
-func (f *localFile) Read(buf []byte) (int, error) {
-	n, err := f.file.Read(buf)
-	f.n += n
-	return n, err
-}
-
-// Close closes the local file.
-func (f *localFile) Close() error {
-	err := f.file.Close()
-	if f.m != nil {
-		f.m.ReadDone(f.n, err)
-	}
-	return err
-}
-
-// Open opens local file.
-func (s LocalFileSource) Open(ctx context.Context) (io.ReadCloser, error) {
-	r, err := os.Open(s.Fname)
-	return &localFile{file: r, m: s.IOMetrics}, err
-}
-
-// String returns the source name with "file://" prefix.
-func (s LocalFileSource) String() string {
-	return fmt.Sprintf("file://%s", s.Fname)
+type LocalFileSource interface {
+	Source
+	IsLocal()
 }
