@@ -8,6 +8,7 @@ package recall
 
 import (
 	"context"
+	_ "embed"
 	"errors"
 	"flag"
 	"fmt"
@@ -491,21 +492,59 @@ func (c *run) callLocal(ctx context.Context) error {
 		cmdline = append(cmdline, "--device-write-bps", device+":12mb")
 	}
 
-	// We cannot assume that the container ships a copy of /usr/bin/time, so let's just mount
-	// the one from the current system into the container.
+	// We cannot assume that the container ships a copy of /usr/bin/time,
+	// and it may require different GLIBC version.
 	if c.stats {
-		cmdline = append(cmdline, "-v", "/usr/bin/time:/usr/bin/time")
+		rusageCmd, err := filepath.Abs("rusage")
+		if err != nil {
+			return err
+		}
+		err = buildRusageCmd(ctx, rusageCmd)
+		if err != nil {
+			return err
+		}
+		cmdline = append(cmdline, "-v", rusageCmd+":/bin/rusage")
 	}
-
 	cmdline = append(cmdline, strings.TrimPrefix(platformProperty(p, "container-image"), "docker://"))
 
 	if c.stats {
-		cmdline = append(cmdline, "/usr/bin/time", "-v")
+		cmdline = append(cmdline, "/bin/rusage")
 	}
 
 	cmdline = append(cmdline, command.Arguments...)
 	fmt.Println(cmdline)
 	cmd := exec.CommandContext(ctx, cmdline[0], cmdline[1:]...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
+//go:embed rusage.go.in
+var rusageGo []byte
+
+// buildRusageCmd builds a command from rusage.go that reports resource usage.
+// This is similar to `/usr/bin/time -v`, but `/usr/bin/time` may not be
+// available in the container.
+func buildRusageCmd(ctx context.Context, fname string) error {
+	f, err := os.CreateTemp("", "recall_rusage*.go")
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = os.Remove(f.Name())
+	}()
+	_, err = f.Write(rusageGo)
+	cerr := f.Close()
+	if err != nil {
+		return err
+	}
+	if cerr != nil {
+		return err
+	}
+	cmd := exec.CommandContext(ctx, "go", "build", "-o", fname, f.Name())
+	env := os.Environ()
+	env = append(env, "CGO_ENABLED=0")
+	cmd.Env = env
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
