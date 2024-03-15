@@ -674,7 +674,11 @@ loop:
 	err = <-errdone
 	if !b.verbose {
 		// replace 2 progress lines.
-		ui.Default.PrintLines(fmt.Sprintf("%s finished: %v", name, err), "")
+		if err == nil {
+			ui.Default.PrintLines(fmt.Sprintf("%s finished", name), "")
+		} else {
+			ui.Default.PrintLines(fmt.Sprintf("%s failed: %v", name, err), "")
+		}
 	}
 	// metrics for full build session, without step_id etc.
 	var metrics StepMetric
