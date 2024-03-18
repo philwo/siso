@@ -8,6 +8,7 @@ package reapitest
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"path"
 	"path/filepath"
@@ -219,4 +220,67 @@ pathElements:
 		}
 	}
 	return nil, fmt.Errorf("missing file %s in %s: %s", elem, path.Dir(name), dir.Files)
+}
+
+// LookupSymlinkNode looks up name's symlink node in tree.
+func (t InputTree) LookupSymlinkNode(ctx context.Context, name string) (*rpb.SymlinkNode, error) {
+	dir := &rpb.Directory{}
+	err := t.get(ctx, t.Root, dir)
+	if err != nil {
+		return nil, err
+	}
+	var elems []string
+pathElements:
+	for _, elem := range strings.Split(path.Dir(name), "/") {
+		if elem == "." {
+			continue
+		}
+		for _, s := range dir.Directories {
+			if elem == s.Name {
+				subdir := &rpb.Directory{}
+				err = t.get(ctx, s.Digest, subdir)
+				if err != nil {
+					return nil, fmt.Errorf("missing %s %s: %w", strings.Join(elems, "/"), s.Digest, err)
+				}
+				dir = subdir
+				elems = append(elems, elem)
+				continue pathElements
+			}
+		}
+		return nil, fmt.Errorf("missing dir %s in %s: %s", elem, strings.Join(elems, "."), dir.Directories)
+	}
+	elem := path.Base(name)
+	for _, s := range dir.Symlinks {
+		if elem == s.Name {
+			return s, nil
+		}
+	}
+	return nil, fmt.Errorf("missing symlink %s in %s: %s", elem, path.Dir(name), dir.Files)
+}
+
+func (t InputTree) Dump(ctx context.Context, w io.Writer) error {
+	return t.dump(ctx, w, t.Root, ".", "")
+}
+
+func (t InputTree) dump(ctx context.Context, w io.Writer, d *rpb.Digest, dname, indent string) error {
+	fmt.Fprintf(w, "%s%s dir:%s\n", indent, dname, d)
+	indent += " "
+	dir := &rpb.Directory{}
+	err := t.get(ctx, d, dir)
+	if err != nil {
+		return fmt.Errorf("failed to get %s %s: %w", dname, d, err)
+	}
+	for _, f := range dir.Files {
+		fmt.Fprintf(w, "%s%s file:%s x:%t\n", indent, f.Name, f.Digest, f.IsExecutable)
+	}
+	for _, s := range dir.Symlinks {
+		fmt.Fprintf(w, "%s%s symlink:%s\n", indent, s.Name, s.Target)
+	}
+	for _, subdir := range dir.Directories {
+		err := t.dump(ctx, w, subdir.Digest, subdir.Name, indent)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }

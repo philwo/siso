@@ -617,10 +617,22 @@ func TestBuildDuplicateSymlinkDir(t *testing.T) {
 	if err != nil {
 		t.Errorf("mt.Build()=%v, %v, want nil err", d, err)
 	}
+	dir, err := openDir(ctx, ds, d)
+	if err != nil {
+		t.Fatalf("root %v not found: %v", d, err)
+	}
+	subdir := checkDir(ctx, t, ds, dir, "",
+		nil,
+		[]string{"dir"},
+		nil)
+	// use symlink rather than dir.
+	checkDir(ctx, t, ds, subdir, "dir",
+		nil,
+		nil,
+		[]string{"foo"})
 }
 
-func checkDir(ctx context.Context, t *testing.T, ds *digest.Store, pdir *rpb.Directory, name string,
-	wantFiles []string, wantDirs []string, wantSymlinks []string) *rpb.Directory {
+func checkDir(ctx context.Context, t *testing.T, ds *digest.Store, pdir *rpb.Directory, name string, wantFiles []string, wantDirs []string, wantSymlinks []string) *rpb.Directory {
 	t.Helper()
 	t.Logf("check %s", name)
 	dir := pdir

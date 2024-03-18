@@ -32,6 +32,13 @@ func setupFiles(t *testing.T, dir, name string, deletes []string) {
 		if info.IsDir() {
 			return os.MkdirAll(filepath.Join(dir, name), 0755)
 		}
+		if info.Mode()&fs.ModeSymlink == fs.ModeSymlink {
+			target, err := os.Readlink(pathname)
+			if err != nil {
+				return err
+			}
+			return os.Symlink(target, filepath.Join(dir, name))
+		}
 		buf, err := os.ReadFile(pathname)
 		if err != nil {
 			return err

@@ -370,12 +370,39 @@ func (m *MerkleTree) buildTree(ctx context.Context, curdir *rpb.Directory, dirna
 	})
 	curdir.Files = files
 
+	var symlinks []*rpb.SymlinkNode
+	for _, s := range curdir.Symlinks {
+		p, found := names[s.Name]
+		if found {
+			if !proto.Equal(s, p) {
+				return nil, fmt.Errorf("duplicate symlink %s in %s: %s != %s", s.Name, dirname, s, p)
+			}
+			clog.Infof(ctx, "duplicate symlink %s in %s: %s", s.Name, dirname, s)
+			continue
+		}
+		names[s.Name] = s
+		symlinks = append(symlinks, s)
+	}
+	sort.Slice(symlinks, func(i, j int) bool {
+		return symlinks[i].Name < symlinks[j].Name
+	})
+	curdir.Symlinks = symlinks
+
 	var dirs []*rpb.DirectoryNode
 	for _, subdir := range curdir.Directories {
 		dirname := pathJoin(dirname, subdir.Name)
 		dir, found := m.m[dirname]
 		if !found {
 			return nil, fmt.Errorf("directory not found: %s", dirname)
+		}
+		p, found := names[subdir.Name]
+		if found {
+			switch p.(type) {
+			case *rpb.SymlinkNode:
+				clog.Infof(ctx, "use symlink for dir: %s", filepath.Join(dirname, subdir.Name))
+				continue
+			}
+			// other checks later.
 		}
 		if dir != nil && subdir.Digest == nil {
 			digest, err := m.buildTree(ctx, dir, dirname)
@@ -384,7 +411,6 @@ func (m *MerkleTree) buildTree(ctx context.Context, curdir *rpb.Directory, dirna
 			}
 			subdir.Digest = digest
 		}
-		p, found := names[subdir.Name]
 		if found {
 			if !proto.Equal(subdir, p) {
 				return nil, fmt.Errorf("duplicate dir %s in %s: %s != %s", subdir.Name, dirname, subdir, p)
@@ -399,30 +425,6 @@ func (m *MerkleTree) buildTree(ctx context.Context, curdir *rpb.Directory, dirna
 		return dirs[i].Name < dirs[j].Name
 	})
 	curdir.Directories = dirs
-
-	var symlinks []*rpb.SymlinkNode
-	for _, s := range curdir.Symlinks {
-		p, found := names[s.Name]
-		if found {
-			sdirname := pathJoin(dirname, s.Name)
-			if _, found := m.m[sdirname]; found {
-				clog.Infof(ctx, "duplicate symlink to dir %s in %s -> %s", s.Name, dirname, s.Target)
-				continue
-			}
-
-			if !proto.Equal(s, p) {
-				return nil, fmt.Errorf("duplicate symlink %s in %s: %s != %s", s.Name, dirname, s, p)
-			}
-			clog.Infof(ctx, "duplicate symlink %s in %s: %s", s.Name, dirname, s)
-			continue
-		}
-		names[s.Name] = s
-		symlinks = append(symlinks, s)
-	}
-	sort.Slice(symlinks, func(i, j int) bool {
-		return symlinks[i].Name < symlinks[j].Name
-	})
-	curdir.Symlinks = symlinks
 
 	data, err := digest.FromProtoMessage(curdir)
 	if err != nil {
