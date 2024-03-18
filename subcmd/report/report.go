@@ -90,12 +90,19 @@ func (c *run) run(ctx context.Context) error {
 func (c *run) collect(ctx context.Context) (map[string]digest.Data, error) {
 	report := make(map[string]digest.Data)
 	fsys := os.DirFS(".")
+	wd, err := os.Getwd()
+	if err != nil {
+		return nil, err
+	}
 	osfs := osfs.New("fs")
 
 	for _, pat := range []string{"siso*", ".siso*", "args.gn"} {
 		matches, err := fs.Glob(fsys, pat)
 		if err != nil {
 			return nil, err
+		}
+		if len(matches) == 0 {
+			return nil, fmt.Errorf("no siso files in %s: did you specify correct `-C <dir>` ?", wd)
 		}
 		for _, fname := range matches {
 			ui.Default.PrintLines(fmt.Sprintf("reading %s", fname))
@@ -120,7 +127,7 @@ func (c *run) collect(ctx context.Context) (map[string]digest.Data, error) {
 			}
 		}
 	}
-	_, err := os.Stat(".reproxy_tmp")
+	_, err = os.Stat(".reproxy_tmp")
 	if err != nil {
 		clog.Infof(ctx, "no .reproxy_tmp: %v", err)
 		return report, nil
