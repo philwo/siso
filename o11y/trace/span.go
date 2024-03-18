@@ -11,6 +11,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"path"
+	"strings"
 	"sync"
 	"time"
 
@@ -337,6 +338,13 @@ type SpanData struct {
 	End    time.Time
 	Attrs  map[string]any
 	Status *spb.Status
+}
+
+// NameKind returns span name's kind.
+// It drops resource capacity for semaphore span.
+func (sd SpanData) NameKind() string {
+	name, _, _ := strings.Cut(sd.Name, "/")
+	return name
 }
 
 // Duration returns duration of the span.

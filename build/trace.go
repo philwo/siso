@@ -377,7 +377,7 @@ func (te *traceEvents) Add(ctx context.Context, tc *trace.Context) {
 
 	for _, span := range spans[1:] {
 		var obj traceEventObject
-		switch span.Name {
+		switch span.NameKind() {
 		case "serv:prepcoc":
 			obj = te.runPreprocSpanEvent(span, attr)
 		case "serv:localexec":

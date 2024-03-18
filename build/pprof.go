@@ -59,7 +59,7 @@ func (tp *tracePprof) Add(ctx context.Context, tc *trace.Context) {
 	backtraces, _ := spans[0].Attrs[logLabelKeyBacktrace].([]string)
 
 	for _, span := range spans[1:] {
-		switch span.Name {
+		switch span.NameKind() {
 		case "serv:preproc",
 			"serv:localexec",
 			"serv:remoteexec",
