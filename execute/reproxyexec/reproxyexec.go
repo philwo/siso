@@ -26,9 +26,9 @@ import (
 	"google.golang.org/grpc/status"
 
 	"infra/build/siso/execute"
+	"infra/build/siso/hashfs/osfs"
 	"infra/build/siso/o11y/clog"
 	"infra/build/siso/o11y/trace"
-	"infra/build/siso/osfs"
 	"infra/build/siso/reapi/digest"
 )
 
@@ -403,7 +403,7 @@ type reproxyOutputsDataSource struct {
 
 func (ds reproxyOutputsDataSource) Source(_ digest.Digest, fname string) digest.Source {
 	path := filepath.Join(ds.execRoot, fname)
-	return ds.osfs.FileSource(path)
+	return ds.osfs.FileSource(path, -1)
 }
 
 func setOutputsFromActionLog(actionLog *lpb.LogRecord, actionResult *rpb.ActionResult) error {

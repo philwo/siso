@@ -11,7 +11,7 @@ import (
 	"runtime"
 	"testing"
 
-	"infra/build/siso/osfs"
+	"infra/build/siso/hashfs/osfs"
 )
 
 func TestDirectoryLookup_Symlink(t *testing.T) {
@@ -57,7 +57,7 @@ func TestDirectoryLookup_Symlink(t *testing.T) {
 	setupSymlink(symlinkName, "MacOSX.sdk")
 
 	d := &directory{}
-	osfs := osfs.New("fs")
+	osfs := osfs.New(ctx, "fs", osfs.Option{})
 
 	fname := filepath.Join(dir, symlinkName)
 	_, _, ok := d.lookup(ctx, fname)

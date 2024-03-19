@@ -10,8 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pkg/xattr"
-
 	"infra/build/siso/o11y/clog"
 	"infra/build/siso/o11y/trace"
 	"infra/build/siso/reapi/digest"
@@ -32,7 +30,7 @@ var (
 	digestFnames = make(map[string]struct{})
 )
 
-func localDigest(ctx context.Context, src digest.Source, fname, xattrname string, size int64) (digest.Data, error) {
+func localDigest(ctx context.Context, src digest.Source, fname string) (digest.Data, error) {
 	ctx, span := trace.NewSpan(ctx, "local-digest")
 	defer span.Close(nil)
 
@@ -46,15 +44,6 @@ func localDigest(ctx context.Context, src digest.Source, fname, xattrname string
 		digestCond.Broadcast()
 		digestLock.Unlock()
 	}()
-	if xattrname != "" {
-		d, err := xattr.LGet(fname, xattrname)
-		if err == nil {
-			return digest.NewData(src, digest.Digest{
-				Hash:      string(d),
-				SizeBytes: size,
-			}), nil
-		}
-	}
 	started := time.Now()
 	d, err := digest.FromLocalFile(ctx, src)
 	if dur := time.Since(started); dur >= 10*time.Second {
@@ -71,8 +60,7 @@ type digestReq struct {
 }
 
 type digester struct {
-	xattrname string
-	q         chan digestReq
+	q chan digestReq
 
 	mu    sync.Mutex
 	queue []digestReq
@@ -156,7 +144,7 @@ func (d *digester) compute(ctx context.Context, fname string, e *entry) {
 		return
 	}
 	err := DigestSemaphore.Do(ctx, func(ctx context.Context) error {
-		return e.compute(ctx, fname, d.xattrname)
+		return e.compute(ctx, fname)
 	})
 	if err != nil {
 		clog.Warningf(ctx, "failed to compute digest %s: %v", fname, err)

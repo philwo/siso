@@ -14,8 +14,8 @@ import (
 
 	log "github.com/golang/glog"
 
+	"infra/build/siso/hashfs/osfs"
 	"infra/build/siso/o11y/clog"
-	"infra/build/siso/osfs"
 	"infra/build/siso/reapi/digest"
 	"infra/build/siso/reapi/merkletree"
 )
@@ -26,7 +26,8 @@ type Importer struct{}
 // Import imports dir into digest store and returns digest of root.
 func (Importer) Import(ctx context.Context, dir string, ds *digest.Store) (digest.Digest, error) {
 	var entries []merkletree.Entry
-	osfs := osfs.New("fs")
+	// TODO: pass osfs from subcommand?
+	osfs := osfs.New(ctx, "fs", osfs.Option{})
 	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -65,7 +66,7 @@ func (Importer) Import(ctx context.Context, dir string, ds *digest.Store) (diges
 		if err != nil {
 			return err
 		}
-		data, err := digest.FromLocalFile(ctx, osfs.FileSource(path))
+		data, err := digest.FromLocalFile(ctx, osfs.FileSource(path, fi.Size()))
 		if err != nil {
 			return err
 		}

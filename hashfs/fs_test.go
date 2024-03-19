@@ -27,7 +27,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"infra/build/siso/hashfs"
-	"infra/build/siso/osfs"
+	"infra/build/siso/hashfs/osfs"
 	"infra/build/siso/reapi/digest"
 	"infra/build/siso/reapi/merkletree"
 )
@@ -1608,7 +1608,9 @@ func TestXattr(t *testing.T) {
 	t.Logf("digest of %s/%s = %v", dir, file, wantDigest)
 
 	hashFS, err := hashfs.New(ctx, hashfs.Option{
-		DigestXattrName: *xattrName,
+		OSFSOption: osfs.Option{
+			DigestXattrName: *xattrName,
+		},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -2020,7 +2022,7 @@ func update(ctx context.Context, hfs *hashfs.HashFS, execRoot string, entries []
 
 func TestUpdate_WithLocalFlush(t *testing.T) {
 	ctx := context.Background()
-	osfs := osfs.New("fs")
+	osfs := osfs.New(ctx, "fs", osfs.Option{})
 
 	for _, name := range flushTestNames {
 		t.Run(name, func(t *testing.T) {
@@ -2030,7 +2032,7 @@ func TestUpdate_WithLocalFlush(t *testing.T) {
 			case "empty-dir", "subdir", "new-entry":
 				return
 			}
-			data, err := digest.FromLocalFile(ctx, osfs.FileSource(filepath.Join(dir, name)))
+			data, err := digest.FromLocalFile(ctx, osfs.FileSource(filepath.Join(dir, name), -1))
 			if err != nil {
 				t.Fatalf("digest.FromLocalFile(ctx, {%q})=%v, %v; want nil err", filepath.Join(dir, name), data, err)
 			}

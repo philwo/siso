@@ -22,20 +22,16 @@ import (
 	"time"
 
 	log "github.com/golang/glog"
-	"github.com/pkg/xattr"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/protobuf/proto"
 
+	"infra/build/siso/hashfs/osfs"
 	pb "infra/build/siso/hashfs/proto"
 	"infra/build/siso/o11y/clog"
-	"infra/build/siso/osfs"
 	"infra/build/siso/reapi/digest"
 )
 
 const defaultStateFile = ".siso_fs_state"
-
-// defaultDigestXattr is default xattr for digest. http://shortn/_8GHggPD2vw
-const defaultDigestXattr = "google.digest.sha256"
 
 // OutputLocalFunc returns true if given fname needs to be on local disk.
 type OutputLocalFunc func(context.Context, string) bool
@@ -45,21 +41,17 @@ type IgnoreFunc func(context.Context, string) bool
 
 // Option is an option for HashFS.
 type Option struct {
-	StateFile       string
-	DataSource      DataSource
-	OutputLocal     OutputLocalFunc
-	Ignore          IgnoreFunc
-	DigestXattrName string
+	StateFile   string
+	DataSource  DataSource
+	OutputLocal OutputLocalFunc
+	Ignore      IgnoreFunc
+	OSFSOption  osfs.Option
 }
 
 // RegisterFlags registers flags for the option.
 func (o *Option) RegisterFlags(flagSet *flag.FlagSet) {
 	flagSet.StringVar(&o.StateFile, "fs_state", defaultStateFile, "fs state filename")
-	var xattrname string
-	if xattr.XATTR_SUPPORTED {
-		xattrname = defaultDigestXattr
-	}
-	flagSet.StringVar(&o.DigestXattrName, "fs_digest_xattr", xattrname, "xattr for sha256 digest")
+	o.OSFSOption.RegisterFlags(flagSet)
 }
 
 // DataSource is an interface to get digest source for digest and its name.
@@ -210,8 +202,8 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 				// check digest is the same and fix mtime if it matches.
 				// don't reconcile for source (non-generated file),
 				// as user may want to trigger build by touch.
-				src := hfs.OS.FileSource(ent.Name)
-				data, err := localDigest(ctx, src, ent.Name, hfs.opt.DigestXattrName, fi.Size())
+				src := hfs.OS.FileSource(ent.Name, fi.Size())
+				data, err := localDigest(ctx, src, ent.Name)
 				if err == nil && data.Digest() == e.d {
 					et = entryEqLocal
 					err = hfs.OS.Chtimes(ctx, ent.Name, time.Now(), e.mtime)
@@ -301,7 +293,7 @@ func newStateEntry(ent *pb.Entry, ftime time.Time, dataSource DataSource, osfs *
 	entDigest := toDigest(ent.Digest)
 	if !entDigest.IsZero() {
 		if entType == entryEqLocal {
-			src = osfs.FileSource(ent.Name)
+			src = osfs.FileSource(ent.Name, entDigest.SizeBytes)
 		} else {
 			// not the same as local, but digest is in state.
 			// probably, exists in RBE side, or local cache.
@@ -435,7 +427,7 @@ func (hfs *HashFS) State(ctx context.Context) *pb.State {
 					if e.src == nil {
 						clog.Warningf(ctx, "wrong entry for %s?", name)
 					} else {
-						err := e.compute(ctx, name, hfs.opt.DigestXattrName)
+						err := e.compute(ctx, name)
 						if err != nil {
 							clog.Warningf(ctx, "failed to calculate digest for %s: %v", name, err)
 						}

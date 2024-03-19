@@ -7,6 +7,8 @@ package osfs
 
 import (
 	"context"
+	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"io/fs"
@@ -14,10 +16,15 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/pkg/xattr"
+
 	"infra/build/siso/o11y/clog"
 	"infra/build/siso/o11y/iometrics"
 	"infra/build/siso/reapi/digest"
 )
+
+// defaultDigestXattr is default xattr for digest. http://shortn/_8GHggPD2vw
+const defaultDigestXattr = "google.digest.sha256"
 
 // OSFS provides OS Filesystem access.
 // It counts metrics by iometrics.
@@ -25,11 +32,36 @@ import (
 // in addition to local filesystem.
 type OSFS struct {
 	*iometrics.IOMetrics
+
+	digestXattrName string
+}
+
+// Option is an option for osfs.
+type Option struct {
+	// DigestXattrName is xattr name for digest. When it is set, try to retrieve digest from the xattr.
+	DigestXattrName string
+}
+
+func (o *Option) RegisterFlags(flagSet *flag.FlagSet) {
+	var xattrname string
+	if xattr.XATTR_SUPPORTED {
+		xattrname = defaultDigestXattr
+	}
+	flagSet.StringVar(&o.DigestXattrName, "fs_digest_xattr", xattrname, "xatr for sha256 digest")
 }
 
 // New creates new OSFS.
-func New(name string) *OSFS {
-	return &OSFS{IOMetrics: iometrics.New(name)}
+func New(ctx context.Context, name string, opt Option) *OSFS {
+	if !xattr.XATTR_SUPPORTED {
+		opt.DigestXattrName = ""
+	}
+	if opt.DigestXattrName != "" {
+		clog.Infof(ctx, "use xattr %s for file digest", opt.DigestXattrName)
+	}
+	return &OSFS{
+		IOMetrics:       iometrics.New(name),
+		digestXattrName: opt.DigestXattrName,
+	}
 }
 
 func logSlow(ctx context.Context, name string, dur time.Duration, err error) {
@@ -68,8 +100,10 @@ func (*OSFS) AsFileSource(ds digest.Source) (FileSource, bool) {
 }
 
 // FileSource creates new FileSource for name.
-func (fs *OSFS) FileSource(name string) FileSource {
-	return FileSource{Fname: name, fs: fs}
+// For FileDigestFromXattr, if size is non-negative, it will be used.
+// If size is negative, it will check file info.
+func (fs *OSFS) FileSource(name string, size int64) FileSource {
+	return FileSource{Fname: name, size: size, fs: fs}
 }
 
 // Lstat returns a FileInfo describing the named file.
@@ -138,9 +172,31 @@ func (fs *OSFS) WriteFile(ctx context.Context, name string, data []byte, perm fs
 	return err
 }
 
+// FileDigestFromXattr returns file's digest via xattr if possible.
+func (fs *OSFS) FileDigestFromXattr(ctx context.Context, name string, size int64) (digest.Digest, error) {
+	if fs.digestXattrName == "" {
+		return digest.Digest{}, errors.ErrUnsupported
+	}
+	d, err := xattr.LGet(name, fs.digestXattrName)
+	fs.OpsDone(err)
+	if err != nil {
+		return digest.Digest{}, err
+	}
+	if size < 0 {
+		fi, err := os.Lstat(name)
+		fs.OpsDone(err)
+		size = fi.Size()
+	}
+	return digest.Digest{
+		Hash:      string(d),
+		SizeBytes: size,
+	}, nil
+}
+
 // FileSource is a file source.
 type FileSource struct {
 	Fname string
+	size  int64
 	fs    *OSFS
 }
 
@@ -155,6 +211,11 @@ func (fs FileSource) Open(ctx context.Context) (io.ReadCloser, error) {
 
 func (fs FileSource) String() string {
 	return fmt.Sprintf("file://%s", fs.Fname)
+}
+
+// FileDigestFromXattr returns file's digest via xattr if possible.
+func (fs FileSource) FileDigestFromXattr(ctx context.Context) (digest.Digest, error) {
+	return fs.fs.FileDigestFromXattr(ctx, fs.Fname, fs.size)
 }
 
 type file struct {

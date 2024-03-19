@@ -22,12 +22,11 @@ import (
 	"time"
 
 	log "github.com/golang/glog"
-	"github.com/pkg/xattr"
 	"golang.org/x/sync/errgroup"
 
+	"infra/build/siso/hashfs/osfs"
 	"infra/build/siso/o11y/clog"
 	"infra/build/siso/o11y/trace"
-	"infra/build/siso/osfs"
 	"infra/build/siso/reapi/digest"
 	"infra/build/siso/reapi/merkletree"
 	"infra/build/siso/sync/semaphore"
@@ -85,22 +84,15 @@ func New(ctx context.Context, opt Option) (*HashFS, error) {
 	if opt.DataSource == nil {
 		opt.DataSource = noDataSource{}
 	}
-	if !xattr.XATTR_SUPPORTED {
-		opt.DigestXattrName = ""
-	}
-	if opt.DigestXattrName != "" {
-		clog.Infof(ctx, "use xattr %s for file digest", opt.DigestXattrName)
-	}
 	fsys := &HashFS{
 		opt:       opt,
 		directory: &directory{isRoot: true},
-		OS:        osfs.New("fs"),
+		OS:        osfs.New(ctx, "fs", opt.OSFSOption),
 
 		digester: digester{
-			xattrname: opt.DigestXattrName,
-			q:         make(chan digestReq, 1000),
-			quit:      make(chan struct{}),
-			done:      make(chan struct{}),
+			q:    make(chan digestReq, 1000),
+			quit: make(chan struct{}),
+			done: make(chan struct{}),
 		},
 		previouslyGeneratedFiles: new(sync.Map),
 	}
@@ -1174,7 +1166,7 @@ func (hfs *HashFS) Flush(ctx context.Context, execRoot string, files []string) e
 		}
 		eg.Go(func() (err error) {
 			defer func() { done(err) }()
-			return e.flush(ctx, fname, hfs.opt.DigestXattrName, hfs.OS)
+			return e.flush(ctx, fname, hfs.OS)
 		})
 	}
 	return eg.Wait()
@@ -1276,7 +1268,7 @@ func (e *entry) init(ctx context.Context, fname string, executables map[string]b
 			e.mode |= 0111
 		}
 		e.size = fi.Size()
-		e.src = osfs.FileSource(fname)
+		e.src = osfs.FileSource(fname, fi.Size())
 	default:
 		e.err = fmt.Errorf("unexpected filetype not regular %s: %s", fi.Mode(), fname)
 		clog.Errorf(ctx, "tree entry %s: unknown filetype %s", fname, fi.Mode())
@@ -1290,7 +1282,7 @@ func (e *entry) init(ctx context.Context, fname string, executables map[string]b
 	}
 }
 
-func (e *entry) compute(ctx context.Context, fname, xattrname string) error {
+func (e *entry) compute(ctx context.Context, fname string) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if e.err != nil {
@@ -1302,7 +1294,7 @@ func (e *entry) compute(ctx context.Context, fname, xattrname string) error {
 	if e.src == nil {
 		return nil
 	}
-	data, err := localDigest(ctx, e.src, fname, xattrname, e.size)
+	data, err := localDigest(ctx, e.src, fname)
 	if err != nil {
 		return err
 	}
@@ -1392,7 +1384,7 @@ func (e *entry) getDir() *directory {
 	return e.directory
 }
 
-func (e *entry) flush(ctx context.Context, fname, xattrname string, osfs *osfs.OSFS) error {
+func (e *entry) flush(ctx context.Context, fname string, osfs *osfs.OSFS) error {
 	defer close(e.lready)
 
 	if errors.Is(e.err, fs.ErrNotExist) {
@@ -1479,8 +1471,8 @@ func (e *entry) flush(ctx context.Context, fname, xattrname string, osfs *osfs.O
 			// if size differs, no need to check and force
 			// to write hashfs entry to the disk.
 			var fileDigest digest.Digest
-			src := osfs.FileSource(fname)
-			ld, err := localDigest(ctx, src, fname, xattrname, fi.Size())
+			src := osfs.FileSource(fname, fi.Size())
+			ld, err := localDigest(ctx, src, fname)
 			if err == nil {
 				fileDigest = ld.Digest()
 				if fileDigest == d {
