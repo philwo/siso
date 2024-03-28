@@ -8,7 +8,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
-	"encoding/hex"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -114,7 +114,7 @@ func TestState_Dir(t *testing.T) {
 	h := sha256.New()
 	fmt.Fprint(h, "step command")
 	cmdhash := h.Sum(nil)
-	cmdhashStr := hex.EncodeToString(cmdhash)
+	cmdhashStr := base64.StdEncoding.EncodeToString(cmdhash)
 	d := digest.FromBytes("action digest", []byte("action proto")).Digest()
 	t.Logf("record gen/generate_all dir. mtime=%s cmdhash=%s d=%s", mtime, cmdhashStr, d)
 	err = update(ctx, hashFS, dir, []merkletree.Entry{
@@ -136,7 +136,7 @@ func TestState_Dir(t *testing.T) {
 		t.Errorf("mtime=%d want=%d", ent.Id.ModTime, mtime.UnixNano())
 	}
 	if !bytes.Equal(ent.CmdHash, cmdhash) {
-		t.Errorf("cmdhash=%s want=%s", hex.EncodeToString(ent.CmdHash), cmdhashStr)
+		t.Errorf("cmdhash=%s want=%s", base64.StdEncoding.EncodeToString(ent.CmdHash), cmdhashStr)
 	}
 	if ent.Action.Hash != d.Hash || ent.Action.SizeBytes != d.SizeBytes {
 		t.Errorf("action=%s want=%s", ent.Action, d)

@@ -8,7 +8,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
-	"encoding/hex"
+	"encoding/base64"
 	"errors"
 	"flag"
 	"fmt"
@@ -652,7 +652,7 @@ func TestUpdate_FromLocal(t *testing.T) {
 		t.Errorf("entry modtime=%d want=%d", e.Id.ModTime, now.UnixNano())
 	}
 	if !bytes.Equal(e.CmdHash, cmdhash) {
-		t.Errorf("entry cmdhash=%q want=%q", hex.EncodeToString(e.CmdHash), hex.EncodeToString(cmdhash))
+		t.Errorf("entry cmdhash=%q want=%q", base64.StdEncoding.EncodeToString(e.CmdHash), base64.StdEncoding.EncodeToString(cmdhash))
 	}
 	lfi, err = os.Lstat(fullname)
 	if err != nil {
@@ -766,7 +766,7 @@ func TestUpdate_FromLocal_update(t *testing.T) {
 		t.Errorf("entry modtime=%d want=%d", e.Id.ModTime, now.UnixNano())
 	}
 	if !bytes.Equal(e.CmdHash, cmdhash) {
-		t.Errorf("entry cmdhash=%q want=%q", hex.EncodeToString(e.CmdHash), hex.EncodeToString(cmdhash))
+		t.Errorf("entry cmdhash=%q want=%q", base64.StdEncoding.EncodeToString(e.CmdHash), base64.StdEncoding.EncodeToString(cmdhash))
 	}
 	lfi, err := os.Lstat(fullname)
 	if err != nil {
@@ -859,7 +859,7 @@ func TestUpdate_FromLocal_Restat_update(t *testing.T) {
 		t.Errorf("entry modtime=%d want=%d", e.Id.ModTime, now.UnixNano())
 	}
 	if !bytes.Equal(e.CmdHash, cmdhash) {
-		t.Errorf("entry cmdhash=%q want=%q", hex.EncodeToString(e.CmdHash), hex.EncodeToString(cmdhash))
+		t.Errorf("entry cmdhash=%q want=%q", base64.StdEncoding.EncodeToString(e.CmdHash), base64.StdEncoding.EncodeToString(cmdhash))
 	}
 	lfi, err = os.Lstat(fullname)
 	if err != nil {
@@ -952,7 +952,7 @@ func TestUpdate_FromLocal_Restat_noupdate(t *testing.T) {
 		t.Errorf("entry modtime=%d want=%d", e.Id.ModTime, now.UnixNano())
 	}
 	if !bytes.Equal(e.CmdHash, cmdhash) {
-		t.Errorf("entry cmdhash=%q want=%q", hex.EncodeToString(e.CmdHash), hex.EncodeToString(cmdhash))
+		t.Errorf("entry cmdhash=%q want=%q", base64.StdEncoding.EncodeToString(e.CmdHash), base64.StdEncoding.EncodeToString(cmdhash))
 	}
 	lfi, err = os.Lstat(fullname)
 	if err != nil {
@@ -1032,7 +1032,7 @@ func TestUpdate_FromLocal_Dir(t *testing.T) {
 		t.Errorf("entry modtime=%d want=%d", e.Id.ModTime, now.UnixNano())
 	}
 	if !bytes.Equal(e.CmdHash, cmdhash) {
-		t.Errorf("entry cmdhash=%q want=%q", hex.EncodeToString(e.CmdHash), hex.EncodeToString(cmdhash))
+		t.Errorf("entry cmdhash=%q want=%q", base64.StdEncoding.EncodeToString(e.CmdHash), base64.StdEncoding.EncodeToString(cmdhash))
 	}
 	lfi, err := os.Lstat(fullname)
 	if err != nil {
@@ -1172,7 +1172,7 @@ func TestUpdate_FromLocal_AbsSymlink(t *testing.T) {
 		t.Errorf("entry modtime=%d want=%d", e.Id.ModTime, fi.ModTime().UnixNano())
 	}
 	if !bytes.Equal(e.CmdHash, cmdhash) {
-		t.Errorf("entry cmdhash=%q want=%q", hex.EncodeToString(e.CmdHash), hex.EncodeToString(cmdhash))
+		t.Errorf("entry cmdhash=%q want=%q", base64.StdEncoding.EncodeToString(e.CmdHash), base64.StdEncoding.EncodeToString(cmdhash))
 	}
 	if e.UpdatedTime != now.UnixNano() {
 		t.Errorf("entry updated_time=%v; want=%v", e.UpdatedTime, now.UnixNano())
@@ -1323,7 +1323,7 @@ func TestUpdate_FromLocal_NonLocalSymlink(t *testing.T) {
 		t.Errorf("entry modtime=%d want=%d", e.Id.ModTime, fi.ModTime().UnixNano())
 	}
 	if !bytes.Equal(e.CmdHash, cmdhash) {
-		t.Errorf("entry cmdhash=%q want=%q", hex.EncodeToString(e.CmdHash), hex.EncodeToString(cmdhash))
+		t.Errorf("entry cmdhash=%q want=%q", base64.StdEncoding.EncodeToString(e.CmdHash), base64.StdEncoding.EncodeToString(cmdhash))
 	}
 	if e.UpdatedTime != now.UnixNano() {
 		t.Errorf("entry updated_time=%v; want=%v", e.UpdatedTime, now.UnixNano())

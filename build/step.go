@@ -7,7 +7,7 @@ package build
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/hex"
+	"encoding/base64"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -306,7 +306,7 @@ func (s *Step) init(ctx context.Context, b *Builder) {
 	defer span.Close(nil)
 	s.def.EnsureRule(ctx)
 	s.cmd = newCmd(ctx, b, s.def)
-	clog.Infof(ctx, "cmdhash:%s", hex.EncodeToString(s.cmd.CmdHash))
+	clog.Infof(ctx, "cmdhash:%s", base64.StdEncoding.EncodeToString(s.cmd.CmdHash))
 }
 
 func newCmd(ctx context.Context, b *Builder, stepDef StepDef) *execute.Cmd {

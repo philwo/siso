@@ -8,7 +8,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
-	"encoding/hex"
+	"encoding/base64"
 	"errors"
 	"flag"
 	"io"
@@ -228,7 +228,7 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 					return nil
 				}
 
-				clog.Infof(gctx, "not exist %s %s cmdhash:%s", ftype, ent.Name, hex.EncodeToString(e.cmdhash))
+				clog.Infof(gctx, "not exist %s %s cmdhash:%s", ftype, ent.Name, base64.StdEncoding.EncodeToString(e.cmdhash))
 			case entryBeforeLocal:
 				ninvalidate.Add(1)
 				dirty.Store(true)
@@ -245,10 +245,10 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 				if len(h) == 0 {
 					return nil
 				}
-				clog.Infof(gctx, "old local %s %s: state:%s disk:%s cmdhash:%s", ftype, ent.Name, e.mtime, fi.ModTime(), hex.EncodeToString(e.cmdhash))
+				clog.Infof(gctx, "old local %s %s: state:%s disk:%s cmdhash:%s", ftype, ent.Name, e.mtime, fi.ModTime(), base64.StdEncoding.EncodeToString(e.cmdhash))
 			}
 			if log.V(1) {
-				clog.Infof(gctx, "set state %s: d:%s %s s:%s m:%s cmdhash:%s action:%s", ent.Name, e.d, e.mode, e.target, e.mtime, hex.EncodeToString(e.cmdhash), e.action)
+				clog.Infof(gctx, "set state %s: d:%s %s s:%s m:%s cmdhash:%s action:%s", ent.Name, e.d, e.mode, e.target, e.mtime, base64.StdEncoding.EncodeToString(e.cmdhash), e.action)
 			}
 			_, err = hfs.directory.store(gctx, filepath.ToSlash(ent.Name), e)
 			if len(e.cmdhash) > 0 {

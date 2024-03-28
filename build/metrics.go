@@ -6,7 +6,7 @@ package build
 
 import (
 	"context"
-	"encoding/hex"
+	"encoding/base64"
 	"encoding/json"
 	"time"
 
@@ -146,7 +146,7 @@ func (m *StepMetric) done(ctx context.Context, step *Step) {
 	m.Inputs = len(step.cmd.Inputs)
 	m.Outputs = len(step.cmd.Outputs)
 
-	m.CmdHash = hex.EncodeToString(step.cmd.CmdHash)
+	m.CmdHash = base64.StdEncoding.EncodeToString(step.cmd.CmdHash)
 	m.Digest = step.cmd.ActionDigest().String()
 
 	result, cached := step.cmd.ActionResult()

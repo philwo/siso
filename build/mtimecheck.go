@@ -7,7 +7,7 @@ package build
 import (
 	"bytes"
 	"context"
-	"encoding/hex"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"time"
@@ -84,7 +84,7 @@ func (b *Builder) checkUpToDate(ctx context.Context, stepDef StepDef, outputs []
 		return false
 	}
 	if !generator && !bytes.Equal(cmdhash, stepCmdHash) {
-		clog.Infof(ctx, "need: cmdhash differ %q -> %q", hex.EncodeToString(cmdhash), hex.EncodeToString(stepCmdHash))
+		clog.Infof(ctx, "need: cmdhash differ %q -> %q", base64.StdEncoding.EncodeToString(cmdhash), base64.StdEncoding.EncodeToString(stepCmdHash))
 		span.SetAttr("run-reason", "cmdhash-update")
 		if len(cmdhash) == 0 {
 			fmt.Fprintf(b.explainWriter, "command line not found in log for %s\n", outname)
@@ -176,14 +176,14 @@ func outputMtime(ctx context.Context, b *Builder, outputs []Target, restat bool)
 			continue
 		}
 		if log.V(1) {
-			clog.Infof(ctx, "out-cmdhash %d:%s %s", i, outPath, hex.EncodeToString(fi.CmdHash()))
+			clog.Infof(ctx, "out-cmdhash %d:%s %s", i, outPath, base64.StdEncoding.EncodeToString(fi.CmdHash()))
 		}
 		if i == 0 {
 			outcmdhash = fi.CmdHash()
 		}
 		if !bytes.Equal(outcmdhash, fi.CmdHash()) {
 			if log.V(1) {
-				clog.Infof(ctx, "out-cmdhash differ %s %s->%s", outPath, hex.EncodeToString(outcmdhash), hex.EncodeToString(fi.CmdHash()))
+				clog.Infof(ctx, "out-cmdhash differ %s %s->%s", outPath, base64.StdEncoding.EncodeToString(outcmdhash), base64.StdEncoding.EncodeToString(fi.CmdHash()))
 			}
 			outcmdhash = nil
 		}
