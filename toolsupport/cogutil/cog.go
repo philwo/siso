@@ -46,11 +46,6 @@ func New(ctx context.Context, dir string, reopt *reapi.Option) (*Client, error) 
 		return nil, err
 	}
 	// see http://shortn/_rBwmJ3sRKS for prototype.
-	if !bytes.Contains(buf, []byte("--cog_experimental=true")) {
-		clog.Warningf(ctx, "disabled: --cog_experimental")
-	} else {
-		clog.Infof(ctx, "enabled: --cog_experimental")
-	}
 	if !bytes.Contains(buf, []byte("--cog_use_buildfs=true")) {
 		clog.Warningf(ctx, "cog: --cog_use_buildfs is not set")
 		// still want to set local direct mode.
