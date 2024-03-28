@@ -101,5 +101,5 @@ func (r *repoLoader) Load(thread *starlark.Thread, module string) (starlark.Stri
 		Load: r.Load,
 	}
 	t.SetLocal("modulename", fullname)
-	return starlark.ExecFile(t, fname, buf, r.predeclared)
+	return starlark.ExecFile(t, fullname, buf, r.predeclared)
 }

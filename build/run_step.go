@@ -291,6 +291,9 @@ func cmdOutput(ctx context.Context, result string, cmd *execute.Cmd, cmdline, ru
 	msgs = append(msgs, fmt.Sprintf("%s %s %q %s\n", result, cmd, output, cmd.Desc))
 	if err != nil {
 		msgs = append(msgs, fmt.Sprintf("err: %v\n", err))
+		if berr, ok := err.(interface{ Backtrace() string }); ok {
+			msgs = append(msgs, fmt.Sprintf("stacktrace: %s\n", berr.Backtrace()))
+		}
 	}
 	if rule != "" {
 		msgs = append(msgs, fmt.Sprintf("siso_rule:%s\n", rule))
