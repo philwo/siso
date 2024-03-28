@@ -47,6 +47,7 @@ import (
 	"infra/build/siso/o11y/trace"
 	"infra/build/siso/reapi"
 	"infra/build/siso/reapi/digest"
+	"infra/build/siso/toolsupport/cogutil"
 	"infra/build/siso/toolsupport/ninjautil"
 	"infra/build/siso/ui"
 )
@@ -446,6 +447,36 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 			return fname == ninjaLogFname
 		}
 	}
+	// TODO: pass reopt for reclient mode?
+	cogfs, err := cogutil.New(ctx, execRoot, c.reopt)
+	if err != nil && !errors.Is(err, errors.ErrUnsupported) {
+		clog.Warningf(ctx, "unable to use cog? %v", err)
+	}
+	if cogfs != nil {
+		ui.Default.PrintLines(ui.SGR(ui.Yellow, fmt.Sprintf("build in cog: %s\n", cogfs.Info())))
+		c.fsopt.CogFS = cogfs
+		mode := cogfs.LocalRedirectMode(ctx, execRoot)
+		switch mode {
+		case "writes":
+			ui.Default.PrintLines(ui.SGR(ui.Yellow, " cog: local redirect mode=writes\n"))
+		default:
+			err = cogfs.SetLocalRedirectMode(ctx, execRoot, "writes")
+			if err != nil {
+				ui.Default.PrintLines(ui.SGR(ui.Red, fmt.Sprintf(" cog: failed to enable local redirect mode=writes: %v\n", err)))
+			} else {
+				ui.Default.PrintLines(ui.SGR(ui.Yellow, " cog: enabling local redirect mode=writes\n"))
+			}
+			defer func() {
+				err := cogfs.SetLocalRedirectMode(ctx, execRoot, mode)
+				if err != nil {
+					ui.Default.PrintLines(ui.SGR(ui.Red, fmt.Sprintf(" cog: failed to restore local direct mode=%s: %v\n", mode, err)))
+				} else {
+					ui.Default.PrintLines(ui.SGR(ui.Yellow, fmt.Sprintf(" cog: restored local redirect mode=%s\n", mode)))
+				}
+			}()
+		}
+	}
+
 	spin.Start("loading fs state")
 
 	hashFS, err := hashfs.New(ctx, *c.fsopt)

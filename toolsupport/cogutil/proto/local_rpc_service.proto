@@ -1,0 +1,41 @@
+// Copyright 2024 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+//
+// excerpt from google3/devtools/srcfs/daemon/cog/cog_local_rpc_service.proto#27
+// TODO(ukai): update proto once protoc supports edition etc.
+
+syntax = "proto2";
+
+package devtools_srcfs;
+
+option go_package = "infra/build/siso/toolsupport/cogutil/proto";
+
+service CogLocalRpcService {
+  rpc BuildfsInsert(BuildfsInsertRequest) returns (BuildfsInsertResponse) {}
+}
+
+message BuildfsInsertion {
+  optional string path = 1;
+
+  // SHA256 of the file content.
+  optional string digest = 2;
+
+  // Size of the file.
+  optional int64 size = 3;
+
+  enum Mode {
+    FILE = 0;
+    EXECUTABLE_FILE = 1;
+  }
+
+  optional Mode mode = 4;
+}
+
+message BuildfsInsertRequest {
+  optional string reapi_server = 1;
+  optional string reapi_instance = 2;
+  repeated BuildfsInsertion insertions = 3;
+}
+
+message BuildfsInsertResponse {}

@@ -29,6 +29,7 @@ import (
 	pb "infra/build/siso/hashfs/proto"
 	"infra/build/siso/o11y/clog"
 	"infra/build/siso/reapi/digest"
+	"infra/build/siso/toolsupport/cogutil"
 )
 
 const defaultStateFile = ".siso_fs_state"
@@ -46,6 +47,7 @@ type Option struct {
 	OutputLocal OutputLocalFunc
 	Ignore      IgnoreFunc
 	OSFSOption  osfs.Option
+	CogFS       *cogutil.Client
 }
 
 // RegisterFlags registers flags for the option.

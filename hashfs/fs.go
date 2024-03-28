@@ -861,6 +861,42 @@ func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []Update
 		return entries[i].Name < entries[j].Name
 	})
 
+	if hfs.opt.CogFS != nil {
+		var updates []merkletree.Entry
+		var updateIdx []int
+		var nFromLocals, nNonFiles int
+		for i, ent := range entries {
+			if ent.Entry == nil {
+				// UpdateEntry was captured by RetrieveUpdateEntriesFromLocal
+				// so file already exist on local disk
+				nFromLocals++
+				continue
+			}
+			if ent.Entry.Data.IsZero() {
+				// symlink or dir. handled in usual way.
+				nNonFiles++
+				continue
+			}
+			updateIdx = append(updateIdx, i)
+			updates = append(updates, *ent.Entry)
+		}
+		if len(updates) > 0 {
+			err := hfs.opt.CogFS.BuildfsInsert(ctx, execRoot, updates)
+			if err != nil {
+				clog.Warningf(ctx, "cog buildfs insert %d under %s: %v", len(updates), execRoot, err)
+			} else {
+				clog.Infof(ctx, "cog buildfs insert %d under %s", len(updates), execRoot)
+				// cogfs inserted the update, so we can assume
+				// these files exist locally.
+				for _, i := range updateIdx {
+					entries[i].IsLocal = true
+				}
+			}
+		} else {
+			clog.Warningf(ctx, "cog buildfs insert 0 from_local=%d not_file=%d", nFromLocals, nNonFiles)
+		}
+	}
+
 	for _, ent := range entries {
 		clog.Infof(ctx, "update %v", ent)
 		fname := filepath.Join(execRoot, ent.Name)
