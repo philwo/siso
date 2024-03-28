@@ -8,6 +8,7 @@ package hashfs
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
@@ -848,6 +849,32 @@ type UpdateEntry struct {
 	// IsLocal=true uses Entry, but assumes file exists on local,
 	// to avoid unnecessary flush operation.
 	IsLocal bool
+}
+
+func (e UpdateEntry) String() string {
+	var buf strings.Builder
+	fmt.Fprintf(&buf, "%q ", e.Name)
+	if e.Entry != nil {
+		switch {
+		case !e.Entry.Data.IsZero():
+			fmt.Fprintf(&buf, "file=%s ", e.Entry.Data.Digest())
+		case e.Entry.Target != "":
+			fmt.Fprintf(&buf, "symlink=%s ", e.Entry.Target)
+		default:
+			fmt.Fprintf(&buf, "dir ")
+		}
+	} else {
+		fmt.Fprintf(&buf, "local ")
+	}
+	fmt.Fprintf(&buf, "mode=%s ", e.Mode)
+	fmt.Fprintf(&buf, "mtime=%s ", e.ModTime.Format(time.RFC3339Nano))
+	fmt.Fprintf(&buf, "cmdhash=%s ", base64.StdEncoding.EncodeToString(e.CmdHash))
+	fmt.Fprintf(&buf, "action=%s ", e.Action)
+	if !e.ModTime.Equal(e.UpdatedTime) {
+		fmt.Fprintf(&buf, "updated_time=%s ", e.UpdatedTime.Format(time.RFC3339Nano))
+	}
+	fmt.Fprintf(&buf, "changed=%t is_local=%t", e.IsChanged, e.IsLocal)
+	return buf.String()
 }
 
 // Update updates cache information for entries under execRoot.
