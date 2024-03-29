@@ -1424,10 +1424,10 @@ func (s source) Open(ctx context.Context) (io.ReadCloser, error) {
 	}
 	if s.dataSource.client != nil {
 		buf, err := s.dataSource.client.Get(ctx, s.d, s.fname)
-		if err != nil {
-			return nil, err
+		if err == nil {
+			return io.NopCloser(bytes.NewReader(buf)), nil
 		}
-		return io.NopCloser(bytes.NewReader(buf)), nil
+		// fallback
 	}
 	// no reapi configured. use local file?
 	f, err := os.Open(s.fname)
