@@ -1,7 +1,6 @@
 # Siso
 
-Siso is an experimental build tool that aims to significantly speed up
-Chromium's build.
+Siso is a build tool that aims to significantly speed up Chromium's build.
 
 * It is a drop-in replacement for Ninja, which means it can be easily used
   instead of Ninja without requiring a migration or change in developer's
@@ -20,6 +19,8 @@ Please check [go/siso-faq](http://go/siso-faq).
 ## Status
 
 Siso is under development and not yet ready for general use.
+
+As of end of 2024 Q1, Siso is used in all CQ builders in Chromium.
 
 As of April 2023, we are dogfooding Siso with invited Chrome developers.
 Please check [go/chrome-build-dogfood](http://go/chrome-build-dogfood) for more information.
