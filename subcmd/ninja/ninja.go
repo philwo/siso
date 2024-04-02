@@ -380,6 +380,12 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	if err != nil {
 		return stats, err
 	}
+	useRemoteexec := argsGN(config.Metadata.Get("args.gn"), "use_remoteexec")
+	clog.Infof(ctx, "args.gn=%q use_remoteexec=%q", config.Metadata.Get("args.gn"), useRemoteexec)
+	if !c.offline && useRemoteexec == "true" && c.reproxyAddr == "" {
+		return stats, fmt.Errorf("`use_remoteexec=true` but reproxy is not running. use `autoninja` to use reclient, or drop `use_remoteexec=true` for `siso ninja`?\n")
+	}
+
 	sameTargets := checkTargets(ctx, lastTargetsFile, targets)
 
 	spin := ui.Default.NewSpinner()
@@ -1525,4 +1531,19 @@ func checkTargets(ctx context.Context, lastTargetsFile string, targets []string)
 		}
 	}
 	return true
+}
+
+func argsGN(args, key string) string {
+	i := strings.Index(args, key)
+	if i < 0 {
+		return ""
+	}
+	value := strings.TrimSpace(args[i+len(key):])
+	value = strings.TrimPrefix(value, "=")
+	value = strings.TrimSpace(value)
+	i = strings.IndexAny(value, " \r\n")
+	if i >= 0 {
+		value = value[:i]
+	}
+	return value
 }
