@@ -511,6 +511,7 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 		hashfs.FlushSemaphore,
 		hashfs.ForgetMissingsSemaphore,
 		remoteexec.Semaphore,
+		reapi.FileSemaphore,
 	}
 	b.traceEvents.Start(ctx, semas, []*iometrics.IOMetrics{
 		b.hashFS.OS.IOMetrics,

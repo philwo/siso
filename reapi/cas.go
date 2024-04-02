@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"path"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -30,6 +31,12 @@ import (
 	"infra/build/siso/reapi/bytestreamio"
 	"infra/build/siso/reapi/digest"
 	"infra/build/siso/reapi/retry"
+	"infra/build/siso/sync/semaphore"
+)
+
+var (
+	// FileSemaphore limits concurrent file access to create BatchUpdateBlobgs to protect from runtime thread exhaustion.
+	FileSemaphore = semaphore.New("reapi-cas-file", runtime.NumCPU())
 )
 
 const (
@@ -390,7 +397,12 @@ func lookupBlobsInStore(ctx context.Context, blobs []digest.Digest, ds *digest.S
 				result.err = errBlobNotInReq
 				return
 			}
-			b, err := readAll(ctx, data)
+			var b []byte
+			err := FileSemaphore.Do(ctx, func(ctx context.Context) error {
+				var err error
+				b, err = readAll(ctx, data)
+				return err
+			})
 			if err != nil {
 				result.err = err
 				return
