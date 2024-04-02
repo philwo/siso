@@ -8,6 +8,7 @@ package makeutil
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io/fs"
 	"strings"
 
@@ -25,15 +26,15 @@ func ParseDepsFile(ctx context.Context, fsys fs.FS, fname string) ([]string, err
 	if err != nil {
 		return nil, err
 	}
-	deps := ParseDeps(b)
+	deps, err := ParseDeps(b)
 	if log.V(1) {
-		clog.Infof(ctx, "deps %s => %s", fname, deps)
+		clog.Infof(ctx, "deps %s => %s: %v", fname, deps, err)
 	}
-	return deps, nil
+	return deps, err
 }
 
 // ParseDeps parses deps and returns a list of inputs.
-func ParseDeps(b []byte) []string {
+func ParseDeps(b []byte) ([]string, error) {
 	// deps contents
 	// <output>: <input> ...
 	// <input> is space separated
@@ -50,13 +51,19 @@ depLines:
 		if i < 0 {
 			break
 		}
+		out := bytes.TrimSpace(s[:i])
+		if len(out) == 0 {
+			return nil, fmt.Errorf("missing output in deps. depfile should be `<target>: <dependencyList>`")
+		}
 		// collect inputs
 		for s = s[i+1:]; len(s) > 0; {
 			token, s = nextToken(s)
-			if token == "" {
+			switch token {
+			case "":
 				continue
-			}
-			if token == "\n" {
+			case ":":
+				return nil, fmt.Errorf("multiple colon in dep line. depfile should be `<target>: <dependencyList>`")
+			case "\n":
 				continue depLines
 			}
 			if seen[token] {
@@ -66,7 +73,7 @@ depLines:
 			inputs = append(inputs, token)
 		}
 	}
-	return inputs
+	return inputs, nil
 }
 
 func nextToken(s []byte) (string, []byte) {
@@ -111,6 +118,15 @@ skipSpaces:
 		switch s[i] {
 		case ' ', '\t', '\n', '\r':
 			return sb.String(), s[i:]
+		case ':':
+			switch sb.Len() {
+			case 0:
+				return ":", s[i+1:]
+			case 1:
+				// <drive>: ?
+			default:
+				return sb.String(), s[i:]
+			}
 		}
 		sb.WriteByte(s[i])
 	}

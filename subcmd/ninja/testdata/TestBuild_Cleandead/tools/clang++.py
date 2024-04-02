@@ -20,7 +20,9 @@ def main():
       f.write("compile result of %s" % options.inputs)
     if options.MF:
       with open(options.MF, "w") as f:
-        f.write("%s: %s" % (options.o, options.inputs))
+        f.write("%s:")
+        for input in options.inputs:
+          f.write(" %s" % input)
     return 0
   with open(options.o, "w") as f:
     f.write("link result of %s" % options.inputs)

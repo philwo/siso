@@ -7,20 +7,41 @@ package build
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 
 	"infra/build/siso/execute"
+	"infra/build/siso/hashfs"
 )
 
 func TestDescMSVCDepsAfterRun(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
 
+	hfs, err := hashfs.New(ctx, hashfs.Option{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, in := range []string{
+		"out/siso/clang-cl.exe",
+		"base/foo.cc",
+		"base/foo.h",
+		"base/bar.h",
+		"v1/foo.h",
+	} {
+		err = hfs.WriteFile(ctx, dir, in, nil, false, time.Now(), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
 	b := &Builder{
-		path: NewPath(dir, "out/siso"),
+		path:   NewPath(dir, "out/siso"),
+		hashFS: hfs,
 	}
 	step := &Step{
+		def: fakeStepDef{},
 		cmd: &execute.Cmd{
 			Args: []string{"clang-cl.exe", "/showIncludes", "/TP", "../../base/foo.cc"},
 			Inputs: []string{
@@ -37,7 +58,7 @@ func TestDescMSVCDepsAfterRun(t *testing.T) {
 		},
 	}
 	w := step.cmd.StdoutWriter()
-	_, err := w.Write([]byte("Note: including file: ../../base/foo.h\r\n"))
+	_, err = w.Write([]byte("Note: including file: ../../base/foo.h\r\n"))
 	if err != nil {
 		t.Fatalf("write to stdout: %v", err)
 	}

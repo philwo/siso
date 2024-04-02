@@ -124,6 +124,10 @@ func (depsMSVC) DepsAfterRun(ctx context.Context, b *Builder, step *Step) ([]str
 		deps = append(deps, in)
 	}
 
+	err := checkDeps(ctx, b, step, deps)
+	if err != nil {
+		return nil, fmt.Errorf("error in /showIncludes: %w", err)
+	}
 	dspan.SetAttr("deps", len(deps))
 	dspan.Close(nil)
 

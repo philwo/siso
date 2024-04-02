@@ -71,11 +71,45 @@ obj/ios/chrome/browser/shared/ui/util/util_swift/UIView+WindowObserving.o : ../.
 				"../../ios/chrome/browser/shared/ui/util/UIView+WindowObserving.swift",
 			},
 		},
+		{
+			name:     "win-abs",
+			depsfile: []byte(`foo\bar.o: c:\src\foo\bar.c`),
+			want: []string{
+				`c:\src\foo\bar.c`,
+			},
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got := ParseDeps(tc.depsfile)
+			got, err := ParseDeps(tc.depsfile)
+			if err != nil {
+				t.Errorf("ParseDeps(%q) got err=%v; want nil err", tc.depsfile, err)
+			}
 			if diff := cmp.Diff(tc.want, got); diff != "" {
 				t.Errorf("ParseDeps(%q) -want +got:\n%s", tc.depsfile, diff)
+			}
+		})
+	}
+}
+
+func TestParseDeps_Error(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		depsfile []byte
+		want     []string
+	}{
+		{
+			name:     "nooutput",
+			depsfile: []byte(": bar baz qux"),
+		},
+		{
+			name:     "multicolon",
+			depsfile: []byte(`foo:bar:baz`),
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := ParseDeps(tc.depsfile)
+			if err == nil {
+				t.Errorf("ParseDeps(%q)=%q, %v; want err", tc.depsfile, got, err)
 			}
 		})
 	}

@@ -18,6 +18,7 @@ import (
 	"infra/build/siso/execute"
 	"infra/build/siso/o11y/clog"
 	"infra/build/siso/o11y/trace"
+	"infra/build/siso/toolsupport/makeutil"
 )
 
 type depsProcessor interface {
@@ -189,26 +190,18 @@ func depsAfterRun(ctx context.Context, b *Builder, step *Step) ([]string, error)
 		if log.V(1) {
 			clog.Infof(ctx, "update deps; unexpected deps=%q", step.cmd.Deps)
 		}
+		// deps= is not set, but depfile= is set.
+		if step.cmd.Depfile != "" {
+			err := checkDepfile(ctx, b, step)
+			if err != nil {
+				return nil, err
+			}
+		}
 		return nil, nil
 	}
 	deps, err := ds.DepsAfterRun(ctx, b, step)
 	if err != nil {
 		return nil, err
-	}
-	if step.useReclient() {
-		// when remote_exec_wrapper or reproxy is used,
-		// deps is managed by goma/reclient
-		// so no need to check it in siso.
-		// b/278661991
-	} else if step.cmd.Platform["InputRootAbsolutePath"] == "" {
-		for _, dep := range deps {
-			if filepath.IsAbs(dep) {
-				clog.Warningf(ctx, "update deps: abs path in deps %s in depfile=%s. use input_root_absolute_path. platform=%v", dep, step.cmd.Depfile, step.cmd.Platform)
-				if step.cmd.Pure {
-					return nil, fmt.Errorf("absolute path in deps %s of %s: use input_root_absolute_path=true: %w", dep, step, errNotRelocatable)
-				}
-			}
-		}
 	}
 	return deps, nil
 }
@@ -232,4 +225,53 @@ func fixInputsByDeps(ctx context.Context, b *Builder, stepInputs, depsIns []stri
 	}
 	inputs = uniqueFiles(inputs)
 	return inputs, nil
+}
+
+func checkDepfile(ctx context.Context, b *Builder, step *Step) error {
+	fsys := b.hashFS.FileSystem(ctx, b.path.ExecRoot)
+	deps, err := makeutil.ParseDepsFile(ctx, fsys, step.cmd.Depfile)
+	if err != nil {
+		return fmt.Errorf("failed to parse depfile %s: %w", step.cmd.Depfile, err)
+	}
+	err = checkDeps(ctx, b, step, deps)
+	if err != nil {
+		return fmt.Errorf("error in depfile %s: %w", step.cmd.Depfile, err)
+	}
+	return nil
+}
+
+func checkDeps(ctx context.Context, b *Builder, step *Step, deps []string) error {
+	// TODO: implement check that deps output (target in depfile "<target>: <dependencyList>") matches build graph's output.
+
+	platform := step.cmd.Platform
+	if step.useReclient() {
+		platform = step.cmd.REProxyConfig.Platform
+	}
+	relocatableReq := platform["InputRootAbsolutePath"] == ""
+	for _, dep := range deps {
+		// remote relocatableReq should not have absolute path dep.
+		if filepath.IsAbs(dep) {
+			if relocatableReq {
+				clog.Warningf(ctx, "check deps: abs path in deps %s: platform=%v", dep, platform)
+				if platform != nil {
+					return fmt.Errorf("absolute path in deps %s of %s: use input_root_absolute_path=true for %s (siso config: %s): %w", dep, step, step.cmd.Outputs[0], step.def.RuleName(), errNotRelocatable)
+				}
+			}
+			continue
+		}
+		// all dep (== inputs) should exist just after step ran.
+		input := b.path.MaybeFromWD(ctx, dep)
+		_, err := b.hashFS.Stat(ctx, b.path.ExecRoot, input)
+		if err != nil {
+			return fmt.Errorf("deps input %s not exist: %w", dep, err)
+		}
+		// input should not be output.
+		for _, out := range step.cmd.Outputs {
+			if out == input {
+				return fmt.Errorf("deps input %s is output", dep)
+			}
+		}
+		// TODO: if dep is generated, check the dep is in ancestor inputs (direct or indirect inputs) to make sure no missing deps in build graph.
+	}
+	return nil
 }
