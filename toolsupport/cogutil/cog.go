@@ -123,26 +123,3 @@ func (c *Client) BuildfsInsert(ctx context.Context, dir string, entries []merkle
 	clog.Infof(ctx, "buildfs insert %s: %v", req, err)
 	return err
 }
-
-// LocalRedirectMode gets current local redirect mode.
-func (*Client) LocalRedirectMode(ctx context.Context, execRoot string) string {
-	buf, err := os.ReadFile(filepath.Join(execRoot, "../.citc/annotations/cog.local_redirect_mode"))
-	if err != nil {
-		clog.Warningf(ctx, "cog.local_redirect_mode failed: %v. fallback to reads", err)
-		return "reads"
-	}
-	mode := strings.TrimSpace(string(buf))
-	clog.Infof(ctx, "cog.local_redirect_mode=%s", mode)
-	return mode
-}
-
-// SetLocalRedirectMode sets local redirect mode.
-func (*Client) SetLocalRedirectMode(ctx context.Context, execRoot, mode string) error {
-	err := os.WriteFile(filepath.Join(execRoot, "../.citc/annotations/cog.local_redirect_mode"), []byte(mode), 0644)
-	if err != nil {
-		clog.Warningf(ctx, "failed to set cog.local_redirect_mode=%s: %v", mode, err)
-		return err
-	}
-	clog.Infof(ctx, "set cog.local_redirect_mode=%s", mode)
-	return nil
-}

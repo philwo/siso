@@ -461,26 +461,6 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	if cogfs != nil {
 		ui.Default.PrintLines(ui.SGR(ui.Yellow, fmt.Sprintf("build in cog: %s\n", cogfs.Info())))
 		c.fsopt.CogFS = cogfs
-		mode := cogfs.LocalRedirectMode(ctx, execRoot)
-		switch mode {
-		case "writes":
-			ui.Default.PrintLines(ui.SGR(ui.Yellow, " cog: local redirect mode=writes\n"))
-		default:
-			err = cogfs.SetLocalRedirectMode(ctx, execRoot, "writes")
-			if err != nil {
-				ui.Default.PrintLines(ui.SGR(ui.Red, fmt.Sprintf(" cog: failed to enable local redirect mode=writes: %v\n", err)))
-			} else {
-				ui.Default.PrintLines(ui.SGR(ui.Yellow, " cog: enabling local redirect mode=writes\n"))
-			}
-			defer func() {
-				err := cogfs.SetLocalRedirectMode(ctx, execRoot, mode)
-				if err != nil {
-					ui.Default.PrintLines(ui.SGR(ui.Red, fmt.Sprintf(" cog: failed to restore local direct mode=%s: %v\n", mode, err)))
-				} else {
-					ui.Default.PrintLines(ui.SGR(ui.Yellow, fmt.Sprintf(" cog: restored local redirect mode=%s\n", mode)))
-				}
-			}()
-		}
 	}
 
 	spin.Start("loading fs state")
