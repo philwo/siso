@@ -41,7 +41,7 @@ func TestScanDepsParams(t *testing.T) {
 				"obj/base/base/base64.o",
 			},
 			want: ScanDepsParams{
-				Files: []string{
+				Sources: []string{
 					"../../base/base64.cc",
 				},
 				Dirs: []string{
@@ -77,7 +77,7 @@ func TestScanDepsParams(t *testing.T) {
 				"obj/base/base/base64.o",
 			},
 			want: ScanDepsParams{
-				Files: []string{
+				Sources: []string{
 					"../../base/base64.cc",
 				},
 				Dirs: []string{
@@ -111,7 +111,7 @@ func TestScanDepsParams(t *testing.T) {
 				"obj/third_party/abseil-cpp/absl/strings/str_format_internal/arg.o",
 			},
 			want: ScanDepsParams{
-				Files: []string{
+				Sources: []string{
 					"../../third_party/abseil-cpp/absl/strings/internal/str_format/arg.cc",
 				},
 				Dirs: []string{
@@ -151,7 +151,7 @@ func TestScanDepsParams(t *testing.T) {
 				"obj/base/test/goolge_test_runner/goolge_test_runner.o",
 			},
 			want: ScanDepsParams{
-				Files: []string{
+				Sources: []string{
 					"../../base/test/ios/google_test_runner.mm",
 				},
 				Dirs: []string{
@@ -167,6 +167,62 @@ func TestScanDepsParams(t *testing.T) {
 				Sysroots: []string{
 					"../../third_party/llvm-build/Release+Asserts",
 					"sdk/xcode_links/iPhoneSimulator16.4.sdk",
+				},
+				Defines: map[string]string{},
+			},
+		},
+		{
+			name: "clang-sanitize-ignorelist",
+			args: []string{
+				"../../third_party/llvm-build/Release+Asserts/bin/clang",
+				"-MMD",
+				"-MF",
+				"obj/build/rust/tests/bindgen_static_fns_test/c_lib/lib.o.d",
+				"-fsanitize-ignorelist=../../tools/cfi/ignores.txt",
+				"--sysroot=../../build/linux/debian_bullseye_amd64-sysroot",
+				"-c",
+				"../../build/rust/tests/bindgen_static_fns_test/lib.c",
+				"-o",
+				"obj/build/rust/tests/bindgen_static_fns_test/c_lib/lib.o",
+			},
+			want: ScanDepsParams{
+				Sources: []string{
+					"../../build/rust/tests/bindgen_static_fns_test/lib.c",
+				},
+				Files: []string{
+					"../../tools/cfi/ignores.txt",
+				},
+				Sysroots: []string{
+					"../../third_party/llvm-build/Release+Asserts",
+					"../../build/linux/debian_bullseye_amd64-sysroot",
+				},
+				Defines: map[string]string{},
+			},
+		},
+		{
+			name: "clang-profile-use",
+			args: []string{
+				"../../third_party/llvm-build/Release+Asserts/bin/clang",
+				"-MMD",
+				"-MF",
+				"obj/third_party/nasm/nasm/stdscan.o.d",
+				"-fprofile-use=../../chrome/build/pgo_profiles/chrome-linux-main-1711928897-084d26c5015f903804b549b12d02ae8f183b9b65-b852f373c4dd312c572a9f1c95892c4a12f81e13.profdata",
+				"--sysroot=../../build/linux/debian_bullseye_amd64-sysroot",
+				"-c",
+				"../../third_party/nasm/asm/stdscan.c",
+				"-o",
+				"obj/third_party/nasm/nasm/stdscan.o",
+			},
+			want: ScanDepsParams{
+				Sources: []string{
+					"../../third_party/nasm/asm/stdscan.c",
+				},
+				Files: []string{
+					"../../chrome/build/pgo_profiles/chrome-linux-main-1711928897-084d26c5015f903804b549b12d02ae8f183b9b65-b852f373c4dd312c572a9f1c95892c4a12f81e13.profdata",
+				},
+				Sysroots: []string{
+					"../../third_party/llvm-build/Release+Asserts",
+					"../../build/linux/debian_bullseye_amd64-sysroot",
 				},
 				Defines: map[string]string{},
 			},

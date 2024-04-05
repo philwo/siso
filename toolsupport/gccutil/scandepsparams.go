@@ -12,7 +12,10 @@ import (
 
 // ScanDepsParams holds parameters used for scandeps.
 type ScanDepsParams struct {
-	// Files are input files.
+	// Sources are source files (*.cc, *.h etc)
+	Sources []string
+
+	// Files are input files, such as sanitaizer ignore list.
 	Files []string
 
 	// Dirs are include directories.
@@ -62,7 +65,7 @@ func ExtractScanDepsParams(ctx context.Context, args, env []string) ScanDepsPara
 			continue
 		case "-include":
 			i++
-			res.Files = append(res.Files, args[i])
+			res.Sources = append(res.Sources, args[i])
 			continue
 		case "-isysroot":
 			i++
@@ -84,6 +87,10 @@ func ExtractScanDepsParams(ctx context.Context, args, env []string) ScanDepsPara
 			res.Dirs = append(res.Dirs, strings.TrimPrefix(arg, "-isystem"))
 		case strings.HasPrefix(arg, "-F"):
 			res.Frameworks = append(res.Frameworks, strings.TrimPrefix(arg, "-F"))
+		case strings.HasPrefix(arg, "-fprofile-use="):
+			res.Files = append(res.Files, strings.TrimPrefix(arg, "-fprofile-use="))
+		case strings.HasPrefix(arg, "-fsanitize-ignorelist="):
+			res.Files = append(res.Files, strings.TrimPrefix(arg, "-fsanitize-ignorelist="))
 		case strings.HasPrefix(arg, "-iframework"):
 			res.Frameworks = append(res.Frameworks, strings.TrimPrefix(arg, "-iframework"))
 		case strings.HasPrefix(arg, "--sysroot="):
@@ -95,7 +102,7 @@ func ExtractScanDepsParams(ctx context.Context, args, env []string) ScanDepsPara
 			ext := filepath.Ext(arg)
 			switch ext {
 			case ".c", ".cc", ".cxx", ".cpp", ".m", ".mm", ".S":
-				res.Files = append(res.Files, arg)
+				res.Sources = append(res.Sources, arg)
 			}
 		}
 	}

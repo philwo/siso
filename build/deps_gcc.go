@@ -44,6 +44,9 @@ func (gcc depsGCC) DepsFastCmd(ctx context.Context, b *Builder, cmd *execute.Cmd
 
 func (gcc depsGCC) fixCmdInputs(ctx context.Context, b *Builder, cmd *execute.Cmd) ([]string, error) {
 	params := gccutil.ExtractScanDepsParams(ctx, cmd.Args, cmd.Env)
+	for i := range params.Files {
+		params.Files[i] = b.path.MaybeFromWD(ctx, params.Files[i])
+	}
 	for i := range params.Dirs {
 		params.Dirs[i] = b.path.MaybeFromWD(ctx, params.Dirs[i])
 	}
@@ -54,6 +57,9 @@ func (gcc depsGCC) fixCmdInputs(ctx context.Context, b *Builder, cmd *execute.Cm
 		params.Sysroots[i] = b.path.MaybeFromWD(ctx, params.Sysroots[i])
 	}
 	var inputs []string
+	// include files detected by command line. i.e. sanitaizer ignore lists.
+	// These would not be in depsfile, different from Sources.
+	inputs = append(inputs, params.Files...)
 	// include directory must be included, even if no include files there.
 	// without the dir, it may fail for `#include "../config.h"`
 	inputs = append(inputs, params.Dirs...)
@@ -167,6 +173,9 @@ func (depsGCC) scandeps(ctx context.Context, b *Builder, step *Step) ([]string, 
 	var ins []string
 	err := b.scanDepsSema.Do(ctx, func(ctx context.Context) error {
 		params := gccutil.ExtractScanDepsParams(ctx, step.cmd.Args, step.cmd.Env)
+		for i := range params.Sources {
+			params.Sources[i] = b.path.MaybeFromWD(ctx, params.Sources[i])
+		}
 		for i := range params.Files {
 			params.Files[i] = b.path.MaybeFromWD(ctx, params.Files[i])
 		}
@@ -181,7 +190,7 @@ func (depsGCC) scandeps(ctx context.Context, b *Builder, step *Step) ([]string, 
 		}
 		req := scandeps.Request{
 			Defines:    params.Defines,
-			Sources:    params.Files,
+			Sources:    params.Sources,
 			Dirs:       params.Dirs,
 			Frameworks: params.Frameworks,
 			Sysroots:   params.Sysroots,
@@ -199,8 +208,10 @@ func (depsGCC) scandeps(ctx context.Context, b *Builder, step *Step) ([]string, 
 		if err != nil {
 			buf, berr := json.Marshal(req)
 			clog.Warningf(ctx, "scandeps failed Request %s %v: %v", buf, berr, err)
+			return err
 		}
-		return err
+		ins = append(ins, params.Files...)
+		return nil
 	})
 	if err != nil {
 		return nil, err
