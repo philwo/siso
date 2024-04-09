@@ -6,10 +6,12 @@ package ninja
 
 import (
 	"context"
+	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"infra/build/siso/build"
 	"infra/build/siso/build/buildconfig"
@@ -53,6 +55,73 @@ func setupFiles(t *testing.T, dir, name string, deletes []string) {
 		if err != nil {
 			t.Fatal(err)
 		}
+	}
+}
+
+// make sure file at dir/name is modified, i.e. have different mtime.
+// gen takes old content and returns new content.
+func modifyFile(t *testing.T, dir, name string, gen func([]byte) []byte) {
+	t.Helper()
+	t.Logf("-- modify %s", name)
+	fullname := filepath.Join(dir, name)
+	fi, err := os.Stat(fullname)
+	if err != nil {
+		t.Fatal(err)
+	}
+	buf, err := os.ReadFile(fullname)
+	if err != nil {
+		t.Fatal(err)
+	}
+	buf = gen(buf)
+	err = os.WriteFile(fullname, buf, fi.Mode())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for {
+		err = os.Chtimes(fullname, time.Now(), time.Now())
+		if err != nil {
+			t.Fatal(err)
+		}
+		nfi, err := os.Stat(fullname)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if fi.ModTime().Equal(nfi.ModTime()) {
+			time.Sleep(1 * time.Millisecond)
+			continue
+		}
+		return
+	}
+}
+
+// like modifyFile, make sure file at dir/name exists and mtime is updated.
+func touchFile(t *testing.T, dir, name string) {
+	t.Helper()
+	t.Logf("-- touch %s", name)
+	fullname := filepath.Join(dir, name)
+	fi, err := os.Stat(fullname)
+	if errors.Is(err, fs.ErrNotExist) {
+		err = os.WriteFile(fullname, nil, 0644)
+		if err != nil {
+			t.Fatal(err)
+		}
+	} else if err != nil {
+		t.Fatal(err)
+	}
+	for {
+		err = os.Chtimes(fullname, time.Now(), time.Now())
+		if err != nil {
+			t.Fatal(err)
+		}
+		nfi, err := os.Stat(fullname)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if fi != nil && fi.ModTime().Equal(nfi.ModTime()) {
+			time.Sleep(1 * time.Millisecond)
+			continue
+		}
+		return
 	}
 }
 

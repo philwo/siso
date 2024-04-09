@@ -77,10 +77,10 @@ func TestBuild_Fail_Reproxy(t *testing.T) {
 	}
 
 	t.Logf("make bad foo.txt and fail gen/foo.srcjar")
-	err = os.WriteFile(filepath.Join(dir, "foo.txt"), []byte("error"), 0644)
-	if err != nil {
-		t.Fatal(err)
-	}
+	modifyFile(t, dir, "foo.txt", func([]byte) []byte {
+		return []byte("error")
+	})
+
 	fakereErr := &reproxytest.Fake{
 		RunCommandFunc: func(ctx context.Context, req *pb.RunRequest) (*pb.RunResponse, error) {
 			return &pb.RunResponse{
@@ -109,11 +109,11 @@ func TestBuild_Fail_Reproxy(t *testing.T) {
 		t.Fatalf("ninja stats done=%d Fail=%d Remote=%d; want done=1 Fail=1 Remote=1", stats.Done, stats.Fail, stats.Remote)
 	}
 
-	t.Logf("fix")
-	err = os.WriteFile(filepath.Join(dir, "foo.txt"), []byte("ok"), 0644)
-	if err != nil {
-		t.Fatal(err)
-	}
+	t.Logf("-- fix foo.txt")
+	modifyFile(t, dir, "foo.txt", func([]byte) []byte {
+		return []byte("ok")
+	})
+
 	stats, err = ninja(t, fakereSuccess)
 	if err != nil {
 		t.Fatalf("ninja %v; want nil err", err)
@@ -181,11 +181,11 @@ func TestBuild_Fail_Remote(t *testing.T) {
 		t.Fatalf("ninja confirm no-op error? stats=%#v", stats)
 	}
 
-	t.Logf("make bad foo.txt and fail gen/foo.srcjar")
-	err = os.WriteFile(filepath.Join(dir, "foo.txt"), []byte("error"), 0644)
-	if err != nil {
-		t.Fatal(err)
-	}
+	t.Logf("-- make bad foo.txt and fail gen/foo.srcjar")
+	modifyFile(t, dir, "foo.txt", func([]byte) []byte {
+		return []byte("error")
+	})
+
 	fakereErr := &reapitest.Fake{
 		ExecuteFunc: func(re *reapitest.Fake, action *rpb.Action) (*rpb.ActionResult, error) {
 			t.Logf("remote fail")
@@ -212,11 +212,11 @@ func TestBuild_Fail_Remote(t *testing.T) {
 		t.Fatalf("ninja stats done=%d Fail=%d Remote=%d; want done=1 Fail=1 Remote=0", stats.Done, stats.Fail, stats.Remote)
 	}
 
-	t.Logf("fix")
-	err = os.WriteFile(filepath.Join(dir, "foo.txt"), []byte("ok"), 0644)
-	if err != nil {
-		t.Fatal(err)
-	}
+	t.Logf("-- fix foo.txt")
+	modifyFile(t, dir, "foo.txt", func([]byte) []byte {
+		return []byte("ok")
+	})
+
 	stats, err = ninja(t, fakereSuccess)
 	if err != nil {
 		t.Fatalf("ninja %v; want nil err", err)

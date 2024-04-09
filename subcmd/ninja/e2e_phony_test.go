@@ -38,12 +38,10 @@ func TestBuild_PhonyDir(t *testing.T) {
 		t.Errorf("done=%d local=%d; want done=5 local=3", stats.Done, stats.Local)
 	}
 
-	t.Logf("modify res.bin")
 	resContent := []byte("new res.bin")
-	err = os.WriteFile(filepath.Join(dir, "res.bin"), resContent, 0644)
-	if err != nil {
-		t.Fatal(err)
-	}
+	modifyFile(t, dir, "res.bin", func([]byte) []byte {
+		return resContent
+	})
 
 	t.Logf("second build")
 	stats, err = ninja(t)
@@ -96,12 +94,10 @@ func TestBuild_PhonyDirCopyHandler(t *testing.T) {
 		t.Errorf("done=%d local=%d no_exec=%d; want done=5 local=2 no_exec=1", stats.Done, stats.Local, stats.NoExec)
 	}
 
-	t.Logf("modify res.bin")
 	resContent := []byte("new res.bin")
-	err = os.WriteFile(filepath.Join(dir, "res.bin"), resContent, 0644)
-	if err != nil {
-		t.Fatal(err)
-	}
+	modifyFile(t, dir, "res.bin", func([]byte) []byte {
+		return resContent
+	})
 
 	t.Logf("second build")
 	stats, err = ninja(t)
@@ -154,12 +150,10 @@ func TestBuild_PhonyDirStampHandler(t *testing.T) {
 		t.Errorf("done=%d local=%d no_exec=%d; want done=5 local=2 no_exec=1", stats.Done, stats.Local, stats.NoExec)
 	}
 
-	t.Logf("modify res.bin")
 	resContent := []byte("new res.bin")
-	err = os.WriteFile(filepath.Join(dir, "res.bin"), resContent, 0644)
-	if err != nil {
-		t.Fatal(err)
-	}
+	modifyFile(t, dir, "res.bin", func([]byte) []byte {
+		return resContent
+	})
 
 	t.Logf("second build")
 	stats, err = ninja(t)
@@ -212,12 +206,10 @@ func TestBuild_PhonyDirStampCopyHandler(t *testing.T) {
 		t.Errorf("done=%d local=%d no_exec=%d; want done=5 local=1 no_exec=1", stats.Done, stats.Local, stats.NoExec)
 	}
 
-	t.Logf("modify res.bin")
 	resContent := []byte("new res.bin")
-	err = os.WriteFile(filepath.Join(dir, "res.bin"), resContent, 0644)
-	if err != nil {
-		t.Fatal(err)
-	}
+	modifyFile(t, dir, "res.bin", func([]byte) []byte {
+		return resContent
+	})
 
 	t.Logf("second build")
 	stats, err = ninja(t)
@@ -269,12 +261,12 @@ func TestBuild_PhonyStamp(t *testing.T) {
 	if stats.Done != 5 || stats.Local != 3 || stats.NoExec != 0 {
 		t.Errorf("done=%d local=%d no_exec=%d;  want done=5 local=3 no_exec=0", stats.Done, stats.Local, stats.NoExec)
 	}
-	t.Logf("modify foo/0.input")
+
 	newContent := []byte("new 0.input")
-	err = os.WriteFile(filepath.Join(dir, "foo/0.input"), newContent, 0644)
-	if err != nil {
-		t.Fatal(err)
-	}
+	modifyFile(t, dir, "foo/0.input", func([]byte) []byte {
+		return newContent
+	})
+
 	t.Logf("second build")
 	stats, err = ninja(t)
 	if err != nil {

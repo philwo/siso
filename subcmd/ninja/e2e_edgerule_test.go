@@ -8,9 +8,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"os"
 	"path"
-	"path/filepath"
 	"testing"
 
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
@@ -215,14 +213,12 @@ func TestBuild_EdgeRule(t *testing.T) {
 		t.Errorf("stats total=%d done=%d remote=%d skipped=%d; want total=7 done=7 remote=0 skipped=7", stats.Total, stats.Done, stats.Remote, stats.Skipped)
 	}
 
-	t.Logf("modify foo.cc")
-	err = os.WriteFile(filepath.Join(dir, "foo.cc"), []byte(`
+	modifyFile(t, dir, "foo.cc", func([]byte) []byte {
+		return []byte(`
 // new content
 #include "gen/bar.h"
-`), 0644)
-	if err != nil {
-		t.Fatal(err)
-	}
+`)
+	})
 
 	t.Logf("third build")
 	// make sure replace / accumulate still works
@@ -327,13 +323,11 @@ func TestBuild_EdgeRule_solibs(t *testing.T) {
 		t.Errorf("done=%d skipped=%d total=%d; want done=total=skipped=3; %#v", stats.Done, stats.Skipped, stats.Total, stats)
 	}
 
-	t.Logf("modify protobuf/foo.proto")
-	err = os.WriteFile(filepath.Join(dir, "protobuf/foo.proto"), []byte(`
+	modifyFile(t, dir, "protobuf/foo.proto", func([]byte) []byte {
+		return []byte(`
 // new content
-`), 0644)
-	if err != nil {
-		t.Fatal(err)
-	}
+`)
+	})
 
 	t.Logf("third build")
 	// make sure solibs still works

@@ -239,12 +239,10 @@ func TestBuild_CopyLocalOut(t *testing.T) {
 	if version(newSrc) != "1.2.4" {
 		t.Fatalf("unexpected version %q", version(newSrc))
 	}
-	// wait for 100ms to make sure mtime of snapshot.in is updated.
-	time.Sleep(100 * time.Millisecond)
-	err = os.WriteFile(filepath.Join(dir, "snapshot.in"), newSrc, 0644)
-	if err != nil {
-		t.Fatal(err)
-	}
+	modifyFile(t, dir, "snapshot.in", func([]byte) []byte {
+		return newSrc
+	})
+
 	err = ninja(t, dir)
 	if err != nil {
 		t.Fatalf("ninja %v; want nil err", err)

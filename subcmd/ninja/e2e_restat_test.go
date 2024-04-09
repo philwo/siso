@@ -8,13 +8,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
-	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"infra/build/siso/build"
 	"infra/build/siso/hashfs"
@@ -73,38 +69,9 @@ func TestBuild_Restat(t *testing.T) {
 		}
 	}()
 
-	touch := func(fname string) {
-		t.Helper()
-		fullname := filepath.Join(dir, fname)
-		fi, err := os.Stat(fullname)
-		if errors.Is(err, fs.ErrNotExist) {
-			err = os.WriteFile(fullname, nil, 0644)
-			if err != nil {
-				t.Fatal(err)
-			}
-		} else if err != nil {
-			t.Fatal(err)
-		}
-		for {
-			err = os.Chtimes(fullname, time.Now(), time.Now())
-			if err != nil {
-				t.Fatal(err)
-			}
-			nfi, err := os.Stat(fullname)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if fi.ModTime().Equal(nfi.ModTime()) {
-				time.Sleep(1 * time.Millisecond)
-				continue
-			}
-			return
-		}
-	}
-
 	func() {
 		t.Logf("second build. touch base/foo.in, expect only foo.out is built")
-		touch("base/foo.in")
+		touchFile(t, dir, "base/foo.in")
 		opt, graph, cleanup := setupBuild(ctx, t, dir, hashfsOpts)
 		defer cleanup()
 		var metricsBuffer bytes.Buffer
@@ -150,42 +117,11 @@ func TestBuild_Restat(t *testing.T) {
 		}
 	}()
 
-	update := func(fname string) {
-		t.Helper()
-		fullname := filepath.Join(dir, fname)
-		buf, err := os.ReadFile(fullname)
-		if err != nil {
-			t.Fatal(err)
-		}
-		for i := 0; ; i++ {
-			fi, err := os.Stat(fullname)
-			if err != nil {
-				t.Fatal(err)
-			}
-			nbuf := fmt.Sprintf("%s%d", buf, i)
-			err = os.WriteFile(fullname, []byte(nbuf), 0644)
-			if err != nil {
-				t.Fatal(err)
-			}
-			nfi, err := os.Stat(fullname)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if fi.ModTime().Equal(nfi.ModTime()) {
-				time.Sleep(1 * time.Millisecond)
-				continue
-			}
-			t.Logf("update %s: %s -> %s", fname, fi.ModTime(), nfi.ModTime())
-			return
-		}
-	}
-	// wait a while to make sure update would trigger build
-	// on ubuntu-18.04 b/301201420
-	time.Sleep(1 * time.Second)
-
 	func() {
 		t.Logf("third build, update base/foo.in")
-		update("base/foo.in")
+		modifyFile(t, dir, "base/foo.in", func(buf []byte) []byte {
+			return append(buf, []byte(" modified")...)
+		})
 		opt, graph, cleanup := setupBuild(ctx, t, dir, hashfsOpts)
 		defer cleanup()
 		var metricsBuffer bytes.Buffer
@@ -297,37 +233,7 @@ func TestBuild_RestatMultiout(t *testing.T) {
 	}
 	stmap := hashfs.StateMap(st)
 
-	touch := func(fname string) {
-		t.Logf("touch %s", fname)
-		t.Helper()
-		fullname := filepath.Join(dir, fname)
-		fi, err := os.Stat(fullname)
-		if errors.Is(err, fs.ErrNotExist) {
-			err = os.WriteFile(fullname, nil, 0644)
-			if err != nil {
-				t.Fatal(err)
-			}
-		} else if err != nil {
-			t.Fatal(err)
-		}
-		for {
-			err = os.Chtimes(fullname, time.Now(), time.Now())
-			if err != nil {
-				t.Fatal(err)
-			}
-			nfi, err := os.Stat(fullname)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if fi.ModTime().Equal(nfi.ModTime()) {
-				time.Sleep(1 * time.Millisecond)
-				continue
-			}
-			return
-		}
-	}
-
-	touch("base/foo.in")
+	touchFile(t, dir, "base/foo.in")
 
 	func() {
 		t.Logf("second build. touch base/foo.in, expect only foo.out2 is updated and bar.out is updated")

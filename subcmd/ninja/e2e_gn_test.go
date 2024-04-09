@@ -13,7 +13,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"infra/build/siso/build"
 	"infra/build/siso/hashfs"
@@ -80,35 +79,6 @@ func TestBuild_GNGen(t *testing.T) {
 		return stats, metrics, err
 	}
 
-	update := func(t *testing.T, fname string) {
-		t.Helper()
-		fullname := filepath.Join(dir, fname)
-		fi, err := os.Stat(fullname)
-		if err != nil {
-			t.Fatal(err)
-		}
-		buf, err := os.ReadFile(fullname)
-		if err != nil {
-			t.Fatal(err)
-		}
-		buf = append(buf, []byte("!!!")...)
-		for {
-			err = os.WriteFile(fullname, buf, 0644)
-			if err != nil {
-				t.Fatal(err)
-			}
-			nfi, err := os.Stat(fullname)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if fi.ModTime().Equal(nfi.ModTime()) {
-				time.Sleep(1 * time.Millisecond)
-				continue
-			}
-			return
-		}
-	}
-
 	testName := t.Name()
 	const nsteps = 2
 
@@ -146,7 +116,9 @@ func TestBuild_GNGen(t *testing.T) {
 			t.Errorf("null build Skipped=%d want=%d", stats.Skipped, nsteps)
 		}
 
-		update(t, "BUILD.gn")
+		modifyFile(t, dir, "BUILD.gn", func(buf []byte) []byte {
+			return append(buf, []byte("!!!")...)
+		})
 
 		stats, _, err = runBuild(t, "incremental-regen")
 		if !errors.Is(err, build.ErrManifestModified) {
@@ -226,7 +198,9 @@ func TestBuild_GNGen(t *testing.T) {
 			t.Fatalf("failed to save failed targets: %v", err)
 		}
 
-		update(t, "BUILD.gn")
+		modifyFile(t, dir, "BUILD.gn", func(buf []byte) []byte {
+			return append(buf, []byte("!!!")...)
+		})
 
 		stats, err = ninja("fix")
 		if err != nil {
@@ -269,7 +243,9 @@ func TestBuild_GNGen(t *testing.T) {
 			t.Fatalf("failed to save failed targets: %v", err)
 		}
 
-		update(t, "BUILD.gn")
+		modifyFile(t, dir, "BUILD.gn", func(buf []byte) []byte {
+			return append(buf, []byte("!!!")...)
+		})
 
 		stats, err = ninja("fix")
 		if err != nil {
