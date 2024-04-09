@@ -382,8 +382,12 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	}
 	useRemoteexec := argsGN(config.Metadata.Get("args.gn"), "use_remoteexec")
 	clog.Infof(ctx, "args.gn=%q use_remoteexec=%q", config.Metadata.Get("args.gn"), useRemoteexec)
-	if !c.offline && useRemoteexec == "true" && c.reproxyAddr == "" {
-		return stats, fmt.Errorf("`use_remoteexec=true` but reproxy is not running. use `autoninja` to use reclient, or drop `use_remoteexec=true` for `siso ninja`?\n")
+	if useRemoteexec == "true" && c.reproxyAddr == "" {
+		if c.offline || (c.subtool == "cleandead") || c.dryRun {
+			clog.Warningf(ctx, "`use_remoteexec=true` but reproxy is not running. offline=%t cleandead=%t drynRun=%t", c.offline, c.cleandead, c.dryRun)
+		} else {
+			return stats, fmt.Errorf("`use_remoteexec=true` but reproxy is not running. use `autoninja` to use reclient, or drop `use_remoteexec=true` for `siso ninja`?")
+		}
 	}
 
 	sameTargets := checkTargets(ctx, lastTargetsFile, targets)
