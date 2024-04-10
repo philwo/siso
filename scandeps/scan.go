@@ -170,13 +170,6 @@ func (s *scanner) updateMacros(ctx context.Context, macros map[string][]string) 
 	}
 }
 
-func (s *scanner) addInclude(ctx context.Context, fname string) {
-	s.pushInputs(`"` + fname + `"`)
-	if log.V(1) {
-		clog.Infof(ctx, "include %q", fname)
-	}
-}
-
 func (s *scanner) addSource(ctx context.Context, fname string) {
 	// add dir and include as if #include "basename".
 	s.pushDir(ctx, filepath.ToSlash(filepath.Dir(fname)))

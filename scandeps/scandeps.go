@@ -45,11 +45,9 @@ type Request struct {
 	// macro value would be `"path.h"` or `<path.h>`
 	Defines map[string]string
 
-	// Sources are source files.
+	// Sources are source files, or include files by -include or /FI.
+	// Include files should come before source files.
 	Sources []string
-
-	// Includes are additional include files (i.e. -include or /FI).
-	Includes []string
 
 	// Dirs are include directories (search paths) or hmap paths.
 	Dirs []string
@@ -81,9 +79,6 @@ func (s *ScanDeps) Scan(ctx context.Context, execRoot string, req Request) ([]st
 	scanner := s.fs.scanner(ctx, execRoot, s.inputDeps, precomputedTrees)
 	scanner.setMacros(ctx, req.Defines)
 
-	for _, s := range req.Includes {
-		scanner.addInclude(ctx, s)
-	}
 	for _, s := range req.Sources {
 		scanner.addSource(ctx, s)
 	}
