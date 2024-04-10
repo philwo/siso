@@ -43,28 +43,25 @@ func (msvc depsMSVC) DepsFastCmd(ctx context.Context, b *Builder, cmd *execute.C
 }
 
 func (msvc depsMSVC) fixCmdInputs(ctx context.Context, b *Builder, cmd *execute.Cmd) ([]string, error) {
-	params := msvcutil.ExtractScanDepsParams(ctx, cmd.Args, cmd.Env)
-	for i := range params.Files {
-		params.Files[i] = b.path.MaybeFromWD(ctx, params.Files[i])
+	_, _, dirs, sysroots, _, err := msvcutil.ScanDepsParams(ctx, cmd.Args, cmd.Env)
+	if err != nil {
+		return nil, err
 	}
-	for i := range params.Dirs {
-		params.Dirs[i] = b.path.MaybeFromWD(ctx, params.Dirs[i])
+	for i := range dirs {
+		dirs[i] = b.path.MaybeFromWD(ctx, dirs[i])
 	}
-	for i := range params.Sysroots {
-		params.Sysroots[i] = b.path.MaybeFromWD(ctx, params.Sysroots[i])
+	for i := range sysroots {
+		sysroots[i] = b.path.MaybeFromWD(ctx, sysroots[i])
 	}
+	clog.Infof(ctx, "fixCmdInputs dirs=%q sysroots=%q", dirs, sysroots)
 	var inputs []string
-	// include files detected by command line. i.e. sanitaizer ignore lists.
-	// These would not be in depsfile, different from Sources.
-	inputs = append(inputs, params.Files...)
-
 	// include directory must be included, even if no include files there.
 	// without the dir, it may fail for `#include "../config.h"`
-	inputs = append(inputs, params.Dirs...)
+	inputs = append(inputs, dirs...)
 	// sysroot directory must be included, eve if no include files there.
 	// or error with
 	// clang++: error: no such sysroot directory: ... [-Werror, -Wmissing-sysroot]
-	inputs = append(inputs, params.Sysroots...)
+	inputs = append(inputs, sysroots...)
 	inputs = b.expandInputs(ctx, inputs)
 
 	var expandFn func(context.Context, []string) []string
@@ -83,7 +80,7 @@ func (msvc depsMSVC) fixCmdInputs(ctx context.Context, b *Builder, cmd *execute.
 	if msvc.treeInput != nil {
 		fn = msvc.treeInput
 	}
-	cmd.TreeInputs = append(cmd.TreeInputs, treeInputs(ctx, fn, params.Sysroots, params.Dirs)...)
+	cmd.TreeInputs = append(cmd.TreeInputs, treeInputs(ctx, fn, sysroots, dirs)...)
 	clog.Infof(ctx, "treeInputs=%v", cmd.TreeInputs)
 	return inputs, nil
 }
@@ -183,31 +180,31 @@ func (msvc depsMSVC) depsInputs(ctx context.Context, b *Builder, step *Step) ([]
 func (depsMSVC) scandeps(ctx context.Context, b *Builder, step *Step) ([]string, error) {
 	var ins []string
 	err := b.scanDepsSema.Do(ctx, func(ctx context.Context) error {
-		params := msvcutil.ExtractScanDepsParams(ctx, step.cmd.Args, step.cmd.Env)
-		for i := range params.Sources {
-			params.Sources[i] = b.path.MaybeFromWD(ctx, params.Sources[i])
+		files, includes, dirs, sysroots, defines, err := msvcutil.ScanDepsParams(ctx, step.cmd.Args, step.cmd.Env)
+		if err != nil {
+			return err
 		}
-		for i := range params.Files {
-			params.Files[i] = b.path.MaybeFromWD(ctx, params.Files[i])
+		for i := range files {
+			files[i] = b.path.MaybeFromWD(ctx, files[i])
 		}
-		for i := range params.Dirs {
-			params.Dirs[i] = b.path.MaybeFromWD(ctx, params.Dirs[i])
+		for i := range dirs {
+			dirs[i] = b.path.MaybeFromWD(ctx, dirs[i])
 		}
-		for i := range params.Sysroots {
-			params.Sysroots[i] = b.path.MaybeFromWD(ctx, params.Sysroots[i])
+		for i := range sysroots {
+			sysroots[i] = b.path.MaybeFromWD(ctx, sysroots[i])
 		}
 		req := scandeps.Request{
-			Defines:  params.Defines,
-			Sources:  params.Sources,
-			Dirs:     params.Dirs,
-			Sysroots: params.Sysroots,
+			Defines:  defines,
+			Sources:  files,
+			Includes: includes,
+			Dirs:     dirs,
+			Sysroots: sysroots,
 			Timeout:  step.cmd.Timeout,
 		}
 		if log.V(1) {
 			clog.Infof(ctx, "scandeps req=%#v", req)
 		}
 		started := time.Now()
-		var err error
 		ins, err = b.scanDeps.Scan(ctx, b.path.ExecRoot, req)
 		if log.V(1) {
 			clog.Infof(ctx, "scandeps %d %s: %v", len(ins), time.Since(started), err)
@@ -215,9 +212,7 @@ func (depsMSVC) scandeps(ctx context.Context, b *Builder, step *Step) ([]string,
 		if err != nil {
 			buf, berr := json.Marshal(req)
 			clog.Warningf(ctx, "scandeps failed Request %s %v: %v", buf, berr, err)
-			return err
 		}
-		ins = append(ins, params.Files...)
 		return err
 	})
 	if err != nil {
