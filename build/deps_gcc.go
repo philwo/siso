@@ -176,6 +176,9 @@ func (depsGCC) scandeps(ctx context.Context, b *Builder, step *Step) ([]string, 
 		for i := range params.Sources {
 			params.Sources[i] = b.path.MaybeFromWD(ctx, params.Sources[i])
 		}
+		for i := range params.Includes {
+			params.Includes[i] = b.path.MaybeFromWD(ctx, params.Includes[i])
+		}
 		for i := range params.Files {
 			params.Files[i] = b.path.MaybeFromWD(ctx, params.Files[i])
 		}
@@ -191,6 +194,7 @@ func (depsGCC) scandeps(ctx context.Context, b *Builder, step *Step) ([]string, 
 		req := scandeps.Request{
 			Defines:    params.Defines,
 			Sources:    params.Sources,
+			Includes:   params.Includes,
 			Dirs:       params.Dirs,
 			Frameworks: params.Frameworks,
 			Sysroots:   params.Sysroots,

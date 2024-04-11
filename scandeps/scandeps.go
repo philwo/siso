@@ -49,6 +49,7 @@ type Request struct {
 	Sources []string
 
 	// Includes are additional include files (i.e. -include or /FI).
+	// it would be equivalent with `#include "fname"` in source.
 	Includes []string
 
 	// Dirs are include directories (search paths) or hmap paths.

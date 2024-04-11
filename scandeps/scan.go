@@ -171,6 +171,7 @@ func (s *scanner) updateMacros(ctx context.Context, macros map[string][]string) 
 }
 
 func (s *scanner) addInclude(ctx context.Context, fname string) {
+	// -include or /FI is equivalent with `#include "filename"`
 	s.pushInputs(`"` + fname + `"`)
 	if log.V(1) {
 		clog.Infof(ctx, "include %q", fname)

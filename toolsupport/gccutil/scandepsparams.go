@@ -12,8 +12,11 @@ import (
 
 // ScanDepsParams holds parameters used for scandeps.
 type ScanDepsParams struct {
-	// Sources are source files (*.cc, *.h etc)
+	// Sources are source files.
 	Sources []string
+
+	// Includes are include files by -include.
+	Includes []string
 
 	// Files are input files, such as sanitaizer ignore list.
 	Files []string
@@ -65,7 +68,7 @@ func ExtractScanDepsParams(ctx context.Context, args, env []string) ScanDepsPara
 			continue
 		case "-include":
 			i++
-			res.Sources = append(res.Sources, args[i])
+			res.Includes = append(res.Includes, args[i])
 			continue
 		case "-isysroot":
 			i++
