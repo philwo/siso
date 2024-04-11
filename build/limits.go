@@ -29,6 +29,10 @@ const (
 	// limit # of concurrent steps at most 80 times of num cpus
 	// to protect from out of memory, or DDoS to RE API.
 	remoteLimitFactor = 80
+
+	// max limit # of concurrent steps for reproxy
+	// to protect from thread exaustion b/333669451
+	reproxyLimitCap = 5000
 )
 
 // Limits specifies the resource limits used in siso build process.
@@ -65,7 +69,7 @@ func DefaultLimits(ctx context.Context) Limits {
 			ScanDeps:  scanDepsLimitFactor * numCPU,
 			Local:     numCPU,
 			FastLocal: limitForFastLocal(ctx, numCPU),
-			Remote:    remoteLimitFactor * numCPU,
+			Remote:    limitForRemote(ctx, numCPU),
 			REWrap:    limitForREWrapper(ctx, numCPU),
 			Cache:     stepLimitFactor * numCPU,
 		}
@@ -143,6 +147,16 @@ func UnitTestLimits(ctx context.Context) Limits {
 // Test should restore the original value after the test.
 func SetDefaultForTest(limits Limits) {
 	defaultLimits = limits
+}
+
+func limitForRemote(ctx context.Context, numCPU int) int {
+	limit := remoteLimitFactor * numCPU
+	// reclient_helper.py sets the RBE_server_address
+	// https://chromium.googlesource.com/chromium/tools/depot_tools.git/+/e13840bd9a04f464e3bef22afac1976fc15a96a0/reclient_helper.py#138
+	if v := os.Getenv("RBE_server_address"); v != "" {
+		return min(reproxyLimitCap, limit)
+	}
+	return limit
 }
 
 func limitForFastLocal(ctx context.Context, numCPU int) int {
