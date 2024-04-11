@@ -372,8 +372,9 @@ func (b *Builder) outputFailureSummary(ctx context.Context, step *Step, err erro
 	if err == nil || b.failureSummaryWriter == nil || step.cmd == nil {
 		return
 	}
+	stat := b.stats.stats()
 	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "%s\n", step.cmd.Desc)
+	fmt.Fprintf(&buf, "[%d/%d] %s\n", stat.Done-stat.Skipped, stat.Total-stat.Skipped, step.cmd.Desc)
 	fmt.Fprintf(&buf, "%s\n", strings.Join(step.cmd.Args, " "))
 	stderr := step.cmd.Stderr()
 	if len(stderr) > 0 {
