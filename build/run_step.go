@@ -377,10 +377,16 @@ func (b *Builder) outputFailureSummary(ctx context.Context, step *Step, err erro
 	fmt.Fprintf(&buf, "[%d/%d] %s\n", stat.Done-stat.Skipped, stat.Total-stat.Skipped, step.cmd.Desc)
 	fmt.Fprintf(&buf, "%s\n", strings.Join(step.cmd.Args, " "))
 	stderr := step.cmd.Stderr()
+	stdout := step.cmd.Stdout()
+	if step.cmd.Deps == "msvc" {
+		// cl.exe, clang-cl shows included file to stderr
+		// but RBE merges stderr into stdout...
+		_, stdout = msvcutil.ParseShowIncludes(stdout)
+		_, stderr = msvcutil.ParseShowIncludes(stderr)
+	}
 	if len(stderr) > 0 {
 		fmt.Fprint(&buf, ui.StripANSIEscapeCodes(string(stderr)))
 	}
-	stdout := step.cmd.Stdout()
 	if len(stdout) > 0 {
 		fmt.Fprint(&buf, ui.StripANSIEscapeCodes(string(stdout)))
 	}
