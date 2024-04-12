@@ -735,7 +735,8 @@ func (s *StepDef) ExpandedInputs(ctx context.Context) []string {
 			solibsIns = append(solibsIns, in)
 		}
 		if len(solibsIns) > 0 {
-			newInputs = append(newInputs, solibsIns...)
+			// solibsIns need to check recursively.
+			inputs = append(inputs, solibsIns...)
 			if s.rule.Debug {
 				clog.Infof(ctx, "solibs %q -> %q", inputs[i], solibsIns)
 			}
