@@ -18,9 +18,9 @@ import (
 )
 
 const (
-	// limit # of concurrent steps at most 1024 times of num cpus
+	// limit # of concurrent steps at most 512 times of num cpus
 	// to protect from out of memory, or too many threads.
-	stepLimitFactor = 1024
+	stepLimitFactor = 512
 
 	// limit # of concurrent scandeps steps at most 2 times of num cpus
 	// to protect from out of memory, reduce contention
