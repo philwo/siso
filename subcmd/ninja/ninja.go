@@ -27,6 +27,7 @@ import (
 	"cloud.google.com/go/profiler"
 	log "github.com/golang/glog"
 	"github.com/google/uuid"
+	"github.com/klauspost/cpuid/v2"
 	"github.com/maruel/subcommands"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/api/option"
@@ -348,6 +349,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		ctx = logCtx
 	}
 	// logging is ready.
+	clog.Infof(ctx, "%s", cpuinfo())
 
 	if cmdver, err := version.GetStartupVersion(); err != nil {
 		clog.Warningf(ctx, "cannot determine CIPD package version: %s", err)
@@ -1530,4 +1532,12 @@ func argsGN(args, key string) string {
 		value = value[:i]
 	}
 	return value
+}
+
+func cpuinfo() string {
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "brand=%q vendor=%q ", cpuid.CPU.BrandName, cpuid.CPU.VendorString)
+	fmt.Fprintf(&sb, "physicalCores=%d threadsPerCore=%d logicalCores=%d ", cpuid.CPU.PhysicalCores, cpuid.CPU.ThreadsPerCore, cpuid.CPU.LogicalCores)
+	fmt.Fprintf(&sb, "vm=%t features=%s", cpuid.CPU.VM(), cpuid.CPU.FeatureSet())
+	return sb.String()
 }
