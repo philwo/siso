@@ -5,7 +5,6 @@
 package cogutil
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -19,6 +18,7 @@ import (
 
 	"infra/build/siso/o11y/clog"
 	"infra/build/siso/reapi"
+	"infra/build/siso/reapi/digest"
 	"infra/build/siso/reapi/merkletree"
 	pb "infra/build/siso/toolsupport/cogutil/proto"
 )
@@ -41,36 +41,39 @@ func New(ctx context.Context, dir string, reopt *reapi.Option) (*Client, error) 
 		return nil, err
 	}
 	clog.Infof(ctx, "cog version:\n%s", string(buf))
-	buf, err = os.ReadFile("/google/cog/status/flags")
-	if err != nil {
-		return nil, err
-	}
-	// see http://shortn/_rBwmJ3sRKS for prototype.
-	if !bytes.Contains(buf, []byte("--cog_use_buildfs=true")) {
-		clog.Warningf(ctx, "cog: --cog_use_buildfs is not set")
-		// still want to set local direct mode.
-		return &Client{}, nil
-	}
-	clog.Infof(ctx, "enabled: --cog_use_buildfs")
 	if !reopt.IsValid() {
 		clog.Warningf(ctx, "cog: reapi is not enabled")
-		// still want to set local direct mode.
 		return &Client{}, nil
 	}
 	addr := fmt.Sprintf("unix:///google/cog/status/uds/%d", os.Getuid())
 	conn, err := grpc.DialContext(ctx, addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		clog.Warningf(ctx, "cog: failed to dial to cog server %s: %v", addr, err)
-		// still want to set local direct mode.
 		return &Client{}, nil
 	}
 	clog.Infof(ctx, "cog connected to %s", addr)
-	return &Client{
+	c := &Client{
 		reopt:  reopt,
 		conn:   conn,
 		client: pb.NewCogLocalRpcServiceClient(conn),
-	}, nil
-
+	}
+	err = c.BuildfsInsert(ctx, dir, []merkletree.Entry{
+		{
+			Name: "out/.siso_cog_buildfs",
+			Data: digest.FromBytes(".siso_cog_buildfs", nil),
+		},
+	})
+	if err != nil {
+		clog.Warningf(ctx, "cog: failed to insert .siso_cog_buildfs: %v", err)
+		err = c.Close()
+		if err != nil {
+			clog.Warningf(ctx, "cog: close conn: %v", err)
+		}
+		// disable buildfs
+		return &Client{}, nil
+	}
+	clog.Infof(ctx, "cog: buildfs available")
+	return c, nil
 }
 
 // Info returns cog supported status.
