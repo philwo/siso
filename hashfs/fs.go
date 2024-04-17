@@ -292,9 +292,8 @@ func (hfs *HashFS) Stat(ctx context.Context, root, fname string) (FileInfo, erro
 	fname = filepath.ToSlash(fname)
 	e = newLocalEntry()
 	e.init(ctx, fname, hfs.executables, hfs.OS)
-	clog.Infof(ctx, "stat new entry %s %s", fname, e)
-	if log.V(9) {
-		clog.Infof(ctx, "store %s %s in %s", fname, e, dir)
+	if log.V(1) {
+		clog.Infof(ctx, "stat new entry %s %s", fname, e)
 	}
 	var err error
 	if dir != nil {
@@ -1805,27 +1804,33 @@ func (d *directory) storeEntry(ctx context.Context, fname string, e *entry) (*en
 			cmdchanged := !bytes.Equal(ee.cmdhash, e.cmdhash)
 			actionchanged := ee.action != e.action
 			if e.target != "" && ee.target != e.target {
-				lv := struct {
-					origFname         string
-					cmdchanged        bool
-					eetarget, etarget string
-				}{pe.origFname, cmdchanged, ee.target, e.target}
-				clog.Infof(ctx, "store %s: cmdchange:%t s:%q to %q", lv.origFname, lv.cmdchanged, lv.eetarget, lv.etarget)
+				if log.V(1) {
+					lv := struct {
+						origFname         string
+						cmdchanged        bool
+						eetarget, etarget string
+					}{pe.origFname, cmdchanged, ee.target, e.target}
+					clog.Infof(ctx, "store %s: cmdchange:%t s:%q to %q", lv.origFname, lv.cmdchanged, lv.eetarget, lv.etarget)
+				}
 			} else if !e.d.IsZero() && eed != e.d && eed.SizeBytes != 0 && e.d.SizeBytes != 0 {
-				// don't log nil to digest of empty file (size=0)
-				lv := struct {
-					origFname  string
-					cmdchanged bool
-					eed, ed    digest.Digest
-				}{pe.origFname, cmdchanged, eed, e.d}
-				clog.Infof(ctx, "store %s: cmdchange:%t d:%v to %v", lv.origFname, lv.cmdchanged, lv.eed, lv.ed)
+				if log.V(1) {
+					// don't log nil to digest of empty file (size=0)
+					lv := struct {
+						origFname  string
+						cmdchanged bool
+						eed, ed    digest.Digest
+					}{pe.origFname, cmdchanged, eed, e.d}
+					clog.Infof(ctx, "store %s: cmdchange:%t d:%v to %v", lv.origFname, lv.cmdchanged, lv.eed, lv.ed)
+				}
 			} else if cmdchanged || actionchanged {
-				lv := struct {
-					origFname     string
-					cmdchanged    bool
-					actionchanged bool
-				}{pe.origFname, cmdchanged, actionchanged}
-				clog.Infof(ctx, "store %s: cmdchange:%t actionchange:%t", lv.origFname, lv.cmdchanged, lv.actionchanged)
+				if log.V(1) {
+					lv := struct {
+						origFname     string
+						cmdchanged    bool
+						actionchanged bool
+					}{pe.origFname, cmdchanged, actionchanged}
+					clog.Infof(ctx, "store %s: cmdchange:%t actionchange:%t", lv.origFname, lv.cmdchanged, lv.actionchanged)
+				}
 			} else if ee.target == e.target && ee.size == e.size && ee.mode == e.mode && (e.d.IsZero() || eed == e.d) {
 				// no change?
 
@@ -1841,12 +1846,14 @@ func (d *directory) storeEntry(ctx context.Context, fname string, e *entry) (*en
 				}
 				ee.isChanged = e.isChanged
 				ee.mu.Unlock()
-				lv := struct {
-					origFname   string
-					mtime       time.Time
-					updatedTime time.Time
-				}{pe.origFname, ee.getMtime(), ee.getUpdatedTime()}
-				clog.Infof(ctx, "store %s: mtime updated %v %v", lv.origFname, lv.mtime, lv.updatedTime)
+				if log.V(1) {
+					lv := struct {
+						origFname   string
+						mtime       time.Time
+						updatedTime time.Time
+					}{pe.origFname, ee.getMtime(), ee.getUpdatedTime()}
+					clog.Infof(ctx, "store %s: mtime updated %v %v", lv.origFname, lv.mtime, lv.updatedTime)
+				}
 				return ee, "", nil
 			} else if ee.getDir() != nil && e.getDir() != nil {
 				// ok if mkdir with the no cmdhash or same cmdhash.
