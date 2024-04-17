@@ -341,12 +341,17 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	if c.enableCloudLogging {
 		logCtx, loggerURL, done, err := c.initCloudLogging(ctx, projectID, buildID, execRoot, credential)
 		if err != nil {
-			return stats, err
+			// b/335295396 Compile step hitting write requests quota
+			// rather than build fails, fallback to glog.
+			fmt.Fprintf(os.Stderr, "cloud logging: %v\n", err)
+			fmt.Fprintln(os.Stderr, "fallback to glog")
+			c.enableCloudLogging = false
+		} else {
+			// use stderr for confirm no-op step. b/288534744
+			fmt.Fprintln(os.Stderr, loggerURL)
+			defer done()
+			ctx = logCtx
 		}
-		// use stderr for confirm no-op step. b/288534744
-		fmt.Fprintln(os.Stderr, loggerURL)
-		defer done()
-		ctx = logCtx
 	}
 	// logging is ready.
 	clog.Infof(ctx, "%s", cpuinfo())
