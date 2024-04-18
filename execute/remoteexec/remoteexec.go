@@ -194,19 +194,25 @@ func (re *RemoteExec) processResult(ctx context.Context, action digest.Digest, c
 		// Even when err was not nil, the outputs were populated to ActionResult for investigation.
 		return err
 	}
+	err = resultErr(result)
+	if err != nil {
+		return err
+	}
 	if len(result.GetStdoutRaw()) > 0 {
 		cmd.StdoutWriter().Write(result.GetStdoutRaw())
 	} else {
-		setStdout(ctx, re.client, result.GetStdoutDigest(), cmd)
+		err = setStdout(ctx, re.client, result.GetStdoutDigest(), cmd)
+		if err != nil {
+			return err
+		}
 	}
 	if len(result.GetStderrRaw()) > 0 {
 		cmd.StderrWriter().Write(result.GetStderrRaw())
 	} else {
-		setStderr(ctx, re.client, result.GetStderrDigest(), cmd)
-	}
-	err = resultErr(result)
-	if err != nil {
-		return err
+		err = setStderr(ctx, re.client, result.GetStderrDigest(), cmd)
+		if err != nil {
+			return err
+		}
 	}
 	// update output file only step succeeded.
 	return cmd.RecordOutputs(ctx, cmd.HashFS.DataSource(), now)
@@ -226,38 +232,28 @@ func resultErr(result *rpb.ActionResult) error {
 	}
 }
 
-func setStdout(ctx context.Context, client *reapi.Client, d *rpb.Digest, cmd *execute.Cmd) {
+func setStdout(ctx context.Context, client *reapi.Client, d *rpb.Digest, cmd *execute.Cmd) error {
 	if d == nil || d.SizeBytes == 0 {
-		return
+		return nil
 	}
 	w := cmd.StdoutWriter()
 	b, err := client.Get(ctx, digest.FromProto(d), "stdout")
 	if err != nil {
-		// If the context is canceled, we should not write the error to stdout.
-		// Otherwise, we will receive a lot of "ctx canceled" error messages to stdout.
-		// This is because if one action fails, all concurrent actions will be canceled.
-		if ctx.Err() != nil {
-			clog.Warningf(ctx, "failed to get stdout: %v", err)
-			return
-		}
-		w.Write([]byte(err.Error()))
+		return err
 	}
 	w.Write(b)
+	return nil
 }
 
-func setStderr(ctx context.Context, client *reapi.Client, d *rpb.Digest, cmd *execute.Cmd) {
+func setStderr(ctx context.Context, client *reapi.Client, d *rpb.Digest, cmd *execute.Cmd) error {
 	if d == nil || d.SizeBytes == 0 {
-		return
+		return nil
 	}
 	w := cmd.StderrWriter()
 	b, err := client.Get(ctx, digest.FromProto(d), "stderr")
 	if err != nil {
-		// Do not write the error to stderr for the same reason with stdout.
-		if ctx.Err() != nil {
-			clog.Warningf(ctx, "failed to get stderr: %v", err)
-			return
-		}
-		w.Write([]byte(err.Error()))
+		return err
 	}
 	w.Write(b)
+	return nil
 }
