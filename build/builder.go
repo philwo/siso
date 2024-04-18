@@ -134,6 +134,7 @@ type Builder struct {
 	// arg table to intern command line args of steps.
 	argTab symtab
 
+	// start is the time at the build starts.
 	start time.Time
 	graph Graph
 	plan  *plan
@@ -731,13 +732,10 @@ func (b *Builder) recordMetrics(ctx context.Context, m StepMetric) {
 }
 
 func (b *Builder) recordNinjaLogs(ctx context.Context, s *Step) {
-	start := time.Duration(s.metrics.ActionStartTime).Milliseconds()
-	end := time.Duration(s.metrics.ActionEndTime).Milliseconds()
 	// TODO: b/298594790 - Use the same mtime with hashFS.
-	// end time = start time + duration
-	mtime := s.startTime.Add(time.Duration(s.metrics.Duration))
-
-	ninjautil.WriteNinjaLogEntries(ctx, b.ninjaLogWriter, start, end, mtime, s.cmd.Outputs, s.cmd.Args)
+	start := time.Duration(s.startTime.Sub(b.start)).Milliseconds()
+	end := time.Duration(s.metrics.ActionEndTime).Milliseconds()
+	ninjautil.WriteNinjaLogEntries(ctx, b.ninjaLogWriter, start, end, s.endTime, s.cmd.Outputs, s.cmd.Args)
 }
 
 // stepLogEntry logs step in parent access log of the step.
@@ -940,7 +938,6 @@ func (b *Builder) progressStepCacheHit(ctx context.Context, step *Step) {
 // progressStepStarted shows progress of the started step.
 func (b *Builder) progressStepStarted(ctx context.Context, step *Step) {
 	step.setPhase(stepStart)
-	step.startTime = time.Now()
 	b.progress.step(ctx, b, step, progressPrefixStart+step.cmd.Desc)
 }
 

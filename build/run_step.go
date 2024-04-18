@@ -50,7 +50,7 @@ func (e StepError) Unwrap() error {
 //
 // can control the flows with the experiment ids, defined in experiments.go.
 func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
-	stepStart := time.Now()
+	step.startTime = time.Now()
 	tc := trace.New(ctx, step.def.String())
 	ctx = trace.NewContext(ctx, tc)
 	spanName := stepSpanName(step.def)
@@ -77,9 +77,10 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 			span.Close(nil)
 		}
 		if !step.metrics.skip {
-			duration := time.Since(stepStart)
+			step.endTime = time.Now()
+			duration := step.endTime.Sub(step.startTime)
 			step.metrics.Duration = IntervalMetric(duration)
-			step.metrics.ActionEndTime = IntervalMetric(step.startTime.Add(duration).Sub(b.start))
+			step.metrics.ActionEndTime = IntervalMetric(step.endTime.Sub(b.start))
 			step.metrics.Err = err != nil
 			stepLogEntry(ctx, logger, step, duration, err)
 			b.recordMetrics(ctx, step.metrics)
@@ -104,7 +105,7 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 	description := stepDescription(step.def)
 	prevStepOut := b.prevStepOut(ctx, step)
 	stepStartLog(ctx, logger, step, description, spanName)
-	step.metrics.init(ctx, b, step, stepStart, prevStepOut)
+	step.metrics.init(ctx, b, step, step.startTime, prevStepOut)
 	b.stepSpanInit(ctx, span, step, description, spanName, prevStepOut)
 
 	ctx, span = trace.NewSpan(ctx, "run-step")

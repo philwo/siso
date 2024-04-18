@@ -121,6 +121,7 @@ type Step struct {
 	queueSize     int
 	queueDuration time.Duration
 	startTime     time.Time
+	endTime       time.Time
 
 	metrics StepMetric
 
