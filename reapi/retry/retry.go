@@ -25,11 +25,16 @@ func retriableError(err error, called int) bool {
 		st = status.FromContextError(err)
 	}
 
+	// https://github.com/bazelbuild/bazel/blob/7.1.1/src/main/java/com/google/devtools/build/lib/remote/RemoteRetrier.java#L47
 	switch st.Code() {
 	case codes.ResourceExhausted,
 		codes.Internal,
-		codes.Unavailable:
+		codes.Unavailable,
+		codes.Aborted:
 		return true
+	case codes.Unknown:
+		// unknown grpc error should retry, but non grpc error should not.
+		return ok
 	case
 		// may get
 		// code = Unauthenticated desc = Request had invalid authentication credentials.

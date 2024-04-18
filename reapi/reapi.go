@@ -96,6 +96,7 @@ type Client struct {
 }
 
 // serviceConfig is gRPC service config for RE API.
+// https://github.com/bazelbuild/bazel/blob/7.1.1/src/main/java/com/google/devtools/build/lib/remote/RemoteRetrier.java#L47
 var serviceConfig = fmt.Sprintf(`
 {
 	"loadBalancingConfig": [{%q:{}}],
@@ -111,8 +112,11 @@ var serviceConfig = fmt.Sprintf(`
 			"maxBackoff": "120s",
 			"backoffMultiplier": 1.6,
 			"retryableStatusCodes": [
+				"ABORTED",
+				"INTERNAL",
 				"RESOURCE_EXHAUSTED",
-				"UNAVAILABLE"
+				"UNAVAILABLE",
+				"UNKNOWN"
 			]
 		}
 	  },
@@ -129,8 +133,11 @@ var serviceConfig = fmt.Sprintf(`
 			"maxBackoff": "1s",
 			"backoffMultiplier": 1.6,
 			"retryableStatusCodes": [
+				"ABORTED",
+				"INTERNAL",
 				"RESOURCE_EXHAUSTED",
-				"UNAVAILABLE"
+				"UNAVAILABLE",
+				"UNKNOWN"
 			]
 		}
 	  }

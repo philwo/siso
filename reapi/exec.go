@@ -91,6 +91,7 @@ retryLoop:
 			}
 		}()
 		c.m.OpsDone(err)
+		// https://github.com/bazelbuild/bazel/blob/7.1.1/src/main/java/com/google/devtools/build/lib/remote/RemoteRetrier.java#L47
 		unknownErr := true
 		switch status.Code(err) {
 		case codes.OK:
@@ -104,6 +105,8 @@ retryLoop:
 			// "the bot running the task appears to be lost" ?
 		case codes.Internal:
 			// stream terminated by RST_STREAM ?
+		case codes.Unknown:
+			// Authentication backend unknown error. ?
 		case codes.Unavailable, codes.ResourceExhausted:
 			unknownErr = false
 		case codes.DeadlineExceeded:

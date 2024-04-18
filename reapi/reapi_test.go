@@ -59,7 +59,17 @@ func TestServiceConfig_CAS(t *testing.T) {
 		{
 			code:     codes.Internal,
 			n:        1,
-			wantCode: codes.Internal,
+			wantCode: codes.OK,
+		},
+		{
+			code:     codes.Unknown,
+			n:        1,
+			wantCode: codes.OK,
+		},
+		{
+			code:     codes.Aborted,
+			n:        1,
+			wantCode: codes.OK,
 		},
 	} {
 		t.Run(fmt.Sprintf("%s_%d", tc.code, tc.n), func(t *testing.T) {
