@@ -129,12 +129,15 @@ func (c *run) collect(ctx context.Context) (map[string]digest.Data, error) {
 			}
 		}
 	}
-	_, err = os.Stat(".reproxy_tmp")
+
+	// no need to collect .reproxy_tmp/racing
+	// .reproxy_tmp/cache may exist, but must not collect reproxy.creds.
+	_, err = os.Stat(".reproxy_tmp/logs")
 	if err != nil {
-		clog.Infof(ctx, "no .reproxy_tmp: %v", err)
+		clog.Infof(ctx, "no .reproxy_tmp/logs: %v", err)
 		return report, nil
 	}
-	err = fs.WalkDir(fsys, ".reproxy_tmp", func(fname string, d fs.DirEntry, err error) error {
+	err = fs.WalkDir(fsys, ".reproxy_tmp/logs", func(fname string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
