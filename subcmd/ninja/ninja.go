@@ -321,6 +321,30 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	if err != nil {
 		return stats, err
 	}
+	if !c.dryRun {
+		lock, err := newLockFile(ctx, ".siso_lock")
+		switch {
+		case errors.Is(err, errors.ErrUnsupported):
+			clog.Warningf(ctx, "lockfile is not supported")
+		case err != nil:
+			return stats, err
+		case err == nil:
+			err = lock.Lock()
+			if err != nil {
+				return stats, err
+			}
+			defer func() {
+				err := lock.Unlock()
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "failed to unlock .siso_lock: %v\n", err)
+				}
+				err = lock.Close()
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "failed to close .siso_lock: %v\n", err)
+				}
+			}()
+		}
+	}
 	buildPath := build.NewPath(execRoot, c.dir)
 
 	buildID := uuid.New().String()
