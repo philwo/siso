@@ -192,10 +192,27 @@ func (s *State) Targets(args []string) ([]*Node, error) {
 		var node *Node
 		if strings.HasSuffix(t, "^") {
 			// Special syntax: "foo.cc^" means "the first output of foo.cc".
+			// TODO(b/336185923): document this.
 			t = strings.TrimSuffix(t, "^")
 			n, ok := s.LookupNode(t)
 			if !ok {
-				return nil, fmt.Errorf("unknown target %q", t)
+				// for header file, try the source file with the same name.
+				// i.e. "foo.h^" will be equivalent with "foo.cc^"
+				// b/335792430
+				switch filepath.Ext(t) {
+				case ".h", ".hxx", ".hpp", ".inc":
+					sourceExts := []string{".cc", ".c", ".cxx", ".cpp", ".m", ".mm", ".S"}
+					for _, ext := range sourceExts {
+						tt := strings.TrimSuffix(t, filepath.Ext(t)) + ext
+						n, ok = s.LookupNode(tt)
+						if ok {
+							break
+						}
+					}
+				}
+				if !ok {
+					return nil, fmt.Errorf("unknown target %q", t)
+				}
 			}
 			outs := n.OutEdges()
 			if len(outs) == 0 {

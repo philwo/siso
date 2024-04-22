@@ -69,6 +69,24 @@ default all
 			args:  []string{"../../foo/foo.cc^"},
 			want:  []string{"obj/foo.o"},
 		},
+		{
+			name:    "missing^",
+			input:   input,
+			args:    []string{"../../foo/bar.cc^"},
+			wantErr: true,
+		},
+		{
+			name:  "header^",
+			input: input,
+			args:  []string{"../../foo/foo.h^"},
+			want:  []string{"obj/foo.o"},
+		},
+		{
+			name:    "missing-header^",
+			input:   input,
+			args:    []string{"../../foo/bar.h^"},
+			wantErr: true,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			state := NewState()
