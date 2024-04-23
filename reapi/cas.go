@@ -127,9 +127,14 @@ func (c *Client) Get(ctx context.Context, d digest.Digest, name string) ([]byte,
 // getWithBatchReadBlobs fetches the content of blob using BatchReadBlobs rpc of CAS.
 func (c *Client) getWithBatchReadBlobs(ctx context.Context, d digest.Digest, name string) ([]byte, error) {
 	casClient := rpb.NewContentAddressableStorageClient(c.conn)
-	resp, err := casClient.BatchReadBlobs(ctx, &rpb.BatchReadBlobsRequest{
-		InstanceName: c.opt.Instance,
-		Digests:      []*rpb.Digest{d.Proto()},
+	var resp *rpb.BatchReadBlobsResponse
+	err := retry.Do(ctx, func() error {
+		var err error
+		resp, err = casClient.BatchReadBlobs(ctx, &rpb.BatchReadBlobsRequest{
+			InstanceName: c.opt.Instance,
+			Digests:      []*rpb.Digest{d.Proto()},
+		})
+		return err
 	})
 	if err != nil {
 		c.m.ReadDone(0, err)
