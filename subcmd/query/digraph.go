@@ -88,15 +88,13 @@ func (c *digraphRun) run(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	targets := args
-	if len(targets) == 0 {
-		nodes, err := state.DefaultNodes()
-		if err != nil {
-			return err
-		}
-		for _, n := range nodes {
-			targets = append(targets, n.Path())
-		}
+	nodes, err := state.Targets(args)
+	if err != nil {
+		return err
+	}
+	targets := make([]string, 0, len(nodes))
+	for _, n := range nodes {
+		targets = append(targets, n.Path())
 	}
 	d := &digraph{
 		seen: make(map[string]bool),
