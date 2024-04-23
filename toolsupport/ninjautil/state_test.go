@@ -6,12 +6,48 @@ package ninjautil
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
 )
 
 func TestState_Targets(t *testing.T) {
+	dir := t.TempDir()
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir = filepath.Join(dir, "out/siso")
+	err = os.MkdirAll(dir, 0755)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = os.Chdir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		err := os.Chdir(wd)
+		if err != nil {
+			t.Error(err)
+		}
+	}()
+
+	err = os.MkdirAll(filepath.Join(dir, "../../foo"), 0755)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = os.WriteFile(filepath.Join(dir, "../../foo/foo.cc"), []byte(`
+#include "foo/foo.h"
+#include "foo/foo_util.h"
+`), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	inputNoDefault := `
 rule cxx
   command = clang++ -c ${in} ${out}
@@ -86,6 +122,12 @@ default all
 			input:   input,
 			args:    []string{"../../foo/bar.h^"},
 			wantErr: true,
+		},
+		{
+			name:  "header^-include",
+			input: input,
+			args:  []string{"../../foo/foo_util.h^"},
+			want:  []string{"obj/foo.o"},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

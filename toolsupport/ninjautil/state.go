@@ -5,9 +5,14 @@
 package ninjautil
 
 import (
+	"context"
 	"fmt"
+	"os"
 	"path/filepath"
+	"sort"
 	"strings"
+
+	"infra/build/siso/scandeps"
 )
 
 var (
@@ -191,28 +196,9 @@ func (s *State) Targets(args []string) ([]*Node, error) {
 		t := filepath.ToSlash(t)
 		var node *Node
 		if strings.HasSuffix(t, "^") {
-			// Special syntax: "foo.cc^" means "the first output of foo.cc".
-			// TODO(b/336185923): document this.
-			t = strings.TrimSuffix(t, "^")
-			n, ok := s.LookupNode(t)
+			n, ok := s.hatTarget(t)
 			if !ok {
-				// for header file, try the source file with the same name.
-				// i.e. "foo.h^" will be equivalent with "foo.cc^"
-				// b/335792430
-				switch filepath.Ext(t) {
-				case ".h", ".hxx", ".hpp", ".inc":
-					sourceExts := []string{".cc", ".c", ".cxx", ".cpp", ".m", ".mm", ".S"}
-					for _, ext := range sourceExts {
-						tt := strings.TrimSuffix(t, filepath.Ext(t)) + ext
-						n, ok = s.LookupNode(tt)
-						if ok {
-							break
-						}
-					}
-				}
-				if !ok {
-					return nil, fmt.Errorf("unknown target %q", t)
-				}
+				return nil, fmt.Errorf("unknown target %q", t)
 			}
 			outs := n.OutEdges()
 			if len(outs) == 0 {
@@ -235,6 +221,88 @@ func (s *State) Targets(args []string) ([]*Node, error) {
 		nodes = append(nodes, node)
 	}
 	return nodes, nil
+}
+
+// Special syntax: "foo.cc^" means "the first output of foo.cc".
+// for header file, try to find one of the source file which has
+// a direct #include for the header.
+// i.e. "foo.h^" will be equivalent with "foo.cc^"
+// TODO(b/336185923): document this.
+func (s *State) hatTarget(t string) (*Node, bool) {
+	ctx := context.Background() // TODO: take from caller.
+	t = strings.TrimSuffix(t, "^")
+	n, ok := s.LookupNode(t)
+	if ok {
+		return n, true
+	}
+	switch filepath.Ext(t) {
+	case ".h", ".hxx", ".hpp", ".inc":
+	default:
+		return nil, false
+	}
+	// special handling for header file.
+	incname := filepath.Base(t)
+	dirname := filepath.Dir(t)
+	// check the file include the header file.
+	// TODO: use hashfs here?
+	dirents, err := os.ReadDir(dirname)
+	if err != nil {
+		return nil, false
+	}
+	files := make(map[string]bool)
+	for _, dirent := range dirents {
+		files[dirent.Name()] = true
+	}
+	tbase := strings.TrimSuffix(t, filepath.Ext(t))
+
+	checkNode := func(fname string) (*Node, bool) {
+		buf, err := os.ReadFile(fname)
+		if err != nil {
+			return nil, false
+		}
+		includes, _, err := scandeps.CPPScan(ctx, fname, buf)
+		if err != nil {
+			return nil, false
+		}
+		for _, inc := range includes {
+			// inc should be `"foo.h"` or `<foo.h>`
+			switch inc[len(inc)-1] {
+			case '"', '>':
+				inc = inc[1 : len(inc)-1]
+			default:
+				continue
+			}
+			if filepath.Base(inc) == incname {
+				n, ok := s.LookupNode(fname)
+				if ok {
+					return n, true
+				}
+			}
+		}
+		return nil, false
+	}
+	// prefer same stem, test or unittest.
+	sourceExts := []string{".cc", "_test.cc", "_unittest.cc", ".c", ".cxx", ".cpp", ".m", ".mm", ".S"}
+	for _, ext := range sourceExts {
+		tt := tbase + ext
+		delete(files, filepath.Base(tt))
+		n, ok := checkNode(tt)
+		if ok {
+			return n, true
+		}
+	}
+	var filenames []string
+	for fname := range files {
+		filenames = append(filenames, fname)
+	}
+	sort.Strings(filenames)
+	for _, fname := range filenames {
+		n, ok := checkNode(filepath.ToSlash(filepath.Join(dirname, fname)))
+		if ok {
+			return n, true
+		}
+	}
+	return nil, false
 }
 
 // PhonyNodes returns phony's output nodes.
