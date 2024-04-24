@@ -54,12 +54,13 @@ import (
 )
 
 // Cmd returns the Command for the `ninja` subcommand provided by this package.
-func Cmd(authOpts cred.Options) *subcommands.Command {
+func Cmd(authOpts cred.Options, version string) *subcommands.Command {
 	return &subcommands.Command{
 		UsageLine: "ninja <args>...",
 		CommandRun: func() subcommands.CommandRun {
 			r := ninjaCmdRun{
 				authOpts: authOpts,
+				version:  version,
 			}
 			r.init()
 			return &r
@@ -70,6 +71,7 @@ func Cmd(authOpts cred.Options) *subcommands.Command {
 type ninjaCmdRun struct {
 	subcommands.CommandRunBase
 	authOpts cred.Options
+	version  string
 	started  time.Time
 
 	// flag values
@@ -865,6 +867,7 @@ func (c *ninjaCmdRun) initCloudProfiler(ctx context.Context, projectID string, c
 	clog.Infof(ctx, "enable cloud profiler %q in %s", c.cloudProfilerServiceName, projectID)
 	err := profiler.Start(profiler.Config{
 		Service:        c.cloudProfilerServiceName,
+		ServiceVersion: fmt.Sprintf("%s/%s", c.version, runtime.GOOS),
 		MutexProfiling: true,
 		ProjectID:      projectID,
 	}, credential.ClientOptions()...)

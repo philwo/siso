@@ -47,7 +47,8 @@ var (
 	traceFile     string
 )
 
-const versionStr = "siso v0.1.4"
+const versionID = "v0.1.4"
+const versionStr = "siso " + versionID
 
 func getApplication(authOpts cred.Options) *cli.Application {
 	return &cli.Application{
@@ -55,7 +56,7 @@ func getApplication(authOpts cred.Options) *cli.Application {
 		Title: "Ninja-compatible build system optimized for remote execution",
 		Commands: []*subcommands.Command{
 			help.Cmd(),
-			ninja.Cmd(authOpts),
+			ninja.Cmd(authOpts, versionID),
 			query.Cmd(),
 			fscmd.Cmd(authOpts),
 			recall.Cmd(authOpts),
