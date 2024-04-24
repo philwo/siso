@@ -194,15 +194,12 @@ func (re *RemoteExec) processResult(ctx context.Context, action digest.Digest, c
 		// Even when err was not nil, the outputs were populated to ActionResult for investigation.
 		return err
 	}
-	err = resultErr(result)
-	if err != nil {
-		return err
-	}
+	cmdErr := resultErr(result)
 	if len(result.GetStdoutRaw()) > 0 {
 		cmd.StdoutWriter().Write(result.GetStdoutRaw())
 	} else {
 		err = setStdout(ctx, re.client, result.GetStdoutDigest(), cmd)
-		if err != nil {
+		if cmdErr == nil && err != nil {
 			return err
 		}
 	}
@@ -210,9 +207,12 @@ func (re *RemoteExec) processResult(ctx context.Context, action digest.Digest, c
 		cmd.StderrWriter().Write(result.GetStderrRaw())
 	} else {
 		err = setStderr(ctx, re.client, result.GetStderrDigest(), cmd)
-		if err != nil {
+		if cmdErr == nil && err != nil {
 			return err
 		}
+	}
+	if cmdErr != nil {
+		return cmdErr
 	}
 	// update output file only step succeeded.
 	return cmd.RecordOutputs(ctx, cmd.HashFS.DataSource(), now)

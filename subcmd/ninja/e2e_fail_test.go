@@ -5,9 +5,11 @@
 package ninja
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	pb "github.com/bazelbuild/reclient/api/proxy"
@@ -127,7 +129,7 @@ func TestBuild_Fail_Remote(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
 
-	ninja := func(t *testing.T, refake *reapitest.Fake) (build.Stats, error) {
+	ninja := func(t *testing.T, refake *reapitest.Fake, failureSummary, outputLog *bytes.Buffer) (build.Stats, error) {
 		t.Helper()
 		var ds dataSource
 		defer func() {
@@ -145,6 +147,8 @@ func TestBuild_Fail_Remote(t *testing.T) {
 		})
 		defer cleanup()
 		opt.REAPIClient = ds.client
+		opt.FailureSummaryWriter = failureSummary
+		opt.OutputLogWriter = outputLog
 		return runNinja(ctx, "build.ninja", graph, opt, nil, runNinjaOpts{})
 	}
 
@@ -164,22 +168,39 @@ func TestBuild_Fail_Remote(t *testing.T) {
 			}, nil
 		},
 	}
-	stats, err := ninja(t, fakereSuccess)
+	var failureSummary, outputLog bytes.Buffer
+	stats, err := ninja(t, fakereSuccess, &failureSummary, &outputLog)
 	if err != nil {
 		t.Fatalf("ninja %v; want nil err", err)
 	}
 	if stats.Done != 3 || stats.NoExec != 1 || stats.Remote != 1 || stats.Skipped != 1 {
 		t.Fatalf("ninja stats done=%d NoExec=%d Remote=%d Skipped=%d; want done=3 NoExec=1 Remote=1 Skipped=1", stats.Done, stats.NoExec, stats.Remote, stats.Skipped)
 	}
+	if len(failureSummary.Bytes()) != 0 {
+		t.Errorf("ninja failure=%q; want empty", failureSummary.String())
+	}
+	failureSummary.Reset()
+	if len(outputLog.Bytes()) != 0 {
+		t.Errorf("ninja output_log=%q; want empty", outputLog.String())
+	}
+	outputLog.Reset()
 
 	t.Logf("first confirm no-op")
-	stats, err = ninja(t, fakereSuccess)
+	stats, err = ninja(t, fakereSuccess, &failureSummary, &outputLog)
 	if err != nil {
 		t.Fatalf("ninja %v; want nil err", err)
 	}
 	if stats.Done != 3 || stats.Skipped != 3 || stats.Remote != 0 || stats.Local != 0 || stats.NoExec != 0 {
 		t.Fatalf("ninja confirm no-op error? stats=%#v", stats)
 	}
+	if len(failureSummary.Bytes()) != 0 {
+		t.Errorf("ninja failure=%q; want empty", failureSummary.String())
+	}
+	failureSummary.Reset()
+	if len(outputLog.Bytes()) != 0 {
+		t.Errorf("ninja output_log=%q; want empty", outputLog.String())
+	}
+	outputLog.Reset()
 
 	t.Logf("-- make bad foo.txt and fail gen/foo.srcjar")
 	modifyFile(t, dir, "foo.txt", func([]byte) []byte {
@@ -195,33 +216,57 @@ func TestBuild_Fail_Remote(t *testing.T) {
 			}, nil
 		},
 	}
-	stats, err = ninja(t, fakereErr)
+	stats, err = ninja(t, fakereErr, &failureSummary, &outputLog)
 	if err == nil {
 		t.Fatalf("ninja succeeded, but want err; stats=%#v", stats)
 	}
 	if stats.Done != 1 || stats.Fail != 1 || stats.Remote != 0 {
 		t.Fatalf("ninja stats done=%d Fail=%d Remote=%d; want done=1 Fail=1 Remote=0 %#v", stats.Done, stats.Fail, stats.Remote, stats)
 	}
+	if len(failureSummary.Bytes()) == 0 {
+		t.Errorf("ninja failure=%q; want empty (fallback)", failureSummary.String())
+	}
+	failureSummary.Reset()
+	if !strings.Contains(outputLog.String(), "reapi error") {
+		t.Errorf("ninja output_log=%q; want 'reapi error'", outputLog.String())
+	}
+	outputLog.Reset()
 
 	t.Logf("rerun ninja, should fail again")
-	stats, err = ninja(t, fakereErr)
+	stats, err = ninja(t, fakereErr, &failureSummary, &outputLog)
 	if err == nil {
 		t.Fatalf("ninja succeeded, but want err; stats=%#v", stats)
 	}
 	if stats.Done != 1 || stats.Fail != 1 || stats.Remote != 0 {
 		t.Fatalf("ninja stats done=%d Fail=%d Remote=%d; want done=1 Fail=1 Remote=0", stats.Done, stats.Fail, stats.Remote)
 	}
+	if len(failureSummary.Bytes()) == 0 {
+		t.Errorf("ninja failure=%q; want empty (fallback)", failureSummary.String())
+	}
+	failureSummary.Reset()
+	if !strings.Contains(outputLog.String(), "reapi error") {
+		t.Errorf("ninja output_log=%q; want 'reapi error'", outputLog.String())
+	}
+	outputLog.Reset()
 
 	t.Logf("-- fix foo.txt")
 	modifyFile(t, dir, "foo.txt", func([]byte) []byte {
 		return []byte("ok")
 	})
 
-	stats, err = ninja(t, fakereSuccess)
+	stats, err = ninja(t, fakereSuccess, &failureSummary, &outputLog)
 	if err != nil {
 		t.Fatalf("ninja %v; want nil err", err)
 	}
 	if stats.Done != 3 || stats.NoExec != 1 || stats.Remote != 1 || stats.Skipped != 1 {
 		t.Fatalf("ninja stats done=%d NoExec=%d Remote=%d Skipped=%d; want done=3 NoExec=1 Remote=1 Skipped=1", stats.Done, stats.NoExec, stats.Remote, stats.Skipped)
 	}
+	if len(failureSummary.Bytes()) != 0 {
+		t.Errorf("ninja failure=%q; want empty", failureSummary.String())
+	}
+	failureSummary.Reset()
+	if len(outputLog.Bytes()) != 0 {
+		t.Errorf("ninja output_log=%q; want empty", outputLog.String())
+	}
+	outputLog.Reset()
 }
