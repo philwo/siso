@@ -102,3 +102,70 @@ func TestBuild_Cleandead(t *testing.T) {
 	}
 
 }
+
+func TestBuild_CleandeadPreserveNonOut(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	sdkDir := filepath.Join(t.TempDir(), "sdk")
+	err := os.MkdirAll(sdkDir, 0755)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ninja := func(t *testing.T, subtool string) (build.Stats, error) {
+		t.Helper()
+		opt, graph, cleanup := setupBuild(ctx, t, dir, hashfs.Option{
+			StateFile: ".siso_fs_state",
+		})
+		defer cleanup()
+		return runNinja(ctx, "build.ninja", graph, opt, nil, runNinjaOpts{
+			cleandead: true,
+			subtool:   subtool,
+		})
+	}
+
+	t.Logf("-- setup workspace")
+	err = os.WriteFile(filepath.Join(sdkDir, "info.plist"), nil, 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	setupFiles(t, dir, t.Name(), nil)
+	err = os.Symlink(sdkDir, filepath.Join(dir, "out/siso/sdk/xcode_links"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Logf("-- first build")
+	_, err = ninja(t, "")
+	if err != nil {
+		t.Fatalf("ninja err: %v", err)
+	}
+	for _, fname := range []string{
+		"out/siso/obj/copy.stamp",
+		"out/siso/sdk/xcode_links/info.plist",
+	} {
+		_, err := os.Stat(filepath.Join(dir, fname))
+		if err != nil {
+			t.Errorf("stat(%q)=%v; want nil error", fname, err)
+		}
+	}
+
+	t.Logf("-- cleandead")
+	_, err = ninja(t, "cleandead")
+	if err != nil {
+		t.Fatalf("cleandead err: %v", err)
+	}
+	for _, fname := range []string{
+		"out/siso/obj/copy.stamp",
+		"out/siso/sdk/xcode_links/info.plist",
+	} {
+		_, err := os.Stat(filepath.Join(dir, fname))
+		if err != nil {
+			t.Errorf("stat(%q)=%v; want nil error", fname, err)
+		}
+	}
+	_, err = os.Stat(filepath.Join(sdkDir, "info.plist"))
+	if err != nil {
+		t.Errorf("stat(%q)=%v; want nil error", filepath.Join(sdkDir, "info.plist"), err)
+	}
+}
