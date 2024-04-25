@@ -503,16 +503,17 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 		}
 	}()
 	semas := []*semaphore.Semaphore{
-		b.stepSema,
-		b.localSema,
-		b.rewrapSema,
-		b.remoteSema,
-		b.cacheSema,
 		b.cache.sema,
+		b.cacheSema,
+		b.localSema,
+		b.remoteSema,
+		b.reproxySema,
+		b.rewrapSema,
+		b.stepSema,
 		hashfs.FlushSemaphore,
 		hashfs.ForgetMissingsSemaphore,
-		remoteexec.Semaphore,
 		reapi.FileSemaphore,
+		remoteexec.Semaphore,
 	}
 	b.traceEvents.Start(ctx, semas, []*iometrics.IOMetrics{
 		b.hashFS.OS.IOMetrics,
