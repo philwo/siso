@@ -454,7 +454,7 @@ func (g *Graph) CleanDead(ctx context.Context) (int, int, error) {
 		if !filepath.IsLocal(rel) {
 			// genFile may not be in out dir via symlink dir,
 			// then we should not remove the file.
-			// 1b/336667052
+			// b/336667052
 			clog.Warningf(ctx, "skip generated file not in out dir: %s", genFile)
 			continue
 		}
