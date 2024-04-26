@@ -6,8 +6,6 @@ package ninjautil
 
 import (
 	"testing"
-
-	"github.com/google/go-cmp/cmp"
 )
 
 // TODO(b/267409605): At minimum have test coverage parity with
@@ -23,17 +21,6 @@ func TestLexerVarValue(t *testing.T) {
 	if got := v.String(); got != want {
 		t.Errorf("l.VarValue=%s; want=%s", got, want)
 	}
-	s := v.RawString()
-	if got, want := s, "plain text ${var} ${VaR} ${x}"; got != want {
-		t.Errorf("RawString=%q; want=%q", got, want)
-	}
-	v2, err := parseEvalString(s)
-	if err != nil {
-		t.Errorf("parseEvalString(%q)=_ %v; want nil error", s, err)
-	}
-	if diff := cmp.Diff(v, v2, cmp.AllowUnexported(EvalString{}, tokenStr{})); diff != "" {
-		t.Errorf("parse raw string diff -want +got:\n%s", diff)
-	}
 }
 
 func TestLexerVarValue_Escapes(t *testing.T) {
@@ -46,18 +33,6 @@ func TestLexerVarValue_Escapes(t *testing.T) {
 	if got := v.String(); got != want {
 		t.Errorf("l.VarValue=%s; want=%s", got, want)
 	}
-	s := v.RawString()
-	if got, want := s, " $$ab c$: cde"; got != want {
-		t.Errorf("RawString=%q; want=%q", got, want)
-	}
-	v2, err := parseEvalString(s)
-	if err != nil {
-		t.Errorf("parseEvalString(%q)=_ %v; want nil error", s, err)
-	}
-	if diff := cmp.Diff(v, v2, cmp.AllowUnexported(EvalString{}, tokenStr{})); diff != "" {
-		t.Errorf("parse raw string diff -want +got:\n%s", diff)
-	}
-
 }
 
 func TestLexerIdent(t *testing.T) {

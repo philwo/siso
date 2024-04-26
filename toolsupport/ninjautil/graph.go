@@ -6,8 +6,6 @@ package ninjautil
 
 import (
 	"fmt"
-	"io"
-	"sort"
 	"strings"
 )
 
@@ -187,100 +185,4 @@ func (e *Edge) Outputs() []*Node {
 // IsPhony returns true iff phony edge.
 func (e *Edge) IsPhony() bool {
 	return e.rule == phonyRule
-}
-
-// Print writes edge information in writer.
-// TODO: add test for print.
-func (e *Edge) Print(w io.Writer) {
-	e.env.parent.Print(w)
-	if e.pool != nil && e.pool.Name() != "" {
-		fmt.Fprintf(w, "pool %s\n", escapeNinjaToken(e.pool.Name()))
-		fmt.Fprintf(w, "  depth = %d\n\n", e.pool.Depth())
-	}
-	fmt.Fprintf(w, "rule %s\n", escapeNinjaToken(e.rule.name))
-	var bindings []string
-	for k := range e.rule.bindings {
-		bindings = append(bindings, k)
-	}
-	sort.Strings(bindings)
-	for _, k := range bindings {
-		fmt.Fprintf(w, "  %s = %s\n", escapeNinjaToken(k), e.rule.bindings[k].RawString())
-	}
-	fmt.Fprintf(w, "\n")
-	if len(e.outputs) == 1 {
-		fmt.Fprintf(w, "build %s $\n", escapeNinjaToken(e.outputs[0].Path()))
-	} else {
-		fmt.Fprintf(w, "build $\n")
-		for i, n := range e.outputs {
-			if i == len(e.outputs)-e.implicitOuts {
-				fmt.Fprintf(w, "  | $\n")
-			}
-			switch {
-			case i < len(e.outputs)-e.implicitOuts:
-				fmt.Fprintf(w, "  %s $\n", escapeNinjaToken(n.Path()))
-			default:
-				fmt.Fprintf(w, "    %s $\n", escapeNinjaToken(n.Path()))
-			}
-		}
-	}
-	fmt.Fprintf(w, " : %s $\n", e.rule.Name())
-	for i, n := range e.inputs {
-		switch i {
-		case len(e.inputs) - e.orderOnlyDeps - e.implicitDeps:
-			fmt.Fprintf(w, "  | $\n")
-		case len(e.inputs) - e.orderOnlyDeps:
-			fmt.Fprintf(w, "  || $\n")
-		}
-		switch {
-		case i < len(e.inputs)-e.orderOnlyDeps-e.implicitDeps:
-			fmt.Fprintf(w, "  %s", escapeNinjaToken(n.Path()))
-		case i < len(e.inputs)-e.orderOnlyDeps:
-			fmt.Fprintf(w, "    %s", escapeNinjaToken(n.Path()))
-		default:
-			fmt.Fprintf(w, "      %s", escapeNinjaToken(n.Path()))
-		}
-		if i < len(e.inputs)-1 {
-			fmt.Fprintf(w, " $\n")
-		} else {
-			fmt.Fprintf(w, "\n")
-		}
-	}
-	bindings = nil
-	for k := range e.env.bindings {
-		bindings = append(bindings, k)
-	}
-	sort.Strings(bindings)
-	for _, k := range bindings {
-		fmt.Fprintf(w, "  %s = %s\n", escapeNinjaToken(k), escapeNinjaValue(e.env.bindings[k]))
-	}
-}
-
-func escapeNinjaValue(s string) string {
-	if strings.ContainsAny(s, "$\n") {
-		var sb strings.Builder
-		for _, ch := range s {
-			switch ch {
-			case '$', '\n':
-				sb.WriteByte('$')
-			}
-			sb.WriteRune(ch)
-		}
-		return sb.String()
-	}
-	return s
-}
-
-func escapeNinjaToken(s string) string {
-	if strings.ContainsAny(s, " $:") {
-		var sb strings.Builder
-		for _, ch := range s {
-			switch ch {
-			case ' ', '$', ':':
-				sb.WriteByte('$')
-			}
-			sb.WriteRune(ch)
-		}
-		return sb.String()
-	}
-	return s
 }

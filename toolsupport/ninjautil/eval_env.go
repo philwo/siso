@@ -7,8 +7,6 @@ package ninjautil
 import (
 	"bytes"
 	"fmt"
-	"io"
-	"sort"
 	"strings"
 )
 
@@ -62,28 +60,6 @@ func (e EvalString) RawString() string {
 	for _, t := range e.s {
 		switch t.t {
 		case tokenStrLiteral:
-			if bytes.ContainsAny(t.s, "$ :\r\n") {
-				var cr bool
-				for _, ch := range t.s {
-					switch ch {
-					case '$', ':', '\n':
-						if ch == '\n' && cr {
-							cr = false
-							sb.Write([]byte{'$', '\r', '\n'})
-							continue
-						}
-						cr = false
-						sb.Write([]byte{'$', ch})
-						continue
-					case '\r':
-						cr = true
-						continue
-					}
-					cr = false
-					sb.WriteByte(ch)
-				}
-				continue
-			}
 			sb.Write(t.s)
 		case tokenStrVariable:
 			sb.Write([]byte("${"))
@@ -92,12 +68,6 @@ func (e EvalString) RawString() string {
 		}
 	}
 	return sb.String()
-}
-
-func parseEvalString(in string) (EvalString, error) {
-	l := lexer{buf: []byte(in + "\n")}
-	estr, err := l.VarValue()
-	return estr, err
 }
 
 func (e EvalString) empty() bool {
@@ -217,26 +187,6 @@ func (b *BindingEnv) lookupWithFallback(key string, v EvalString, env Env) strin
 		return b.parent.Lookup(key)
 	}
 	return ""
-}
-
-// Print writes binding env in writer.
-func (b *BindingEnv) Print(w io.Writer) {
-	if b.parent != nil {
-		b.parent.Print(w)
-		fmt.Fprintln(w)
-	}
-	if len(b.bindings) == 0 {
-		return
-	}
-	var keys []string
-	for k := range b.bindings {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	for _, k := range keys {
-		fmt.Fprintf(w, "%s = %s\n", escapeNinjaToken(k), escapeNinjaValue(b.bindings[k]))
-	}
-	fmt.Fprintln(w)
 }
 
 // ruleBinding is a mappings of rule names to rules.
