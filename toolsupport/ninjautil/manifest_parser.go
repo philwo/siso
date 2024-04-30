@@ -278,10 +278,7 @@ func (p *ManifestParser) parseEdge() error {
 
 	// If there is an indented block directly after the `build` line, start reading variables.
 	hasIndent := p.lexer.Peek(tokenIndent{})
-	var env *BindingEnv = p.env
-	if hasIndent {
-		env = newBindingEnv(env)
-	}
+	env := newBindingEnv(p.env)
 	for hasIndent {
 		key, val, err := p.parseLet()
 		if err != nil {

@@ -8,12 +8,14 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
 
 	"infra/build/siso/build"
 	"infra/build/siso/hashfs"
+	"infra/build/siso/toolsupport/ninjautil"
 )
 
 func TestIndirectInputsFilter(t *testing.T) {
@@ -169,5 +171,60 @@ func TestStepConfigExpandInputs(t *testing.T) {
 	}
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("sc.ExpandInputs(...); diff -want +got:\n%s", diff)
+	}
+}
+
+func TestStepConfigLookup_WinPath(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip(`this test only works for windows: require filepath.IsAbs("c:/") == true`)
+		return
+	}
+	ctx := context.Background()
+	dir := t.TempDir()
+	path := build.NewPath(dir, "out/siso")
+	err := os.MkdirAll(filepath.Join(dir, "out/siso"), 0755)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = os.WriteFile(filepath.Join(dir, "out/siso/build.ninja"), []byte(`
+rule cxx
+  command = c:/b/s/w/ir/cipd_bin_packages/cpython3/bin/python3.exe ../../build/toolchain/clang_code_coverage_wrapper.py clang-cl.exe -c ${in} -o ${out}
+
+build obj/foo.o: cxx ../../foo.cc
+build all: phony obj/foo.o
+
+build build.ninja: phony
+`), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state := ninjautil.NewState()
+	p := ninjautil.NewManifestParser(state)
+	err = p.Load(ctx, filepath.Join(dir, "out/siso/build.ninja"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	node, ok := state.LookupNode("obj/foo.o")
+	if !ok {
+		t.Errorf("obj/foo.o not found in build.ninja")
+	}
+	edge, ok := node.InEdge()
+	if !ok {
+		t.Errorf("no inEdge for obj/foo.o")
+	}
+
+	sc := StepConfig{
+		Rules: []*StepRule{
+			{
+				Name:          "clang-coverage/cxx",
+				CommandPrefix: "python3.exe ../../build/toolchain/clang_code_coverage_wrapper.py",
+				Remote:        true,
+			},
+		},
+	}
+	rule, ok := sc.Lookup(ctx, path, edge)
+	if !ok || !rule.Remote {
+		t.Errorf("Lookup(ctx, path, edge)=%v, %v; want (rule.Remote, true)", rule, ok)
 	}
 }
