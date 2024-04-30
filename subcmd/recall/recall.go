@@ -374,10 +374,10 @@ func (c *run) call(ctx context.Context, reopt reapi.Option, credential cred.Cred
 				fmt.Printf("    pool: %s\n", m.GetPool())
 				fmt.Printf("    resource_usage:\n")
 				ru := m.GetUsage()
-				fmt.Printf("      cpu peak: %4.2f%%\n", 100*ru.GetCpuPercentagePeak())
-				fmt.Printf("      cpu avg : %4.2f%%\n", 100*ru.GetCpuPercentageAverage())
-				fmt.Printf("      mem peak: %4.2f%%\n", 100*ru.GetMemoryPercentagePeak())
-				fmt.Printf("      mem avg : %4.2f%%\n", 100*ru.GetMemoryPercentageAverage())
+				fmt.Printf("      cpu peak: %4.2f%%\n", ru.GetCpuPercentagePeak())
+				fmt.Printf("      cpu avg : %4.2f%%\n", ru.GetCpuPercentageAverage())
+				fmt.Printf("      mem peak: %4.2f%%\n", ru.GetMemoryPercentagePeak())
+				fmt.Printf("      mem avg : %4.2f%%\n", ru.GetMemoryPercentageAverage())
 			default:
 				log.Infof("metadata %T: %s", m, m)
 			}
