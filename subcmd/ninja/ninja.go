@@ -1098,6 +1098,7 @@ func (c *ninjaCmdRun) initBuildOpts(ctx context.Context, projectID, buildID stri
 		TraceJSON:            c.traceJSON,
 		Pprof:                c.buildPprof,
 		Clobber:              c.clobber,
+		Prepare:              c.prepare,
 		Verbose:              c.verbose,
 		DryRun:               c.dryRun,
 		FailuresAllowed:      c.failuresAllowed,
