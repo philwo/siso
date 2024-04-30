@@ -6,4 +6,4 @@
 package proto
 
 //go:generate ../../../scripts/install-protoc-gen-go
-//go:generate protoc -I. --go_out=. --go_opt=paths=source_relative extractor.proto
+//go:generate protoc -I. --go_out=. --go_opt=paths=source_relative ide_query.proto

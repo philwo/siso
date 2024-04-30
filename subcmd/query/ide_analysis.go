@@ -12,7 +12,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"slices"
+	"sort"
 	"strings"
 	"time"
 
@@ -23,10 +23,14 @@ import (
 
 	"go.chromium.org/luci/common/cli"
 
+	"infra/build/siso/build"
 	"infra/build/siso/hashfs"
 	fspb "infra/build/siso/hashfs/proto"
 	"infra/build/siso/o11y/clog"
+	"infra/build/siso/scandeps"
 	pb "infra/build/siso/toolsupport/ciderutil/proto"
+	"infra/build/siso/toolsupport/gccutil"
+	"infra/build/siso/toolsupport/makeutil"
 	"infra/build/siso/toolsupport/ninjautil"
 	"infra/build/siso/toolsupport/shutil"
 )
@@ -69,7 +73,6 @@ func (c *ideAnalysisRun) init() {
 	c.fsopt = new(hashfs.Option)
 	c.fsopt.StateFile = ".siso_fs_state"
 	c.fsopt.RegisterFlags(&c.Flags)
-	c.Flags.StringVar(&c.depsLogFile, "deps_log", ".siso_deps", "deps log filename (relative to -C)")
 	c.Flags.StringVar(&c.format, "format", "proto", `output format. "proto", "prototext" or "json"`)
 }
 
@@ -94,15 +97,10 @@ func (c *ideAnalysisRun) run(ctx context.Context, args []string) error {
 	default:
 		return fmt.Errorf(`unknown format %q: "proto", "prototext" or "json": %w`, c.format, flag.ErrHelp)
 	}
-	analysis, err := c.analysis(ctx, args)
+	analysis, err := c.analyze(ctx, args)
 	if err != nil {
-		analysis.Status = &pb.Status{
-			Code:    pb.Status_FAILURE,
-			Message: proto.String(err.Error()),
-		}
-	} else {
-		analysis.Status = &pb.Status{
-			Code: pb.Status_OK,
+		analysis.Error = &pb.AnalysisError{
+			ErrorMessage: err.Error(),
 		}
 	}
 	var buf []byte
@@ -124,9 +122,13 @@ func (c *ideAnalysisRun) run(ctx context.Context, args []string) error {
 	return nil
 }
 
-func (c *ideAnalysisRun) analysis(ctx context.Context, args []string) (*pb.IdeAnalysis, error) {
+func (c *ideAnalysisRun) analyze(ctx context.Context, args []string) (*pb.IdeAnalysis, error) {
 	analysis := &pb.IdeAnalysis{
-		BuildArtifactRoot: c.dir,
+		BuildOutDir: c.dir,
+		WorkingDir:  c.dir,
+	}
+	if len(args) == 0 {
+		return analysis, errors.New("no target given")
 	}
 	// TODO: use ninja's initWorkdirs?
 
@@ -147,26 +149,17 @@ func (c *ideAnalysisRun) analysis(ctx context.Context, args []string) (*pb.IdeAn
 	if err != nil {
 		return analysis, err
 	}
-	var depsLog *ninjautil.DepsLog
-	var fsm map[string]*fspb.Entry
-	var state *ninjautil.State
-	defer func() {
-		if depsLog == nil {
-			return
-		}
-		err := depsLog.Close()
-		if err != nil {
-			clog.Warningf(ctx, "close depslog: %v", err)
-		}
-	}()
+	analyzer := &ideAnalyzer{
+		path: build.NewPath(execRoot, c.dir),
+	}
+	defer analyzer.Close(ctx)
+	hashFS, err := hashfs.New(ctx, hashfs.Option{})
+	if err != nil {
+		return analysis, err
+	}
+	analyzer.hashFS = hashFS
+
 	eg, gctx := errgroup.WithContext(ctx)
-	eg.Go(func() error {
-		started := time.Now()
-		var err error
-		depsLog, err = ninjautil.NewDepsLog(gctx, c.depsLogFile)
-		clog.Infof(gctx, "depslog in %s: %v", time.Since(started), err)
-		return err
-	})
 	eg.Go(func() (finalErr error) {
 		started := time.Now()
 		defer func() {
@@ -176,14 +169,15 @@ func (c *ideAnalysisRun) analysis(ctx context.Context, args []string) (*pb.IdeAn
 		if err != nil {
 			return err
 		}
-		fsm = hashfs.StateMap(fsstate)
+		// hashFS.SetState ?
+		analyzer.fsm = hashfs.StateMap(fsstate)
 		return nil
 	})
 
 	eg.Go(func() error {
 		started := time.Now()
-		state = ninjautil.NewState()
-		p := ninjautil.NewManifestParser(state)
+		analyzer.state = ninjautil.NewState()
+		p := ninjautil.NewManifestParser(analyzer.state)
 		err := p.Load(gctx, c.fname)
 		clog.Infof(gctx, "ninja build in %s: %v", time.Since(started), err)
 		return err
@@ -192,178 +186,267 @@ func (c *ideAnalysisRun) analysis(ctx context.Context, args []string) (*pb.IdeAn
 	if err != nil {
 		return analysis, err
 	}
-
-	nodes, err := state.Targets(args)
-	if err != nil {
-		return analysis, err
+	analyzer.scanDeps = scandeps.New(hashFS, nil)
+	buildableUnits := make(map[string]*pb.BuildableUnit)
+	for _, arg := range args {
+		result, bus := analyzer.analyzeTarget(ctx, arg)
+		analysis.Results = append(analysis.Results, result)
+		for k, v := range bus {
+			buildableUnits[k] = v
+		}
 	}
-	for _, node := range nodes {
-		source := &pb.SourceFile{}
-		inEdge, ok := node.InEdge()
-		if !ok {
-			source.Status = &pb.Status{
-				Code:    pb.Status_FAILURE,
-				Message: proto.String(fmt.Sprintf("no input edge for %s", node.Path())),
-			}
-			analysis.Sources = append(analysis.Sources, source)
-			continue
-
-		}
-		if len(inEdge.Inputs()) == 0 {
-			source.Status = &pb.Status{
-				Code:    pb.Status_FAILURE,
-				Message: proto.String(fmt.Sprintf("no inputs for %s", node.Path())),
-			}
-			analysis.Sources = append(analysis.Sources, source)
-			continue
-		}
-		// better to choose source that match args without ^?
-		sourceNode := inEdge.Inputs()[0]
-		// sourceNode.Path is working dir relative,
-		// but source.Path should be repo root relative.
-		source.Path = filepath.ToSlash(filepath.Join(c.dir, sourceNode.Path()))
-		source.WorkingDir = c.dir
-		outEdges := sourceNode.OutEdges()
-		if len(outEdges) == 0 {
-			analysis.Sources = append(analysis.Sources, source)
-			continue
-		}
-		outEdge := outEdges[0]
-		var out string
-		if len(outEdge.Outputs()) > 0 {
-			node := outEdge.Outputs()[0]
-			out = node.Path()
-		}
-		seen := make(map[string]bool)
-
-		addInputs := func(fname string) {
-			// fname is cur dir relative
-			// i.e. build_artifact_root relative.
-			if seen[fname] {
-				return
-			}
-			seen[fname] = true
-			generated := &pb.GeneratedFile{
-				Path: fname,
-			}
-			fullpath := filepath.Join(execRoot, c.dir, fname)
-			ent, ok := fsm[fullpath]
-			if ok && len(ent.CmdHash) == 0 {
-				// source file
-				clog.Infof(ctx, "%s %s: not generated", source.Path, fname)
-				return
-			}
-			source.Deps = append(source.Deps, c.getDeps(ctx, state, fsm, execRoot, fname)...)
-			// TODO: fetch content from RBE-CAS by digest if needed.
-			buf, err := os.ReadFile(fullpath)
-			if err != nil {
-				clog.Warningf(ctx, "%s %s: failed to get contents: %v", source.Path, fname, err)
-				// report it with empty contents.
-				source.Generated = append(source.Generated, generated)
-				return
-			}
-			generated.Contents = buf
-			source.Generated = append(source.Generated, generated)
-		}
-		if rspfile := outEdge.UnescapedBinding("rspfile"); rspfile != "" {
-			rspfileContent := outEdge.Binding("rspfile_content")
-			generated := &pb.GeneratedFile{
-				Path:     rspfile,
-				Contents: []byte(rspfileContent),
-			}
-			source.Generated = append(source.Generated, generated)
-		}
-		depsLogUsed := false
-		if out != "" {
-			deps, _, err := depsLog.Get(ctx, out)
-			if err != nil {
-				clog.Warningf(ctx, "deps %s: %v", out, err)
-			} else {
-				for _, in := range deps {
-					addInputs(in)
-				}
-				// If deps is available, check generated from deps only.
-				depsLogUsed = true
-			}
-		}
-		if !depsLogUsed {
-			for _, node := range outEdge.Inputs() {
-				addInputs(node.Path())
-			}
-		}
-
-		command := outEdge.Binding("command")
-		cmdArgs, err := shutil.Split(command)
-		if err != nil {
-			cmdArgs = []string{"/bin/sh", "-c", command}
-		}
-		source.CompilerArguments = cmdArgs
-		// TODO: add deps that would change compiler arguments?
-		slices.Sort(source.Deps)
-		source.Deps = slices.Compact(source.Deps)
-
-		source.Status = &pb.Status{
-			Code: pb.Status_OK,
-		}
-		analysis.Sources = append(analysis.Sources, source)
-
+	var buIDs []string
+	for k := range buildableUnits {
+		buIDs = append(buIDs, k)
+	}
+	sort.Strings(buIDs)
+	for _, id := range buIDs {
+		analysis.Units = append(analysis.Units, buildableUnits[id])
 	}
 	return analysis, nil
 }
 
-// getDeps returns deps for fname (generated file).
-// fname is working dir relative, but deps are repo root relative.
-// e.g. *.proto for *.pb.h
-// ref: http://shortn/_GgVRbmzqOx
-// TOOD: could be chromium specific. use starlark to support various cases?
-func (c *ideAnalysisRun) getDeps(ctx context.Context, state *ninjautil.State, fsm map[string]*fspb.Entry, execRoot, fname string) []string {
-	// by default, all source inputs of generated file as deps.
-	filter := func(in *ninjautil.Node) (string, bool) {
-		fname := in.Path()
-		fullpath := filepath.Join(execRoot, c.dir, fname)
-		ent, ok := fsm[fullpath]
-		if ok && len(ent.CmdHash) > 0 {
-			// generated file
-			// TODO: better to collect all indirect source input?
-			return "", false
+type ideAnalyzer struct {
+	path     *build.Path
+	hashFS   *hashfs.HashFS
+	fsm      map[string]*fspb.Entry
+	state    *ninjautil.State
+	scanDeps *scandeps.ScanDeps
+}
+
+func (a *ideAnalyzer) Close(ctx context.Context) {
+	clog.Infof(ctx, "close ideAnalys")
+	err := a.hashFS.Close(ctx)
+	if err != nil {
+		clog.Warningf(ctx, "close hashFS: %v", err)
+	}
+}
+
+func (a *ideAnalyzer) analyzeTarget(ctx context.Context, target string) (*pb.AnalysisResult, map[string]*pb.BuildableUnit) {
+	result := &pb.AnalysisResult{}
+	if strings.HasSuffix(target, "^") {
+		result.SourceFilePath = strings.TrimSuffix(target, "^")
+	}
+	nodes, err := a.state.Targets([]string{target})
+	if err != nil {
+		result.Status = &pb.AnalysisResult_Status{
+			Code:          pb.AnalysisResult_Status_CODE_NOT_FOUND,
+			StatusMessage: proto.String(err.Error()),
 		}
-		return filepath.ToSlash(filepath.Join(c.dir, fname)), true
+		return result, nil
 	}
-	switch {
-	case strings.HasSuffix(fname, ".pb.h"):
-		// use *.proto for *.pb.h
-		filter = func(in *ninjautil.Node) (string, bool) {
-			fname := in.Path()
-			if !strings.HasSuffix(fname, ".proto") {
-				return "", false
-			}
-			fullpath := filepath.Join(execRoot, c.dir, fname)
-			ent, ok := fsm[fullpath]
-			if ok && len(ent.CmdHash) > 0 {
-				// generated file
-				// TODO: recursively check input *.proto, or its source?
-				return "", false
-			}
-			return filepath.ToSlash(filepath.Join(c.dir, fname)), true
+	if len(nodes) != 1 {
+		result.Status = &pb.AnalysisResult_Status{
+			Code:          pb.AnalysisResult_Status_CODE_NOT_FOUND,
+			StatusMessage: proto.String(fmt.Sprintf("target=%q expands to %d nodes", target, len(nodes))),
 		}
+		return result, nil
 	}
-	node, ok := state.LookupNode(fname)
+	node := nodes[0]
+	inEdge, ok := node.InEdge()
 	if !ok {
-		clog.Warningf(ctx, "not found %s in build graph", fname)
-		return nil
+		result.Status = &pb.AnalysisResult_Status{
+			Code:          pb.AnalysisResult_Status_CODE_NOT_FOUND,
+			StatusMessage: proto.String(fmt.Sprintf("no input edge for %s", node.Path())),
+		}
+		return result, nil
 	}
-	edge, ok := node.InEdge()
-	if !ok {
-		clog.Warningf(ctx, "no in-edge for %s", fname)
-		return nil
+	if len(inEdge.Inputs()) == 0 {
+		result.Status = &pb.AnalysisResult_Status{
+			Code:          pb.AnalysisResult_Status_CODE_NOT_FOUND,
+			StatusMessage: proto.String(fmt.Sprintf("no inputs for %s", node.Path())),
+		}
+		return result, nil
 	}
-	// edge is proto gen
-	var deps []string
+	if result.SourceFilePath == "" {
+		result.SourceFilePath = inEdge.Inputs()[0].Path()
+	}
+
+	switch filepath.Ext(result.SourceFilePath) {
+	case ".c", ".cc", ".cxx", ".cpp", ".m", ".mm", ".S", ".h", ".hxx", ".hpp", ".inc":
+		return a.analyzeCPP(ctx, inEdge, result)
+	case ".java":
+		return a.analyzeJava(ctx, inEdge, result)
+	default:
+		clog.Infof(ctx, "analyze unknown %s", result.SourceFilePath)
+	}
+	// TODO: what should we return?
+	return result, nil
+}
+
+func (a *ideAnalyzer) analyzeCPP(ctx context.Context, edge *ninjautil.Edge, result *pb.AnalysisResult) (*pb.AnalysisResult, map[string]*pb.BuildableUnit) {
+	clog.Infof(ctx, "analyze cpp %s", result.SourceFilePath)
+	deps := map[string]*pb.BuildableUnit{}
+
+	// get command line from edge
+	command := edge.Binding("command")
+	cmdArgs, err := shutil.Split(command)
+	if err != nil {
+		result.Status = &pb.AnalysisResult_Status{
+			Code:          pb.AnalysisResult_Status_CODE_BUILD_FAILED,
+			StatusMessage: proto.String(fmt.Sprintf("failed to parse command=%q: %v", command, err)),
+		}
+		return result, nil
+	}
+	// scandeps
+	params := gccutil.ExtractScanDepsParams(ctx, cmdArgs, nil)
+	for i := range params.Sources {
+		params.Sources[i] = a.path.MaybeFromWD(ctx, params.Sources[i])
+	}
+	// no need to canonicalize path for Includes.
+	// it should be used as is for `#include "pathname.h"`
+	for i := range params.Files {
+		params.Files[i] = a.path.MaybeFromWD(ctx, params.Files[i])
+	}
+	for i := range params.Dirs {
+		params.Dirs[i] = a.path.MaybeFromWD(ctx, params.Dirs[i])
+	}
+	for i := range params.Frameworks {
+		params.Frameworks[i] = a.path.MaybeFromWD(ctx, params.Frameworks[i])
+	}
+	for i := range params.Sysroots {
+		params.Sysroots[i] = a.path.MaybeFromWD(ctx, params.Sysroots[i])
+	}
+	req := scandeps.Request{
+		Defines:    params.Defines,
+		Sources:    params.Sources,
+		Includes:   params.Includes,
+		Dirs:       params.Dirs,
+		Frameworks: params.Frameworks,
+		Sysroots:   params.Sysroots,
+	}
+	clog.Infof(ctx, "scandeps %#v", req)
+	incs, err := a.scanDeps.Scan(ctx, a.path.ExecRoot, req)
+	if err != nil {
+		result.Status = &pb.AnalysisResult_Status{
+			Code:          pb.AnalysisResult_Status_CODE_BUILD_FAILED,
+			StatusMessage: proto.String(fmt.Sprintf("failed to scandeps %#v: %v", req, err)),
+		}
+		return result, nil
+	}
+	clog.Infof(ctx, "scandeps results: %q", incs)
+
+	for _, inc := range incs {
+		incTarget := a.path.MaybeToWD(ctx, inc)
+		node, ok := a.state.LookupNode(incTarget)
+		if !ok {
+			clog.Infof(ctx, "not in build graph: %s", incTarget)
+			continue
+		}
+		inEdge, ok := node.InEdge()
+		if !ok {
+			clog.Infof(ctx, "not generated file: %s", incTarget)
+			continue
+		}
+		// for each generated files
+		var generatedFiles []*pb.GeneratedFile
+		for _, out := range inEdge.Outputs() {
+			path := out.Path()
+			buf, err := a.hashFS.ReadFile(ctx, a.path.ExecRoot, a.path.MaybeFromWD(ctx, path))
+			if err != nil {
+				clog.Infof(ctx, "not exist generated file %q: %v", path, err)
+				continue
+			}
+			generatedFiles = append(generatedFiles, &pb.GeneratedFile{
+				Path:     path,
+				Contents: buf,
+			})
+		}
+		//   add buildable unit for the inEdge
+		deps[incTarget] = a.buildableUnit(ctx, inEdge, pb.Language_LANGUAGE_UNSPECIFIED, generatedFiles, nil)
+	}
+	buildableUnit := a.buildableUnit(ctx, edge, pb.Language_LANGUAGE_CPP, nil, deps)
+	result.UnitId = buildableUnit.Id
+	result.Invalidation = a.invalidation(ctx)
+
+	deps[buildableUnit.Id] = buildableUnit
+	result.Status = &pb.AnalysisResult_Status{
+		Code: pb.AnalysisResult_Status_CODE_OK,
+	}
+	return result, deps
+}
+
+func (a *ideAnalyzer) analyzeJava(ctx context.Context, edge *ninjautil.Edge, result *pb.AnalysisResult) (*pb.AnalysisResult, map[string]*pb.BuildableUnit) {
+	// TODO: implement this
+	clog.Infof(ctx, "analyze java %s", result.SourceFilePath)
+	return result, nil
+}
+
+func (a *ideAnalyzer) buildableUnit(ctx context.Context, edge *ninjautil.Edge, language pb.Language, outputs []*pb.GeneratedFile, deps map[string]*pb.BuildableUnit) *pb.BuildableUnit {
+	outPath := edge.Outputs()[0].Path()
+	clog.Infof(ctx, "buildableUnit for %s: lang=%s", outPath, language)
+
+	var depIDs []string
+	for k := range deps {
+		depIDs = append(depIDs, k)
+	}
+	sort.Strings(depIDs)
+
+	seen := make(map[string]bool)
+	var sourceFiles []string
 	for _, in := range edge.Inputs() {
-		dep, ok := filter(in)
-		if ok {
-			deps = append(deps, dep)
+		if seen[in.Path()] {
+			continue
 		}
+		seen[in.Path()] = true
+		_, ok := in.InEdge()
+		if ok {
+			clog.Infof(ctx, "generated source file: %s", in.Path())
+			continue
+		}
+		sourceFiles = append(sourceFiles, in.Path())
 	}
-	return deps
+
+	command := edge.Binding("command")
+	cmdArgs, err := shutil.Split(command)
+	if err != nil {
+		cmdArgs = []string{"/bin/sh", "-c", command}
+	}
+
+	return &pb.BuildableUnit{
+		Id:                outPath,
+		Language:          language,
+		SourceFilePaths:   sourceFiles,
+		CompilerArguments: cmdArgs,
+		GeneratedFiles:    outputs,
+		DependencyIds:     depIDs,
+	}
+}
+
+func (a *ideAnalyzer) invalidation(ctx context.Context) *pb.Invalidation {
+	inv := &pb.Invalidation{
+		Wildcards: []*pb.Invalidation_Wildcard{
+			{
+				Suffix:         proto.String(".gn"),
+				CanCrossFolder: proto.Bool(true),
+			},
+			{
+				Suffix:         proto.String(".gni"),
+				CanCrossFolder: proto.Bool(true),
+			},
+		},
+	}
+	buf, err := a.hashFS.ReadFile(ctx, a.path.ExecRoot, filepath.Join(a.path.Dir, "build.ninja.d"))
+	if err != nil {
+		clog.Warningf(ctx, "failed to read build.ninja.d: %v", err)
+		return inv
+	}
+	bdeps, err := makeutil.ParseDeps(buf)
+	if err != nil {
+		clog.Warningf(ctx, "failed to parse build.ninja.d: %v", err)
+		return inv
+	}
+	for _, d := range bdeps {
+		switch filepath.Ext(d) {
+		case ".gn", ".gni":
+			continue
+		}
+		// ignore generated files?
+		// e.g. *.build_metadata, *.typemap_config etc
+		if filepath.IsLocal(d) {
+			continue
+		}
+		inv.FilePaths = append(inv.FilePaths, filepath.ToSlash(filepath.Join(a.path.Dir, d)))
+	}
+	return inv
 }
