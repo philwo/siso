@@ -94,6 +94,9 @@ type Options struct {
 	// Clobber forces to rebuild ignoring existing generated files.
 	Clobber bool
 
+	// Build inputs of targets, but not build targets itself.
+	Prepare bool
+
 	// Verbose shows all command lines while building rather than step description.
 	Verbose bool
 
@@ -192,6 +195,7 @@ type Builder struct {
 	pprofUploader        *pprof.Uploader
 
 	clobber bool
+	prepare bool
 	verbose bool
 	dryRun  bool
 
@@ -311,6 +315,7 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 		tracePprof:           newTracePprof(opts.Pprof),
 		pprofUploader:        opts.PprofUploader,
 		clobber:              opts.Clobber,
+		prepare:              opts.Prepare,
 		verbose:              opts.Verbose,
 		dryRun:               opts.DryRun,
 		failuresAllowed:      opts.FailuresAllowed,
@@ -395,8 +400,9 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 	// scheduling
 	// TODO: run asynchronously?
 	schedOpts := schedulerOption{
-		Path:   b.path,
-		HashFS: b.hashFS,
+		Path:    b.path,
+		HashFS:  b.hashFS,
+		Prepare: b.prepare,
 	}
 	sched := newScheduler(ctx, schedOpts)
 	err = schedule(ctx, sched, b.graph, args...)

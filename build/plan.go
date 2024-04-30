@@ -85,6 +85,7 @@ type plan struct {
 type schedulerOption struct {
 	Path        *Path
 	HashFS      *hashfs.HashFS
+	Prepare     bool
 	EnableTrace bool
 }
 
@@ -102,6 +103,7 @@ type scheduler struct {
 	visited      int
 	scanned      map[Target]bool
 
+	prepare     bool
 	enableTrace bool
 }
 
@@ -128,6 +130,8 @@ func schedule(ctx context.Context, sched *scheduler, graph Graph, args ...string
 
 // scheduleTarget schedules a build plan for target, which is required to next StepDef, from graph into sched.
 func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target Target, next StepDef) error {
+	isFinalTarget := next == nil
+
 	sched.scanned[target] = true
 	if sched.marked(target) {
 		if log.V(1) {
@@ -203,12 +207,19 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 			waits[in] = struct{}{}
 		}
 	}
+	if sched.prepare && isFinalTarget {
+		clog.Infof(ctx, "sched: not build final target %s", target)
+		return nil
+	}
 	sched.add(ctx, graph, newStep, waits, outputs)
 	return nil
 }
 
 // newScheduler creates new scheduler.
 func newScheduler(ctx context.Context, opt schedulerOption) *scheduler {
+	if opt.Prepare {
+		clog.Infof(ctx, "schedule: prepare mode")
+	}
 	if opt.EnableTrace {
 		clog.Infof(ctx, "schedule: enable trace")
 	}
@@ -223,6 +234,7 @@ func newScheduler(ctx context.Context, opt schedulerOption) *scheduler {
 			outputs: make(map[Target]struct{}),
 		},
 		scanned:     make(map[Target]bool),
+		prepare:     opt.Prepare,
 		enableTrace: opt.EnableTrace,
 	}
 }

@@ -86,6 +86,7 @@ type ninjaCmdRun struct {
 	verbose         bool
 	dryRun          bool
 	clobber         bool
+	prepare         bool
 	failuresAllowed int
 	actionSalt      string
 
@@ -713,6 +714,7 @@ func (c *ninjaCmdRun) init() {
 	c.Flags.BoolVar(&c.verbose, "v", false, "show all command lines while building (alias of --verbose)")
 	c.Flags.BoolVar(&c.dryRun, "n", false, "dry run")
 	c.Flags.BoolVar(&c.clobber, "clobber", false, "clobber build")
+	c.Flags.BoolVar(&c.prepare, "prepare", false, "build inputs of targets, but not build target itself.")
 	c.Flags.IntVar(&c.failuresAllowed, "k", 1, "keep going until N jobs fail (0 means inifinity)")
 	c.Flags.StringVar(&c.actionSalt, "action_salt", "", "action salt")
 
