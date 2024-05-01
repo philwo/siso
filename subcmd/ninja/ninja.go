@@ -1555,18 +1555,27 @@ func checkTargets(ctx context.Context, lastTargetsFile string, targets []string)
 }
 
 func argsGN(args, key string) string {
-	i := strings.Index(args, key)
-	if i < 0 {
-		return ""
+	for _, line := range strings.Split(args, "\n") {
+		i := strings.Index(line, "#")
+		if i >= 0 {
+			line = line[:i]
+		}
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		if !strings.HasPrefix(line, key) {
+			continue
+		}
+		value := strings.TrimPrefix(line, key)
+		value = strings.TrimSpace(value)
+		if !strings.HasPrefix(value, "=") {
+			continue
+		}
+		value = strings.TrimPrefix(value, "=")
+		return strings.TrimSpace(value)
 	}
-	value := strings.TrimSpace(args[i+len(key):])
-	value = strings.TrimPrefix(value, "=")
-	value = strings.TrimSpace(value)
-	i = strings.IndexAny(value, " \r\n")
-	if i >= 0 {
-		value = value[:i]
-	}
-	return value
+	return ""
 }
 
 func cpuinfo() string {
