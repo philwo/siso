@@ -53,10 +53,18 @@ import (
 	"infra/build/siso/ui"
 )
 
+const ninjaUsage = `build the requested targets as ninja.
+
+ $ siso ninja [-C <dir>] [options] [targets...]
+
+`
+
 // Cmd returns the Command for the `ninja` subcommand provided by this package.
 func Cmd(authOpts cred.Options, version string) *subcommands.Command {
 	return &subcommands.Command{
 		UsageLine: "ninja <args>...",
+		ShortDesc: "build the requests targets as ninja",
+		LongDesc:  ninjaUsage,
 		CommandRun: func() subcommands.CommandRun {
 			r := ninjaCmdRun{
 				authOpts: authOpts,
