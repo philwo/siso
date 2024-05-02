@@ -54,28 +54,37 @@ func depsFastStep(ctx context.Context, b *Builder, step *Step) (*Step, error) {
 	if !found {
 		return nil, fmt.Errorf("no fast-deps (deps=%q depfile=%q)", step.cmd.Deps, step.cmd.Depfile)
 	}
-	depsIns, err := step.def.DepInputs(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get fast deps log (deps=%q): %v", step.cmd.Deps, err)
-	}
-	newCmd, err := ds.DepsFastCmd(ctx, b, step.cmd)
+	var newCmd *execute.Cmd
+	// protect from thread exhaustion,
+	// because it would access many files, which would call syscalls
+	// and may create new threads.
+	err := b.scanDepsSema.Do(ctx, func(ctx context.Context) error {
+		depsIns, err := step.def.DepInputs(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to get fast deps log (deps=%q): %w", step.cmd.Deps, err)
+		}
+		newCmd, err = ds.DepsFastCmd(ctx, b, step.cmd)
+		if err != nil {
+			return err
+		}
+		newCmd.ID += "-fast-deps"
+		// Inputs may contains unnecessary inputs.
+		// just needs ToolInputs.
+		stepInputs := newCmd.ToolInputs
+		depsIns = step.def.ExpandedCaseSensitives(ctx, depsIns)
+		inputs, err := fixInputsByDeps(ctx, b, stepInputs, depsIns)
+		if err != nil {
+			clog.Warningf(ctx, "failed to fix inputs by deps: %v", err)
+			return err
+		}
+		clog.Infof(ctx, "fix inputs by deps %d -> %d", len(step.cmd.Inputs), len(inputs))
+		newCmd.Inputs = inputs
+		newCmd.Pure = true
+		return nil
+	})
 	if err != nil {
 		return nil, err
 	}
-	newCmd.ID += "-fast-deps"
-
-	// Inputs may contains unnecessary inputs.
-	// just needs ToolInputs.
-	stepInputs := newCmd.ToolInputs
-	depsIns = step.def.ExpandedCaseSensitives(ctx, depsIns)
-	inputs, err := fixInputsByDeps(ctx, b, stepInputs, depsIns)
-	if err != nil {
-		clog.Warningf(ctx, "failed to fix inputs by deps: %v", err)
-		return nil, err
-	}
-	clog.Infof(ctx, "fix inputs by deps %d -> %d", len(step.cmd.Inputs), len(inputs))
-	newCmd.Inputs = inputs
-	newCmd.Pure = true
 	fastStep := &Step{}
 	*fastStep = *step
 	fastStep.cmd = newCmd
