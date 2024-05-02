@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -248,6 +249,25 @@ func createRequest(ctx context.Context, cmd *execute.Cmd, execTimeout, reclientT
 		}
 	}
 
+	// RBE_compare enables Reproxy's compare mode.
+	var comp bool
+	var localReruns, remoteReruns int
+	if compEnv := os.Getenv("RBE_compare"); compEnv != "" {
+		if comp, err = strconv.ParseBool(compEnv); err != nil {
+			return nil, fmt.Errorf("invalid compare environment variable. RBE_compare=%s", compEnv)
+		}
+	}
+	if localRerunsEnv := os.Getenv("RBE_num_local_reruns"); localRerunsEnv != "" {
+		if localReruns, err = strconv.Atoi(localRerunsEnv); err != nil {
+			return nil, fmt.Errorf("invalid num local reruns environment variable. RBE_num_local_reruns=%s", localRerunsEnv)
+		}
+	}
+	if remoteRerunsEnv := os.Getenv("RBE_num_remote_reruns"); remoteRerunsEnv != "" {
+		if remoteReruns, err = strconv.Atoi(remoteRerunsEnv); err != nil {
+			return nil, fmt.Errorf("invalid num remote reruns environment variable. RBE_num_remote_reruns=%s", remoteRerunsEnv)
+		}
+	}
+
 	md := &ppb.Metadata{EventTimes: map[string]*cpb.TimeInterval{
 		wrapperOverheadKey: {From: command.TimeToProto(time.Now())},
 	}}
@@ -258,9 +278,9 @@ func createRequest(ctx context.Context, cmd *execute.Cmd, execTimeout, reclientT
 		Labels:  cmd.REProxyConfig.Labels,
 		ExecutionOptions: &ppb.ProxyExecutionOptions{
 			ExecutionStrategy: strategy,
-			CompareWithLocal:  false,
-			NumLocalReruns:    0,
-			NumRemoteReruns:   0,
+			CompareWithLocal:  comp,
+			NumLocalReruns:    int32(localReruns),
+			NumRemoteReruns:   int32(remoteReruns),
 			ReclientTimeout:   int32(reclientTimeout.Seconds()),
 			RemoteExecutionOptions: &ppb.RemoteExecutionOptions{
 				AcceptCached:                 !cmd.SkipCacheLookup,
