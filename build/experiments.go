@@ -25,6 +25,7 @@ var knownExperiments = map[string]string{
 	"keep-going-handle-error":     "",
 	"keep-going-impure":           "check siso_localexec",
 	"no-fallback":                 "",
+	"no-fast-deps":                "",
 	"no-fast-deps-fallback":       "",
 }
 
