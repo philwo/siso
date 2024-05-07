@@ -398,9 +398,6 @@ func stepTimeout(ctx context.Context, d string) time.Duration {
 		clog.Warningf(ctx, "failed to parse duration %q: %v", d, err)
 		return defaultTimeout
 	}
-	if experiments.Enabled("no-fallback", "no-fallback: >=1h timeout avoid deadline exceeded error") {
-		return max(defaultTimeout, dur)
-	}
 	return dur
 }
 
