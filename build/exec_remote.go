@@ -6,6 +6,7 @@ package build
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
@@ -57,7 +58,7 @@ func (b *Builder) execRemote(ctx context.Context, step *Step) error {
 			return err
 		})
 		dur := time.Since(started)
-		if code := status.Code(err); noFallback && code == codes.DeadlineExceeded && dur < timeout {
+		if code := status.Code(err); noFallback && (code == codes.DeadlineExceeded || errors.Is(err, context.DeadlineExceeded)) && dur < timeout {
 			clog.Warningf(ctx, "exec remote timedout duration=%s timeout=%s: %v", dur, timeout, err)
 			err = status.Errorf(codes.Unavailable, "reapi timedout %v", err)
 		}
