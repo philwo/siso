@@ -67,6 +67,19 @@ type Graph interface {
 	Filenames() []string
 }
 
+// MissingSourceError is an error of missing source needed for build.
+type MissingSourceError struct {
+	Target   string
+	NeededBy string
+}
+
+func (e MissingSourceError) Error() string {
+	if e.NeededBy != "" {
+		return fmt.Sprintf("%q, needed by %q, missing and no known rule to make it", e.Target, e.NeededBy)
+	}
+	return fmt.Sprintf("%q missing and no known rule to make it", e.Target)
+}
+
 // plan maintains which step to execute next.
 type plan struct {
 	// marked source target
@@ -155,7 +168,7 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 		if log.V(1) {
 			clog.Infof(ctx, "sched target is source? %s", target)
 		}
-		return sched.mark(ctx, graph, target)
+		return sched.mark(ctx, graph, target, next)
 	case errors.Is(err, ErrDuplicateStep):
 		// this step is already processed.
 		if log.V(1) {
@@ -240,14 +253,21 @@ func newScheduler(ctx context.Context, opt schedulerOption) *scheduler {
 }
 
 // mark marks target (exec root relative) as source file.
-func (s *scheduler) mark(ctx context.Context, graph Graph, target Target) error {
+func (s *scheduler) mark(ctx context.Context, graph Graph, target Target, next StepDef) error {
 	fname, err := graph.TargetPath(ctx, target)
 	if err != nil {
 		return err
 	}
 	_, err = s.hashFS.Stat(ctx, s.path.ExecRoot, fname)
 	if err != nil {
-		return fmt.Errorf("missing source %q: %v", target, err)
+		var neededBy string
+		if next != nil && len(next.Outputs(ctx)) > 0 {
+			neededBy = s.path.MaybeToWD(ctx, next.Outputs(ctx)[0])
+		}
+		return MissingSourceError{
+			Target:   s.path.MaybeToWD(ctx, fname),
+			NeededBy: neededBy,
+		}
 	}
 	s.plan.m[target] = true
 	return nil

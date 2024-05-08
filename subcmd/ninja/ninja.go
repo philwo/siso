@@ -180,6 +180,16 @@ func (c *ninjaCmdRun) Run(a subcommands.Application, args []string, env subcomma
 			fmt.Fprintf(os.Stderr, "%v\n", err)
 
 		case errors.As(err, &errBuild):
+			var errMissingSource build.MissingSourceError
+			if errors.As(errBuild.err, &errMissingSource) {
+				msgPrefix := "Schedule Failure"
+				if ui.IsTerminal() {
+					dur = ui.SGR(ui.Bold, dur)
+					msgPrefix = ui.SGR(ui.BackgroundRed, msgPrefix)
+				}
+				fmt.Fprintf(os.Stderr, "\n%6s %s: %v\n", dur, msgPrefix, errMissingSource)
+				return 1
+			}
 			msgPrefix := "Build Failure"
 			if ui.IsTerminal() {
 				dur = ui.SGR(ui.Bold, dur)
