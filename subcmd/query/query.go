@@ -25,6 +25,7 @@ func Cmd() *subcommands.Command {
 						cmdCommands(),
 						cmdDigraph(),
 						cmdIDEAnalysis(),
+						cmdInputs(),
 						cmdRule(),
 						// TODO: add more subcommands (ninja's tool like commands, etc.
 						subcommands.CmdHelp,

@@ -10,6 +10,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"sort"
 
 	"github.com/maruel/subcommands"
 
@@ -18,46 +19,46 @@ import (
 	"infra/build/siso/toolsupport/ninjautil"
 )
 
-const commandsUsage = `list all commands required to rebuild given targets
+const inputsUsage = `list all inputs required to rebuild given targets
 
- $ siso query commands -C <dir> <targets>
+ $ siso query inputs -C <dir> <targets>
 
-prints all commands required to rebuild given targets.
+prints all inputs required to rebuild given targets.
 `
 
-// cmdCommands returns the Command for the `commands` subcommand provided by this package.
-func cmdCommands() *subcommands.Command {
+// cmdInputs returns the Command for the `inputs` subcommand provided by this package.
+func cmdInputs() *subcommands.Command {
 	return &subcommands.Command{
-		UsageLine: "commands [-C <dir>] [<targets>...]",
-		ShortDesc: "list all commands required to rebuild given targets",
-		LongDesc:  commandsUsage,
+		UsageLine: "inputs [-C <dir>] [<targets>...]",
+		ShortDesc: "list all inputs required to rebuild given targets",
+		LongDesc:  inputsUsage,
 		CommandRun: func() subcommands.CommandRun {
-			c := &commandsRun{}
+			c := &inputsRun{}
 			c.init()
 			return c
 		},
 	}
 }
 
-type commandsRun struct {
+type inputsRun struct {
 	subcommands.CommandRunBase
 
 	dir   string
 	fname string
 }
 
-func (c *commandsRun) init() {
+func (c *inputsRun) init() {
 	c.Flags.StringVar(&c.dir, "C", ".", "ninja running directory to find build.ninja")
 	c.Flags.StringVar(&c.fname, "f", "build.ninja", "input build filename (relative to -C)")
 }
 
-func (c *commandsRun) Run(a subcommands.Application, args []string, env subcommands.Env) int {
+func (c *inputsRun) Run(a subcommands.Application, args []string, env subcommands.Env) int {
 	ctx := cli.GetContext(a, c, env)
 	err := c.run(ctx, args)
 	if err != nil {
 		switch {
 		case errors.Is(err, flag.ErrHelp):
-			fmt.Fprintf(os.Stderr, "%v\n%s\n", err, commandsUsage)
+			fmt.Fprintf(os.Stderr, "%v\n%s\n", err, inputsUsage)
 		default:
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		}
@@ -66,7 +67,7 @@ func (c *commandsRun) Run(a subcommands.Application, args []string, env subcomma
 	return 0
 }
 
-func (c *commandsRun) run(ctx context.Context, args []string) error {
+func (c *inputsRun) run(ctx context.Context, args []string) error {
 	state := ninjautil.NewState()
 	p := ninjautil.NewManifestParser(state)
 	err := os.Chdir(c.dir)
@@ -85,23 +86,36 @@ func (c *commandsRun) run(ctx context.Context, args []string) error {
 	for _, n := range nodes {
 		targets = append(targets, n.Path())
 	}
-	g := &commandsGraph{
+	g := &inputsGraph{
 		seen: make(map[string]bool),
 	}
+	isTargets := make(map[string]bool)
 	for _, t := range targets {
+		isTargets[t] = true
 		err := g.Traverse(ctx, state, t)
 		if err != nil {
 			return err
 		}
 	}
+	var inputs []string
+	for t := range g.seen {
+		if isTargets[t] {
+			continue
+		}
+		inputs = append(inputs, t)
+	}
+	sort.Strings(inputs)
+	for _, in := range inputs {
+		fmt.Println(in)
+	}
 	return nil
 }
 
-type commandsGraph struct {
+type inputsGraph struct {
 	seen map[string]bool
 }
 
-func (g *commandsGraph) Traverse(ctx context.Context, state *ninjautil.State, target string) error {
+func (g *inputsGraph) Traverse(ctx context.Context, state *ninjautil.State, target string) error {
 	if g.seen[target] {
 		return nil
 	}
@@ -121,6 +135,5 @@ func (g *commandsGraph) Traverse(ctx context.Context, state *ninjautil.State, ta
 			return err
 		}
 	}
-	fmt.Printf("%s\n", edge.Binding("command"))
 	return nil
 }
