@@ -29,11 +29,17 @@ func fromTokenString(src, token string) (*oauth2.Token, error) {
 	type tokJSON struct {
 		Exp   string `json:"exp"`
 		Email string `json:"email"`
+
+		Error            string `json:"error"`
+		ErrorDescription string `json:"error_description"`
 	}
 	var tok tokJSON
 	err = json.Unmarshal(buf, &tok)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse tokeninfo %q: %w", string(buf), err)
+	}
+	if tok.Error != "" {
+		return nil, fmt.Errorf("token error: %s %s", tok.Error, tok.ErrorDescription)
 	}
 	exp, err := strconv.ParseInt(tok.Exp, 10, 64)
 	if err != nil {
