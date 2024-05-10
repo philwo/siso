@@ -206,6 +206,9 @@ func (depsMSVC) scandeps(ctx context.Context, b *Builder, step *Step) ([]string,
 			Sysroots: params.Sysroots,
 			Timeout:  step.cmd.Timeout,
 		}
+		if experiments.Enabled("no-fallback", "no-fallback has longer timeout for scandeps") {
+			req.Timeout = 2 * req.Timeout
+		}
 		if log.V(1) {
 			clog.Infof(ctx, "scandeps req=%#v", req)
 		}
