@@ -545,6 +545,9 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 			// don't modify .siso_failed_targets, .siso_last_targets by subtool.
 			return
 		}
+		if c.prepare {
+			return
+		}
 		if err != nil {
 			// when batch mode, no need to record failed targets,
 			// as it will build full targets when rebuilding
@@ -1196,6 +1199,7 @@ func doBuild(ctx context.Context, graph *ninjabuild.Graph, bopts build.Options, 
 	clog.Infof(ctx, "rebuild manifest")
 	mfbopts := bopts
 	mfbopts.Clobber = false
+	mfbopts.Prepare = false
 	mfbopts.RebuildManifest = graph.Filename()
 	mfb, err := build.New(ctx, graph, mfbopts)
 	if err != nil {

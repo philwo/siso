@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"sort"
 	"sync"
 	"time"
@@ -116,7 +117,14 @@ type scheduler struct {
 	visited      int
 	scanned      map[Target]bool
 
-	prepare     bool
+	// prepare runs steps to generate inputs for the requested targets,
+	// but not run steps to generate requested targets.
+	prepare bool
+
+	// prepareHeaderOnly runs steps to generate headers needed for
+	// the requested targets.
+	prepareHeaderOnly bool
+
 	enableTrace bool
 }
 
@@ -132,7 +140,7 @@ func schedule(ctx context.Context, sched *scheduler, graph Graph, args ...string
 		if sched.scanned[t] {
 			continue
 		}
-		err := scheduleTarget(ctx, sched, graph, t, nil)
+		err := scheduleTarget(ctx, sched, graph, t, nil, sched.prepare)
 		if err != nil {
 			return fmt.Errorf("failed in schedule %s: %w", t, err)
 		}
@@ -142,9 +150,7 @@ func schedule(ctx context.Context, sched *scheduler, graph Graph, args ...string
 }
 
 // scheduleTarget schedules a build plan for target, which is required to next StepDef, from graph into sched.
-func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target Target, next StepDef) error {
-	isFinalTarget := next == nil
-
+func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target Target, next StepDef, ignore bool) error {
 	sched.scanned[target] = true
 	if sched.marked(target) {
 		if log.V(1) {
@@ -208,7 +214,23 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 	waits := make(map[Target]struct{}, len(inputs))
 	for _, in := range inputs {
 		if !sched.scanned[in] {
-			err := scheduleTarget(ctx, sched, graph, in, next)
+			// if this target is ignored, but "in" is header,
+			// then it will not ignore steps to generate "in"
+			// and "in"'s inputs recursively.
+			var inIgnore bool
+			if ignore && sched.prepareHeaderOnly {
+				fname, err := graph.TargetPath(ctx, in)
+				if err != nil {
+					return fmt.Errorf("schedule bad target %s: %w", in, err)
+				}
+				switch filepath.Ext(fname) {
+				case ".h", ".hxx", ".hpp", ".inc":
+				default:
+					clog.Infof(ctx, "ignore schedule for %s", fname)
+					inIgnore = true
+				}
+			}
+			err := scheduleTarget(ctx, sched, graph, in, next, inIgnore)
 			if err != nil {
 				return fmt.Errorf("schedule %s: %w", in, err)
 			}
@@ -220,8 +242,8 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 			waits[in] = struct{}{}
 		}
 	}
-	if sched.prepare && isFinalTarget {
-		clog.Infof(ctx, "sched: not build final target %s", target)
+	if ignore {
+		clog.Infof(ctx, "sched: ignore target %s", target)
 		return nil
 	}
 	sched.add(ctx, graph, newStep, waits, outputs)
@@ -230,8 +252,13 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 
 // newScheduler creates new scheduler.
 func newScheduler(ctx context.Context, opt schedulerOption) *scheduler {
+	var prepareHeaderOnly bool
 	if opt.Prepare {
 		clog.Infof(ctx, "schedule: prepare mode")
+		if experiments.Enabled("prepare-header-only", "prepare header only") {
+			clog.Infof(ctx, "schedule: prepare header only mode")
+			prepareHeaderOnly = true
+		}
 	}
 	if opt.EnableTrace {
 		clog.Infof(ctx, "schedule: enable trace")
@@ -246,9 +273,10 @@ func newScheduler(ctx context.Context, opt schedulerOption) *scheduler {
 			waits:   make(map[Target][]*Step),
 			outputs: make(map[Target]struct{}),
 		},
-		scanned:     make(map[Target]bool),
-		prepare:     opt.Prepare,
-		enableTrace: opt.EnableTrace,
+		scanned:           make(map[Target]bool),
+		prepare:           opt.Prepare,
+		prepareHeaderOnly: prepareHeaderOnly,
+		enableTrace:       opt.EnableTrace,
 	}
 }
 

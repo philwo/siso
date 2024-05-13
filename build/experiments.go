@@ -27,6 +27,7 @@ var knownExperiments = map[string]string{
 	"no-fallback":                 "",
 	"no-fast-deps":                "",
 	"no-fast-deps-fallback":       "",
+	"prepare-header-only":         "",
 }
 
 type experimentFeature struct {
