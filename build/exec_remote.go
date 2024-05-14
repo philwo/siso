@@ -22,7 +22,6 @@ import (
 func (b *Builder) execRemote(ctx context.Context, step *Step) error {
 	ctx, span := trace.NewSpan(ctx, "exec-remote")
 	defer span.Close(nil)
-	started := time.Now()
 	noFallback := experiments.Enabled("no-fallback", "no-fallback tries for reapi deadline exceeded at most 4 times")
 	var timeout time.Duration
 	if noFallback {
@@ -33,6 +32,7 @@ func (b *Builder) execRemote(ctx context.Context, step *Step) error {
 		timeout = step.cmd.Timeout * 4
 	}
 	clog.Infof(ctx, "exec remote %s", step.cmd.Desc)
+	var reExecDur time.Duration
 	err := retry.Do(ctx, func() error {
 		err := b.remoteSema.Do(ctx, func(ctx context.Context) error {
 			reExecStarted := time.Now()
@@ -57,9 +57,9 @@ func (b *Builder) execRemote(ctx context.Context, step *Step) error {
 			step.metrics.done(ctx, step)
 			return err
 		})
-		dur := time.Since(started)
-		if code := status.Code(err); noFallback && (code == codes.DeadlineExceeded || errors.Is(err, context.DeadlineExceeded)) && dur < timeout {
-			clog.Warningf(ctx, "exec remote timedout duration=%s timeout=%s: %v", dur, timeout, err)
+		reExecDur += time.Duration(step.metrics.RunTime)
+		if code := status.Code(err); noFallback && (code == codes.DeadlineExceeded || errors.Is(err, context.DeadlineExceeded)) && reExecDur < timeout {
+			clog.Warningf(ctx, "exec remote timedout duration=%s timeout=%s: %v", reExecDur, timeout, err)
 			err = status.Errorf(codes.Unavailable, "reapi timedout %v", err)
 		}
 		return err
