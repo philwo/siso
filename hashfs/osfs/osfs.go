@@ -164,7 +164,7 @@ func (fs *OSFS) Symlink(ctx context.Context, oldname, newname string) error {
 // WriteFile writes data to the named file, creating it if necessary.
 func (fs *OSFS) WriteFile(ctx context.Context, name string, data []byte, perm fs.FileMode) error {
 	started := time.Now()
-	err := os.WriteFile(name, data, perm)
+	err := writeFile(name, data, perm)
 	fs.WriteDone(len(data), err)
 	if dur := time.Since(started); dur > 1*time.Minute {
 		logSlow(ctx, name, dur, err)
