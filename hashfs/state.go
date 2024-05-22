@@ -358,6 +358,18 @@ func saveFile(ctx context.Context, fname string, data []byte) error {
 
 // Save persists state in fname.
 func Save(ctx context.Context, fname string, state *pb.State) error {
+	defer func() {
+		r := recover()
+		if r == nil {
+			return
+		}
+		// state is broken?? panic in proto.Marshal b/323265794
+		clog.Warningf(ctx, "state: %d entries", len(state.Entries))
+		for i, ent := range state.Entries {
+			clog.Warningf(ctx, "entries[%d] = %v", i, ent)
+		}
+		panic(r)
+	}()
 	b, err := proto.Marshal(state)
 	if err != nil {
 		return err
@@ -437,6 +449,7 @@ func (hfs *HashFS) State(ctx context.Context) *pb.State {
 				}
 			}
 			if !e.d.IsZero() || e.target != "" {
+				e.mu.Lock()
 				state.Entries = append(state.Entries, &pb.Entry{
 					Id: &pb.FileID{
 						ModTime: e.mtime.UnixNano(),
@@ -449,8 +462,10 @@ func (hfs *HashFS) State(ctx context.Context) *pb.State {
 					Action:       fromDigest(e.action),
 					UpdatedTime:  e.updatedTime.UnixNano(),
 				})
+				e.mu.Unlock()
 			} else if e.directory != nil && len(e.cmdhash) > 0 {
 				// preserve dir for cmdhash
+				e.mu.Lock()
 				state.Entries = append(state.Entries, &pb.Entry{
 					Id: &pb.FileID{
 						ModTime: e.mtime.UnixNano(),
@@ -460,6 +475,7 @@ func (hfs *HashFS) State(ctx context.Context) *pb.State {
 					Action:      fromDigest(e.action),
 					UpdatedTime: e.updatedTime.UnixNano(),
 				})
+				e.mu.Unlock()
 			} else if len(e.cmdhash) > 0 {
 				clog.Warningf(ctx, "wrong entry for %s: cmdhash is set, but no digest?", name)
 			}
