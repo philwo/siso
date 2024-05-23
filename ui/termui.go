@@ -74,11 +74,16 @@ func (s *termSpinner) Done(format string, args ...any) {
 
 // TermUI is a terminal-based UI.
 type TermUI struct {
-	width int
+	width  int
+	height int
 }
 
 func (t *TermUI) init() {
-	t.width, _, _ = term.GetSize(int(os.Stdout.Fd()))
+	t.width, t.height, _ = term.GetSize(int(os.Stdout.Fd()))
+}
+
+func (t *TermUI) Height() int {
+	return t.height
 }
 
 // PrintLines implements the ui.ui interface.

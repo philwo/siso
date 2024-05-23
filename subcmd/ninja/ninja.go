@@ -1238,6 +1238,15 @@ func doBuild(ctx context.Context, graph *ninjabuild.Graph, bopts build.Options, 
 	if err != nil {
 		return stats, err
 	}
+	hctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	go func() {
+		err := newStatuszServer(hctx, b)
+		if err != nil {
+			clog.Warningf(ctx, "statusz: %v", err)
+		}
+	}()
+
 	defer func(ctx context.Context) {
 		cerr := b.Close()
 		if cerr != nil {

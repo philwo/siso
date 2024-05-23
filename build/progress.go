@@ -8,6 +8,7 @@ import (
 	"container/heap"
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -233,4 +234,45 @@ func (p *progress) step(ctx context.Context, b *Builder, step *Step, s string) {
 	p.mu.Lock()
 	p.ts = time.Now()
 	p.mu.Unlock()
+}
+
+type ActiveStepInfo struct {
+	ID    string
+	Desc  string
+	Phase string
+	Dur   string
+}
+
+func (p *progress) ActiveSteps() []ActiveStepInfo {
+	p.mu.Lock()
+	actives := make([]*stepInfo, len(p.actives))
+	copy(actives, p.actives)
+	p.mu.Unlock()
+	now := time.Now()
+	var as []*stepInfo
+	for _, s := range actives {
+		phase := s.step.phase().String()
+		if phase == "done" {
+			continue
+		}
+		as = append(as, s)
+	}
+	sort.Slice(as, func(i, j int) bool {
+		return as[i].step.startTime.Before(as[j].step.startTime)
+	})
+
+	activeSteps := make([]ActiveStepInfo, 0, len(as))
+	for _, s := range as {
+		phase := s.step.phase().String()
+		if phase == "done" {
+			continue
+		}
+		activeSteps = append(activeSteps, ActiveStepInfo{
+			ID:    s.step.String(),
+			Desc:  s.desc,
+			Phase: phase,
+			Dur:   ui.FormatDuration(now.Sub(s.step.startTime)),
+		})
+	}
+	return activeSteps
 }

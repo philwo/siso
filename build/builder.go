@@ -1047,3 +1047,7 @@ func (b *Builder) prepareAllOutDirs(ctx context.Context) error {
 	clog.Infof(ctx, "prepare out dirs %d in %s", len(dirs), time.Since(started))
 	return nil
 }
+
+func (b *Builder) ActiveSteps() []ActiveStepInfo {
+	return b.progress.ActiveSteps()
+}
