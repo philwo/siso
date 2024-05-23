@@ -1615,13 +1615,18 @@ func (e *entry) flush(ctx context.Context, fname string, osfs *osfs.OSFS) error 
 			if ok {
 				srcname = lsrc.Fname
 			}
-			buf, err := digest.DataToBytes(ctx, digest.NewData(e.src, d))
+			// write into tmp and rename after remove.
+			// e.src may be the same as fname, but
+			// we may need to remove fname for some reason
+			// (hardlink etc).
+			tmpname := filepath.Join(filepath.Dir(fname), "."+filepath.Base(fname)+".tmp")
+			err := osfs.WriteDigestData(ctx, tmpname, e.src, e.mode)
 			if err != nil {
-				return fmt.Errorf("flush %s size=%d: %w", fname, d.SizeBytes, err)
+				return fmt.Errorf("flush tmp %s size=%d: %w", tmpname, d.SizeBytes, err)
 			}
 			removeBeforeWrite()
 			clog.Infof(ctx, "flush %s %s from source %s", fname, d, srcname)
-			err = osfs.WriteFile(ctx, fname, buf, e.mode)
+			err = osfs.Rename(ctx, tmpname, fname)
 			return err
 		}()
 	} else {

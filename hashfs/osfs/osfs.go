@@ -21,6 +21,7 @@ import (
 	"infra/build/siso/o11y/clog"
 	"infra/build/siso/o11y/iometrics"
 	"infra/build/siso/reapi/digest"
+	"infra/build/siso/reapi/retry"
 )
 
 // defaultDigestXattr is default xattr for digest. http://shortn/_8GHggPD2vw
@@ -150,6 +151,17 @@ func (fs *OSFS) Remove(ctx context.Context, name string) error {
 	return err
 }
 
+// Rename renames oldpath to newpath.
+func (fs *OSFS) Rename(ctx context.Context, oldpath, newpath string) error {
+	started := time.Now()
+	err := os.Rename(oldpath, newpath)
+	fs.OpsDone(err)
+	if dur := time.Since(started); dur > 1*time.Minute {
+		logSlow(ctx, newpath, dur, err)
+	}
+	return err
+}
+
 // Symlink creates newname as a symbolic link to oldname.
 func (fs *OSFS) Symlink(ctx context.Context, oldname, newname string) error {
 	started := time.Now()
@@ -166,6 +178,34 @@ func (fs *OSFS) WriteFile(ctx context.Context, name string, data []byte, perm fs
 	started := time.Now()
 	err := writeFile(name, data, perm)
 	fs.WriteDone(len(data), err)
+	if dur := time.Since(started); dur > 1*time.Minute {
+		logSlow(ctx, name, dur, err)
+	}
+	return err
+}
+
+// WriteDigestData writes digest source into the named file.
+func (fs *OSFS) WriteDigestData(ctx context.Context, name string, src digest.Source, perm fs.FileMode) error {
+	started := time.Now()
+	var n int64
+	err := retry.Do(ctx, func() error {
+		r, err := src.Open(ctx)
+		if err != nil {
+			return err
+		}
+		defer r.Close()
+		w, err := openForWrite(name, perm)
+		if err != nil {
+			return err
+		}
+		n, err = io.Copy(w, r)
+		cerr := w.Close()
+		if err == nil {
+			err = cerr
+		}
+		return err
+	})
+	fs.WriteDone(int(n), err)
 	if dur := time.Since(started); dur > 1*time.Minute {
 		logSlow(ctx, name, dur, err)
 	}

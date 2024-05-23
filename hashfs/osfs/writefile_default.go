@@ -7,10 +7,15 @@
 package osfs
 
 import (
+	"io"
 	"io/fs"
 	"os"
 )
 
 func writeFile(name string, data []byte, perm fs.FileMode) error {
 	return os.WriteFile(name, data, perm)
+}
+
+func openForWrite(name string, perm fs.FileMode) (io.WriteCloser, error) {
+	return os.OpenFile(name, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, perm)
 }
