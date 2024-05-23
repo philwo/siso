@@ -13,6 +13,7 @@ import (
 
 	"cloud.google.com/go/longrunning/autogen/longrunningpb"
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
+	log "github.com/golang/glog"
 	spb "google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -76,6 +77,17 @@ retryLoop:
 				if !op.GetDone() {
 					waitReq = &rpb.WaitExecutionRequest{
 						Name: opName,
+					}
+
+					metadata := &rpb.ExecuteOperationMetadata{}
+					err = op.GetMetadata().UnmarshalTo(metadata)
+					if err != nil {
+						clog.Warningf(ctx, "failed to unmarshal metadata: %v", err)
+					} else {
+						clog.Infof(ctx, "operation stage: %v", metadata.GetStage())
+						if log.V(1) {
+							clog.Infof(ctx, "operation metadata: %v", metadata)
+						}
 					}
 					continue
 				}
