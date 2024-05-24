@@ -33,6 +33,7 @@ import (
 	"infra/build/siso/toolsupport/makeutil"
 	"infra/build/siso/toolsupport/ninjautil"
 	"infra/build/siso/toolsupport/shutil"
+	"infra/build/siso/ui"
 )
 
 // go/reqs-for-peep
@@ -92,6 +93,7 @@ func (c *ideAnalysisRun) Run(a subcommands.Application, args []string, env subco
 }
 
 func (c *ideAnalysisRun) run(ctx context.Context, args []string) error {
+	started := time.Now()
 	switch c.format {
 	case "proto", "prototext", "json":
 	default:
@@ -119,6 +121,7 @@ func (c *ideAnalysisRun) run(ctx context.Context, args []string) error {
 		return err
 	}
 	fmt.Printf("%s", buf)
+	fmt.Fprintf(os.Stderr, "siso query ideanalysis in %s\n", ui.FormatDuration(time.Since(started)))
 	return nil
 }
 
@@ -171,6 +174,7 @@ func (c *ideAnalysisRun) analyze(ctx context.Context, args []string) (*pb.IdeAna
 		}
 		// hashFS.SetState ?
 		analyzer.fsm = hashfs.StateMap(fsstate)
+		fmt.Fprintf(os.Stderr, "load hashfs state in %s\n", ui.FormatDuration(time.Since(started)))
 		return nil
 	})
 
@@ -180,6 +184,7 @@ func (c *ideAnalysisRun) analyze(ctx context.Context, args []string) (*pb.IdeAna
 		p := ninjautil.NewManifestParser(analyzer.state)
 		err := p.Load(gctx, c.fname)
 		clog.Infof(gctx, "ninja build in %s: %v", time.Since(started), err)
+		fmt.Fprintf(os.Stderr, "load ninja build in %s\n", ui.FormatDuration(time.Since(started)))
 		return err
 	})
 	err = eg.Wait()
@@ -315,6 +320,7 @@ func (a *ideAnalyzer) analyzeCPP(ctx context.Context, edge *ninjautil.Edge, resu
 		Frameworks: params.Frameworks,
 		Sysroots:   params.Sysroots,
 	}
+	started := time.Now()
 	clog.Infof(ctx, "scandeps %#v", req)
 	incs, err := a.scanDeps.Scan(ctx, a.path.ExecRoot, req)
 	if err != nil {
@@ -325,6 +331,8 @@ func (a *ideAnalyzer) analyzeCPP(ctx context.Context, edge *ninjautil.Edge, resu
 		return result, nil
 	}
 	clog.Infof(ctx, "scandeps results: %q", incs)
+	fmt.Fprintf(os.Stderr, "%s scandeps in %s\n", result.SourceFilePath, ui.FormatDuration(time.Since(started)))
+	started = time.Now()
 
 	for _, inc := range incs {
 		incTarget := a.path.MaybeToWD(ctx, inc)
@@ -363,6 +371,7 @@ func (a *ideAnalyzer) analyzeCPP(ctx context.Context, edge *ninjautil.Edge, resu
 	result.Status = &pb.AnalysisResult_Status{
 		Code: pb.AnalysisResult_Status_CODE_OK,
 	}
+	fmt.Fprintf(os.Stderr, "%s analysis result in %s\n", result.SourceFilePath, ui.FormatDuration(time.Since(started)))
 	return result, deps
 }
 
