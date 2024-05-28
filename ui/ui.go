@@ -39,7 +39,7 @@ type UI interface {
 var Default UI
 
 func init() {
-	if term.IsTerminal(int(os.Stdout.Fd())) {
+	if os.Getenv("TERM") != "dumb" && term.IsTerminal(int(os.Stdout.Fd())) {
 		termUI := &TermUI{}
 		termUI.init()
 		Default = termUI
