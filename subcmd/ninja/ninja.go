@@ -275,6 +275,29 @@ func (f flagError) Error() string {
 
 var errNothingToDo = errors.New("nothing to do")
 
+type errAlreadyLocked struct {
+	err     error
+	bufErr  error
+	fname   string
+	pidfile string
+	owner   string
+}
+
+func (l errAlreadyLocked) Error() string {
+	if l.bufErr != nil && l.pidfile != "" {
+		return fmt.Sprintf("%s is locked, and failed to read %s: %v", l.fname, l.pidfile, l.bufErr)
+	} else if l.bufErr != nil {
+		return fmt.Sprintf("%s is locked, and failed to read: %v", l.fname, l.bufErr)
+	}
+	return fmt.Sprintf("%s is locked by %s: %v", l.fname, l.owner, l.err)
+}
+func (l errAlreadyLocked) Unwrap() error {
+	if l.err != nil {
+		return l.err
+	}
+	return l.bufErr
+}
+
 type errInterrupted struct{}
 
 func (errInterrupted) Error() string        { return "interrupt by signal" }
@@ -366,9 +389,33 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		case err != nil:
 			return stats, err
 		case err == nil:
-			err = lock.Lock()
-			if err != nil {
-				return stats, err
+			var owner string
+			spin := ui.Default.NewSpinner()
+			for {
+				err = lock.Lock()
+				alreadyLocked := &errAlreadyLocked{}
+				if errors.As(err, &alreadyLocked) {
+					if owner != alreadyLocked.owner {
+						if owner != "" {
+							spin.Done("lock holder %s completed", owner)
+						}
+						owner = alreadyLocked.owner
+						spin.Start("waiting for lock holder %s..", owner)
+					}
+					select {
+					case <-ctx.Done():
+						return stats, context.Cause(ctx)
+					case <-time.After(500 * time.Millisecond):
+						continue
+					}
+				} else if err != nil {
+					spin.Stop(err)
+					return stats, err
+				}
+				if owner != "" {
+					spin.Done("lock holder %s completed", owner)
+				}
+				break
 			}
 			defer func() {
 				err := lock.Unlock()

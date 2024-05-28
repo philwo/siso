@@ -37,12 +37,21 @@ func (l *lockFile) Lock() error {
 	if err != nil {
 		if errors.Is(err, unix.EWOULDBLOCK) {
 			_, _ = l.f.Seek(0, io.SeekStart)
-			buf, err := io.ReadAll(l.f)
-			if err != nil {
-				return fmt.Errorf("%s is locked, and failed to read: %w", l.f.Name(), err)
+			buf, bufErr := io.ReadAll(l.f)
+			return &errAlreadyLocked{
+				err:     err,
+				bufErr:  bufErr,
+				fname:   l.f.Name(),
+				pidfile: "",
+				owner:   string(buf),
 			}
-			return fmt.Errorf("%s is locked by %s: %w", l.f.Name(), string(buf), unix.EWOULDBLOCK)
 		}
+		return err
+	}
+	if err = l.f.Truncate(0); err != nil {
+		return err
+	}
+	if _, err = l.f.Seek(0, io.SeekStart); err != nil {
 		return err
 	}
 	fmt.Fprintf(l.f, "pid=%d", os.Getpid())

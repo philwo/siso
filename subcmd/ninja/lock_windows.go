@@ -45,11 +45,17 @@ func (l *lockFile) Lock() error {
 	if err != nil {
 		if errors.Is(err, windows.ERROR_LOCK_VIOLATION) {
 			// can't read lockfile when locked.
-			buf, err := os.ReadFile(l.pidfile)
-			if err != nil {
-				return fmt.Errorf("%s is locked, and failed to read %s: %w", l.f.Name(), l.pidfile, err)
+			buf, bufErr := os.ReadFile(l.pidfile)
+			if bufErr != nil {
+				err = bufErr
 			}
-			return fmt.Errorf("%s is locked by %s: %w", l.f.Name(), string(buf), windows.ERROR_LOCK_VIOLATION)
+			return &errAlreadyLocked{
+				err:     err,
+				bufErr:  bufErr,
+				fname:   l.f.Name(),
+				pidfile: l.pidfile,
+				owner:   string(buf),
+			}
 		}
 		return err
 	}
