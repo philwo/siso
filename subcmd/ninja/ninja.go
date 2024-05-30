@@ -864,15 +864,6 @@ func (c *ninjaCmdRun) initWorkdirs(ctx context.Context) (string, error) {
 	}
 	c.startDir = execRoot
 	clog.Infof(ctx, "wd: %s", execRoot)
-	if !filepath.IsAbs(c.configRepoDir) {
-		execRoot, err = detectExecRoot(ctx, execRoot, c.configRepoDir)
-		if err != nil {
-			return "", err
-		}
-		c.configRepoDir = filepath.Join(execRoot, c.configRepoDir)
-	}
-	clog.Infof(ctx, "exec_root: %s", execRoot)
-
 	err = os.Chdir(c.dir)
 	if err != nil {
 		return "", err
@@ -882,6 +873,16 @@ func (c *ninjaCmdRun) initWorkdirs(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
+	if !filepath.IsAbs(c.configRepoDir) {
+		execRoot, err = detectExecRoot(ctx, cwd, c.configRepoDir)
+		if err != nil {
+			return "", err
+		}
+		c.configRepoDir = filepath.Join(execRoot, c.configRepoDir)
+	}
+	clog.Infof(ctx, "exec_root: %s", execRoot)
+
 	// recalculate dir as relative to exec_root.
 	// recipe may use absolute path for -C.
 	rdir, err := filepath.Rel(execRoot, cwd)
@@ -893,6 +894,9 @@ func (c *ninjaCmdRun) initWorkdirs(ctx context.Context) (string, error) {
 	}
 	c.dir = rdir
 	clog.Infof(ctx, "working_directory in exec_root: %s", c.dir)
+	if c.startDir != execRoot {
+		ui.Default.PrintLines(fmt.Sprintf("exec_root=%s dir=%s\n", execRoot, c.dir))
+	}
 	return execRoot, nil
 }
 
