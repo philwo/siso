@@ -63,9 +63,10 @@ var (
 func DefaultLimits(ctx context.Context) Limits {
 	limitOnce.Do(func() {
 		numCPU := runtime.NumCPU()
+		stepLimit := limitForStep(ctx, numCPU)
 		defaultLimits = Limits{
-			Step:      stepLimitFactor * numCPU,
-			Preproc:   stepLimitFactor * numCPU,
+			Step:      stepLimit,
+			Preproc:   stepLimit,
 			ScanDeps:  scanDepsLimitFactor * numCPU,
 			Local:     numCPU,
 			FastLocal: limitForFastLocal(ctx, numCPU),
@@ -147,6 +148,17 @@ func UnitTestLimits(ctx context.Context) Limits {
 // Test should restore the original value after the test.
 func SetDefaultForTest(limits Limits) {
 	defaultLimits = limits
+}
+
+func limitForStep(ctx context.Context, numCPU int) int {
+	limit := stepLimitFactor * numCPU
+	// limit step for reproxy to protect from thread exceeeds.
+	// reclient_helper.py sets the RBE_server_address
+	// https://chromium.googlesource.com/chromium/tools/depot_tools.git/+/e13840bd9a04f464e3bef22afac1976fc15a96a0/reclient_helper.py#138
+	if v := os.Getenv("RBE_server_address"); v != "" {
+		return min(reproxyLimitCap*2, limit)
+	}
+	return limit
 }
 
 func limitForRemote(ctx context.Context, numCPU int) int {
