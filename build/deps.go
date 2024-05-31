@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -225,6 +226,13 @@ func fixInputsByDeps(ctx context.Context, b *Builder, stepInputs, depsIns []stri
 	entries, err := b.hashFS.Entries(ctx, b.path.ExecRoot, depsIns)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get entries: %w", err)
+	}
+	if len(entries) < len(depsIns) {
+		// if deps inputs disappeared, it would be problematic
+		// to use the depsIns.
+		// don't use .siso_deps, but fallback to scandeps to
+		// collect actual include files.
+		return nil, fmt.Errorf("missing files in deps %d: %w", len(depsIns)-len(entries), fs.ErrNotExist)
 	}
 	inputs := stepInputs
 	for _, ent := range entries {
