@@ -26,6 +26,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"infra/build/siso/hashfs/osfs"
+	pb "infra/build/siso/hashfs/proto"
 	"infra/build/siso/o11y/clog"
 	"infra/build/siso/o11y/trace"
 	"infra/build/siso/reapi/digest"
@@ -72,6 +73,9 @@ type HashFS struct {
 	previouslyGeneratedFiles *sync.Map
 
 	executables map[string]bool
+
+	// writer for updated entries journal.
+	journal io.WriteCloser
 }
 
 // New creates a HashFS.
@@ -99,14 +103,38 @@ func New(ctx context.Context, opt Option) (*HashFS, error) {
 	}
 	if opt.StateFile != "" {
 		start := time.Now()
+		journalFile := opt.StateFile + ".journal"
+
 		fstate, err := Load(ctx, opt.StateFile)
 		if err != nil {
 			clog.Warningf(ctx, "Failed to load fs state from %s: %v", opt.StateFile, err)
+			fstate = &pb.State{}
 		} else {
 			clog.Infof(ctx, "Load fs state from %s: %s", opt.StateFile, time.Since(start))
-			if err := fsys.SetState(ctx, fstate); err != nil {
-				return nil, err
+		}
+		// if previous build didn't finish properly, journal file
+		// is not removed, so recover last build updates from the journal.
+		reconciled := loadJournal(ctx, journalFile, fstate)
+		if err := fsys.SetState(ctx, fstate); err != nil {
+			return nil, err
+		}
+		if reconciled {
+			// save fstate to make it base state for next journaling.
+			err := Save(ctx, opt.StateFile, fstate)
+			if err != nil {
+				clog.Errorf(ctx, "Failed to save reconciled fs state in %s: %v", opt.StateFile, err)
 			}
+		}
+		err = os.Remove(journalFile)
+		if err != nil && !errors.Is(err, fs.ErrNotExist) {
+			clog.Warningf(ctx, "Failed to remove journal: %v", err)
+		}
+
+		f, err := os.Create(journalFile)
+		if err != nil {
+			clog.Warningf(ctx, "Failed to create fs state journal: %v", err)
+		} else {
+			fsys.journal = f
 		}
 	}
 	go fsys.digester.start()
@@ -131,6 +159,13 @@ func (hfs *HashFS) Close(ctx context.Context) error {
 	hfs.digester.stop(ctx)
 	if hfs.opt.StateFile == "" {
 		return nil
+	}
+	if hfs.journal != nil {
+		err := hfs.journal.Close()
+		if err != nil {
+			clog.Warningf(ctx, "Failed to close journal %v", err)
+		}
+		hfs.journal = nil
 	}
 	if hfs.clean {
 		return nil
@@ -445,7 +480,11 @@ func (hfs *HashFS) WriteFile(ctx context.Context, root, fname string, b []byte, 
 	}
 	err := hfs.dirStoreAndNotify(ctx, fname, e)
 	clog.Infof(ctx, "writefile %s x:%t mtime:%s: %v", fname, isExecutable, mtime, err)
-	return err
+	if err != nil {
+		return err
+	}
+	hfs.journalEntry(ctx, fname, e)
+	return nil
 }
 
 // Symlink creates a symlink to target at root/linkpath with mtime and cmdhash.
@@ -469,7 +508,11 @@ func (hfs *HashFS) Symlink(ctx context.Context, root, target, linkpath string, m
 	}
 	err := hfs.dirStoreAndNotify(ctx, linkfname, e)
 	clog.Infof(ctx, "symlink @%s %s -> %s: %v", root, linkpath, target, err)
-	return err
+	if err != nil {
+		return err
+	}
+	hfs.journalEntry(ctx, linkfname, e)
+	return nil
 }
 
 // Copy copies a file from root/src to root/dst with mtime and cmdhash.
@@ -531,6 +574,7 @@ func (hfs *HashFS) Copy(ctx context.Context, root, src, dst string, mtime time.T
 	if err != nil {
 		return err
 	}
+	hfs.journalEntry(ctx, dstfname, newEnt)
 	clog.Infof(ctx, "copy %s to %s", srcfname, dstfname)
 	return nil
 }
@@ -587,7 +631,13 @@ func (hfs *HashFS) Mkdir(ctx context.Context, root, dirname string, cmdhash []by
 		}
 	}
 	clog.Infof(ctx, "mkdir %s %s: %v", dirname, mtime, err)
-	return err
+	if err != nil {
+		return err
+	}
+	if len(cmdhash) > 0 {
+		hfs.journalEntry(ctx, dirname, e)
+	}
+	return nil
 }
 
 // Remove removes a file at root/fname.
@@ -958,6 +1008,7 @@ func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []Update
 			if err != nil {
 				return err
 			}
+			hfs.journalEntry(ctx, fname, e)
 			if ent.IsLocal && e.isChanged && e.target == "" {
 				// Update mtime for the local entry if it has changed.
 				// Don't update mtime for symlink,
@@ -1003,6 +1054,7 @@ func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []Update
 			if err != nil {
 				return err
 			}
+			hfs.journalEntry(ctx, fname, e)
 			if ent.IsLocal && e.isChanged {
 				err = hfs.OS.Chtimes(ctx, fname, time.Now(), e.getMtime())
 				if errors.Is(err, fs.ErrNotExist) {
@@ -1037,6 +1089,7 @@ func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []Update
 			if err != nil {
 				return err
 			}
+			hfs.journalEntry(ctx, fname, e)
 		default: // directory
 			lready := make(chan bool, 1)
 			if ent.IsLocal {
@@ -1061,6 +1114,7 @@ func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []Update
 			if err != nil {
 				return err
 			}
+			hfs.journalEntry(ctx, fname, e)
 			err = hfs.OS.Chtimes(ctx, fname, time.Now(), ent.ModTime)
 			if err != nil {
 				clog.Warningf(ctx, "failed to update dir mtime %s: %v", fname, err)

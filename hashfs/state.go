@@ -9,6 +9,7 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"flag"
 	"io"
@@ -374,7 +375,17 @@ func Save(ctx context.Context, fname string, state *pb.State) error {
 	if err != nil {
 		return err
 	}
-	return saveFile(ctx, fname, b)
+	err = saveFile(ctx, fname, b)
+	if err != nil {
+		return err
+	}
+	// Journal data are already included in state.
+	// Remove journal file as it is not needed to reconcile in next build.
+	err = os.Remove(fname + ".journal")
+	if !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	return nil
 }
 
 // State returns a State of the HashFS.
@@ -490,4 +501,76 @@ func StateMap(s *pb.State) map[string]*pb.Entry {
 		m[e.Name] = e
 	}
 	return m
+}
+
+func loadJournal(ctx context.Context, fname string, state *pb.State) bool {
+	started := time.Now()
+	b, err := os.ReadFile(fname)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			clog.Infof(ctx, "no fs state journal: %v", err)
+		} else {
+			clog.Warningf(ctx, "Failed to load journal: %v", err)
+		}
+		return false
+	}
+	cnt, broken := 0, 0
+	m := StateMap(state)
+	dec := json.NewDecoder(bytes.NewReader(b))
+	for dec.More() {
+		ent := &pb.Entry{}
+		err := dec.Decode(&ent)
+		if err != nil {
+			clog.Warningf(ctx, "Failed to decode journal: %v", err)
+			broken++
+			continue
+		}
+		m[ent.Name] = ent
+		if log.V(1) {
+			clog.Infof(ctx, "from journal %s", ent.Name)
+		}
+		cnt++
+	}
+	if cnt == 0 {
+		return false
+	}
+	var keys []string
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	state.Entries = make([]*pb.Entry, 0, len(keys))
+	for _, k := range keys {
+		state.Entries = append(state.Entries, m[k])
+	}
+	clog.Infof(ctx, "reconcile from journal %d entries (%d broken) in %s", cnt, broken, time.Since(started))
+	return true
+}
+
+func (hfs *HashFS) journalEntry(ctx context.Context, fname string, e *entry) {
+	if hfs.journal == nil {
+		return
+	}
+	if e.digest().IsZero() {
+		hfs.digester.compute(ctx, fname, e)
+	}
+	e.mu.Lock()
+	ent := &pb.Entry{
+		Id: &pb.FileID{
+			ModTime: e.mtime.UnixNano(),
+		},
+		Name:         fname,
+		Digest:       fromDigest(e.d),
+		IsExecutable: e.mode&0111 != 0,
+		Target:       e.target,
+		CmdHash:      e.cmdhash,
+		Action:       fromDigest(e.action),
+		UpdatedTime:  e.updatedTime.UnixNano(),
+	}
+	e.mu.Unlock()
+	enc := json.NewEncoder(hfs.journal)
+	err := enc.Encode(ent)
+	if err != nil {
+		clog.Warningf(ctx, "Failed to journal entry %s: %v", fname, err)
+	}
 }
