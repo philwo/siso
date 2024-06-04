@@ -10,12 +10,12 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"path"
 	"strings"
 	"time"
 
 	"github.com/bazelbuild/remote-apis-sdks/go/pkg/balancer"
-	configpb "github.com/bazelbuild/remote-apis-sdks/go/pkg/balancer/proto"
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
 	"golang.org/x/sync/singleflight"
 	"google.golang.org/grpc"
@@ -84,10 +84,15 @@ func (o Option) IsValid() bool {
 	return o.Address != "" && o.Instance != ""
 }
 
+type grpcClientConn interface {
+	grpc.ClientConnInterface
+	io.Closer
+}
+
 // Client is a remote exec API client.
 type Client struct {
 	opt  Option
-	conn *grpc.ClientConn
+	conn grpcClientConn
 
 	capabilities           *rpb.ServerCapabilities
 	bytestreamSingleflight singleflight.Group
@@ -97,9 +102,9 @@ type Client struct {
 
 // serviceConfig is gRPC service config for RE API.
 // https://github.com/bazelbuild/bazel/blob/7.1.1/src/main/java/com/google/devtools/build/lib/remote/RemoteRetrier.java#L47
-var serviceConfig = fmt.Sprintf(`
+var serviceConfig = `
 {
-	"loadBalancingConfig": [{%q:{}}],
+	"loadBalancingConfig": [{"round_robin":{}}],
 	"methodConfig": [
 	  {
 		"name": [
@@ -142,39 +147,15 @@ var serviceConfig = fmt.Sprintf(`
 		}
 	  }
 	]
-}`, balancer.Name)
+}`
 
 func dialOptions(keepAliveParams keepalive.ClientParameters) []grpc.DialOption {
 	// TODO(b/273639326): handle auth failures gracefully.
-
-	// github.com/bazelbuild/remote-apis-sdks/go/pkg/balancer
-	// We use this primarily to create new sub-connections when we reach
-	// maximum number of streams (100 for GFE) on a given connection.
-	// Refer to https://github.com/grpc/grpc/issues/21386 for status on the long-term fix
-	// for this issue.
-	apiConfig := &configpb.ApiConfig{
-		ChannelPool: &configpb.ChannelPoolConfig{
-			MaxSize:                          25,
-			MaxConcurrentStreamsLowWatermark: 75,
-		},
-		Method: []*configpb.MethodConfig{
-			{
-				Name: []string{".*"},
-				Affinity: &configpb.AffinityConfig{
-					Command:     configpb.AffinityConfig_BIND,
-					AffinityKey: "bind-affinity",
-				},
-			},
-		},
-	}
-	grpcInt := balancer.NewGCPInterceptor(apiConfig)
 
 	// https://github.com/grpc/grpc/blob/c16338581dba2b054bf52484266b79e6934bbc1c/doc/service_config.md
 	// https://github.com/grpc/proposal/blob/9f993b522267ed297fe54c9ee32cfc13699166c7/A6-client-retries.md
 	// timeout=300s may cause deadline exceeded to fetch large *.so file?
 	dopts := append([]grpc.DialOption(nil),
-		grpc.WithUnaryInterceptor(grpcInt.GCPUnaryClientInterceptor),
-		grpc.WithStreamInterceptor(grpcInt.GCPStreamClientInterceptor),
 		grpc.WithKeepaliveParams(keepAliveParams),
 		grpc.WithDisableServiceConfig(),
 		// no retry for ActionCache
@@ -194,7 +175,17 @@ func New(ctx context.Context, cred cred.Cred, opt Option) (*Client, error) {
 	clog.Infof(ctx, "address: %q instance: %q", opt.Address, opt.Instance)
 
 	dopts := append(cred.GRPCDialOptions(), dialOptions(opt.KeepAliveParams)...)
-	conn, err := grpc.DialContext(ctx, opt.Address, dopts...)
+
+	// We use "github.com/bazelbuild/remote-apis-sdks/go/pkg/balancer"
+	// primarily to create new sub-connections when we reach
+	// maximum number of streams (100 for GFE) on a given connection.
+	// Refer to https://github.com/grpc/grpc/issues/21386 for status on the long-term fix
+	// for this issue.
+	dialer := func(ctx context.Context) (*grpc.ClientConn, error) {
+		return grpc.DialContext(ctx, opt.Address, dopts...)
+	}
+	const maxConcurrentReqs = 25
+	conn, err := balancer.NewRRConnPool(ctx, maxConcurrentReqs, dialer)
 	if err != nil {
 		return nil, fmt.Errorf("failed to dial %s: %w", opt.Address, err)
 	}
@@ -202,7 +193,7 @@ func New(ctx context.Context, cred cred.Cred, opt Option) (*Client, error) {
 }
 
 // NewFromConn creates new remote exec API client from conn.
-func NewFromConn(ctx context.Context, opt Option, conn *grpc.ClientConn) (*Client, error) {
+func NewFromConn(ctx context.Context, opt Option, conn grpcClientConn) (*Client, error) {
 	cc := rpb.NewCapabilitiesClient(conn)
 	capa, err := cc.GetCapabilities(ctx, &rpb.GetCapabilitiesRequest{
 		InstanceName: opt.Instance,
