@@ -211,6 +211,7 @@ func createRequest(ctx context.Context, cmd *execute.Cmd, execTimeout, reclientT
 	inputRoot, ok := cmd.Platform["InputRootAbsolutePath"]
 	if ok {
 		cmd.REProxyConfig.Platform["InputRootAbsolutePath"] = inputRoot
+		cmd.REProxyConfig.CanonicalizeWorkingDir = false
 	}
 
 	c := &cpb.Command{
