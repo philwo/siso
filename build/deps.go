@@ -282,6 +282,13 @@ func checkDeps(ctx context.Context, b *Builder, step *Step, deps []string) error
 		// all dep (== inputs) should exist just after step ran.
 		input := b.path.MaybeFromWD(ctx, dep)
 		_, err := b.hashFS.Stat(ctx, b.path.ExecRoot, input)
+		if errors.Is(err, fs.ErrNotExist) {
+			// file may be read by handler and not found
+			// and generated after that (e.g. gn_logs.txt)
+			// forget and check again.
+			b.hashFS.Forget(ctx, b.path.ExecRoot, []string{input})
+			_, err = b.hashFS.Stat(ctx, b.path.ExecRoot, input)
+		}
 		if err != nil {
 			return fmt.Errorf("deps input %s not exist: %w", dep, err)
 		}
