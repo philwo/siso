@@ -57,8 +57,11 @@ func (f fakeStepDef) ExpandedInputs(ctx context.Context) []string {
 	return f.expandedInputs(ctx)
 }
 
-func (fakeStepDef) RemoteInputs() map[string]string            { return nil }
-func (fakeStepDef) REProxyConfig() *execute.REProxyConfig      { return &execute.REProxyConfig{} }
+func (fakeStepDef) RemoteInputs() map[string]string       { return nil }
+func (fakeStepDef) REProxyConfig() *execute.REProxyConfig { return &execute.REProxyConfig{} }
+
+func (fakeStepDef) CheckInputDeps(context.Context, []string) []string { return nil }
+
 func (fakeStepDef) Handle(context.Context, *execute.Cmd) error { return nil }
 
 func (f fakeStepDef) Outputs(context.Context) []string {

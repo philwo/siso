@@ -263,6 +263,8 @@ func checkDepfile(ctx context.Context, b *Builder, step *Step) error {
 func checkDeps(ctx context.Context, b *Builder, step *Step, deps []string) error {
 	// TODO: implement check that deps output (target in depfile "<target>: <dependencyList>") matches build graph's output.
 
+	var checkInputs []string
+
 	platform := step.cmd.Platform
 	if step.useReclient() {
 		platform = step.cmd.REProxyConfig.Platform
@@ -281,7 +283,7 @@ func checkDeps(ctx context.Context, b *Builder, step *Step, deps []string) error
 		}
 		// all dep (== inputs) should exist just after step ran.
 		input := b.path.MaybeFromWD(ctx, dep)
-		_, err := b.hashFS.Stat(ctx, b.path.ExecRoot, input)
+		fi, err := b.hashFS.Stat(ctx, b.path.ExecRoot, input)
 		if errors.Is(err, fs.ErrNotExist) {
 			// file may be read by handler and not found
 			// and generated after that (e.g. gn_logs.txt)
@@ -298,7 +300,31 @@ func checkDeps(ctx context.Context, b *Builder, step *Step, deps []string) error
 				return fmt.Errorf("deps input %s is output", dep)
 			}
 		}
-		// TODO: if dep is generated, check the dep is in ancestor inputs (direct or indirect inputs) to make sure no missing deps in build graph.
+		if len(fi.CmdHash()) == 0 {
+			// source, not generated file
+			// ok to be in deps even if it is not in step's input.
+			continue
+		}
+		if dep == "build.ninja" {
+			// build.ninja should have been updated at the beginning of the build.
+			continue
+		}
+		checkInputs = append(checkInputs, input)
+	}
+	if experiments.Enabled("check-deps", "") || experiments.Enabled("fail-on-bad-deps", "") {
+		missingDeps := step.def.CheckInputDeps(ctx, checkInputs)
+		if len(missingDeps) > 0 {
+			output := b.path.MaybeToWD(ctx, step.cmd.Outputs[0])
+			for i := range missingDeps {
+				missingDeps[i] = b.path.MaybeToWD(ctx, missingDeps[i])
+			}
+			msg := fmt.Sprintf("deps inputs have no dependencies from %q: %q\n", output, missingDeps)
+			clog.Errorf(ctx, "deps error: %s", msg)
+			fmt.Fprintf(step.cmd.StderrWriter(), "\ndeps error: %s\n", msg)
+			if experiments.Enabled("fail-on-bad-deps", "") {
+				return fmt.Errorf("deps error: %s", msg)
+			}
+		}
 	}
 	return nil
 }

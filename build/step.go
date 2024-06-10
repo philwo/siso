@@ -84,6 +84,9 @@ type StepDef interface {
 	// REProxyConfig returns configuration options for using reproxy.
 	REProxyConfig() *execute.REProxyConfig
 
+	// CheckInputDeps checks dep can be found in its direct/indirect inputs.
+	CheckInputDeps(context.Context, []string) []string
+
 	// Handle runs a handler for the cmd.
 	Handle(context.Context, *execute.Cmd) error
 

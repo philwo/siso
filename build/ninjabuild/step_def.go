@@ -835,6 +835,55 @@ func (s *StepDef) RemoteInputs() map[string]string {
 	return s.rule.RemoteInputs
 }
 
+// CheckInputDeps checks dep can be found in its direct/indirect inputs.
+func (s *StepDef) CheckInputDeps(ctx context.Context, depInputs []string) []string {
+	deps := make(map[string]bool)
+	for _, dep := range depInputs {
+		deps[dep] = true
+	}
+	seen := make(map[string]bool)
+	checkInputDep(ctx, s.globals, s.edge, deps, seen)
+	if len(deps) == 0 {
+		return nil
+	}
+	depInputs = depInputs[:0]
+	for in := range deps {
+		depInputs = append(depInputs, in)
+	}
+	sort.Strings(depInputs)
+	return depInputs
+}
+
+func checkInputDep(ctx context.Context, globals *globals, edge *ninjautil.Edge, deps, seen map[string]bool) {
+	if len(deps) == 0 {
+		return
+	}
+	inputs := edge.Inputs()
+	var edges []*ninjautil.Edge
+	for _, in := range inputs {
+		p := globals.targetPath(ctx, in)
+		if deps[p] {
+			delete(deps, p)
+			if len(deps) == 0 {
+				return
+			}
+			continue
+		}
+		if seen[p] {
+			continue
+		}
+		seen[p] = true
+		inEdge, ok := in.InEdge()
+		if !ok {
+			continue
+		}
+		edges = append(edges, inEdge)
+	}
+	for _, inEdge := range edges {
+		checkInputDep(ctx, globals, inEdge, deps, seen)
+	}
+}
+
 // Handle runs a handler for the cmd.
 func (s *StepDef) Handle(ctx context.Context, cmd *execute.Cmd) error {
 	handler := s.rule.Handler
