@@ -30,6 +30,7 @@ import (
 	"infra/build/siso/hashfs/osfs"
 	"infra/build/siso/o11y/clog"
 	"infra/build/siso/o11y/trace"
+	"infra/build/siso/reapi"
 	"infra/build/siso/reapi/digest"
 )
 
@@ -213,12 +214,20 @@ func createRequest(ctx context.Context, cmd *execute.Cmd, execTimeout, reclientT
 		cmd.REProxyConfig.Platform["InputRootAbsolutePath"] = inputRoot
 		cmd.REProxyConfig.CanonicalizeWorkingDir = false
 	}
+	reqID := &cpb.Identifiers{
+		CommandId: cmd.ID,
+	}
+	rmd, ok := reapi.MetadataFromOutgoingContext(ctx)
+	if ok {
+		reqID.InvocationId = rmd.ToolInvocationId
+		reqID.CorrelatedInvocationsId = rmd.CorrelatedInvocationsId
+		reqID.ToolName = rmd.GetToolDetails().GetToolName()
+		reqID.ToolVersion = rmd.GetToolDetails().GetToolVersion()
+	}
 
 	c := &cpb.Command{
-		Identifiers: &cpb.Identifiers{
-			CommandId: cmd.ID,
-		},
-		ExecRoot: cmd.ExecRoot,
+		Identifiers: reqID,
+		ExecRoot:    cmd.ExecRoot,
 		Input: &cpb.InputSpec{
 			Inputs: inputs,
 		},

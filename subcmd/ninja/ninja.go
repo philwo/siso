@@ -471,6 +471,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		clog.Infof(ctx, "CIPD instance ID: %s", cmdver.InstanceID)
 	}
 
+	clog.Infof(ctx, "job id: %q", c.jobID)
 	clog.Infof(ctx, "build id: %q", buildID)
 	clog.Infof(ctx, "project id: %q", projectID)
 	clog.Infof(ctx, "commandline %q", os.Args)
