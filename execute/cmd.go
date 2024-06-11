@@ -13,6 +13,7 @@ import (
 	"io/fs"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -326,11 +327,12 @@ func (c *Cmd) Digest(ctx context.Context, ds *digest.Store) (digest.Digest, erro
 		return digest.Digest{}, fmt.Errorf("failed to get input tree for %s: %w", c, err)
 	}
 
+	treeInputs := c.TreeInputs
 	if c.CanonicalizeDir {
-		ents = c.canonicalizeEntries(ctx, ents)
+		ents, treeInputs = c.canonicalizeDir(ctx, ents, treeInputs)
 	}
 
-	inputRootDigest, err := treeDigest(ctx, c.TreeInputs, ents, ds)
+	inputRootDigest, err := treeDigest(ctx, treeInputs, ents, ds)
 	if err != nil {
 		return digest.Digest{}, fmt.Errorf("failed to get input root for %s: %w", c, err)
 	}
@@ -489,20 +491,37 @@ func treeDigest(ctx context.Context, subtrees []merkletree.TreeEntry, entries []
 	return d, nil
 }
 
-// canonicalizeEntries canonicalizes working dirs in the entries.
-func (c *Cmd) canonicalizeEntries(ctx context.Context, entries []merkletree.Entry) []merkletree.Entry {
+// canonicalizeDir canonicalizes working dir in the entries and trees.
+func (c *Cmd) canonicalizeDir(ctx context.Context, ents []merkletree.Entry, treeInputs []merkletree.TreeEntry) ([]merkletree.Entry, []merkletree.TreeEntry) {
 	cdir := c.canonicalDir()
 	if cdir == "" {
-		return entries
+		return ents, treeInputs
 	}
 	if log.V(1) {
 		clog.Infof(ctx, "canonicalize dir: %s -> %s", c.Dir, cdir)
 	}
+	ents = c.canonicalizeEntries(ctx, cdir, ents)
+	treeInputs = slices.Clone(treeInputs)
+	treeInputs = c.canonicalizeTrees(ctx, cdir, treeInputs)
+	return ents, treeInputs
+}
+
+// canonicalizeEntries canonicalizes working dir to cdir in the entries.
+func (c *Cmd) canonicalizeEntries(ctx context.Context, cdir string, entries []merkletree.Entry) []merkletree.Entry {
 	for i := range entries {
 		e := &entries[i]
 		e.Name = canonicalizeDir(e.Name, c.Dir, cdir)
 	}
 	return entries
+}
+
+// canonicalizeTrees canonicalizes working dir to cdir in the trees.
+func (c *Cmd) canonicalizeTrees(ctx context.Context, cdir string, trees []merkletree.TreeEntry) []merkletree.TreeEntry {
+	for i := range trees {
+		e := &trees[i]
+		e.Name = canonicalizeDir(e.Name, c.Dir, cdir)
+	}
+	return trees
 }
 
 // canonicalDir computes a canonical dir of the working directory.
@@ -515,7 +534,7 @@ func (c *Cmd) canonicalDir() string {
 	for i := 1; i < n; i++ {
 		elems = append(elems, "x")
 	}
-	return filepath.Join(elems...)
+	return filepath.ToSlash(filepath.Join(elems...))
 }
 
 func canonicalizeDir(fname, dir, cdir string) string {
@@ -527,7 +546,7 @@ func canonicalizeDir(fname, dir, cdir string) string {
 	}
 	for _, prefix := range []string{dir + "/", dir + `\`} {
 		if f, ok := strings.CutPrefix(fname, prefix); ok {
-			return filepath.Join(cdir, f)
+			return filepath.ToSlash(filepath.Join(cdir, f))
 		}
 	}
 	return fname
