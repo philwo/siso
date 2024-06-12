@@ -339,6 +339,7 @@ func (b *Builder) logOutput(ctx context.Context, msgs []string, console bool) {
 		for _, msg := range msgs {
 			switch {
 			case strings.HasPrefix(msg, "err:"):
+				fmt.Fprint(&sb, msg)
 			case strings.HasPrefix(msg, "stdout:"), strings.HasPrefix(msg, "stderr:"):
 				if !console {
 					fmt.Fprint(&sb, msg)
