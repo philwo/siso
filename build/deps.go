@@ -289,7 +289,7 @@ func checkDeps(ctx context.Context, b *Builder, step *Step, deps []string) error
 			// and generated after that (e.g. gn_logs.txt)
 			// forget and check again.
 			b.hashFS.Forget(ctx, b.path.ExecRoot, []string{input})
-			_, err = b.hashFS.Stat(ctx, b.path.ExecRoot, input)
+			fi, err = b.hashFS.Stat(ctx, b.path.ExecRoot, input)
 		}
 		if err != nil {
 			return fmt.Errorf("deps input %s not exist: %w", dep, err)
