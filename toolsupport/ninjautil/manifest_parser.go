@@ -373,7 +373,7 @@ func (p *ManifestParser) parseDefault() error {
 	}
 	for {
 		path := string(v.Evaluate(p.env))
-		path = filepath.Clean(path)
+		path = filepath.ToSlash(filepath.Clean(path))
 		err := p.state.addDefault(path)
 		if err != nil {
 			return p.lexer.errorf("%v", err)
