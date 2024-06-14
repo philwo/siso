@@ -91,9 +91,10 @@ func (b *Builder) execReproxy(ctx context.Context, step *Step) error {
 	if err != nil {
 		return fmt.Errorf("reproxy error: %w", err)
 	}
-	// TODO(b/273407069): this won't be useful until we add code to specifically handle the deps log that reproxy returns.
+	// need to update deps for remote exec for deps=gcc with depsfile,
+	// or deps=msvc with showIncludes
 	if err = b.updateDeps(ctx, step); err != nil {
-		clog.Warningf(ctx, "failed to update deps: %v", err)
+		return err
 	}
 	return b.outputs(ctx, step)
 }

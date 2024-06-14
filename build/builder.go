@@ -975,7 +975,6 @@ func (b *Builder) updateDeps(ctx context.Context, step *Step) error {
 	}
 	deps, err := depsAfterRun(ctx, b, step)
 	if err != nil {
-		clog.Warningf(ctx, "update deps: %v", err)
 		return err
 	}
 	updated, err := step.def.RecordDeps(ctx, output, fi.ModTime(), deps)

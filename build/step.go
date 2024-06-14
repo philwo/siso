@@ -85,7 +85,8 @@ type StepDef interface {
 	REProxyConfig() *execute.REProxyConfig
 
 	// CheckInputDeps checks dep can be found in its direct/indirect inputs.
-	CheckInputDeps(context.Context, []string) []string
+	// Returns true if it is unknown bad deps, false otherwise.
+	CheckInputDeps(context.Context, []string) (bool, error)
 
 	// Handle runs a handler for the cmd.
 	Handle(context.Context, *execute.Cmd) error

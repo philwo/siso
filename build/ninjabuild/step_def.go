@@ -836,7 +836,8 @@ func (s *StepDef) RemoteInputs() map[string]string {
 }
 
 // CheckInputDeps checks dep can be found in its direct/indirect inputs.
-func (s *StepDef) CheckInputDeps(ctx context.Context, depInputs []string) []string {
+// Returns true if it is unknown bad deps, false otherwise.
+func (s *StepDef) CheckInputDeps(ctx context.Context, depInputs []string) (bool, error) {
 	deps := make(map[string]bool)
 	for _, dep := range depInputs {
 		deps[dep] = true
@@ -844,14 +845,24 @@ func (s *StepDef) CheckInputDeps(ctx context.Context, depInputs []string) []stri
 	seen := make(map[string]bool)
 	checkInputDep(ctx, s.globals, s.edge, deps, seen)
 	if len(deps) == 0 {
-		return nil
+		return false, nil
 	}
 	depInputs = depInputs[:0]
+	bpath := s.globals.path
 	for in := range deps {
-		depInputs = append(depInputs, in)
+		depInputs = append(depInputs, bpath.MaybeToWD(ctx, in))
 	}
 	sort.Strings(depInputs)
-	return depInputs
+	var outputPath string
+	if len(s.edge.Outputs()) > 0 {
+		out := bpath.MaybeFromWD(ctx, s.edge.Outputs()[0].Path())
+		outputPath = toConfigPath(bpath, out)
+	}
+	v, ok := s.globals.stepConfig.BadDeps[outputPath]
+	if ok {
+		return false, fmt.Errorf("deps inputs have no dependencies from %q to %q - %s", outputPath, depInputs, v)
+	}
+	return true, fmt.Errorf("deps inputs have no dependencies from %q to %q - unknown", outputPath, depInputs)
 }
 
 func checkInputDep(ctx context.Context, globals *globals, edge *ninjautil.Edge, deps, seen map[string]bool) {

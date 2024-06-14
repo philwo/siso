@@ -134,6 +134,9 @@ to register handlers and step configs.
        * a list of filenames for case sensitive filesystem.
          if "a.txt" and "A.txt" are in this, and "a.txt" is
          used as input, "A.txt" will be added as input too.
+     * `bad_deps`
+       * key: output target known to have bad deps
+       * value: annotation (usually bug link)
      * `executables`
        * (Windows only) a list of filenames for executables.
          This is used to send Linux executables from Windows machine.

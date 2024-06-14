@@ -70,7 +70,7 @@ func (b *Builder) execRemote(ctx context.Context, step *Step) error {
 	// need to update deps for remote exec for deps=gcc with depsfile,
 	// or deps=msvc with showIncludes
 	if err = b.updateDeps(ctx, step); err != nil {
-		clog.Warningf(ctx, "failed to update deps: %v", err)
+		return err
 	}
 	return b.outputs(ctx, step)
 }
@@ -98,7 +98,7 @@ func (b *Builder) execRemoteCache(ctx context.Context, step *Step) error {
 	// even if cache hit, deps should be updated with gcc depsfile,
 	// or with msvc showIncludes outputs.
 	if err = b.updateDeps(ctx, step); err != nil {
-		clog.Warningf(ctx, "failed to update deps %s: %v", step, err)
+		return err
 	}
 	return b.outputs(ctx, step)
 }

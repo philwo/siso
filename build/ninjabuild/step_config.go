@@ -286,6 +286,16 @@ type StepConfig struct {
 	// Rules lists step rules.
 	Rules []*StepRule `json:"rules,omitempty"`
 
+	// BadDeps specifies known targets with bad deps,
+	// i.e. target has other generated targets not in direct/indirect
+	// dependencies in depfile.
+	// This target won't cause error with bad deps even with
+	// `SISO_EXPERIMENTS=fail-on-bad-deps` to make it easy to
+	// detect new bad deps.
+	// key is output target known to have bad deps.
+	// value is annotation (usually bug link).
+	BadDeps map[string]string `json:"bad_deps,omitempty"`
+
 	// Executables are files that need to have executable bit on Linux worker.
 	// This field is used to upload Linux executables from Windows host.
 	Executables []string `json:"executables,omitempty"`
