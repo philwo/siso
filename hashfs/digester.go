@@ -112,9 +112,13 @@ func (d *digester) stop(ctx context.Context) {
 	close(d.quit)
 	clog.Infof(ctx, "wait for workers")
 	<-d.done
-	close(d.q)
+	d.mu.Lock()
+	q := d.q
+	d.q = nil
+	d.mu.Unlock()
+	close(q)
 	clog.Infof(ctx, "run pending digest chan:%d + queue:%d", len(d.q), len(d.queue))
-	for req := range d.q {
+	for req := range q {
 		d.compute(req.ctx, req.fname, req.e)
 	}
 	for _, req := range d.queue {
@@ -125,6 +129,12 @@ func (d *digester) stop(ctx context.Context) {
 }
 
 func (d *digester) lazyCompute(ctx context.Context, fname string, e *entry) {
+	select {
+	case <-ctx.Done():
+		clog.Warningf(ctx, "ignore lazyCompute %s: %v", fname, context.Cause(ctx))
+		return
+	default:
+	}
 	req := digestReq{
 		ctx:   ctx,
 		fname: fname,
@@ -132,6 +142,9 @@ func (d *digester) lazyCompute(ctx context.Context, fname string, e *entry) {
 	}
 	d.mu.Lock()
 	defer d.mu.Unlock()
+	if d.q == nil {
+		return
+	}
 	select {
 	case d.q <- req:
 	default:
@@ -144,6 +157,12 @@ func (d *digester) compute(ctx context.Context, fname string, e *entry) {
 		return
 	}
 	err := DigestSemaphore.Do(ctx, func(ctx context.Context) error {
+		select {
+		case <-ctx.Done():
+			clog.Warningf(ctx, "ignore compute %s: %v", fname, context.Cause(ctx))
+			return context.Cause(ctx)
+		default:
+		}
 		return e.compute(ctx, fname)
 	})
 	if err != nil {
