@@ -120,7 +120,7 @@ func (depsGCC) DepsAfterRun(ctx context.Context, b *Builder, step *Step) ([]stri
 	}()
 	buf, err := b.hashFS.ReadFile(ctx, step.cmd.ExecRoot, step.cmd.Depfile)
 	if err != nil {
-		return nil, fmt.Errorf("gcc-deps: failed to get depfile %s of %s: %v", step.cmd.Depfile, step, err)
+		return nil, fmt.Errorf("gcc-deps: failed to get depfile %q of %s: %w", step.cmd.Depfile, step, err)
 	}
 	span.SetAttr("depfile", step.cmd.Depfile)
 	span.SetAttr("deps-file-size", len(buf))
@@ -128,11 +128,11 @@ func (depsGCC) DepsAfterRun(ctx context.Context, b *Builder, step *Step) ([]stri
 	_, dspan := trace.NewSpan(ctx, "parse-deps")
 	deps, err := makeutil.ParseDeps(buf)
 	if err != nil {
-		return nil, fmt.Errorf("gcc-deps: failed to parse depfile %s: %w", step.cmd.Depfile, err)
+		return nil, fmt.Errorf("gcc-deps: failed to parse depfile %q: %w", step.cmd.Depfile, err)
 	}
 	err = checkDeps(ctx, b, step, deps)
 	if err != nil {
-		return nil, fmt.Errorf("error in depfile %s: %w", step.cmd.Depfile, err)
+		return nil, fmt.Errorf("error in depfile %q: %w", step.cmd.Depfile, err)
 	}
 	dspan.SetAttr("deps", len(deps))
 	dspan.Close(nil)

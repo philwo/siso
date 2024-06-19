@@ -29,11 +29,11 @@ func (depsDepfile) DepsAfterRun(ctx context.Context, b *Builder, step *Step) ([]
 	fsys := b.hashFS.FileSystem(ctx, b.path.ExecRoot)
 	depins, err := makeutil.ParseDepsFile(ctx, fsys, step.cmd.Depfile)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse depfile %s: %w", step.cmd.Depfile, err)
+		return nil, fmt.Errorf("failed to parse depfile %q: %w", step.cmd.Depfile, err)
 	}
 	err = checkDeps(ctx, b, step, depins)
 	if err != nil {
-		return nil, fmt.Errorf("error in depfile %s: %w", step.cmd.Depfile, err)
+		return nil, fmt.Errorf("error in depfile %q: %w", step.cmd.Depfile, err)
 	}
 	clog.Infof(ctx, "depfile %s: %d", step.cmd.Depfile, len(depins))
 	return depins, nil

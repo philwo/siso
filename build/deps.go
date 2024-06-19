@@ -252,11 +252,11 @@ func checkDepfile(ctx context.Context, b *Builder, step *Step) error {
 	fsys := b.hashFS.FileSystem(ctx, b.path.ExecRoot)
 	deps, err := makeutil.ParseDepsFile(ctx, fsys, step.cmd.Depfile)
 	if err != nil {
-		return fmt.Errorf("failed to parse depfile %s: %w", step.cmd.Depfile, err)
+		return fmt.Errorf("failed to parse depfile %q: %w", step.cmd.Depfile, err)
 	}
 	err = checkDeps(ctx, b, step, deps)
 	if err != nil {
-		return fmt.Errorf("error in depfile %s: %w", step.cmd.Depfile, err)
+		return fmt.Errorf("error in depfile %q: %w", step.cmd.Depfile, err)
 	}
 	return nil
 }
@@ -277,7 +277,7 @@ func checkDeps(ctx context.Context, b *Builder, step *Step, deps []string) error
 			if relocatableReq {
 				clog.Warningf(ctx, "check deps: abs path in deps %s: platform=%v", dep, platform)
 				if platform != nil {
-					return fmt.Errorf("absolute path in deps %s of %s: use input_root_absolute_path=true for %s (siso config: %s): %w", dep, step, step.cmd.Outputs[0], step.def.RuleName(), errNotRelocatable)
+					return fmt.Errorf("absolute path in deps %q of %q: use input_root_absolute_path=true for %q (siso config: %s): %w", dep, step, step.cmd.Outputs[0], step.def.RuleName(), errNotRelocatable)
 				}
 			}
 			continue
@@ -293,12 +293,12 @@ func checkDeps(ctx context.Context, b *Builder, step *Step, deps []string) error
 			fi, err = b.hashFS.Stat(ctx, b.path.ExecRoot, input)
 		}
 		if err != nil {
-			return fmt.Errorf("deps input %s not exist: %w", dep, err)
+			return fmt.Errorf("deps input %q not exist: %w", dep, err)
 		}
 		// input should not be output.
 		for _, out := range step.cmd.Outputs {
 			if out == input {
-				return fmt.Errorf("deps input %s is output", dep)
+				return fmt.Errorf("deps input %q is output", dep)
 			}
 		}
 		if len(fi.CmdHash()) == 0 {
