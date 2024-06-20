@@ -182,7 +182,7 @@ func New(ctx context.Context, cred cred.Cred, opt Option) (*Client, error) {
 	// Refer to https://github.com/grpc/grpc/issues/21386 for status on the long-term fix
 	// for this issue.
 	dialer := func(ctx context.Context) (*grpc.ClientConn, error) {
-		return grpc.DialContext(ctx, opt.Address, dopts...)
+		return grpc.NewClient(opt.Address, dopts...)
 	}
 	const maxConcurrentReqs = 25
 	conn, err := balancer.NewRRConnPool(ctx, maxConcurrentReqs, dialer)

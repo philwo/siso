@@ -46,7 +46,7 @@ func New(ctx context.Context, dir string, reopt *reapi.Option) (*Client, error) 
 		return &Client{}, nil
 	}
 	addr := fmt.Sprintf("unix:///google/cog/status/uds/%d", os.Getuid())
-	conn, err := grpc.DialContext(ctx, addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		clog.Warningf(ctx, "cog: failed to dial to cog server %s: %v", addr, err)
 		return &Client{}, nil

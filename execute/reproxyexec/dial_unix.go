@@ -13,13 +13,10 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-// DialContext connects to the serverAddress for grpc.
-func DialContext(ctx context.Context, serverAddr string) (*grpc.ClientConn, error) {
-	return grpc.DialContext(
-		ctx,
+// dialContext connects to the serverAddress for grpc.
+func dialContext(ctx context.Context, serverAddr string) (*grpc.ClientConn, error) {
+	return grpc.NewClient(
 		serverAddr,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		// Ensure blocking due to flaky reproxy behavior http://tg/639661.
-		grpc.WithBlock(),
 		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(grpcMaxMsgSize)))
 }

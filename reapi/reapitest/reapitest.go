@@ -127,7 +127,7 @@ func New(ctx context.Context, t *testing.T, fake *Fake) *reapi.Client {
 		Address:  s.addr,
 		Instance: "projects/siso-test/instances/default_instance",
 	}
-	conn, err := grpc.DialContext(ctx, s.addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(s.addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		t.Fatal(err)
 	}

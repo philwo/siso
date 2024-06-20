@@ -109,7 +109,7 @@ func TestServiceConfig_CAS(t *testing.T) {
 				Time:    30 * time.Second,
 				Timeout: 20 * time.Second,
 			}
-			conn, err := grpc.DialContext(ctx, addr, append([]grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}, dialOptions(keepAliveParams)...)...)
+			conn, err := grpc.NewClient(addr, append([]grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}, dialOptions(keepAliveParams)...)...)
 			if err != nil {
 				t.Fatal(err)
 			}

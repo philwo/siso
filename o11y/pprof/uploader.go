@@ -78,7 +78,7 @@ func (u *Uploader) Upload(ctx context.Context, p *Profile) error {
 	}
 
 	// better to configure retry etc by service_config??
-	conn, err := grpc.DialContext(ctx, "cloudprofiler.googleapis.com:443", u.dialOptions...)
+	conn, err := grpc.NewClient("cloudprofiler.googleapis.com:443", u.dialOptions...)
 	if err != nil {
 		return err
 	}
