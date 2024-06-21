@@ -24,7 +24,6 @@ import (
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/status"
 
 	"infra/build/siso/execute"
@@ -156,27 +155,10 @@ func (re *REProxyExec) Run(ctx context.Context, cmd *execute.Cmd) error {
 	re.connOnce.Do(func() {
 		ctx, cancel := context.WithTimeout(ctx, dialTimeout)
 		defer cancel()
-		re.conn, re.connErr = dialContext(ctx, re.connAddress)
+		re.conn, re.connErr = DialContext(ctx, re.connAddress)
 	})
 	if re.connErr != nil {
 		return fmt.Errorf("fail to dial %s: %w", re.connAddress, re.connErr)
-	}
-	// Ensure blocking due to flaky reproxy behavior http://tg/639661.
-blockConn:
-	for {
-		s := re.conn.GetState()
-		switch s {
-		case connectivity.Idle:
-			re.conn.Connect()
-		case connectivity.Ready:
-			break blockConn
-		default:
-			clog.Warningf(ctx, "dial %s connectivity=%s", re.connAddress, s)
-		}
-		for !re.conn.WaitForStateChange(ctx, s) {
-			// context got timeout or canceled.
-			return fmt.Errorf("failed to dial %s: %w", re.connAddress, context.Cause(ctx))
-		}
 	}
 
 	// Create REProxy client and send the request with backoff configuration above.
