@@ -13,10 +13,17 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-// dialContext connects to the serverAddress for grpc.
-func dialContext(ctx context.Context, serverAddr string) (*grpc.ClientConn, error) {
-	return grpc.NewClient(
+// DialContext connects to the serverAddress for grpc.
+func DialContext(ctx context.Context, serverAddr string) (*grpc.ClientConn, error) {
+	// Although grpc.DialContxt is deprecated, but grpc.NewClient
+	// doesn't have blocking feature.
+	// https://crrev.com/c/5642324 didn't work well?
+	// https://ci.chromium.org/ui/p/chromium/builders/build/win-build-perf-developer/1232/overview
+	return grpc.DialContext(
+		ctx,
 		serverAddr,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		// Ensure blocking due to flaky reproxy behavior http://tg/639661.
+		grpc.WithBlock(),
 		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(grpcMaxMsgSize)))
 }
