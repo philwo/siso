@@ -15,9 +15,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bazelbuild/remote-apis-sdks/go/pkg/balancer"
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
 	"golang.org/x/sync/singleflight"
+	"google.golang.org/api/option"
+	gtransport "google.golang.org/api/transport/grpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/metadata"
@@ -174,18 +175,17 @@ func New(ctx context.Context, cred cred.Cred, opt Option) (*Client, error) {
 	}
 	clog.Infof(ctx, "address: %q instance: %q", opt.Address, opt.Instance)
 
-	dopts := append(cred.GRPCDialOptions(), dialOptions(opt.KeepAliveParams)...)
-
-	// We use "github.com/bazelbuild/remote-apis-sdks/go/pkg/balancer"
-	// primarily to create new sub-connections when we reach
-	// maximum number of streams (100 for GFE) on a given connection.
-	// Refer to https://github.com/grpc/grpc/issues/21386 for status on the long-term fix
-	// for this issue.
-	dialer := func(ctx context.Context) (*grpc.ClientConn, error) {
-		return grpc.NewClient(opt.Address, dopts...)
+	copts := []option.ClientOption{
+		option.WithEndpoint(opt.Address),
+		option.WithGRPCConnectionPool(25),
 	}
-	const maxConcurrentReqs = 25
-	conn, err := balancer.NewRRConnPool(ctx, maxConcurrentReqs, dialer)
+	copts = append(copts, cred.ClientOptions()...)
+	dopts := dialOptions(opt.KeepAliveParams)
+	for _, dopt := range dopts {
+		copts = append(copts, option.WithGRPCDialOption(dopt))
+	}
+
+	conn, err := gtransport.DialPool(ctx, copts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to dial %s: %w", opt.Address, err)
 	}
