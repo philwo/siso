@@ -155,7 +155,7 @@ func (re *REProxyExec) Run(ctx context.Context, cmd *execute.Cmd) error {
 	re.connOnce.Do(func() {
 		ctx, cancel := context.WithTimeout(ctx, dialTimeout)
 		defer cancel()
-		re.conn, re.connErr = DialContext(ctx, re.connAddress)
+		re.conn, re.connErr = dialContext(ctx, re.connAddress)
 	})
 	if re.connErr != nil {
 		return fmt.Errorf("fail to dial %s: %w", re.connAddress, re.connErr)
