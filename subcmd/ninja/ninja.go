@@ -16,8 +16,10 @@ import (
 	"io/fs"
 	"math"
 	"os"
+	"os/user"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"sort"
 	"strings"
 	"text/tabwriter"
@@ -32,7 +34,9 @@ import (
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/api/option"
 	mrpb "google.golang.org/genproto/googleapis/api/monitoredres"
+	rspb "google.golang.org/genproto/googleapis/devtools/resultstore/v2"
 	"google.golang.org/grpc/grpclog"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.chromium.org/luci/auth"
 	"go.chromium.org/luci/cipd/version"
@@ -45,6 +49,7 @@ import (
 	"infra/build/siso/build/ninjabuild"
 	"infra/build/siso/hashfs"
 	"infra/build/siso/o11y/clog"
+	"infra/build/siso/o11y/resultstore"
 	"infra/build/siso/o11y/trace"
 	"infra/build/siso/reapi"
 	"infra/build/siso/reapi/digest"
@@ -133,6 +138,7 @@ type ninjaCmdRun struct {
 	reproxyAddr string
 
 	enableCloudLogging bool
+	enableResultstore  bool
 	// enableCPUProfiler bool
 	enableCloudProfiler      bool
 	cloudProfilerServiceName string
@@ -462,19 +468,62 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		}
 	}
 	// logging is ready.
+	var properties resultstore.Properties
+	properties.Add("dir", c.dir)
 	clog.Infof(ctx, "%s", cpuinfo())
+	properties.Add("cpu", cpuinfo())
 
 	if cmdver, err := version.GetStartupVersion(); err != nil {
 		clog.Warningf(ctx, "cannot determine CIPD package version: %s", err)
-	} else {
+	} else if cmdver.PackageName != "" {
 		clog.Infof(ctx, "CIPD package name: %s", cmdver.PackageName)
 		clog.Infof(ctx, "CIPD instance ID: %s", cmdver.InstanceID)
+		properties.Add("cipd_package_name", cmdver.PackageName)
+		properties.Add("cipd_instance_id", cmdver.InstanceID)
+	} else {
+		buildInfo, ok := debug.ReadBuildInfo()
+		if ok {
+			if buildInfo.GoVersion != "" {
+				clog.Infof(ctx, "Go version: %s", buildInfo.GoVersion)
+				properties.Add("go_version", buildInfo.GoVersion)
+			}
+			for _, s := range buildInfo.Settings {
+				if strings.HasPrefix(s.Key, "vcs.") {
+					clog.Infof(ctx, "build_%s=%s", s.Key, s.Value)
+					properties.Add(fmt.Sprintf("build_%s", s.Key), s.Value)
+				}
+			}
+		}
 	}
+	properties.Add("job_id", c.jobID)
 
 	clog.Infof(ctx, "job id: %q", c.jobID)
 	clog.Infof(ctx, "build id: %q", buildID)
 	clog.Infof(ctx, "project id: %q", projectID)
 	clog.Infof(ctx, "commandline %q", os.Args)
+
+	var resultStoreUploader *resultstore.Uploader
+	if c.enableResultstore {
+		resultStoreUploader, err = resultstore.New(ctx, resultstore.Options{
+			InvocationID: buildID,
+			Invocation:   c.invocation(ctx, buildID, projectID, execRoot, properties),
+			DialOptions:  credential.GRPCDialOptions(),
+		})
+		if err != nil {
+			return stats, err
+		}
+		fmt.Fprintf(os.Stderr, "https://btx.cloud.google.com/invocations/%s\n", buildID)
+		defer func() {
+			exitCode := 0
+			if err != nil {
+				exitCode = 1
+			}
+			cerr := resultStoreUploader.Close(ctx, exitCode)
+			if cerr != nil {
+				clog.Warningf(ctx, "failed to close resultstore: %v", cerr)
+			}
+		}()
+	}
 
 	if c.enableCloudProfiler {
 		c.initCloudProfiler(ctx, projectID, credential)
@@ -840,6 +889,7 @@ func (c *ninjaCmdRun) init() {
 	c.Flags.DurationVar(&c.traceSpanThreshold, "trace_span_threshold", 100*time.Millisecond, "theshold for trace span record")
 
 	c.Flags.BoolVar(&c.enableCloudLogging, "enable_cloud_logging", false, "enable cloud logging")
+	c.Flags.BoolVar(&c.enableResultstore, "enable_resultstore", false, "enable resultstore")
 	c.Flags.BoolVar(&c.enableCloudProfiler, "enable_cloud_profiler", false, "enable cloud profiler")
 	c.Flags.StringVar(&c.cloudProfilerServiceName, "cloud_profiler_service_name", "siso", "cloud profiler service name")
 	c.Flags.BoolVar(&c.enableCloudTrace, "enable_cloud_trace", false, "enable cloud trace")
@@ -1675,4 +1725,59 @@ func cpuinfo() string {
 	fmt.Fprintf(&sb, "physicalCores=%d threadsPerCore=%d logicalCores=%d ", cpuid.CPU.PhysicalCores, cpuid.CPU.ThreadsPerCore, cpuid.CPU.LogicalCores)
 	fmt.Fprintf(&sb, "vm=%t features=%s", cpuid.CPU.VM(), cpuid.CPU.FeatureSet())
 	return sb.String()
+}
+
+func (c *ninjaCmdRun) invocation(ctx context.Context, buildID, projectID, execRoot string, properties resultstore.Properties) *rspb.Invocation {
+	userInfo, err := user.Current()
+	if err != nil {
+		clog.Warningf(ctx, "failed to get current user: %v", err)
+		userInfo = &user.User{
+			Username: "nobody",
+		}
+	}
+	hostname, err := os.Hostname()
+	if err != nil {
+		clog.Warningf(ctx, "failed to get hostname: %v", err)
+	}
+
+	return &rspb.Invocation{
+		Timing: &rspb.Timing{
+			StartTime: timestamppb.New(c.started),
+		},
+		InvocationAttributes: &rspb.InvocationAttributes{
+			ProjectId:   projectID,
+			Users:       []string{userInfo.Username},
+			Labels:      []string{"siso", "build"},
+			Description: fmt.Sprintf("Invocation ID %s", buildID),
+		},
+		WorkspaceInfo: &rspb.WorkspaceInfo{
+			Hostname:         hostname,
+			WorkingDirectory: execRoot,
+			ToolTag:          "siso",
+			CommandLines:     c.commandLines(),
+		},
+		Properties: properties,
+	}
+}
+
+func (c *ninjaCmdRun) commandLines() []*rspb.CommandLine {
+	var cmdlines []*rspb.CommandLine
+	cmdlines = append(cmdlines, &rspb.CommandLine{
+		Label:   "original",
+		Tool:    os.Args[0],
+		Args:    os.Args[1:],
+		Command: "ninja",
+	})
+	cmdline := &rspb.CommandLine{
+		Label:   "canonical",
+		Tool:    os.Args[0],
+		Args:    []string{"ninja"},
+		Command: "ninja",
+	}
+	c.Flags.VisitAll(func(f *flag.Flag) {
+		cmdline.Args = append(cmdline.Args, fmt.Sprintf("-%s=%s", f.Name, f.Value.String()))
+	})
+	cmdline.Args = append(cmdline.Args, c.Flags.Args()...)
+	cmdlines = append(cmdlines, cmdline)
+	return cmdlines
 }
