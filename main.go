@@ -37,6 +37,7 @@ import (
 	"infra/build/siso/subcmd/report"
 	"infra/build/siso/subcmd/scandeps"
 	"infra/build/siso/subcmd/version"
+	"infra/build/siso/subcmd/webui"
 	"infra/build/siso/ui"
 )
 
@@ -69,6 +70,7 @@ func getApplication(authOpts cred.Options) *cli.Application {
 			ps.Cmd(),
 			scandeps.Cmd(),
 			authcheck.Cmd(authOpts),
+			webui.Cmd(),
 
 			authcli.SubcommandLogin(authOpts.LUCIAuth, "login", true),
 			authcli.SubcommandLogout(authOpts.LUCIAuth, "logout", true),

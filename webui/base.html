@@ -1,0 +1,54 @@
+{{/* Copyright 2024 The Chromium Authors
+Use of this source code is governed by a BSD-style license that can be
+found in the LICENSE file. */}}
+
+{{define "base"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>sisod</title>
+
+  {{/* Use an importmap for JS libraries where ES import is the canonical installation method,
+    or if using ES imports lets us import only the parts we need. */}}
+  <script type="importmap">
+    {
+      "imports": {
+        "@carbon/web-components/": "https://esm.run/@carbon/web-components/",
+        "@material/web/": "https://esm.run/@material/web/"
+      }
+    }
+  </script>
+  <script type="module">
+    import '@material/web/all.js';
+    import {styles as typescaleStyles} from '@material/web/typography/md-typescale-styles.js';
+    document.adoptedStyleSheets.push(typescaleStyles.styleSheet);
+    import '@carbon/web-components/es/components/data-table/index.js';
+  </script>
+
+  {{/* Classical JS includes. */}}
+  <script src="https://unpkg.com/htmx.org@2.0.0"></script>
+
+  {{/* Styles. */}}
+  <link href="https://fonts.googleapis.com/icon?family=Material+Symbols+Outlined" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body
+  {{/* Use HTMX's boost so even normal links and forms are intercepted and feel like AJAX requests. */}}
+  hx-boost="true"
+  {{/* Tell HTMX by default to use this element as a progress indicator. (It will attach the class "htmx-request" when active.) */}}
+  hx-indicator="#progress-indicator">
+  <md-linear-progress id="progress-indicator" indeterminate></md-linear-progress>
+  <div id="page">
+    <header class="header">
+      <div class="header-title">
+        <h1>sisod</h1>
+        <p class="subtitle">version 0.0.0</p>
+      </div>
+    </header>
+    <div class="content">{{template "content" .}}</div>
+    <aside class="sidebar">{{template "sidebar" .}}</aside>
+  </div>
+</body>
+</html>
+{{end}}

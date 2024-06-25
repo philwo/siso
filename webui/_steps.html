@@ -1,0 +1,106 @@
+{{/* Copyright 2024 The Chromium Authors
+Use of this source code is governed by a BSD-style license that can be
+found in the LICENSE file. */}}
+
+{{define "sidebar"}}
+<form class="data-table-filter"
+    action="/steps/" method="GET"
+    hx-select="#data-table-body" hx-target="#data-table-body" hx-swap="outerHTML show:window:top"
+    hx-trigger="change,submit">
+  <div>
+    <div id="paginator" hx-swap-oob="true">
+      Showing {{ .items_first }}-{{ .items_last }} of {{ .items_len }}
+    </div>
+    <div class="page-controls">
+      <md-outlined-text-field class="page-number" type="number" name="page" aria-label="Page"
+          value="{{ .page }}" min="0" max="{{ .page_last }}"></md-outlined-text-field>
+      <md-icon-button onclick="this.parentElement.querySelector('.page-number').value = {{ .page_first }}">
+        <md-icon>first_page</md-icon>
+      </md-icon-button>
+      <md-icon-button onclick="this.parentElement.querySelector('.page-number').stepDown()">
+        <md-icon>chevron_left</md-icon>
+      </md-icon-button>
+      <md-icon-button onclick="this.parentElement.querySelector('.page-number').stepUp()">
+        <md-icon>chevron_right</md-icon>
+      </md-icon-button>
+      <md-icon-button onclick="this.parentElement.querySelector('.page-number').value = {{ .page_last }}">
+        <md-icon>last_page</md-icon>
+      </md-icon-button>
+    </div>
+  </div>
+  <div class="filter-controls">
+    <md-filled-text-field name="q" type="search" value="{{.output_search}}" placeholder="Search outputs"
+        oninput="this.querySelector('md-icon-button').style.display = this.value ? 'flex' : 'none'">
+      <md-icon slot="leading-icon">search</md-icon>
+      <md-icon-button class="clear-text-field" slot="trailing-icon"
+          {{if not .output_search}} style="display: none"{{end}} onclick="this.closest('md-filled-text-field').value = ''; this.style.display = 'none'">
+        <md-icon>close</md-icon>
+      </md-icon-button>
+    </md-filled-text-field>
+    <h3 id="action-label">action</h3>
+    <md-chip-set aria-labelledby="action-label">
+      {{ range $key, $count := .action_counts }}
+        {{ if gt $count 20 }}
+        <input type="checkbox" id="action-{{$key}}"
+            name="action" value="{{$key}}"{{if currentURLHasParam "action" $key}}checked{{end}}>
+        <label for="action-{{$key}}">
+          <md-filter-chip label="{{printf "%.25s" $key}} ({{$count}})"{{if currentURLHasParam "action" $key}}selected{{end}}></md-filter-chip>
+        </label>
+        {{ end }}
+      {{ end }}
+    </md-chip-set>
+    <h3 id="rule-label">rule</h3>
+    <md-chip-set aria-labelledby="rule-label">
+      {{ range $key, $count := .rule_counts }}
+        <input type="checkbox" id="rule-{{$key}}"
+            name="rule" value="{{$key}}"{{if currentURLHasParam "rule" $key}}checked{{end}}>
+        <label for="rule-{{$key}}">
+          <md-filter-chip label="{{$key}} ({{$count}})"{{if currentURLHasParam "rule" $key}}selected{{end}}></md-filter-chip></label>
+      {{ end }}
+    </md-chip-set>
+  </div>
+</form>
+{{end}}
+
+{{define "content"}}
+<div class="data-table-container">
+  <cds-table>
+    <cds-table-head>
+      <cds-table-header-row>
+        <cds-table-header-cell>step_id</cds-table-header-cell>
+        <cds-table-header-cell>
+          output
+          <cds-table-cell-content>action</cds-table-cell-content>
+        </cds-table-header-cell>
+        <cds-table-header-cell>rule</cds-table-header-cell>
+        <cds-table-header-cell>ready</cds-table-header-cell>
+        <cds-table-header-cell>start</cds-table-header-cell>
+        <cds-table-header-cell>duration</cds-table-header-cell>
+        <cds-table-header-cell>weighted_duration</cds-table-header-cell>
+        <cds-table-header-cell>run</cds-table-header-cell>
+        <cds-table-header-cell>queue</cds-table-header-cell>
+        <cds-table-header-cell>exec</cds-table-header-cell>
+      </cds-table-header-row>
+    </cds-table-head>
+    <cds-table-body id="data-table-body">
+      {{ range .subset }}
+      <cds-table-row>
+        <cds-table-cell><a href="/steps/{{ .step_id }}">{{ .step_id }}</a></cds-table-cell>
+        <cds-table-cell>
+          {{ .output }}
+          <cds-table-cell-content>{{ .action }}</cds-table-cell-content>
+        </cds-table-cell>
+        <cds-table-cell>{{ .rule }}</cds-table-cell>
+        <cds-table-cell>{{ printf "%.4f" .ready }}</cds-table-cell>
+        <cds-table-cell>{{ printf "%.4f" .start }}</cds-table-cell>
+        <cds-table-cell>{{ printf "%.4f" .duration }}</cds-table-cell>
+        <cds-table-cell>{{ printf "%.4f" .weighted_duration }}</cds-table-cell>
+        <cds-table-cell>{{ printf "%.4f" .run }}</cds-table-cell>
+        <cds-table-cell>{{ printf "%.4f" .queue }}</cds-table-cell>
+        <cds-table-cell>{{ printf "%.4f" .exec }}</cds-table-cell>
+      </cds-table-row>
+      {{ end }}
+    </cds-table-body>
+  </cds-table>
+</div>
+{{end}}
