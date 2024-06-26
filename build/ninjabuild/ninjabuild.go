@@ -356,6 +356,11 @@ func (g *Graph) Filenames() []string {
 	return g.nstate.Filenames()
 }
 
+// ConfigProperties returns configuration properties.
+func (g *Graph) ConfigProperties() map[string]string {
+	return g.globals.stepConfig.Properties
+}
+
 // Targets returns targets for ninja args.
 // If args is not given, returns default build targets.
 func (g *Graph) Targets(ctx context.Context, args ...string) ([]build.Target, error) {

@@ -503,9 +503,9 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	clog.Infof(ctx, "project id: %q", projectID)
 	clog.Infof(ctx, "commandline %q", os.Args)
 
-	var resultStoreUploader *resultstore.Uploader
+	var resultstoreUploader *resultstore.Uploader
 	if c.enableResultstore {
-		resultStoreUploader, err = resultstore.New(ctx, resultstore.Options{
+		resultstoreUploader, err = resultstore.New(ctx, resultstore.Options{
 			InvocationID: buildID,
 			Invocation:   c.invocation(ctx, buildID, projectID, execRoot, properties),
 			DialOptions:  credential.GRPCDialOptions(),
@@ -519,7 +519,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 			if err != nil {
 				exitCode = 1
 			}
-			cerr := resultStoreUploader.Close(ctx, exitCode)
+			cerr := resultstoreUploader.Close(ctx, exitCode)
 			if cerr != nil {
 				clog.Warningf(ctx, "failed to close resultstore: %v", cerr)
 			}
@@ -698,7 +698,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	}
 	os.Remove(lastTargetsFile)
 
-	bopts, done, err := c.initBuildOpts(ctx, projectID, buildID, buildPath, config, ds, hashFS, limits, traceExporter)
+	bopts, done, err := c.initBuildOpts(ctx, projectID, buildID, buildPath, config, ds, hashFS, limits, traceExporter, resultstoreUploader)
 	if err != nil {
 		return stats, err
 	}
@@ -717,12 +717,6 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		return stats, err
 	}
 	spin.Stop(nil)
-	if resultStoreUploader != nil {
-		err := resultStoreUploader.NewConfiguration(ctx, "default", stepConfig.Properties)
-		if err != nil {
-			return stats, err
-		}
-	}
 
 	spin.Start(fmt.Sprintf("load %s", c.fname))
 	nstate, err := ninjabuild.Load(ctx, c.fname, buildPath)
@@ -1105,7 +1099,7 @@ func (c *ninjaCmdRun) initDepsLog(ctx context.Context) (*ninjautil.DepsLog, erro
 	return depsLog, nil
 }
 
-func (c *ninjaCmdRun) initBuildOpts(ctx context.Context, projectID, buildID string, buildPath *build.Path, config *buildconfig.Config, ds dataSource, hashFS *hashfs.HashFS, limits build.Limits, traceExporter *trace.Exporter) (bopts build.Options, done func(*error), err error) {
+func (c *ninjaCmdRun) initBuildOpts(ctx context.Context, projectID, buildID string, buildPath *build.Path, config *buildconfig.Config, ds dataSource, hashFS *hashfs.HashFS, limits build.Limits, traceExporter *trace.Exporter, resultstoreUploader *resultstore.Uploader) (bopts build.Options, done func(*error), err error) {
 	var dones []func(*error)
 	defer func() {
 		if err != nil {
@@ -1234,6 +1228,7 @@ func (c *ninjaCmdRun) initBuildOpts(ctx context.Context, projectID, buildID stri
 		TraceExporter:        traceExporter,
 		TraceJSON:            c.traceJSON,
 		Pprof:                c.buildPprof,
+		ResultstoreUploader:  resultstoreUploader,
 		Clobber:              c.clobber,
 		Prepare:              c.prepare,
 		Verbose:              c.verbose,
@@ -1310,6 +1305,13 @@ func doBuild(ctx context.Context, graph *ninjabuild.Graph, bopts build.Options, 
 	if err != nil {
 		return stats, err
 	}
+	if bopts.ResultstoreUploader != nil {
+		err := bopts.ResultstoreUploader.NewConfiguration(ctx, "default", graph.ConfigProperties())
+		if err != nil {
+			return stats, err
+		}
+	}
+
 	err = mfb.Build(ctx, "rebuild manifest", graph.Filename())
 	cerr := mfb.Close()
 	if cerr != nil {

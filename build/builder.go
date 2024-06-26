@@ -38,6 +38,7 @@ import (
 	"infra/build/siso/o11y/clog"
 	"infra/build/siso/o11y/iometrics"
 	"infra/build/siso/o11y/pprof"
+	"infra/build/siso/o11y/resultstore"
 	"infra/build/siso/o11y/trace"
 	"infra/build/siso/reapi"
 	"infra/build/siso/reapi/digest"
@@ -90,6 +91,7 @@ type Options struct {
 	Pprof                string
 	TraceExporter        *trace.Exporter
 	PprofUploader        *pprof.Uploader
+	ResultstoreUploader  *resultstore.Uploader
 
 	// Clobber forces to rebuild ignoring existing generated files.
 	Clobber bool
