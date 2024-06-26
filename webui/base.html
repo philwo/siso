@@ -14,6 +14,7 @@ found in the LICENSE file. */}}
   <script type="importmap">
     {
       "imports": {
+        "@github/": "https://esm.run/@github/",
         "@carbon/web-components/": "https://esm.run/@carbon/web-components/",
         "@material/web/": "https://esm.run/@material/web/"
       }
@@ -24,6 +25,7 @@ found in the LICENSE file. */}}
     import {styles as typescaleStyles} from '@material/web/typography/md-typescale-styles.js';
     document.adoptedStyleSheets.push(typescaleStyles.styleSheet);
     import '@carbon/web-components/es/components/data-table/index.js';
+    import '@github/clipboard-copy-element';
   </script>
 
   {{/* Classical JS includes. */}}

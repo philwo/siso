@@ -6,5 +6,27 @@ found in the LICENSE file. */}}
 {{end}}
 
 {{define "content"}}
-<h1>{{ .step_id }}</h1>
+{{$step_id:=.step_id}}
+<div class="step-header">
+  <md-icon-button>
+    <md-icon>arrow_back</md-icon>
+  </md-icon-button>
+  <h1 class="md-typescale-title-medium">{{$step_id}}</h1>
+</div>
+
+<div class="step-details">
+  <dl>
+    {{range $key, $value := .}}
+    <dt>{{$key}}</dt>
+    <dd>
+      <span id="step-{{$step_id}}-{{$key}}-value">{{$value}}</span>
+      <clipboard-copy for="step-{{$step_id}}-{{$key}}-value">
+        <md-icon-button>
+          <md-icon>content_copy</md-icon>
+        </md-icon-button>
+      </clipboard-copy>
+    </dd>
+    {{end}}
+  </dl>
+</div>
 {{end}}

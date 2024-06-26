@@ -96,6 +96,32 @@ cds-table-body {
     background: var(--md-sys-color-surface);
 }
 
+/* Individual step page. */
+
+.step-details {
+    background: var(--md-sys-color-surface);
+    padding: 28px;
+    border-radius: var(--md-sys-shape-corner-large);
+}
+
+.step-details dl {
+    margin-top: 24px;
+}
+
+.step-details dt {
+    font-weight: bold;
+}
+
+.step-details dd {
+    display: flex;
+    align-items: center;
+    margin-bottom: 4px;
+}
+
+.step-header {
+    display: flex;
+}
+
 /* Global styles. */
 
 #progress-indicator {
@@ -174,5 +200,8 @@ a:focus-visible, a:hover {
     --md-sys-color-surface-container: rgb(238 239 227);
     --md-sys-color-surface-container-high: rgb(233 233 221);
     --md-sys-color-surface-container-highest: rgb(227 227 216);
+    --md-sys-shape-corner-small: 8px;
+    --md-sys-shape-corner-medium: 12px;
+    --md-sys-shape-corner-large: 16px;
     --md-icon-button-state-layer-height: 40px;
 }
