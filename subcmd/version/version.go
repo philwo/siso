@@ -87,11 +87,14 @@ func (c *versionRun) Run(a subcommands.Application, args []string, env subcomman
 	}
 	fmt.Printf("CIPD URL: %s\n", cipdURL)
 
+	// already identified the cipd instance id.
+	// rest are just informational, so not fail by the following failures.
+
 	// TODO(crbug.com//1451715): cleanup once cipd tag can easily identify the revision of the binary.
 	repo, rev, err := parseCIPDGitRepoRevision(ctx, cipdURL)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to get git_repository and git_revision in %s: %v\n", cipdURL, err)
-		return 1
+		return 0
 	}
 	fmt.Printf("%s/+/%s\n", repo, rev)
 	switch repo {
@@ -99,18 +102,18 @@ func (c *versionRun) Run(a subcommands.Application, args []string, env subcomman
 		rev, err = parseInfraSuperprojectDEPS(ctx, rev)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "failed to get infra revision in infra_superproject.git@%s/DEPS: %v\n", rev, err)
-			return 1
+			return 0
 		}
 		fmt.Printf("https://chromium.googlesource.com/infra/infra/+/%s\n", rev)
 	case "https://chromium.googlesource.com/infra/infra":
 	default:
 		fmt.Fprintf(os.Stderr, "unknown git_repository: %s\n", repo)
-		return 1
+		return 0
 	}
 	sisoCommit, err := getSisoCommit(ctx, rev)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to get siso commit in infra.git@%s: %v\n", rev, err)
-		return 1
+		return 0
 	}
 	fmt.Println(sisoCommit)
 	return 0
