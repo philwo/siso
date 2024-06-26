@@ -717,6 +717,12 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		return stats, err
 	}
 	spin.Stop(nil)
+	if resultStoreUploader != nil {
+		err := resultStoreUploader.NewConfiguration(ctx, "default", stepConfig.Properties)
+		if err != nil {
+			return stats, err
+		}
+	}
 
 	spin.Start(fmt.Sprintf("load %s", c.fname))
 	nstate, err := ninjabuild.Load(ctx, c.fname, buildPath)

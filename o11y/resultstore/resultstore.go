@@ -35,6 +35,8 @@ type Uploader struct {
 	conn   *grpc.ClientConn
 	client rspb.ResultStoreUploadClient
 
+	invocationID string
+
 	q    chan *rspb.UploadRequest
 	quit chan int
 	done chan struct{}
@@ -49,6 +51,8 @@ func New(ctx context.Context, opts Options) (*Uploader, error) {
 	uploader := &Uploader{
 		conn:   conn,
 		client: rspb.NewResultStoreUploadClient(conn),
+
+		invocationID: opts.InvocationID,
 
 		q:    make(chan *rspb.UploadRequest, 100),
 		quit: make(chan int),
