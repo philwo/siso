@@ -579,6 +579,12 @@ func (c *Client) uploadResourceName(d digest.Digest) string {
 	return path.Join(c.opt.Instance, "uploads", uuid.New().String(), "blobs", d.Hash, strconv.FormatInt(d.SizeBytes, 10))
 }
 
+// FileURI returns bytestream URI for digest.
+func (c *Client) FileURI(d digest.Digest) string {
+	// compressed-blobs is not supported?
+	return fmt.Sprintf("bytestream://%s/%s", c.opt.Address, path.Join(c.opt.Instance, "blobs", d.Hash, strconv.FormatInt(d.SizeBytes, 10)))
+}
+
 // newEncoder returns an encoder to compress blob.
 // For uncompressed blob, it returns a nop closer.
 func (c *Client) newEncoder(w io.Writer, d digest.Digest) (io.WriteCloser, error) {

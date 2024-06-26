@@ -20,7 +20,10 @@ import (
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"infra/build/siso/hashfs"
 	"infra/build/siso/o11y/clog"
+	"infra/build/siso/reapi"
+	"infra/build/siso/reapi/digest"
 )
 
 // Options is options for resultstore uploader.
@@ -32,12 +35,17 @@ type Options struct {
 
 // Uploader is resultstore uploader.
 type Uploader struct {
+	// These are needed for upload and associate files in resultstore.
+	Dir         string
+	HashFS      *hashfs.HashFS
+	REAPIClient *reapi.Client
+
 	conn   *grpc.ClientConn
 	client rspb.ResultStoreUploadClient
 
 	invocationID string
 
-	q    chan *rspb.UploadRequest
+	q    chan any
 	quit chan int
 	done chan struct{}
 }
@@ -54,7 +62,7 @@ func New(ctx context.Context, opts Options) (*Uploader, error) {
 
 		invocationID: opts.InvocationID,
 
-		q:    make(chan *rspb.UploadRequest, 100),
+		q:    make(chan any, 100),
 		quit: make(chan int),
 		done: make(chan struct{}),
 	}
@@ -131,19 +139,35 @@ loop:
 		case exitCode = <-u.quit:
 			clog.Infof(ctx, "quit upload resultstore exit_code=%d", exitCode)
 			break loop
-		case req := <-u.q:
-			batchReq.UploadRequests = append(batchReq.UploadRequests, req)
-			if proto.Size(batchReq) < 4*1024*1024 {
-				continue
+		case x := <-u.q:
+			switch req := x.(type) {
+			case *rspb.UploadRequest:
+				batchReq.UploadRequests = append(batchReq.UploadRequests, req)
+				if proto.Size(batchReq) < 4*1024*1024 {
+					continue
+				}
+				// remove last req to fit in proto size limit.
+				batchReq.UploadRequests = slices.Delete(batchReq.UploadRequests, len(batchReq.UploadRequests)-1, len(batchReq.UploadRequests))
+				clog.Infof(ctx, "upload resultstore %d reqs", len(batchReq.UploadRequests))
+				err := u.uploadBatch(ctx, batchReq)
+				if err != nil {
+					clog.Warningf(ctx, "failed to upload resultstore: %v", err)
+				}
+				batchReq.UploadRequests = append(batchReq.UploadRequests, req)
+
+			case *digest.Store:
+				started := time.Now()
+				n, err := u.REAPIClient.UploadAll(ctx, req)
+				if err != nil {
+					clog.Warningf(ctx, "failed to upload files: n=%d, %s: %v", n, time.Since(started), err)
+				} else {
+					clog.Infof(ctx, "upload files: n=%d, %s", n, time.Since(started))
+				}
+
+			default:
+				clog.Warningf(ctx, "unknown request type: %T", x)
 			}
-			// remove last req to fit in proto size limit.
-			batchReq.UploadRequests = slices.Delete(batchReq.UploadRequests, len(batchReq.UploadRequests)-1, len(batchReq.UploadRequests))
-			clog.Infof(ctx, "upload resultstore %d reqs", len(batchReq.UploadRequests))
-			err := u.uploadBatch(ctx, batchReq)
-			if err != nil {
-				clog.Warningf(ctx, "failed to upload resultstore: %v", err)
-			}
-			batchReq.UploadRequests = append(batchReq.UploadRequests, req)
+
 		case <-time.After(1 * time.Minute):
 			// flush batchReq
 			if len(batchReq.UploadRequests) == 0 {

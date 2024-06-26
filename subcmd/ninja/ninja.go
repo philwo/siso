@@ -1310,6 +1310,14 @@ func doBuild(ctx context.Context, graph *ninjabuild.Graph, bopts build.Options, 
 		if err != nil {
 			return stats, err
 		}
+		bopts.ResultstoreUploader.Dir = filepath.Join(bopts.Path.ExecRoot, bopts.Path.Dir)
+		bopts.ResultstoreUploader.HashFS = bopts.HashFS
+		bopts.ResultstoreUploader.REAPIClient = bopts.REAPIClient
+
+		err = bopts.ResultstoreUploader.UploadFiles(ctx, []string{".siso_config", ".siso_filegroups"})
+		if err != nil {
+			return stats, err
+		}
 	}
 
 	err = mfb.Build(ctx, "rebuild manifest", graph.Filename())
