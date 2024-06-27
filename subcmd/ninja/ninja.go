@@ -1305,6 +1305,16 @@ func doBuild(ctx context.Context, graph *ninjabuild.Graph, bopts build.Options, 
 	if err != nil {
 		return stats, err
 	}
+
+	err = mfb.Build(ctx, "rebuild manifest", graph.Filename())
+	cerr := mfb.Close()
+	if cerr != nil {
+		return stats, fmt.Errorf("failed to close builder: %w", cerr)
+	}
+	if err != nil {
+		return stats, err
+	}
+
 	if bopts.ResultstoreUploader != nil {
 		err := bopts.ResultstoreUploader.NewConfiguration(ctx, "default", graph.ConfigProperties())
 		if err != nil {
@@ -1318,15 +1328,6 @@ func doBuild(ctx context.Context, graph *ninjabuild.Graph, bopts build.Options, 
 		if err != nil {
 			return stats, err
 		}
-	}
-
-	err = mfb.Build(ctx, "rebuild manifest", graph.Filename())
-	cerr := mfb.Close()
-	if cerr != nil {
-		return stats, fmt.Errorf("failed to close builder: %w", cerr)
-	}
-	if err != nil {
-		return stats, err
 	}
 
 	if !bopts.DryRun && nopts.cleandead {
