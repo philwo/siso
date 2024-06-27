@@ -11,7 +11,9 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
+	"path"
 	"strings"
 
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
@@ -34,6 +36,9 @@ Print contents to stdout, or extract in <dir> for -type dir-extract.
  $ siso fetch -project <project> -reapi_instnace <instnace> \
           [-type <type>] \
           <digest> [<dir>]
+
+ $ siso fetch [-type <type>] \
+  bytesteam://<endpoint>/projects/<project>/instances/<instance>/blobs/<digest>
 
 <type> is
   raw: raw content
@@ -102,6 +107,31 @@ func (c *run) run(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer signals.HandleInterrupt(cancel)()
 
+	if c.Flags.NArg() == 0 {
+		return fmt.Errorf("no digest nor bytestream uri: %w", flag.ErrHelp)
+	}
+	var digestStr string
+	if strings.HasPrefix(c.Flags.Arg(0), "bytestream://") {
+		bsurl, err := url.Parse(c.Flags.Arg(0))
+		if err != nil {
+			return fmt.Errorf("invalid bytestream uri: %w", err)
+		}
+		c.reopt.Address = bsurl.Host
+		elems := strings.Split(strings.TrimPrefix(bsurl.EscapedPath(), "/"), "/")
+		// projects/<project>/instances/<instance>/blobs/<hash>/<size>
+		if len(elems) != 7 {
+			return fmt.Errorf("invlaid bytestream uri: path=%q", strings.Join(elems, "/"))
+		}
+		if elems[0] != "projects" || elems[2] != "instances" || elems[4] != "blobs" {
+			return fmt.Errorf("invlaid bytestream uri: path=%q", strings.Join(elems, "/"))
+		}
+		c.projectID = elems[1]
+		c.reopt.Instance = path.Join(elems[0:4]...)
+		digestStr = path.Join(elems[5:]...)
+	} else {
+		digestStr = c.Flags.Arg(0)
+	}
+
 	projectID := c.reopt.UpdateProjectID(c.projectID)
 	var credential cred.Cred
 	var err error
@@ -112,10 +142,7 @@ func (c *run) run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if c.Flags.NArg() == 0 {
-		return fmt.Errorf("no digest: %w", flag.ErrHelp)
-	}
-	d, err := digest.Parse(c.Flags.Arg(0))
+	d, err := digest.Parse(digestStr)
 	if err != nil {
 		return err
 	}
