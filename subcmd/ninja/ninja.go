@@ -503,6 +503,8 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	clog.Infof(ctx, "project id: %q", projectID)
 	clog.Infof(ctx, "commandline %q", os.Args)
 
+	spin := ui.Default.NewSpinner()
+
 	var resultstoreUploader *resultstore.Uploader
 	if c.enableResultstore {
 		resultstoreUploader, err = resultstore.New(ctx, resultstore.Options{
@@ -515,6 +517,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		}
 		fmt.Fprintf(os.Stderr, "https://btx.cloud.google.com/invocations/%s\n", buildID)
 		defer func() {
+			spin.Start("finishing upload to resultstore")
 			exitCode := 0
 			if err != nil {
 				exitCode = 1
@@ -523,6 +526,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 			if cerr != nil {
 				clog.Warningf(ctx, "failed to close resultstore: %v", cerr)
 			}
+			spin.Stop(cerr)
 		}()
 	}
 
@@ -548,8 +552,6 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	}
 
 	sameTargets := checkTargets(ctx, lastTargetsFile, targets)
-
-	spin := ui.Default.NewSpinner()
 
 	var eg errgroup.Group
 	var localDepsLog *ninjautil.DepsLog
@@ -697,6 +699,25 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		return stats, errNothingToDo
 	}
 	os.Remove(lastTargetsFile)
+
+	if resultstoreUploader != nil {
+		defer func() {
+			var files []string
+			if c.metricsJSON != "" {
+				files = append(files, c.metricsJSON)
+			}
+			// TODO(b/329564182): add other files? e.g. siso_output, siso_trace.json etc.
+			if len(files) == 0 {
+				return
+			}
+			spin.Start("uploading to resultstore")
+			uerr := resultstoreUploader.UploadFiles(ctx, files)
+			if uerr != nil {
+				clog.Warningf(ctx, "failed to upload %q: %v", c.metricsJSON, uerr)
+			}
+			spin.Stop(uerr)
+		}()
+	}
 
 	bopts, done, err := c.initBuildOpts(ctx, projectID, buildID, buildPath, config, ds, hashFS, limits, traceExporter, resultstoreUploader)
 	if err != nil {
