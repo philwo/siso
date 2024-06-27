@@ -62,6 +62,42 @@ func Serve(port int, metricsJSON string) int {
 		http.Redirect(w, r, "/steps/", http.StatusTemporaryRedirect)
 	})
 
+	http.HandleFunc("POST /steps/{id}/recall/", func(w http.ResponseWriter, r *http.Request) {
+		tmpl, err := template.ParseFiles(
+			"webui/base.html",
+			"webui/_recall.html",
+		)
+		if err != nil {
+			fmt.Fprintf(w, "failed to parse templates: %s\n", err)
+			return
+		}
+
+		stepIdx := slices.IndexFunc(metrics, func(m any) bool {
+			if m, _ := m.(map[string]any); m != nil {
+				if s, _ := m["step_id"].(string); s != "" {
+					return s == r.PathValue("id")
+				}
+			}
+			return false
+		})
+
+		if step, ok := metrics[stepIdx].(map[string]any); ok {
+			err = tmpl.ExecuteTemplate(w, "base", map[string]any{
+				"step_id":        step["step_id"],
+				"digest":         step["digest"],
+				"project":        r.FormValue("project"),
+				"reapi_instance": r.FormValue("reapi_instance"),
+			})
+			if err != nil {
+				fmt.Fprintf(w, "failed to execute template: %s\n", err)
+			}
+			return
+		}
+
+		fmt.Fprintf(w, "invalid step %s", r.PathValue("id"))
+		http.NotFound(w, r)
+	})
+
 	http.HandleFunc("/steps/{id}/", func(w http.ResponseWriter, r *http.Request) {
 		tmpl, err := template.ParseFiles(
 			"webui/base.html",

@@ -14,8 +14,8 @@ found in the LICENSE file. */}}
   <h1>{{$step_id}}</h1>
 </div>
 
-<div class="step-details">
-  <dl>
+<div class="step-page">
+  <dl class="step-details">
     {{range $key, $value := .}}
     <dt>{{$key}}</dt>
     <dd>
@@ -28,5 +28,30 @@ found in the LICENSE file. */}}
     </dd>
     {{end}}
   </dl>
+
+  <div class="step-tools">
+    <h2>Tools</h2>
+    <h3>Recall</h3>
+    <form id="recall-form"
+          action="/steps/{{$step_id}}/recall/" method="POST" hx-push-url="false"
+          hx-select="#page-content" hx-target="#recall-dialog-form" hx-swap="innerHTML"
+          hx-on:htmx:before-request="document.getElementById('recall-dialog').show()">
+      <md-outlined-text-field name="project" label="Cloud project ID" type="text" value="rbe-chrome-untrusted"></md-outlined-text-field>
+      <md-outlined-text-field name="reapi_instance" label="RE API instance name" type="text" value="default_instance"></md-outlined-text-field>
+      <md-filled-button>Recall</md-filled-button>
+    </form>
+    <md-dialog id="recall-dialog">
+      <div slot="headline">
+        Recall step
+      </div>
+      <form slot="content" id="recall-dialog-form" method="dialog" hx-trigger="none">
+        <md-circular-progress four-color indeterminate></md-circular-progress>
+        Loading...
+      </form>
+      <div slot="actions">
+        <md-text-button form="recall-dialog-form">Ok</md-text-button>
+      </div>
+    </md-dialog>
+  </div>
 </div>
 {{end}}

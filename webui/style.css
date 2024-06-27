@@ -98,24 +98,37 @@ cds-table-body {
 
 /* Individual step page. */
 
-.step-details {
+.step-page {
+    display: grid;
+    grid-template-columns: 3fr 1fr;
+    grid-template-areas: "details tools";
     background: var(--md-sys-color-surface);
     padding: 28px;
     border-radius: var(--md-sys-shape-corner-large);
 }
 
-.step-details dl {
-    margin-top: 24px;
-}
-
-.step-details dt {
+.step-page dt {
     font-weight: bold;
 }
 
-.step-details dd {
+.step-page dd {
     display: flex;
     align-items: center;
     margin-bottom: 4px;
+}
+
+.step-details {
+    grid-area: details;
+}
+
+.step-tools {
+    grid-area: tools;
+}
+
+.step-tools form {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
 }
 
 .step-header {
@@ -150,6 +163,14 @@ a {
 
 a:focus-visible, a:hover {
     text-decoration: underline;
+}
+
+.code-block {
+    max-width: 100%;
+    overflow-x: auto;
+    background: var(--md-sys-color-surface-container);
+    border: 1px solid var(--md-sys-color-outline);
+    padding: 8px;
 }
 
 :root {
