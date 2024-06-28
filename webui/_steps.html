@@ -85,19 +85,20 @@ found in the LICENSE file. */}}
     <cds-table-body id="data-table-body">
       {{ range .subset }}
       <cds-table-row>
-        <cds-table-cell><a href="/steps/{{ .step_id }}">{{ .step_id }}</a></cds-table-cell>
+        <cds-table-cell><a href="/steps/{{ .StepID }}">{{ .StepID }}</a></cds-table-cell>
         <cds-table-cell>
-          {{ .output }}
-          <cds-table-cell-content>{{ .action }}</cds-table-cell-content>
+          {{ .Output }}
+          <cds-table-cell-content>{{ .Action }}</cds-table-cell-content>
         </cds-table-cell>
-        <cds-table-cell>{{ .rule }}</cds-table-cell>
-        <cds-table-cell>{{ printf "%.4f" .ready }}</cds-table-cell>
-        <cds-table-cell>{{ printf "%.4f" .start }}</cds-table-cell>
-        <cds-table-cell>{{ printf "%.4f" .duration }}</cds-table-cell>
-        <cds-table-cell>{{ printf "%.4f" .weighted_duration }}</cds-table-cell>
-        <cds-table-cell>{{ printf "%.4f" .run }}</cds-table-cell>
-        <cds-table-cell>{{ printf "%.4f" .queue }}</cds-table-cell>
-        <cds-table-cell>{{ printf "%.4f" .exec }}</cds-table-cell>
+        <cds-table-cell>{{ .Rule }}</cds-table-cell>
+        {{/* TODO(b/349287453): Fix timestamp display. */}}
+        <cds-table-cell>{{ printf "%v" .Ready }}</cds-table-cell>
+        <cds-table-cell>{{ printf "%v" .Start }}</cds-table-cell>
+        <cds-table-cell>{{ printf "%v" .Duration }}</cds-table-cell>
+        <cds-table-cell>{{ printf "%v" .WeightedDuration }}</cds-table-cell>
+        <cds-table-cell>{{ printf "%v" .RunTime }}</cds-table-cell>
+        <cds-table-cell>{{ printf "%v" .QueueTime }}</cds-table-cell>
+        <cds-table-cell>{{ printf "%v" .ExecTime }}</cds-table-cell>
       </cds-table-row>
       {{ end }}
     </cds-table-body>

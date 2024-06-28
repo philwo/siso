@@ -6,55 +6,61 @@
 package webui
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"slices"
 	"strconv"
 	"strings"
 	"text/template"
+
+	"infra/build/siso/build"
 )
 
 const DefaultItemsPerPage = 100
 
 func Serve(port int, metricsJSON string) int {
 	// Read metrics.
-	b, err := os.ReadFile(metricsJSON)
+	f, err := os.Open(metricsJSON)
 	if err != nil {
-		fmt.Printf("failed to read metrics: %s\n", err)
+		fmt.Fprintf(os.Stderr, "failed to read metrics: %v", err)
 		return 1
 	}
-	b = bytes.Replace(b, []byte("\n"), []byte(","), -1)
-	b = append([]byte{'['}, b...)
-	if b[len(b)-1] == ',' {
-		b = b[:len(b)-1]
-	}
-	b = append(b, ']')
-	var metrics []any
-	err = json.Unmarshal(b, &metrics)
-	if err != nil {
-		fmt.Printf("failed to unmarshal metrics: %s\n", err)
-		return 1
+	defer func() {
+		err := f.Close()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "failed to close metrics: %v", err)
+		}
+	}()
+	d := json.NewDecoder(f)
+	var metrics []build.StepMetric
+	for {
+		var m build.StepMetric
+		err := d.Decode(&m)
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "parse error in %s:%d: %v", metricsJSON, d.InputOffset(), err)
+			return 1
+		}
+		metrics = append(metrics, m)
 	}
 
 	actionCounts := make(map[string]int)
 	for _, metric := range metrics {
-		if actionVal, ok := metric.(map[string]any)["action"]; ok {
-			if action, ok := actionVal.(string); ok && len(action) > 0 {
-				actionCounts[action]++
-			}
+		if len(metric.Action) > 0 {
+			actionCounts[metric.Action]++
 		}
 	}
 
 	ruleCounts := make(map[string]int)
 	for _, metric := range metrics {
-		if ruleVal, ok := metric.(map[string]any)["rule"]; ok {
-			if rule, ok := ruleVal.(string); ok && len(rule) > 0 {
-				ruleCounts[rule]++
-			}
+		if len(metric.Rule) > 0 {
+			ruleCounts[metric.Rule]++
 		}
 	}
 
@@ -72,30 +78,23 @@ func Serve(port int, metricsJSON string) int {
 			return
 		}
 
-		stepIdx := slices.IndexFunc(metrics, func(m any) bool {
-			if m, _ := m.(map[string]any); m != nil {
-				if s, _ := m["step_id"].(string); s != "" {
-					return s == r.PathValue("id")
-				}
-			}
-			return false
+		stepIdx := slices.IndexFunc(metrics, func(s build.StepMetric) bool {
+			return s.StepID == r.PathValue("id")
 		})
-
-		if step, ok := metrics[stepIdx].(map[string]any); ok {
-			err = tmpl.ExecuteTemplate(w, "base", map[string]any{
-				"step_id":        step["step_id"],
-				"digest":         step["digest"],
-				"project":        r.FormValue("project"),
-				"reapi_instance": r.FormValue("reapi_instance"),
-			})
-			if err != nil {
-				fmt.Fprintf(w, "failed to execute template: %s\n", err)
-			}
+		if stepIdx == -1 {
+			http.NotFound(w, r)
 			return
 		}
 
-		fmt.Fprintf(w, "invalid step %s", r.PathValue("id"))
-		http.NotFound(w, r)
+		err = tmpl.ExecuteTemplate(w, "base", map[string]string{
+			"step_id":        metrics[stepIdx].StepID,
+			"digest":         metrics[stepIdx].Digest,
+			"project":        r.FormValue("project"),
+			"reapi_instance": r.FormValue("reapi_instance"),
+		})
+		if err != nil {
+			fmt.Fprintf(w, "failed to execute template: %s\n", err)
+		}
 	})
 
 	http.HandleFunc("/steps/{id}/", func(w http.ResponseWriter, r *http.Request) {
@@ -108,19 +107,29 @@ func Serve(port int, metricsJSON string) int {
 			return
 		}
 
-		// TODO: send 404 if missing
-		step := slices.IndexFunc(metrics, func(m any) bool {
-			if m, _ := m.(map[string]any); m != nil {
-				if s, _ := m["step_id"].(string); s != "" {
-					return s == r.PathValue("id")
-				}
-			}
-			return false
+		stepIdx := slices.IndexFunc(metrics, func(s build.StepMetric) bool {
+			return s.StepID == r.PathValue("id")
 		})
+		if stepIdx == -1 {
+			http.NotFound(w, r)
+			return
+		}
 
-		err = tmpl.ExecuteTemplate(w, "base", metrics[step])
+		var asMap map[string]any
+		asJSON, err := json.Marshal(metrics[stepIdx])
 		if err != nil {
-			fmt.Fprintf(w, "failed to execute template: %s\n", err)
+			// TODO(b/349287453): proper error handling.
+			fmt.Fprintf(w, "failed to marshal metrics: %v\n", err)
+		}
+		err = json.Unmarshal(asJSON, &asMap)
+		if err != nil {
+			// TODO(b/349287453): proper error handling.
+			fmt.Fprintf(w, "failed to unmarshal metrics: %v\n", err)
+		}
+
+		err = tmpl.ExecuteTemplate(w, "base", asMap)
+		if err != nil {
+			fmt.Fprintf(w, "failed to execute template: %v\n", err)
 		}
 	})
 
@@ -149,30 +158,23 @@ func Serve(port int, metricsJSON string) int {
 		filteredMetrics := metrics
 		if len(actionsWanted) > 0 || len(rulesWanted) > 0 || len(outputSearch) > 0 {
 			// Need to clone metrics otherwise deletes will propagate to the cached metrics.
-			filteredMetrics = make([]any, len(metrics))
-			copy(filteredMetrics, metrics)
-			filteredMetrics = slices.DeleteFunc(filteredMetrics, func(m any) bool {
+			filteredMetrics = slices.Clone(metrics)
+			filteredMetrics = slices.DeleteFunc(filteredMetrics, func(m build.StepMetric) bool {
 				shouldDelete := false
-				if metric, ok := m.(map[string]any); ok {
-					// Perform filtering only if filters are set for that field.
-					// Ignore failed type assertions because null fields should be filtered out.
-					if len(actionsWanted) > 0 {
-						action, _ := metric["action"].(string)
-						if !slices.Contains(actionsWanted, action) {
-							shouldDelete = true
-						}
+				// Perform filtering only if filters are set for that field.
+				if len(actionsWanted) > 0 {
+					if !slices.Contains(actionsWanted, m.Action) {
+						shouldDelete = true
 					}
-					if len(rulesWanted) > 0 {
-						rule, _ := metric["rule"].(string)
-						if !slices.Contains(rulesWanted, rule) {
-							shouldDelete = true
-						}
+				}
+				if len(rulesWanted) > 0 {
+					if !slices.Contains(rulesWanted, m.Rule) {
+						shouldDelete = true
 					}
-					if len(outputSearch) > 0 {
-						output, _ := metric["output"].(string)
-						if !strings.Contains(output, outputSearch) {
-							shouldDelete = true
-						}
+				}
+				if len(outputSearch) > 0 {
+					if !strings.Contains(m.Output, outputSearch) {
+						shouldDelete = true
 					}
 				}
 				return shouldDelete
