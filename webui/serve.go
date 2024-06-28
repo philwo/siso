@@ -6,6 +6,7 @@
 package webui
 
 import (
+	"cmp"
 	"embed"
 	"encoding/json"
 	"errors"
@@ -14,6 +15,7 @@ import (
 	"io/fs"
 	"net/http"
 	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -27,7 +29,63 @@ var content embed.FS
 
 const DefaultItemsPerPage = 100
 
-func Serve(localDevelopment bool, port int, metricsJSON string) int {
+type outdirInfo struct {
+	buildMetrics []build.StepMetric
+	stepMetrics  map[string]build.StepMetric
+	ruleCounts   map[string]int
+	actionCounts map[string]int
+}
+
+func loadOutdirInfo(outdirPath string) (*outdirInfo, error) {
+	metricsPath := filepath.Join(outdirPath, "siso_metrics.json")
+
+	f, err := os.Open(metricsPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read metrics: %w", err)
+	}
+	defer f.Close()
+
+	outdirInfo := &outdirInfo{
+		buildMetrics: []build.StepMetric{},
+		stepMetrics:  make(map[string]build.StepMetric),
+		ruleCounts:   make(map[string]int),
+		actionCounts: make(map[string]int),
+	}
+
+	d := json.NewDecoder(f)
+	for {
+		var m build.StepMetric
+		err := d.Decode(&m)
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("parse error in %s:%d: %w", metricsPath, d.InputOffset(), err)
+		}
+		if m.BuildID != "" {
+			outdirInfo.buildMetrics = append(outdirInfo.buildMetrics, m)
+		} else if m.StepID != "" {
+			outdirInfo.stepMetrics[m.StepID] = m
+		} else {
+			return nil, fmt.Errorf("unexpected metric found %v", m)
+		}
+	}
+
+	for _, metric := range outdirInfo.stepMetrics {
+		if metric.Action != "" {
+			outdirInfo.actionCounts[metric.Action]++
+		}
+	}
+	for _, metric := range outdirInfo.stepMetrics {
+		if metric.Rule != "" {
+			outdirInfo.ruleCounts[metric.Rule]++
+		}
+	}
+
+	return outdirInfo, err
+}
+
+func Serve(localDevelopment bool, port int, outdir string) int {
 	// Prepare templates.
 	// TODO(b/349287453): don't recompile templates every time if using embedded fs.
 	fs := fs.FS(content)
@@ -36,44 +94,10 @@ func Serve(localDevelopment bool, port int, metricsJSON string) int {
 	}
 
 	// Read metrics.
-	f, err := os.Open(metricsJSON)
+	// TODO(b/349287453): support multiple outdirs.
+	metrics, err := loadOutdirInfo(outdir)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to read metrics: %v", err)
-		return 1
-	}
-	defer func() {
-		err := f.Close()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "failed to close metrics: %v", err)
-		}
-	}()
-	d := json.NewDecoder(f)
-	var metrics []build.StepMetric
-	for {
-		var m build.StepMetric
-		err := d.Decode(&m)
-		if errors.Is(err, io.EOF) {
-			break
-		}
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "parse error in %s:%d: %v", metricsJSON, d.InputOffset(), err)
-			return 1
-		}
-		metrics = append(metrics, m)
-	}
-
-	actionCounts := make(map[string]int)
-	for _, metric := range metrics {
-		if len(metric.Action) > 0 {
-			actionCounts[metric.Action]++
-		}
-	}
-
-	ruleCounts := make(map[string]int)
-	for _, metric := range metrics {
-		if len(metric.Rule) > 0 {
-			ruleCounts[metric.Rule]++
-		}
+		fmt.Fprintf(os.Stderr, "failed to load outdir: %v", err)
 	}
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -90,17 +114,15 @@ func Serve(localDevelopment bool, port int, metricsJSON string) int {
 			return
 		}
 
-		stepIdx := slices.IndexFunc(metrics, func(s build.StepMetric) bool {
-			return s.StepID == r.PathValue("id")
-		})
-		if stepIdx == -1 {
+		metric, ok := metrics.stepMetrics[r.PathValue("id")]
+		if !ok {
 			http.NotFound(w, r)
 			return
 		}
 
 		err = tmpl.ExecuteTemplate(w, "base", map[string]string{
-			"step_id":        metrics[stepIdx].StepID,
-			"digest":         metrics[stepIdx].Digest,
+			"step_id":        metric.StepID,
+			"digest":         metric.Digest,
 			"project":        r.FormValue("project"),
 			"reapi_instance": r.FormValue("reapi_instance"),
 		})
@@ -117,16 +139,14 @@ func Serve(localDevelopment bool, port int, metricsJSON string) int {
 			return
 		}
 
-		stepIdx := slices.IndexFunc(metrics, func(s build.StepMetric) bool {
-			return s.StepID == r.PathValue("id")
-		})
-		if stepIdx == -1 {
+		metric, ok := metrics.stepMetrics[r.PathValue("id")]
+		if !ok {
 			http.NotFound(w, r)
 			return
 		}
 
 		var asMap map[string]any
-		asJSON, err := json.Marshal(metrics[stepIdx])
+		asJSON, err := json.Marshal(metric)
 		if err != nil {
 			// TODO(b/349287453): proper error handling.
 			fmt.Fprintf(w, "failed to marshal metrics: %v\n", err)
@@ -163,33 +183,24 @@ func Serve(localDevelopment bool, port int, metricsJSON string) int {
 		rulesWanted := r.URL.Query()["rule"]
 		outputSearch := r.URL.Query().Get("q")
 
-		filteredMetrics := metrics
-		if len(actionsWanted) > 0 || len(rulesWanted) > 0 || len(outputSearch) > 0 {
-			// Need to clone metrics otherwise deletes will propagate to the cached metrics.
-			filteredMetrics = slices.Clone(metrics)
-			filteredMetrics = slices.DeleteFunc(filteredMetrics, func(m build.StepMetric) bool {
-				shouldDelete := false
-				// Perform filtering only if filters are set for that field.
-				if len(actionsWanted) > 0 {
-					if !slices.Contains(actionsWanted, m.Action) {
-						shouldDelete = true
-					}
-				}
-				if len(rulesWanted) > 0 {
-					if !slices.Contains(rulesWanted, m.Rule) {
-						shouldDelete = true
-					}
-				}
-				if len(outputSearch) > 0 {
-					if !strings.Contains(m.Output, outputSearch) {
-						shouldDelete = true
-					}
-				}
-				return shouldDelete
-			})
+		var filteredSteps []build.StepMetric
+		for _, m := range metrics.stepMetrics {
+			if len(actionsWanted) > 0 && !slices.Contains(actionsWanted, m.Action) {
+				continue
+			}
+			if len(rulesWanted) > 0 && !slices.Contains(rulesWanted, m.Rule) {
+				continue
+			}
+			if outputSearch != "" && !strings.Contains(m.Output, outputSearch) {
+				continue
+			}
+			filteredSteps = append(filteredSteps, m)
 		}
+		slices.SortFunc(filteredSteps, func(a, b build.StepMetric) int {
+			return cmp.Compare(a.Start, b.Start)
+		})
 
-		itemsLen := len(filteredMetrics)
+		itemsLen := len(filteredSteps)
 		itemsPerPage, err := strconv.Atoi(r.URL.Query().Get("items_per_page"))
 		if err != nil {
 			itemsPerPage = DefaultItemsPerPage
@@ -198,8 +209,8 @@ func Serve(localDevelopment bool, port int, metricsJSON string) int {
 		if err != nil {
 			requestedPage = 0
 		}
-		pageCount := len(filteredMetrics) / itemsPerPage
-		if len(filteredMetrics)%itemsPerPage > 0 {
+		pageCount := len(filteredSteps) / itemsPerPage
+		if len(filteredSteps)%itemsPerPage > 0 {
 			pageCount++
 		}
 
@@ -210,7 +221,7 @@ func Serve(localDevelopment bool, port int, metricsJSON string) int {
 		pagePrev := max(0, pageIndex-1)
 		itemsFirst := pageIndex * itemsPerPage
 		itemsLast := max(0, min(itemsFirst+itemsPerPage, itemsLen)-1)
-		subset := filteredMetrics[itemsFirst:itemsLast]
+		subset := filteredSteps[itemsFirst:itemsLast]
 
 		data := map[string]any{
 			"subset":        subset,
@@ -224,9 +235,9 @@ func Serve(localDevelopment bool, port int, metricsJSON string) int {
 			"page_count":    pageCount,
 			"items_first":   itemsFirst + 1,
 			"items_last":    itemsLast + 1,
-			"items_len":     len(filteredMetrics),
-			"action_counts": actionCounts,
-			"rule_counts":   ruleCounts,
+			"items_len":     len(filteredSteps),
+			"action_counts": metrics.actionCounts,
+			"rule_counts":   metrics.ruleCounts,
 		}
 		err = tmpl.ExecuteTemplate(w, "base", data)
 		if err != nil {

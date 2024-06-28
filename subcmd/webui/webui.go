@@ -29,15 +29,15 @@ type webuiRun struct {
 	subcommands.CommandRunBase
 	localDevelopment bool
 	port             int
-	metricsJSON      string
+	outdir           string
 }
 
 func (c *webuiRun) init() {
 	c.Flags.BoolVar(&c.localDevelopment, "local_development", false, "whether to use local instead of embedded files")
 	c.Flags.IntVar(&c.port, "port", 8080, "port to use (defaults to 8080)")
-	c.Flags.StringVar(&c.metricsJSON, "metrics", "", "path to siso_metrics.json")
+	c.Flags.StringVar(&c.outdir, "C", "", "path to outdir")
 }
 
 func (c *webuiRun) Run(a subcommands.Application, args []string, env subcommands.Env) int {
-	return webui.Serve(c.localDevelopment, c.port, c.metricsJSON)
+	return webui.Serve(c.localDevelopment, c.port, c.outdir)
 }
