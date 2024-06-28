@@ -6,10 +6,12 @@
 package webui
 
 import (
+	"embed"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"os"
 	"slices"
@@ -20,9 +22,19 @@ import (
 	"infra/build/siso/build"
 )
 
+//go:embed *.html *.css
+var content embed.FS
+
 const DefaultItemsPerPage = 100
 
-func Serve(port int, metricsJSON string) int {
+func Serve(localDevelopment bool, port int, metricsJSON string) int {
+	// Prepare templates.
+	// TODO(b/349287453): don't recompile templates every time if using embedded fs.
+	fs := fs.FS(content)
+	if localDevelopment {
+		fs = os.DirFS("webui/")
+	}
+
 	// Read metrics.
 	f, err := os.Open(metricsJSON)
 	if err != nil {
@@ -98,10 +110,8 @@ func Serve(port int, metricsJSON string) int {
 	})
 
 	http.HandleFunc("/steps/{id}/", func(w http.ResponseWriter, r *http.Request) {
-		tmpl, err := template.ParseFiles(
-			"webui/base.html",
-			"webui/_step.html",
-		)
+		templates := []string{"base.html", "_step.html"}
+		tmpl, err := template.ParseFS(fs, templates...)
 		if err != nil {
 			fmt.Fprintf(w, "failed to parse templates: %s\n", err)
 			return
@@ -134,7 +144,8 @@ func Serve(port int, metricsJSON string) int {
 	})
 
 	http.HandleFunc("/steps/", func(w http.ResponseWriter, r *http.Request) {
-		tmpl, err := template.New("_steps.html").Funcs(template.FuncMap{
+		templates := []string{"base.html", "_steps.html"}
+		tmpl, err := template.New("steps").Funcs(template.FuncMap{
 			"currentURLHasParam": func(key string, value string) bool {
 				q := r.URL.Query()
 				if values, ok := q[key]; ok {
@@ -142,10 +153,7 @@ func Serve(port int, metricsJSON string) int {
 				}
 				return false
 			},
-		}).ParseFiles(
-			"webui/base.html",
-			"webui/_steps.html",
-		)
+		}).ParseFS(fs, templates...)
 		if err != nil {
 			fmt.Fprintf(w, "failed to parse templates: %s\n", err)
 			return
@@ -227,7 +235,7 @@ func Serve(port int, metricsJSON string) int {
 	})
 
 	http.HandleFunc("/style.css", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFile(w, r, "webui/style.css")
+		http.ServeFileFS(w, r, fs, "style.css")
 	})
 
 	fmt.Printf("listening on http://localhost:%d/...\n", port)
