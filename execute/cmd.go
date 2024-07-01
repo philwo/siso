@@ -755,46 +755,6 @@ func retrieveLocalOutputEntries(ctx context.Context, hfs *hashfs.HashFS, root st
 	return hfs.RetrieveUpdateEntriesFromLocal(ctx, root, inputs)
 }
 
-func updateLocalOutputDir(ctx context.Context, hfs *hashfs.HashFS, root, dir string) (err error) {
-	started := time.Now()
-	defer func() {
-		if err != nil {
-			clog.Warningf(ctx, "failed to update local output dir %q: %v", dir, err)
-		} else {
-			clog.Infof(ctx, "update local output dir %q: %s", dir, time.Since(started))
-		}
-	}()
-
-	entriesFromLocalDir := func(dir string) ([]hashfs.UpdateEntry, error) {
-		dents, err := hfs.ReadDir(ctx, root, dir)
-		if err != nil {
-			return nil, err
-		}
-		names := make([]string, 0, len(dents))
-		for _, dent := range dents {
-			names = append(names, filepath.Join(dir, dent.Name()))
-		}
-		hfs.Forget(ctx, root, names)
-		return hfs.RetrieveUpdateEntriesFromLocal(ctx, root, names), nil
-	}
-	ents, err := entriesFromLocalDir(dir)
-	if err != nil {
-		return err
-	}
-	for i := 0; i < len(ents); i++ {
-		ent := ents[i]
-		if !ent.Mode.IsDir() {
-			continue
-		}
-		subdirEnts, err := entriesFromLocalDir(ent.Name)
-		if err != nil {
-			return err
-		}
-		ents = append(ents, subdirEnts...)
-	}
-	return hfs.Update(ctx, root, ents)
-}
-
 // computeOutputEntries computes output entries to have updatedTime and cmdhash.
 // if restat is true, it checks preOutputEntries recorded by
 // RecordPreOutputs and don't update mtime/is_changed
@@ -844,17 +804,6 @@ func (c *Cmd) RecordOutputsFromLocal(ctx context.Context, now time.Time) error {
 	err := c.HashFS.Update(ctx, c.ExecRoot, entries)
 	if err != nil {
 		return fmt.Errorf("failed to update hashfs from local: %w", err)
-	}
-	for _, ent := range entries {
-		if !ent.Mode.IsDir() {
-			continue
-		}
-		// If output is dir, forget all files under dir and retrieve
-		// from local disk.
-		err := updateLocalOutputDir(ctx, c.HashFS, c.ExecRoot, ent.Name)
-		if err != nil {
-			return fmt.Errorf("failed to update hashfs from local dir %q: %w", ent.Name, err)
-		}
 	}
 	return nil
 }
