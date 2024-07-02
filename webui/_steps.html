@@ -63,6 +63,7 @@ found in the LICENSE file. */}}
 {{end}}
 
 {{define "content"}}
+{{$build_duration:=.build_duration}}
 <div class="data-table-container">
   <cds-table>
     <cds-table-head>
@@ -74,6 +75,7 @@ found in the LICENSE file. */}}
         <cds-table-header-cell>Ready</cds-table-header-cell>
         <cds-table-header-cell>Duration</cds-table-header-cell>
         <cds-table-header-cell>Completion</cds-table-header-cell>
+        <cds-table-header-cell>Timeline</cds-table-header-cell>
       </cds-table-header-row>
     </cds-table-head>
     <cds-table-body id="data-table-body">
@@ -89,6 +91,13 @@ found in the LICENSE file. */}}
         <cds-table-cell>{{ formatIntervalMetric .Ready }}</cds-table-cell>
         <cds-table-cell>{{ formatIntervalMetric .Duration }}</cds-table-cell>
         <cds-table-cell>{{ formatIntervalMetric (addIntervals .Ready .Duration) }}</cds-table-cell>
+        <cds-table-cell>
+          <svg height="20" class="step-timeline-bar">
+            <rect x="{{ divIntervalsScaled .Ready $build_duration 100 }}%" y="0"
+                width="{{ divIntervalsScaled .Duration $build_duration 100 }}%" height="20"
+                class="duration-interval" />
+          </svg>
+        </cds-table-cell>
       </cds-table-row>
       {{ end }}
     </cds-table-body>

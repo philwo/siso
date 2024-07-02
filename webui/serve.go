@@ -31,10 +31,11 @@ var content embed.FS
 const DefaultItemsPerPage = 100
 
 type outdirInfo struct {
-	buildMetrics []build.StepMetric
-	stepMetrics  map[string]build.StepMetric
-	ruleCounts   map[string]int
-	actionCounts map[string]int
+	buildMetrics  []build.StepMetric
+	buildDuration build.IntervalMetric
+	stepMetrics   map[string]build.StepMetric
+	ruleCounts    map[string]int
+	actionCounts  map[string]int
 }
 
 func loadOutdirInfo(outdirPath string) (*outdirInfo, error) {
@@ -65,6 +66,8 @@ func loadOutdirInfo(outdirPath string) (*outdirInfo, error) {
 		}
 		if m.BuildID != "" {
 			outdirInfo.buildMetrics = append(outdirInfo.buildMetrics, m)
+			// The last build metric found has the actual build duration.
+			outdirInfo.buildDuration = m.Duration
 		} else if m.StepID != "" {
 			outdirInfo.stepMetrics[m.StepID] = m
 		} else {
@@ -174,6 +177,9 @@ func Serve(localDevelopment bool, port int, outdir string) int {
 				}
 				return false
 			},
+			"divIntervalsScaled": func(a build.IntervalMetric, b build.IntervalMetric, scale int) float64 {
+				return float64(a) / float64(b) * float64(scale)
+			},
 			"addIntervals": func(a build.IntervalMetric, b build.IntervalMetric) build.IntervalMetric {
 				return a + b
 			},
@@ -236,20 +242,21 @@ func Serve(localDevelopment bool, port int, outdir string) int {
 		subset := filteredSteps[itemsFirst:itemsLast]
 
 		data := map[string]any{
-			"subset":        subset,
-			"output_search": outputSearch,
-			"page":          requestedPage,
-			"page_index":    pageIndex,
-			"page_first":    pageFirst,
-			"page_next":     pageNext,
-			"page_prev":     pagePrev,
-			"page_last":     pageLast,
-			"page_count":    pageCount,
-			"items_first":   itemsFirst + 1,
-			"items_last":    itemsLast + 1,
-			"items_len":     len(filteredSteps),
-			"action_counts": metrics.actionCounts,
-			"rule_counts":   metrics.ruleCounts,
+			"subset":         subset,
+			"output_search":  outputSearch,
+			"page":           requestedPage,
+			"page_index":     pageIndex,
+			"page_first":     pageFirst,
+			"page_next":      pageNext,
+			"page_prev":      pagePrev,
+			"page_last":      pageLast,
+			"page_count":     pageCount,
+			"items_first":    itemsFirst + 1,
+			"items_last":     itemsLast + 1,
+			"items_len":      len(filteredSteps),
+			"action_counts":  metrics.actionCounts,
+			"rule_counts":    metrics.ruleCounts,
+			"build_duration": metrics.buildDuration,
 		}
 		err = tmpl.ExecuteTemplate(w, "base", data)
 		if err != nil {

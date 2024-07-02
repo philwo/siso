@@ -103,6 +103,13 @@ cds-table-body {
     border-radius: var(--md-sys-shape-corner-large);
 }
 
+.step-timeline-bar {
+    outline: 1px solid var(--md-sys-color-outline);
+}
+.step-timeline-bar .duration-interval {
+    fill: var(--md-sys-color-on-surface);
+}
+
 /* Individual step page. */
 
 .step-page {
