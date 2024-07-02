@@ -121,10 +121,12 @@ type StepMetric struct {
 	Outputs int `json:"outputs,omitempty"` // how many output files.
 
 	// resource used by local process.
-	MaxRSS  int64 `json:"max_rss,omitempty"` // max rss in local cmd.
-	Majflt  int64 `json:"majflt,omitempty"`  // major page faults
-	Inblock int64 `json:"inblock,omitempty"` // block input operations.
-	Oublock int64 `json:"oublock,omitempty"` // block output operations.
+	MaxRSS  int64          `json:"max_rss,omitempty"` // max rss in local cmd.
+	Majflt  int64          `json:"majflt,omitempty"`  // major page faults
+	Inblock int64          `json:"inblock,omitempty"` // block input operations.
+	Oublock int64          `json:"oublock,omitempty"` // block output operations.
+	Utime   IntervalMetric `json:"utime,omitempty"`   // user CPU time used for local cmd.
+	Stime   IntervalMetric `json:"stime,omitempty"`   // system CPU time used for local cmd.
 
 	skip bool // whether the step was skipped during the build.
 }
@@ -165,6 +167,8 @@ func (m *StepMetric) done(ctx context.Context, step *Step) {
 			m.Majflt = ru.Majflt
 			m.Inblock = ru.Inblock
 			m.Oublock = ru.Oublock
+			m.Utime = IntervalMetric(time.Duration(ru.Utime.Seconds)*time.Second + time.Duration(ru.Utime.Nanos)*time.Nanosecond)
+			m.Stime = IntervalMetric(time.Duration(ru.Stime.Seconds)*time.Second + time.Duration(ru.Stime.Nanos)*time.Nanosecond)
 		}
 	}
 }

@@ -6,6 +6,8 @@ syntax = "proto3";
 
 package siso.execute;
 
+import "google/protobuf/duration.proto";
+
 option go_package = "infra/build/siso/execute/proto";
 
 // resource usage of command execution to be stored
@@ -16,4 +18,6 @@ message Rusage {
   int64 majflt = 2;
   int64 inblock = 3;
   int64 oublock = 4;
+  google.protobuf.Duration utime = 5;
+  google.protobuf.Duration stime = 6;
 }
