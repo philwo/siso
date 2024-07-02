@@ -96,6 +96,13 @@ cds-table-body {
     background: var(--md-sys-color-surface);
 }
 
+.step-rule:not(:empty) {
+    background: var(--md-sys-color-surface-container);
+    color: var(--md-sys-color-on-surface-container);
+    padding: 2px 4px;
+    border-radius: var(--md-sys-shape-corner-large);
+}
+
 /* Individual step page. */
 
 .step-page {

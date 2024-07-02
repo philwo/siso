@@ -67,38 +67,28 @@ found in the LICENSE file. */}}
   <cds-table>
     <cds-table-head>
       <cds-table-header-row>
-        <cds-table-header-cell>step_id</cds-table-header-cell>
         <cds-table-header-cell>
-          output
-          <cds-table-cell-content>action</cds-table-cell-content>
+          Output
+          <cds-table-cell-content>Action</cds-table-cell-content>
         </cds-table-header-cell>
-        <cds-table-header-cell>rule</cds-table-header-cell>
-        <cds-table-header-cell>ready</cds-table-header-cell>
-        <cds-table-header-cell>start</cds-table-header-cell>
-        <cds-table-header-cell>duration</cds-table-header-cell>
-        <cds-table-header-cell>weighted_duration</cds-table-header-cell>
-        <cds-table-header-cell>run</cds-table-header-cell>
-        <cds-table-header-cell>queue</cds-table-header-cell>
-        <cds-table-header-cell>exec</cds-table-header-cell>
+        <cds-table-header-cell>Ready</cds-table-header-cell>
+        <cds-table-header-cell>Duration</cds-table-header-cell>
+        <cds-table-header-cell>Completion</cds-table-header-cell>
       </cds-table-header-row>
     </cds-table-head>
     <cds-table-body id="data-table-body">
       {{ range .subset }}
       <cds-table-row>
-        <cds-table-cell><a href="/steps/{{ .StepID }}">{{ .StepID }}</a></cds-table-cell>
         <cds-table-cell>
-          {{ .Output }}
-          <cds-table-cell-content>{{ .Action }}</cds-table-cell-content>
+          <a href="/steps/{{ .StepID }}">{{ .Output }}</a>
+          <cds-table-cell-content>
+            <span class="step-rule">{{ .Rule }}</span>
+            <span class="step-action">{{ .Action }}</span>
+          </cds-table-cell-content>
         </cds-table-cell>
-        <cds-table-cell>{{ .Rule }}</cds-table-cell>
-        {{/* TODO(b/349287453): Fix timestamp display. */}}
-        <cds-table-cell>{{ printf "%v" .Ready }}</cds-table-cell>
-        <cds-table-cell>{{ printf "%v" .Start }}</cds-table-cell>
-        <cds-table-cell>{{ printf "%v" .Duration }}</cds-table-cell>
-        <cds-table-cell>{{ printf "%v" .WeightedDuration }}</cds-table-cell>
-        <cds-table-cell>{{ printf "%v" .RunTime }}</cds-table-cell>
-        <cds-table-cell>{{ printf "%v" .QueueTime }}</cds-table-cell>
-        <cds-table-cell>{{ printf "%v" .ExecTime }}</cds-table-cell>
+        <cds-table-cell>{{ formatIntervalMetric .Ready }}</cds-table-cell>
+        <cds-table-cell>{{ formatIntervalMetric .Duration }}</cds-table-cell>
+        <cds-table-cell>{{ formatIntervalMetric (addIntervals .Ready .Duration) }}</cds-table-cell>
       </cds-table-row>
       {{ end }}
     </cds-table-body>

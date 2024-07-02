@@ -20,6 +20,7 @@ import (
 	"strconv"
 	"strings"
 	"text/template"
+	"time"
 
 	"infra/build/siso/build"
 )
@@ -173,6 +174,17 @@ func Serve(localDevelopment bool, port int, outdir string) int {
 				}
 				return false
 			},
+			"addIntervals": func(a build.IntervalMetric, b build.IntervalMetric) build.IntervalMetric {
+				return a + b
+			},
+			"formatIntervalMetric": func(i build.IntervalMetric) string {
+				d := time.Duration(i)
+				hour := int(d.Hours())
+				minute := int(d.Minutes()) % 60
+				second := int(d.Seconds()) % 60
+				milli := d.Milliseconds() % 1000
+				return fmt.Sprintf("%02d:%02d:%02d.%03d", hour, minute, second, milli)
+			},
 		}).ParseFS(fs, templates...)
 		if err != nil {
 			fmt.Fprintf(w, "failed to parse templates: %s\n", err)
@@ -197,7 +209,7 @@ func Serve(localDevelopment bool, port int, outdir string) int {
 			filteredSteps = append(filteredSteps, m)
 		}
 		slices.SortFunc(filteredSteps, func(a, b build.StepMetric) int {
-			return cmp.Compare(a.Start, b.Start)
+			return cmp.Compare(a.Ready, b.Ready)
 		})
 
 		itemsLen := len(filteredSteps)
