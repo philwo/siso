@@ -218,7 +218,6 @@ func Serve(localDevelopment bool, port int, outdir string) int {
 			return cmp.Compare(a.Ready, b.Ready)
 		})
 
-		itemsLen := len(filteredSteps)
 		itemsPerPage, err := strconv.Atoi(r.URL.Query().Get("items_per_page"))
 		if err != nil {
 			itemsPerPage = DefaultItemsPerPage
@@ -238,25 +237,25 @@ func Serve(localDevelopment bool, port int, outdir string) int {
 		pageNext := min(pageIndex+1, pageLast)
 		pagePrev := max(0, pageIndex-1)
 		itemsFirst := pageIndex * itemsPerPage
-		itemsLast := max(0, min(itemsFirst+itemsPerPage, itemsLen)-1)
+		itemsLast := max(0, min(itemsFirst+itemsPerPage, len(filteredSteps)))
 		subset := filteredSteps[itemsFirst:itemsLast]
 
 		data := map[string]any{
-			"subset":         subset,
-			"output_search":  outputSearch,
-			"page":           requestedPage,
-			"page_index":     pageIndex,
-			"page_first":     pageFirst,
-			"page_next":      pageNext,
-			"page_prev":      pagePrev,
-			"page_last":      pageLast,
-			"page_count":     pageCount,
-			"items_first":    itemsFirst + 1,
-			"items_last":     itemsLast + 1,
-			"items_len":      len(filteredSteps),
-			"action_counts":  metrics.actionCounts,
-			"rule_counts":    metrics.ruleCounts,
-			"build_duration": metrics.buildDuration,
+			"subset":             subset,
+			"output_search":      outputSearch,
+			"page":               requestedPage,
+			"page_index":         pageIndex,
+			"page_first":         pageFirst,
+			"page_next":          pageNext,
+			"page_prev":          pagePrev,
+			"page_last":          pageLast,
+			"page_count":         pageCount,
+			"item_first_logical": itemsFirst + 1,
+			"item_last_logical":  itemsFirst + len(subset),
+			"items_len":          len(filteredSteps),
+			"action_counts":      metrics.actionCounts,
+			"rule_counts":        metrics.ruleCounts,
+			"build_duration":     metrics.buildDuration,
 		}
 		err = tmpl.ExecuteTemplate(w, "base", data)
 		if err != nil {
