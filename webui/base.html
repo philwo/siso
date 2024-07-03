@@ -28,12 +28,41 @@ found in the LICENSE file. */}}
 
   {{/* Classical JS includes. */}}
   <script src="https://unpkg.com/htmx.org@2.0.0"></script>
+  <script>
+    // HTMX extension to allow <md-filter-chip> values to be automatically reset like <input type=checkbox>.
+    htmx.defineExtension('ext-md-filter-chip-as-checkbox', {
+      onEvent: function(name, event) {
+        if (event.detail.isError) return;
+        const elt = event.detail.requestConfig?.elt;
+        if (name === 'htmx:load') {
+          // When the page loads, save the default value of all <md-filter-chip>s.
+          document.querySelectorAll('md-filter-chip').forEach(chip => {
+            chip.dataset.originalValue = chip.selected;
+          });
+        } else if (name === 'htmx:beforeRequest') {
+          // Before making a request, ensure <md-filter-chip>s are cached with their original value.
+          // <form>s must opt in by setting the attribute hx-ext-md-filter-chip-as-checkbox.
+          if (!elt || !elt.closest('[hx-ext-md-filter-chip-as-checkbox]')) {
+            return;
+          }
+          elt.querySelectorAll('md-filter-chip').forEach(chip => {
+            chip.dataset.newValue = chip.selected;
+            const originalValue = chip.dataset.originalValue === 'true';
+            if (chip.selected != originalValue) {
+              chip.selected = originalValue;
+            }
+          });
+        }
+      }
+    });
+  </script>
 
   {{/* Styles. */}}
   <link href="https://fonts.googleapis.com/icon?family=Material+Symbols+Outlined" rel="stylesheet">
   <link rel="stylesheet" href="/style.css">
 </head>
 <body
+  hx-ext="ext-md-filter-chip-as-checkbox"
   {{/* Use HTMX's boost so even normal links and forms are intercepted and feel like AJAX requests. */}}
   hx-boost="true"
   {{/* Tell HTMX by default to use this element as a progress indicator. (It will attach the class "htmx-request" when active.) */}}
