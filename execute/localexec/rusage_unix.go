@@ -10,6 +10,8 @@ import (
 	"os/exec"
 	"syscall"
 
+	durationpb "google.golang.org/protobuf/types/known/durationpb"
+
 	epb "infra/build/siso/execute/proto"
 )
 
@@ -21,6 +23,8 @@ func rusage(cmd *exec.Cmd) *epb.Rusage {
 			Majflt:  int64(u.Majflt),
 			Inblock: int64(u.Inblock),
 			Oublock: int64(u.Oublock),
+			Utime:   &durationpb.Duration{Seconds: int64(u.Utime.Sec), Nanos: int32(u.Utime.Usec)},
+			Stime:   &durationpb.Duration{Seconds: int64(u.Stime.Sec), Nanos: int32(u.Stime.Usec)},
 		}
 	}
 	return nil
