@@ -9,42 +9,57 @@ html, body {
     padding: 0;
 }
 
-#page {
-    display: grid;
-    grid-gap: 20px;
-    grid-template-columns: 300px 3fr;
-    grid-template-rows: 40px 1fr;
-    grid-template-areas:
-        "header  content"
-        "sidebar content";
-}
-
 #page .header {
-    position: sticky;
-    top: 0;
-    grid-area: header;
     padding: 8px;
 }
 
-#page .header-title h1, #page .header-title p.subtitle {
+#page .header-title h1,
+#page .header-title .subtitle,
+#page .header-title .page-name {
     margin: 0;
     padding: 0;
     display: inline;
-    font: inherit;
+    font-size: var(--md-sys-typescale-title-medium-size);
+    font-weight: var(--md-sys-typescale-title-medium-weight);
 }
 
-#page .header-title p.subtitle {
-    font-size: smaller;
+#page .header-title .subtitle {
+    font-size: var(--md-sys-typescale-title-small-size);
+    font-weight: var(--md-sys-typescale-title-small-weight);
 }
 
-#page .content {
+#page .header-title .page-name::before {
+    content: "\203A"; /* › character */
+    padding-right: 4px;
+}
+
+#page .header-title .page-name {
+    font-size: var(--md-sys-typescale-title-small-size);
+    font-weight: var(--md-sys-typescale-title-small-weight);
+}
+
+#page-view {
+    display: grid;
+    grid-template-columns: 300px 3fr;
+    grid-template-areas:
+        "nav nav"
+        "sidebar content";
+    background: var(--md-sys-color-surface);
+    border-radius: var(--md-sys-shape-corner-large);
+}
+
+#page-view .tabs {
+    grid-area: nav;
+}
+
+#page-view .content {
     grid-area: content;
+    padding: 16px;
 }
 
-#page .sidebar {
+#page-view .sidebar {
     grid-area: sidebar;
-    top: 40px;
-    padding: 8px;
+    padding: 24px 16px;
     /* Even though this is part of the grid, it needs to be explicitly set for
      * some reason, otherwise child elements won't wrap. TODO: why? */
     width: 300px;
@@ -90,7 +105,7 @@ cds-table-head {
     top: 0;
 }
 cds-table-header-cell {
-    background: var(--md-sys-color-surface-container);
+    background: var(--md-sys-color-surface);
 }
 cds-table-body {
     background: var(--md-sys-color-surface);
@@ -116,9 +131,6 @@ cds-table-body {
     display: grid;
     grid-template-columns: 3fr 1fr;
     grid-template-areas: "details tools";
-    background: var(--md-sys-color-surface);
-    padding: 28px;
-    border-radius: var(--md-sys-shape-corner-large);
 }
 
 .step-page dt {

@@ -89,7 +89,17 @@ func loadOutdirInfo(outdirPath string) (*outdirInfo, error) {
 	return outdirInfo, err
 }
 
-func Serve(localDevelopment bool, port int, outdir string) int {
+func Serve(version string, localDevelopment bool, port int, outdir string) int {
+	renderView := func(wr io.Writer, tmpl *template.Template, data map[string]any) error {
+		data["outdir"] = outdir
+		data["versionID"] = version
+		err := tmpl.ExecuteTemplate(wr, "base", data)
+		if err != nil {
+			return fmt.Errorf("failed to execute template: %w", err)
+		}
+		return nil
+	}
+
 	// Prepare templates.
 	// TODO(b/349287453): don't recompile templates every time if using embedded fs.
 	fs := fs.FS(content)
@@ -124,14 +134,14 @@ func Serve(localDevelopment bool, port int, outdir string) int {
 			return
 		}
 
-		err = tmpl.ExecuteTemplate(w, "base", map[string]string{
+		err = renderView(w, tmpl, map[string]any{
 			"step_id":        metric.StepID,
 			"digest":         metric.Digest,
 			"project":        r.FormValue("project"),
 			"reapi_instance": r.FormValue("reapi_instance"),
 		})
 		if err != nil {
-			fmt.Fprintf(w, "failed to execute template: %s\n", err)
+			fmt.Fprintf(w, "failed to render view: %s\n", err)
 		}
 	})
 
@@ -161,9 +171,9 @@ func Serve(localDevelopment bool, port int, outdir string) int {
 			fmt.Fprintf(w, "failed to unmarshal metrics: %v\n", err)
 		}
 
-		err = tmpl.ExecuteTemplate(w, "base", asMap)
+		err = renderView(w, tmpl, asMap)
 		if err != nil {
-			fmt.Fprintf(w, "failed to execute template: %v\n", err)
+			fmt.Fprintf(w, "failed to render view: %v\n", err)
 		}
 	})
 
@@ -257,9 +267,9 @@ func Serve(localDevelopment bool, port int, outdir string) int {
 			"rule_counts":        metrics.ruleCounts,
 			"build_duration":     metrics.buildDuration,
 		}
-		err = tmpl.ExecuteTemplate(w, "base", data)
+		err = renderView(w, tmpl, data)
 		if err != nil {
-			fmt.Fprintf(w, "failed to execute template: %s\n", err)
+			fmt.Fprintf(w, "failed to render view: %s\n", err)
 		}
 	})
 

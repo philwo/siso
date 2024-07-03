@@ -11,14 +11,16 @@ import (
 	"infra/build/siso/webui"
 )
 
-func Cmd() *subcommands.Command {
+func Cmd(version string) *subcommands.Command {
 	return &subcommands.Command{
 		UsageLine: "webui <args>",
 		Advanced:  true,
 		ShortDesc: "starts the experimental webui",
 		LongDesc:  "Starts the experimental webui. Not ready for wide use yet, requires static files to work. This is subject to breaking changes at any moment.",
 		CommandRun: func() subcommands.CommandRun {
-			r := &webuiRun{}
+			r := &webuiRun{
+				version: version,
+			}
 			r.init()
 			return r
 		},
@@ -27,6 +29,7 @@ func Cmd() *subcommands.Command {
 
 type webuiRun struct {
 	subcommands.CommandRunBase
+	version          string
 	localDevelopment bool
 	port             int
 	outdir           string
@@ -39,5 +42,5 @@ func (c *webuiRun) init() {
 }
 
 func (c *webuiRun) Run(a subcommands.Application, args []string, env subcommands.Env) int {
-	return webui.Serve(c.localDevelopment, c.port, c.outdir)
+	return webui.Serve(c.version, c.localDevelopment, c.port, c.outdir)
 }

@@ -70,7 +70,7 @@ func getApplication(authOpts cred.Options) *cli.Application {
 			ps.Cmd(),
 			scandeps.Cmd(),
 			authcheck.Cmd(authOpts),
-			webui.Cmd(),
+			webui.Cmd(versionID),
 
 			authcli.SubcommandLogin(authOpts.LUCIAuth, "login", true),
 			authcli.SubcommandLogout(authOpts.LUCIAuth, "logout", true),

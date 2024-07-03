@@ -42,12 +42,19 @@ found in the LICENSE file. */}}
   <div id="page">
     <header class="header">
       <div class="header-title">
-        <h1>sisod</h1>
-        <p class="subtitle">version 0.0.0</p>
+        <h1>sisoweb</h1>
+        <p class="subtitle">{{.versionID}}</p>
+        <div class="page-name">{{.outdir}}</div>
       </div>
     </header>
-    <div id="page-content" class="content">{{template "content" .}}</div>
-    <aside class="sidebar">{{template "sidebar" .}}</aside>
+    <div id="page-view">
+      <md-tabs class="tabs">
+        <md-primary-tab>Steps</md-primary-tab>
+        <md-primary-tab>Aggregates</md-primary-tab>
+      </md-tabs>
+      <div id="page-content" class="content">{{template "content" .}}</div>
+      <aside class="sidebar">{{template "sidebar" .}}</aside>
+    </div>
   </div>
 </body>
 </html>
