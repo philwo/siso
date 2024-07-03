@@ -37,6 +37,11 @@ found in the LICENSE file. */}}
         <md-icon>close</md-icon>
       </md-icon-button>
     </md-filled-text-field>
+    <h3 id="view-label">view</h3>
+    <input type="radio" id="view-all" name="view" value="" />
+    <label for="view-all">All Steps</label>
+    <input type="radio" id="view-critical-path" name="view" value="criticalPath" />
+    <label for="view-critical-path">Critical Path</label>
     <h3 id="action-label">action</h3>
     <md-chip-set aria-labelledby="action-label">
       {{ range $key, $count := .action_counts }}

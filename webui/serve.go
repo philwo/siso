@@ -34,6 +34,7 @@ type outdirInfo struct {
 	buildMetrics  []build.StepMetric
 	buildDuration build.IntervalMetric
 	stepMetrics   map[string]build.StepMetric
+	lastStepID    string
 	ruleCounts    map[string]int
 	actionCounts  map[string]int
 }
@@ -70,6 +71,7 @@ func loadOutdirInfo(outdirPath string) (*outdirInfo, error) {
 			outdirInfo.buildDuration = m.Duration
 		} else if m.StepID != "" {
 			outdirInfo.stepMetrics[m.StepID] = m
+			outdirInfo.lastStepID = m.StepID
 		} else {
 			return nil, fmt.Errorf("unexpected metric found %v", m)
 		}
@@ -209,24 +211,42 @@ func Serve(version string, localDevelopment bool, port int, outdir string) int {
 
 		actionsWanted := r.URL.Query()["action"]
 		rulesWanted := r.URL.Query()["rule"]
+		view := r.URL.Query().Get("view")
 		outputSearch := r.URL.Query().Get("q")
 
 		var filteredSteps []build.StepMetric
-		for _, m := range metrics.stepMetrics {
-			if len(actionsWanted) > 0 && !slices.Contains(actionsWanted, m.Action) {
-				continue
+		switch view {
+		case "criticalPath":
+			// We assume the last step is on the critical path.
+			// Build the critical path backwards then reverse it.
+			critStepID := metrics.lastStepID
+			for {
+				if critStepID == "" {
+					break
+				}
+				step := metrics.stepMetrics[critStepID]
+				filteredSteps = append(filteredSteps, step)
+				// TODO(b/349287453): add some sort of error to indicate if prev step was not found
+				critStepID = step.PrevStepID
 			}
-			if len(rulesWanted) > 0 && !slices.Contains(rulesWanted, m.Rule) {
-				continue
+			slices.Reverse(filteredSteps)
+		default:
+			for _, m := range metrics.stepMetrics {
+				if len(actionsWanted) > 0 && !slices.Contains(actionsWanted, m.Action) {
+					continue
+				}
+				if len(rulesWanted) > 0 && !slices.Contains(rulesWanted, m.Rule) {
+					continue
+				}
+				if outputSearch != "" && !strings.Contains(m.Output, outputSearch) {
+					continue
+				}
+				filteredSteps = append(filteredSteps, m)
 			}
-			if outputSearch != "" && !strings.Contains(m.Output, outputSearch) {
-				continue
-			}
-			filteredSteps = append(filteredSteps, m)
+			slices.SortFunc(filteredSteps, func(a, b build.StepMetric) int {
+				return cmp.Compare(a.Ready, b.Ready)
+			})
 		}
-		slices.SortFunc(filteredSteps, func(a, b build.StepMetric) int {
-			return cmp.Compare(a.Ready, b.Ready)
-		})
 
 		itemsPerPage, err := strconv.Atoi(r.URL.Query().Get("items_per_page"))
 		if err != nil {
