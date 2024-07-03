@@ -130,6 +130,9 @@ func (e HandlerError) Unwrap() error {
 
 // Init initializes config by running `init`.
 func (cfg *Config) Init(ctx context.Context, hashFS *hashfs.HashFS, buildPath *build.Path) (string, error) {
+	// Clear fscache to read updated contents after `gn gen`.
+	cfg.fscache = &fscache{m: make(map[string][]byte)}
+
 	fun, ok := cfg.globals[configEntryPoint]
 	if !ok {
 		return "", fmt.Errorf("no %s", configEntryPoint)
