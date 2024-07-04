@@ -14,6 +14,7 @@ import (
 	"io"
 	"io/fs"
 	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -30,6 +31,29 @@ import (
 var content embed.FS
 
 const DefaultItemsPerPage = 100
+
+var (
+	templates     = make(map[string]*template.Template)
+	baseFunctions = template.FuncMap{
+		"urlHasParam": func(url *url.URL, key, value string) bool {
+			return slices.Contains(url.Query()[key], value)
+		},
+		"divIntervalsScaled": func(a, b build.IntervalMetric, scale float64) float64 {
+			return float64(a) / float64(b) * scale
+		},
+		"addIntervals": func(a, b build.IntervalMetric) build.IntervalMetric {
+			return a + b
+		},
+		"formatIntervalMetric": func(i build.IntervalMetric) string {
+			d := time.Duration(i)
+			hour := int(d.Hours())
+			minute := int(d.Minutes()) % 60
+			second := int(d.Seconds()) % 60
+			milli := d.Milliseconds() % 1000
+			return fmt.Sprintf("%02d:%02d:%02d.%03d", hour, minute, second, milli)
+		},
+	}
+)
 
 type outdirInfo struct {
 	buildMetrics  []build.StepMetric
@@ -92,10 +116,27 @@ func loadOutdirInfo(outdirPath string) (*outdirInfo, error) {
 	return outdirInfo, err
 }
 
+// loadView lazy-parses a view once, or parses every time if in local development mode.
+func loadView(localDevelopment bool, fs fs.FS, view string) (*template.Template, error) {
+	if template, ok := templates[view]; ok {
+		return template, nil
+	}
+	template, err := template.New("").Funcs(baseFunctions).ParseFS(fs, "base.html", view)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse view: %w", err)
+	}
+	if !localDevelopment {
+		templates[view] = template
+	}
+	return template, nil
+}
+
+// Serve serves the webui.
 func Serve(version string, localDevelopment bool, port int, outdir string) int {
-	renderView := func(wr io.Writer, tmpl *template.Template, data map[string]any) error {
+	renderView := func(wr io.Writer, r *http.Request, tmpl *template.Template, data map[string]any) error {
 		data["outdir"] = outdir
 		data["versionID"] = version
+		data["currentURL"] = r.URL
 		err := tmpl.ExecuteTemplate(wr, "base", data)
 		if err != nil {
 			return fmt.Errorf("failed to execute template: %w", err)
@@ -103,8 +144,7 @@ func Serve(version string, localDevelopment bool, port int, outdir string) int {
 		return nil
 	}
 
-	// Prepare templates.
-	// TODO(b/349287453): don't recompile templates every time if using embedded fs.
+	// Use templates from embed or local.
 	fs := fs.FS(content)
 	if localDevelopment {
 		fs = os.DirFS("webui/")
@@ -115,6 +155,7 @@ func Serve(version string, localDevelopment bool, port int, outdir string) int {
 	metrics, err := loadOutdirInfo(outdir)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to load outdir: %v", err)
+		return 1
 	}
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -126,11 +167,10 @@ func Serve(version string, localDevelopment bool, port int, outdir string) int {
 	})
 
 	http.HandleFunc("/logs/{file}", func(w http.ResponseWriter, r *http.Request) {
-		templates := []string{"base.html", "_logs.html"}
-		tmpl, err := template.ParseFS(fs, templates...)
+		tmpl, err := loadView(localDevelopment, fs, "_logs.html")
 		if err != nil {
 			// TODO(b/349287453): proper error handling.
-			fmt.Fprintf(w, "failed to parse templates: %s\n", err)
+			fmt.Fprintf(w, "failed to load view: %s\n", err)
 			return
 		}
 
@@ -154,7 +194,7 @@ func Serve(version string, localDevelopment bool, port int, outdir string) int {
 			return
 		}
 
-		err = renderView(w, tmpl, map[string]any{
+		err = renderView(w, r, tmpl, map[string]any{
 			"allowed_files": allowedFiles,
 			"file":          file,
 			"file_contents": string(fileContents),
@@ -166,12 +206,10 @@ func Serve(version string, localDevelopment bool, port int, outdir string) int {
 	})
 
 	http.HandleFunc("POST /steps/{id}/recall/", func(w http.ResponseWriter, r *http.Request) {
-		tmpl, err := template.ParseFiles(
-			"webui/base.html",
-			"webui/_recall.html",
-		)
+		tmpl, err := loadView(localDevelopment, fs, "_recall.html")
 		if err != nil {
-			fmt.Fprintf(w, "failed to parse templates: %s\n", err)
+			// TODO(b/349287453): proper error handling.
+			fmt.Fprintf(w, "failed to load view: %s\n", err)
 			return
 		}
 
@@ -181,7 +219,7 @@ func Serve(version string, localDevelopment bool, port int, outdir string) int {
 			return
 		}
 
-		err = renderView(w, tmpl, map[string]any{
+		err = renderView(w, r, tmpl, map[string]any{
 			"step_id":        metric.StepID,
 			"digest":         metric.Digest,
 			"project":        r.FormValue("project"),
@@ -193,10 +231,10 @@ func Serve(version string, localDevelopment bool, port int, outdir string) int {
 	})
 
 	http.HandleFunc("/steps/{id}/", func(w http.ResponseWriter, r *http.Request) {
-		templates := []string{"base.html", "_step.html"}
-		tmpl, err := template.ParseFS(fs, templates...)
+		tmpl, err := loadView(localDevelopment, fs, "_step.html")
 		if err != nil {
-			fmt.Fprintf(w, "failed to parse templates: %s\n", err)
+			// TODO(b/349287453): proper error handling.
+			fmt.Fprintf(w, "failed to load view: %s\n", err)
 			return
 		}
 
@@ -218,39 +256,17 @@ func Serve(version string, localDevelopment bool, port int, outdir string) int {
 			fmt.Fprintf(w, "failed to unmarshal metrics: %v\n", err)
 		}
 
-		err = renderView(w, tmpl, asMap)
+		err = renderView(w, r, tmpl, asMap)
 		if err != nil {
 			fmt.Fprintf(w, "failed to render view: %v\n", err)
 		}
 	})
 
 	http.HandleFunc("/steps/", func(w http.ResponseWriter, r *http.Request) {
-		templates := []string{"base.html", "_steps.html"}
-		tmpl, err := template.New("steps").Funcs(template.FuncMap{
-			"currentURLHasParam": func(key string, value string) bool {
-				q := r.URL.Query()
-				if values, ok := q[key]; ok {
-					return slices.Contains(values, value)
-				}
-				return false
-			},
-			"divIntervalsScaled": func(a build.IntervalMetric, b build.IntervalMetric, scale int) float64 {
-				return float64(a) / float64(b) * float64(scale)
-			},
-			"addIntervals": func(a build.IntervalMetric, b build.IntervalMetric) build.IntervalMetric {
-				return a + b
-			},
-			"formatIntervalMetric": func(i build.IntervalMetric) string {
-				d := time.Duration(i)
-				hour := int(d.Hours())
-				minute := int(d.Minutes()) % 60
-				second := int(d.Seconds()) % 60
-				milli := d.Milliseconds() % 1000
-				return fmt.Sprintf("%02d:%02d:%02d.%03d", hour, minute, second, milli)
-			},
-		}).ParseFS(fs, templates...)
+		tmpl, err := loadView(localDevelopment, fs, "_steps.html")
 		if err != nil {
-			fmt.Fprintf(w, "failed to parse templates: %s\n", err)
+			// TODO(b/349287453): proper error handling.
+			fmt.Fprintf(w, "failed to load view: %s\n", err)
 			return
 		}
 
@@ -332,7 +348,7 @@ func Serve(version string, localDevelopment bool, port int, outdir string) int {
 			"rule_counts":        metrics.ruleCounts,
 			"build_duration":     metrics.buildDuration,
 		}
-		err = renderView(w, tmpl, data)
+		err = renderView(w, r, tmpl, data)
 		if err != nil {
 			fmt.Fprintf(w, "failed to render view: %s\n", err)
 		}

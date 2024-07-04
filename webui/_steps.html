@@ -3,6 +3,7 @@ Use of this source code is governed by a BSD-style license that can be
 found in the LICENSE file. */}}
 
 {{define "sidebar"}}
+{{$currentURL:=.currentURL}}
 <form class="data-table-filter"
     action="/steps/" method="GET"
     hx-select="#data-table-body" hx-target="#data-table-body" hx-swap="outerHTML show:window:top"
@@ -50,9 +51,9 @@ found in the LICENSE file. */}}
       {{ range $key, $count := .action_counts }}
         {{ if gt $count 20 }}
         <input type="checkbox" id="action-{{$key}}"
-            name="action" value="{{$key}}"{{if currentURLHasParam "action" $key}}checked{{end}}>
+            name="action" value="{{$key}}"{{if urlHasParam $currentURL "action" $key}}checked{{end}}>
         <label for="action-{{$key}}">
-          <md-filter-chip label="{{printf "%.25s" $key}} ({{$count}})"{{if currentURLHasParam "action" $key}}selected{{end}}></md-filter-chip>
+          <md-filter-chip label="{{printf "%.25s" $key}} ({{$count}})"{{if urlHasParam $currentURL "action" $key}}selected{{end}}></md-filter-chip>
         </label>
         {{ end }}
       {{ end }}
@@ -61,9 +62,9 @@ found in the LICENSE file. */}}
     <md-chip-set aria-labelledby="rule-label">
       {{ range $key, $count := .rule_counts }}
         <input type="checkbox" id="rule-{{$key}}"
-            name="rule" value="{{$key}}"{{if currentURLHasParam "rule" $key}}checked{{end}}>
+            name="rule" value="{{$key}}"{{if urlHasParam $currentURL "rule" $key}}checked{{end}}>
         <label for="rule-{{$key}}">
-          <md-filter-chip label="{{$key}} ({{$count}})"{{if currentURLHasParam "rule" $key}}selected{{end}}></md-filter-chip></label>
+          <md-filter-chip label="{{$key}} ({{$count}})"{{if urlHasParam $currentURL "rule" $key}}selected{{end}}></md-filter-chip></label>
       {{ end }}
     </md-chip-set>
   </div>
