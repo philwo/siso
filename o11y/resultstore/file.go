@@ -13,17 +13,14 @@ import (
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"infra/build/siso/reapi/digest"
+	"infra/build/siso/reapi/merkletree"
 )
 
 // UploadFiles uploads files to RBE-CAS, and sets the files as the invocation's artifact.
-// Need to set Dir, HashFS, REAPIClient to Uploader before calling this.
-func (u *Uploader) UploadFiles(ctx context.Context, fnames []string) error {
+// Need to set HashFS, REAPIClient to Uploader before calling this.
+func (u *Uploader) UploadFiles(ctx context.Context, ents []merkletree.Entry) error {
 	if u.HashFS == nil || u.REAPIClient == nil {
 		return fmt.Errorf("resultstore: unable to upload file. hashfs or reapi client is not set")
-	}
-	ents, err := u.HashFS.Entries(ctx, u.Dir, fnames)
-	if err != nil {
-		return err
 	}
 	ds := digest.NewStore()
 	var files []*rspb.File
