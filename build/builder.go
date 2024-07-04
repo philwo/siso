@@ -195,7 +195,6 @@ type Builder struct {
 	traceStats           *traceStats
 	tracePprof           *tracePprof
 	pprofUploader        *pprof.Uploader
-	resultstoreUploader  *resultstore.Uploader
 
 	clobber bool
 	prepare bool
@@ -317,7 +316,6 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 		traceStats:           newTraceStats(),
 		tracePprof:           newTracePprof(opts.Pprof),
 		pprofUploader:        opts.PprofUploader,
-		resultstoreUploader:  opts.ResultstoreUploader,
 		clobber:              opts.Clobber,
 		prepare:              opts.Prepare,
 		verbose:              opts.Verbose,
@@ -501,15 +499,13 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 		}
 		if !b.reproxyExec.Used() {
 			// this stats will be shown by reproxy shutdown.
-			msg := fmt.Sprintf("\nlocal:%d remote:%d cache:%d fallback:%d skip:%d\n",
-				stat.Local+stat.NoExec, stat.Remote, stat.CacheHit, stat.LocalFallback, stat.Skipped) +
-				depsStatLine +
-				restatLine +
-				fsstatLine
-			ui.Default.PrintLines("\n", msg)
-			if b.resultstoreUploader != nil {
-				b.resultstoreUploader.AddBuildLog(msg + "\n")
-			}
+			ui.Default.PrintLines(
+				"\n",
+				fmt.Sprintf("\nlocal:%d remote:%d cache:%d fallback:%d skip:%d\n",
+					stat.Local+stat.NoExec, stat.Remote, stat.CacheHit, stat.LocalFallback, stat.Skipped)+
+					depsStatLine+
+					restatLine+
+					fsstatLine)
 		} else {
 			ui.Default.PrintLines("\n", "\n")
 		}

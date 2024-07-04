@@ -53,7 +53,6 @@ import (
 	"infra/build/siso/o11y/trace"
 	"infra/build/siso/reapi"
 	"infra/build/siso/reapi/digest"
-	"infra/build/siso/reapi/merkletree"
 	"infra/build/siso/toolsupport/cogutil"
 	"infra/build/siso/toolsupport/ninjautil"
 	"infra/build/siso/ui"
@@ -154,8 +153,6 @@ type ninjaCmdRun struct {
 
 	sisoInfoLog string // abs or relative to logDir
 	startDir    string
-
-	resultstoreUploader *resultstore.Uploader
 }
 
 // Run runs the `ninja` subcommand.
@@ -508,8 +505,9 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 
 	spin := ui.Default.NewSpinner()
 
+	var resultstoreUploader *resultstore.Uploader
 	if c.enableResultstore {
-		c.resultstoreUploader, err = resultstore.New(ctx, resultstore.Options{
+		resultstoreUploader, err = resultstore.New(ctx, resultstore.Options{
 			InvocationID: buildID,
 			Invocation:   c.invocation(ctx, buildID, projectID, execRoot, properties),
 			DialOptions:  credential.GRPCDialOptions(),
@@ -524,7 +522,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 			if err != nil {
 				exitCode = 1
 			}
-			cerr := c.resultstoreUploader.Close(ctx, exitCode)
+			cerr := resultstoreUploader.Close(ctx, exitCode)
 			if cerr != nil {
 				clog.Warningf(ctx, "failed to close resultstore: %v", cerr)
 			}
@@ -702,36 +700,26 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	}
 	os.Remove(lastTargetsFile)
 
-	if c.resultstoreUploader != nil {
+	if resultstoreUploader != nil {
 		defer func() {
-			var ents []merkletree.Entry
-
 			var files []string
 			if c.metricsJSON != "" {
 				files = append(files, c.metricsJSON)
 			}
 			// TODO(b/329564182): add other files? e.g. siso_output, siso_trace.json etc.
-			if len(files) != 0 {
-				var err error
-				ents, err = hashFS.Entries(ctx, filepath.Join(execRoot, c.dir), files)
-				if err != nil {
-					clog.Warningf(ctx, "failed to get entries for %q: %v", files, err)
-				}
+			if len(files) == 0 {
+				return
 			}
-			ents = append(ents, merkletree.Entry{
-				Name: "build.log",
-				Data: c.resultstoreUploader.BuildLogData(),
-			})
 			spin.Start("uploading to resultstore")
-			uerr := c.resultstoreUploader.UploadFiles(ctx, ents)
+			uerr := resultstoreUploader.UploadFiles(ctx, files)
 			if uerr != nil {
-				clog.Warningf(ctx, "failed to upload results: %v", uerr)
+				clog.Warningf(ctx, "failed to upload %q: %v", c.metricsJSON, uerr)
 			}
 			spin.Stop(uerr)
 		}()
 	}
 
-	bopts, done, err := c.initBuildOpts(ctx, projectID, buildID, buildPath, config, ds, hashFS, limits, traceExporter)
+	bopts, done, err := c.initBuildOpts(ctx, projectID, buildID, buildPath, config, ds, hashFS, limits, traceExporter, resultstoreUploader)
 	if err != nil {
 		return stats, err
 	}
@@ -847,13 +835,6 @@ func runNinja(ctx context.Context, fname string, graph *ninjabuild.Graph, bopts 
 			continue
 		}
 		clog.Infof(ctx, "build finished: %v", err)
-		if bopts.ResultstoreUploader != nil {
-			if err != nil {
-				bopts.ResultstoreUploader.AddBuildLog(fmt.Sprintf("build failed: %v\n", err))
-			} else {
-				bopts.ResultstoreUploader.AddBuildLog("build succeeded\n")
-			}
-		}
 		return stats, err
 	}
 }
@@ -1139,7 +1120,7 @@ func (c *ninjaCmdRun) initDepsLog(ctx context.Context) (*ninjautil.DepsLog, erro
 	return depsLog, nil
 }
 
-func (c *ninjaCmdRun) initBuildOpts(ctx context.Context, projectID, buildID string, buildPath *build.Path, config *buildconfig.Config, ds dataSource, hashFS *hashfs.HashFS, limits build.Limits, traceExporter *trace.Exporter) (bopts build.Options, done func(*error), err error) {
+func (c *ninjaCmdRun) initBuildOpts(ctx context.Context, projectID, buildID string, buildPath *build.Path, config *buildconfig.Config, ds dataSource, hashFS *hashfs.HashFS, limits build.Limits, traceExporter *trace.Exporter, resultstoreUploader *resultstore.Uploader) (bopts build.Options, done func(*error), err error) {
 	var dones []func(*error)
 	defer func() {
 		if err != nil {
@@ -1268,7 +1249,7 @@ func (c *ninjaCmdRun) initBuildOpts(ctx context.Context, projectID, buildID stri
 		TraceExporter:        traceExporter,
 		TraceJSON:            c.traceJSON,
 		Pprof:                c.buildPprof,
-		ResultstoreUploader:  c.resultstoreUploader,
+		ResultstoreUploader:  resultstoreUploader,
 		Clobber:              c.clobber,
 		Prepare:              c.prepare,
 		Verbose:              c.verbose,
@@ -1360,14 +1341,11 @@ func doBuild(ctx context.Context, graph *ninjabuild.Graph, bopts build.Options, 
 		if err != nil {
 			return stats, err
 		}
+		bopts.ResultstoreUploader.Dir = filepath.Join(bopts.Path.ExecRoot, bopts.Path.Dir)
 		bopts.ResultstoreUploader.HashFS = bopts.HashFS
 		bopts.ResultstoreUploader.REAPIClient = bopts.REAPIClient
 
-		ents, err := bopts.HashFS.Entries(ctx, filepath.Join(bopts.Path.ExecRoot, bopts.Path.Dir), []string{".siso_config", ".siso_filegroups"})
-		if err != nil {
-			return stats, err
-		}
-		err = bopts.ResultstoreUploader.UploadFiles(ctx, ents)
+		err = bopts.ResultstoreUploader.UploadFiles(ctx, []string{".siso_config", ".siso_filegroups"})
 		if err != nil {
 			return stats, err
 		}
@@ -1475,11 +1453,7 @@ func doBuild(ctx context.Context, graph *ninjabuild.Graph, bopts build.Options, 
 		semaTraces[name] = t
 	}
 	if len(semaTraces) > 0 {
-		rut := dumpResourceUsageTable(ctx, semaTraces)
-		clog.Infof(ctx, "resource usage table:\n%s", rut)
-		if bopts.ResultstoreUploader != nil {
-			bopts.ResultstoreUploader.AddBuildLog(rut + "\n")
-		}
+		dumpResourceUsageTable(ctx, semaTraces)
 	}
 	stats = b.Stats()
 	clog.Infof(ctx, "stats=%#v", stats)
@@ -1508,7 +1482,7 @@ func detectExecRoot(ctx context.Context, execRoot, crdir string) (string, error)
 	}
 }
 
-func dumpResourceUsageTable(ctx context.Context, semaTraces map[string]semaTrace) string {
+func dumpResourceUsageTable(ctx context.Context, semaTraces map[string]semaTrace) {
 	var semaNames []string
 	for key := range semaTraces {
 		semaNames = append(semaNames, key)
@@ -1535,7 +1509,7 @@ func dumpResourceUsageTable(ctx context.Context, semaTraces map[string]semaTrace
 	if needToShow {
 		fmt.Print(usb.String())
 	}
-	return lsb.String()
+	clog.Infof(ctx, "resource usage table:\n%s", lsb.String())
 }
 
 var histchar = [...]string{"▂", "▃", "▄", "▅", "▆", "▇", "█"}
