@@ -49,7 +49,19 @@ func (b *Builder) execRemote(ctx context.Context, step *Step) error {
 			err := b.remoteExec.Run(ctx, step.cmd)
 			step.setPhase(stepOutput)
 			step.metrics.IsRemote = true
-			_, cached := step.cmd.ActionResult()
+			result, cached := step.cmd.ActionResult()
+			if err == nil && !validateActionResult(result) {
+				clog.Errorf(ctx, "no outputs in action result. retry without cache lookup. b/350360391")
+				step.cmd.SkipCacheLookup = true
+				step.setPhase(stepRemoteRun)
+				err = b.remoteExec.Run(ctx, step.cmd)
+				step.setPhase(stepOutput)
+				step.metrics.IsRemote = true
+				result, cached = step.cmd.ActionResult()
+				if err == nil && !validateActionResult(result) {
+					clog.Errorf(ctx, "no outputs in action result again. b/350360391")
+				}
+			}
 			if cached {
 				step.metrics.Cached = true
 			}
@@ -84,6 +96,12 @@ func (b *Builder) execRemoteCache(ctx context.Context, step *Step) error {
 		err := b.cache.GetActionResult(ctx, step.cmd)
 		if err != nil {
 			return err
+		}
+		result, _ := step.cmd.ActionResult()
+		if !validateActionResult(result) {
+			clog.Errorf(ctx, "no outputs in action result. ignore cache lookup. b/350360391")
+			step.cmd.SkipCacheLookup = true
+			return errors.New("no output in action result")
 		}
 		b.progressStepCacheHit(ctx, step)
 		step.metrics.RunTime = IntervalMetric(time.Since(start))
