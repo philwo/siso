@@ -38,8 +38,22 @@ type UI interface {
 // UI implementations are currently not expected to handle being changed.
 var Default UI
 
+// termUI needs
+// - cursor up : \033[A
+// - kill line:  \033[K
+// disable termUI if term doesn't support these feature.
+// https://invisible-island.net/ncurses/terminfo.src.html
+func isSmartTerminal(term string) bool {
+	switch term {
+	case "dumb", "dumb-emacs-ansi":
+		return false
+	}
+	// assume default terminal works.
+	return true
+}
+
 func init() {
-	if os.Getenv("TERM") != "dumb" && term.IsTerminal(int(os.Stdout.Fd())) {
+	if isSmartTerminal(os.Getenv("TERM")) && term.IsTerminal(int(os.Stdout.Fd())) {
 		termUI := &TermUI{}
 		termUI.init()
 		Default = termUI
