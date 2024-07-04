@@ -26,7 +26,7 @@ import (
 	"infra/build/siso/build"
 )
 
-//go:embed *.html *.css
+//go:embed *.html css/*.css
 var content embed.FS
 
 const DefaultItemsPerPage = 100
@@ -338,9 +338,7 @@ func Serve(version string, localDevelopment bool, port int, outdir string) int {
 		}
 	})
 
-	http.HandleFunc("/style.css", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFileFS(w, r, fs, "style.css")
-	})
+	http.Handle("/css/", http.FileServerFS(fs))
 
 	fmt.Printf("listening on http://localhost:%d/...\n", port)
 	err = http.ListenAndServe(fmt.Sprintf(":%d", port), nil)
