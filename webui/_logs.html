@@ -1,0 +1,17 @@
+{{/* Copyright 2024 The Chromium Authors
+Use of this source code is governed by a BSD-style license that can be
+found in the LICENSE file. */}}
+
+{{define "sidebar"}}
+<md-list>
+  {{range $allowed_file := .allowed_files}}
+  <md-list-item type="button" href="/logs/{{$allowed_file}}">
+    {{$allowed_file}}
+  </md-list-item>
+  {{end}}
+</md-list>
+{{end}}
+
+{{define "content"}}
+<pre>{{.file_contents}}</pre>
+{{end}}

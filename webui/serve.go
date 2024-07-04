@@ -15,6 +15,7 @@ import (
 	"io/fs"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -118,6 +119,50 @@ func Serve(version string, localDevelopment bool, port int, outdir string) int {
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/steps/", http.StatusTemporaryRedirect)
+	})
+
+	http.HandleFunc("/logs/", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/logs/.siso_config/", http.StatusTemporaryRedirect)
+	})
+
+	http.HandleFunc("/logs/{file}", func(w http.ResponseWriter, r *http.Request) {
+		templates := []string{"base.html", "_logs.html"}
+		tmpl, err := template.ParseFS(fs, templates...)
+		if err != nil {
+			// TODO(b/349287453): proper error handling.
+			fmt.Fprintf(w, "failed to parse templates: %s\n", err)
+			return
+		}
+
+		allowedFiles := []string{
+			".siso_config",
+			"siso_output",
+			"siso_localexec",
+		}
+		file := r.PathValue("file")
+
+		if !slices.Contains(allowedFiles, file) {
+			// TODO(b/349287453): proper error handling.
+			fmt.Fprintf(w, "unknown file: %v\n", err)
+			return
+		}
+
+		fileContents, err := os.ReadFile(path.Join(outdir, file))
+		if err != nil {
+			// TODO(b/349287453): proper error handling.
+			fmt.Fprintf(w, "failed to open file: %s\n", err)
+			return
+		}
+
+		err = renderView(w, tmpl, map[string]any{
+			"allowed_files": allowedFiles,
+			"file":          file,
+			"file_contents": string(fileContents),
+		})
+		if err != nil {
+			// TODO(b/349287453): proper error handling.
+			fmt.Fprintf(w, "failed to render view: %v\n", err)
+		}
 	})
 
 	http.HandleFunc("POST /steps/{id}/recall/", func(w http.ResponseWriter, r *http.Request) {
