@@ -752,6 +752,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		checkFailedTargets: !c.batch && sameTargets && !c.clobber,
 		cleandead:          c.cleandead,
 		subtool:            c.subtool,
+		enableStatusz:      true,
 	})
 }
 
@@ -765,6 +766,9 @@ type runNinjaOpts struct {
 	// subtool name.
 	// if "cleandead", it returns after cleandead performed.
 	subtool string
+
+	// enable statusz (for `siso ps`)
+	enableStatusz bool
 }
 
 func runNinja(ctx context.Context, fname string, graph *ninjabuild.Graph, bopts build.Options, targets []string, nopts runNinjaOpts) (build.Stats, error) {
@@ -1371,12 +1375,14 @@ func doBuild(ctx context.Context, graph *ninjabuild.Graph, bopts build.Options, 
 	}
 	hctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	go func() {
-		err := newStatuszServer(hctx, b)
-		if err != nil {
-			clog.Warningf(ctx, "statusz: %v", err)
-		}
-	}()
+	if nopts.enableStatusz {
+		go func() {
+			err := newStatuszServer(hctx, b)
+			if err != nil {
+				clog.Warningf(ctx, "statusz: %v", err)
+			}
+		}()
+	}
 
 	defer func(ctx context.Context) {
 		cerr := b.Close()
