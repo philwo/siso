@@ -35,6 +35,12 @@ const DefaultItemsPerPage = 100
 var (
 	templates     = make(map[string]*template.Template)
 	baseFunctions = template.FuncMap{
+		"urlPathEq": func(url *url.URL, path string) bool {
+			return url.Path == path
+		},
+		"urlPathHasPrefix": func(url *url.URL, prefix string) bool {
+			return strings.HasPrefix(url.Path, prefix)
+		},
 		"urlHasParam": func(url *url.URL, key, value string) bool {
 			return slices.Contains(url.Query()[key], value)
 		},
@@ -163,7 +169,7 @@ func Serve(version string, localDevelopment bool, port int, outdir string) int {
 	})
 
 	http.HandleFunc("/logs/", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, "/logs/.siso_config/", http.StatusTemporaryRedirect)
+		http.Redirect(w, r, "/logs/.siso_config", http.StatusTemporaryRedirect)
 	})
 
 	http.HandleFunc("/logs/{file}", func(w http.ResponseWriter, r *http.Request) {
@@ -176,6 +182,7 @@ func Serve(version string, localDevelopment bool, port int, outdir string) int {
 
 		allowedFiles := []string{
 			".siso_config",
+			".siso_filegroups",
 			"siso_output",
 			"siso_localexec",
 		}

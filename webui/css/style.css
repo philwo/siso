@@ -38,7 +38,7 @@ html, body {
     font-weight: var(--md-sys-typescale-title-small-weight);
 }
 
-#page-view {
+#page-container {
     display: grid;
     grid-template-columns: 300px 3fr;
     grid-template-areas:
@@ -47,17 +47,17 @@ html, body {
     background: var(--md-sys-color-surface);
     border-radius: var(--md-sys-shape-corner-large);
 }
-
-#page-view .tabs {
+#page-tabs {
     grid-area: nav;
 }
-
-#page-view .content {
+#page-view {
+    display: contents;
+}
+#page-content {
     grid-area: content;
     padding: 16px;
 }
-
-#page-view .sidebar {
+#page-sidebar {
     grid-area: sidebar;
     padding: 24px 16px;
     /* Even though this is part of the grid, it needs to be explicitly set for

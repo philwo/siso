@@ -82,13 +82,17 @@ found in the LICENSE file. */}}
         <div class="page-name">{{.outdir}}</div>
       </div>
     </header>
-    <div id="page-view">
-      <md-tabs class="tabs">
-        <md-primary-tab>Steps</md-primary-tab>
+    <div id="page-container">
+      <md-tabs id="page-tabs" hx-push-url="true"
+          hx-select="#page-view" hx-target="#page-view" hx-swap="outerHTML show:window:top">
+        <md-primary-tab hx-get="/steps/" {{if urlPathHasPrefix .currentURL "/steps/"}}selected{{end}}>Build Steps</md-primary-tab>
         <md-primary-tab>Aggregates</md-primary-tab>
+        <md-primary-tab hx-get="/logs/" {{if urlPathHasPrefix .currentURL "/logs/"}}selected{{end}}>Raw Logs</md-primary-tab>
       </md-tabs>
-      <div id="page-content" class="content">{{template "content" .}}</div>
-      <aside class="sidebar">{{template "sidebar" .}}</aside>
+      <div id="page-view">
+        <div id="page-content" class="content">{{template "content" .}}</div>
+        <aside id="page-sidebar" class="sidebar">{{template "sidebar" .}}</aside>
+      </div>
     </div>
   </div>
 </body>
