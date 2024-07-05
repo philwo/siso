@@ -290,8 +290,7 @@ func (p *ManifestParser) parseEdge() error {
 
 	// Finished parsing.
 	// Add a new Edge to current state and begin populating it.
-	edge := p.state.addEdge(rule)
-	edge.env = env
+	edge := p.state.addEdge(rule, env)
 
 	// Populate this Edge with the properties we collected above.
 	poolName := edge.Binding("pool")

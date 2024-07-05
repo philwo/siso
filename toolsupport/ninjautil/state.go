@@ -98,11 +98,11 @@ func (s *State) Pools() map[string]*Pool {
 	return m
 }
 
-func (s *State) addEdge(rule *rule) *Edge {
+func (s *State) addEdge(rule *rule, env *BindingEnv) *Edge {
 	edge := &Edge{
 		rule: rule,
 		pool: defaultPool,
-		env:  s.bindings,
+		env:  env,
 	}
 	s.edges = append(s.edges, edge)
 	return edge
