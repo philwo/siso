@@ -9,8 +9,8 @@ found in the LICENSE file. */}}
 {{if .digest}}
   <p>You can perform this recall with:</p>
   <div class="code-block">
-    <pre id="recall-{{.step_id}}">siso recall -project="{{.project}}" -reapi_instance="{{.reapi_instance}}" &lt;output_directory&gt; {{.digest}}</pre>
-    <clipboard-copy for="recall-{{.step_id}}">
+    <pre id="recall-{{.stepID}}">siso recall -project="{{.project}}" -reapi_instance="{{.reapiInstance}}" &lt;output_directory&gt; {{.digest}}</pre>
+    <clipboard-copy for="recall-{{.stepID}}">
       <md-icon-button>
         <md-icon>content_copy</md-icon>
       </md-icon-button>

@@ -195,9 +195,9 @@ func Serve(version string, localDevelopment bool, port int, outdir string) int {
 		}
 
 		err = renderView(w, r, tmpl, map[string]any{
-			"allowed_files": allowedFiles,
-			"file":          file,
-			"file_contents": string(fileContents),
+			"allowedFiles": allowedFiles,
+			"file":         file,
+			"fileContents": string(fileContents),
 		})
 		if err != nil {
 			// TODO(b/349287453): proper error handling.
@@ -220,10 +220,10 @@ func Serve(version string, localDevelopment bool, port int, outdir string) int {
 		}
 
 		err = renderView(w, r, tmpl, map[string]any{
-			"step_id":        metric.StepID,
-			"digest":         metric.Digest,
-			"project":        r.FormValue("project"),
-			"reapi_instance": r.FormValue("reapi_instance"),
+			"stepID":        metric.StepID,
+			"digest":        metric.Digest,
+			"project":       r.FormValue("project"),
+			"reapiInstance": r.FormValue("reapi_instance"),
 		})
 		if err != nil {
 			fmt.Fprintf(w, "failed to render view: %s\n", err)
@@ -332,21 +332,21 @@ func Serve(version string, localDevelopment bool, port int, outdir string) int {
 		subset := filteredSteps[itemsFirst:itemsLast]
 
 		data := map[string]any{
-			"subset":             subset,
-			"output_search":      outputSearch,
-			"page":               requestedPage,
-			"page_index":         pageIndex,
-			"page_first":         pageFirst,
-			"page_next":          pageNext,
-			"page_prev":          pagePrev,
-			"page_last":          pageLast,
-			"page_count":         pageCount,
-			"item_first_logical": itemsFirst + 1,
-			"item_last_logical":  itemsFirst + len(subset),
-			"items_len":          len(filteredSteps),
-			"action_counts":      metrics.actionCounts,
-			"rule_counts":        metrics.ruleCounts,
-			"build_duration":     metrics.buildDuration,
+			"subset":           subset,
+			"outputSearch":     outputSearch,
+			"page":             requestedPage,
+			"pageIndex":        pageIndex,
+			"pageFirst":        pageFirst,
+			"pageNext":         pageNext,
+			"pagePrev":         pagePrev,
+			"pageLast":         pageLast,
+			"pageCount":        pageCount,
+			"itemFirstLogical": itemsFirst + 1,
+			"itemLastLogical":  itemsFirst + len(subset),
+			"itemsLen":         len(filteredSteps),
+			"actionCounts":     metrics.actionCounts,
+			"ruleCounts":       metrics.ruleCounts,
+			"buildDuration":    metrics.buildDuration,
 		}
 		err = renderView(w, r, tmpl, data)
 		if err != nil {

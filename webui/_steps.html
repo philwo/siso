@@ -11,12 +11,12 @@ found in the LICENSE file. */}}
     hx-ext-md-filter-chip-as-checkbox>
   <div>
     <div id="paginator" hx-swap-oob="true">
-      Showing {{ .item_first_logical }}-{{ .item_last_logical }} of {{ .items_len }}
+      Showing {{.itemFirstLogical}}-{{.itemLastLogical}} of {{.itemsLen}}
     </div>
     <div class="page-controls">
       <md-outlined-text-field class="page-number" type="number" name="page" aria-label="Page"
-          value="{{ .page }}" min="0" max="{{ .page_last }}"></md-outlined-text-field>
-      <md-icon-button onclick="this.parentElement.querySelector('.page-number').value = {{ .page_first }}">
+          value="{{.page}}" min="0" max="{{.pageLast}}"></md-outlined-text-field>
+      <md-icon-button onclick="this.parentElement.querySelector('.page-number').value = {{.pageFirst}}">
         <md-icon>first_page</md-icon>
       </md-icon-button>
       <md-icon-button onclick="this.parentElement.querySelector('.page-number').stepDown()">
@@ -25,7 +25,7 @@ found in the LICENSE file. */}}
       <md-icon-button onclick="this.parentElement.querySelector('.page-number').stepUp()">
         <md-icon>chevron_right</md-icon>
       </md-icon-button>
-      <md-icon-button onclick="this.parentElement.querySelector('.page-number').value = {{ .page_last }}">
+      <md-icon-button onclick="this.parentElement.querySelector('.page-number').value = {{.pageLast}}">
         <md-icon>last_page</md-icon>
       </md-icon-button>
     </div>
@@ -33,7 +33,7 @@ found in the LICENSE file. */}}
   <div class="filter-controls"
       {{/* Ensure state doesn't go out of sync with the backend by swapping this form whenever we see it in a fetched page. */}}
       id="step-filter-controls" hx-swap-oob="true">
-    <md-filled-text-field name="q" type="search" value="{{.output_search}}" placeholder="Search outputs"
+    <md-filled-text-field name="q" type="search" value="{{.outputSearch}}" placeholder="Search outputs"
         oninput="this.querySelector('md-icon-button').style.display = this.value ? 'flex' : 'none'">
       <md-icon slot="leading-icon">search</md-icon>
       <md-icon-button class="clear-text-field" slot="trailing-icon"
@@ -48,31 +48,31 @@ found in the LICENSE file. */}}
     <label for="view-critical-path">Critical Path</label>
     <h3 id="action-label">action</h3>
     <md-chip-set aria-labelledby="action-label">
-      {{ range $key, $count := .action_counts }}
-        {{ if gt $count 20 }}
+      {{range $key, $count := .actionCounts}}
+        {{if gt $count 20}}
         <input type="checkbox" id="action-{{$key}}"
             name="action" value="{{$key}}"{{if urlHasParam $currentURL "action" $key}}checked{{end}}>
         <label for="action-{{$key}}">
           <md-filter-chip label="{{printf "%.25s" $key}} ({{$count}})"{{if urlHasParam $currentURL "action" $key}}selected{{end}}></md-filter-chip>
         </label>
-        {{ end }}
-      {{ end }}
+        {{end}}
+      {{end}}
     </md-chip-set>
     <h3 id="rule-label">rule</h3>
     <md-chip-set aria-labelledby="rule-label">
-      {{ range $key, $count := .rule_counts }}
+      {{range $key, $count := .ruleCounts}}
         <input type="checkbox" id="rule-{{$key}}"
             name="rule" value="{{$key}}"{{if urlHasParam $currentURL "rule" $key}}checked{{end}}>
         <label for="rule-{{$key}}">
           <md-filter-chip label="{{$key}} ({{$count}})"{{if urlHasParam $currentURL "rule" $key}}selected{{end}}></md-filter-chip></label>
-      {{ end }}
+      {{end}}
     </md-chip-set>
   </div>
 </form>
 {{end}}
 
 {{define "content"}}
-{{$build_duration:=.build_duration}}
+{{$buildDuration:=.buildDuration}}
 <div class="data-table-container">
   <cds-table>
     <cds-table-head>
@@ -88,27 +88,27 @@ found in the LICENSE file. */}}
       </cds-table-header-row>
     </cds-table-head>
     <cds-table-body id="data-table-body">
-      {{ range .subset }}
+      {{range .subset}}
       <cds-table-row>
         <cds-table-cell>
-          <a href="/steps/{{ .StepID }}">{{ .Output }}</a>
+          <a href="/steps/{{.StepID}}">{{.Output}}</a>
           <cds-table-cell-content>
-            <span class="step-rule">{{ .Rule }}</span>
-            <span class="step-action">{{ .Action }}</span>
+            <span class="step-rule">{{.Rule}}</span>
+            <span class="step-action">{{.Action}}</span>
           </cds-table-cell-content>
         </cds-table-cell>
-        <cds-table-cell>{{ formatIntervalMetric .Ready }}</cds-table-cell>
-        <cds-table-cell>{{ formatIntervalMetric .Duration }}</cds-table-cell>
-        <cds-table-cell>{{ formatIntervalMetric (addIntervals .Ready .Duration) }}</cds-table-cell>
+        <cds-table-cell>{{formatIntervalMetric .Ready}}</cds-table-cell>
+        <cds-table-cell>{{formatIntervalMetric .Duration}}</cds-table-cell>
+        <cds-table-cell>{{formatIntervalMetric (addIntervals .Ready .Duration)}}</cds-table-cell>
         <cds-table-cell>
           <svg height="20" class="step-timeline-bar">
-            <rect x="{{ divIntervalsScaled .Ready $build_duration 100 }}%" y="0"
-                width="{{ divIntervalsScaled .Duration $build_duration 100 }}%" height="20"
+            <rect x="{{divIntervalsScaled .Ready $buildDuration 100}}%" y="0"
+                width="{{divIntervalsScaled .Duration $buildDuration 100}}%" height="20"
                 class="duration-interval" />
           </svg>
         </cds-table-cell>
       </cds-table-row>
-      {{ end }}
+      {{end}}
     </cds-table-body>
   </cds-table>
 </div>
