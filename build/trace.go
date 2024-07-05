@@ -87,24 +87,29 @@ func (te *traceEvents) loop(ctx context.Context) {
 	runtime.ReadMemStats(&te.memstats)
 	te.rusage.get()
 	te.sys.get(ctx)
-	tmpname := te.fname + ".tmp"
-	f, err := os.Create(te.fname + ".tmp")
-	if err != nil {
-		clog.Warningf(ctx, "Failed to create %s: %v", tmpname, err)
-		return
+	w := io.Discard
+	if te.fname != "" {
+		tmpname := te.fname + ".tmp"
+		f, err := os.Create(te.fname + ".tmp")
+		if err != nil {
+			clog.Warningf(ctx, "Failed to create %s: %v", tmpname, err)
+			return
+		}
+		w = bufio.NewWriterSize(f, 256*1024)
+		defer func() {
+			fmt.Fprintf(w, "\n]")
+			if fw, ok := w.(interface{ Flush() error }); ok {
+				err := fw.Flush()
+				if err != nil {
+					clog.Warningf(ctx, "Failed to flush %s: %v", tmpname, err)
+				}
+			}
+			err = f.Close()
+			if err != nil {
+				clog.Warningf(ctx, "Failed to close %s: %v", tmpname, err)
+			}
+		}()
 	}
-	w := bufio.NewWriterSize(f, 256*1024)
-	defer func() {
-		fmt.Fprintf(w, "\n]")
-		err := w.Flush()
-		if err != nil {
-			clog.Warningf(ctx, "Failed to flush %s: %v", tmpname, err)
-		}
-		err = f.Close()
-		if err != nil {
-			clog.Warningf(ctx, "Failed to close %s: %v", tmpname, err)
-		}
-	}()
 	fmt.Fprintf(w, "[\n")
 	te.start = time.Now()
 	te.rusage.start = te.start
@@ -535,6 +540,9 @@ func (te *traceEvents) Close(ctx context.Context) {
 	<-te.done
 	clog.Infof(ctx, "trace finalize")
 
+	if te.fname == "" {
+		return
+	}
 	tmpname := te.fname + ".tmp"
 	buf, err := os.ReadFile(tmpname)
 	if err != nil {
