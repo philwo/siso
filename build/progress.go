@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"infra/build/siso/o11y/resultstore"
 	"infra/build/siso/ui"
 )
 
@@ -23,6 +24,8 @@ type progress struct {
 	numLocal atomic.Int32
 	mu       sync.Mutex
 	ts       time.Time
+
+	resultstoreUploader *resultstore.Uploader
 
 	actives       activeSteps
 	done          chan struct{}
@@ -55,6 +58,7 @@ func (as *activeSteps) Pop() any {
 func (p *progress) start(ctx context.Context, b *Builder) {
 	p.started = time.Now()
 	p.verbose = b.verbose
+	p.resultstoreUploader = b.resultstoreUploader
 	p.done = make(chan struct{})
 	p.updateStopped = make(chan struct{})
 	go p.update(ctx, b)
@@ -121,10 +125,17 @@ func (p *progress) report(format string, args ...any) {
 	p.mu.Lock()
 	t := p.ts
 	p.mu.Unlock()
+	var msg string
+	if p.resultstoreUploader != nil {
+		msg = fmt.Sprintf(format, args...)
+		p.resultstoreUploader.AddBuildLog(msg + "\n")
+	}
 	if ui.IsTerminal() && time.Since(t) < 500*time.Millisecond {
 		return
 	}
-	msg := fmt.Sprintf(format, args...)
+	if msg == "" {
+		msg = fmt.Sprintf(format, args...)
+	}
 	ui.Default.PrintLines(msg)
 	p.mu.Lock()
 	p.ts = time.Now()
@@ -149,10 +160,24 @@ func (p *progress) step(ctx context.Context, b *Builder, step *Step, s string) {
 		}
 	}
 	p.mu.Unlock()
+	dur := ui.FormatDuration(time.Since(b.start))
+	stat := b.stats.stats()
+	if step != nil && p.resultstoreUploader != nil {
+		switch {
+		case strings.HasPrefix(s, progressPrefixStart),
+			strings.HasPrefix(s, progressPrefixFinish),
+			strings.HasPrefix(s, progressPrefixCacheHit):
+			p.resultstoreUploader.AddBuildLog(fmt.Sprintf("[%d/%d] %s %s\n",
+				stat.Done-stat.Skipped, stat.Total-stat.Skipped,
+				dur,
+				s))
+		default:
+			// message of progress.update
+		}
+	}
 	if ui.IsTerminal() && !p.verbose && (time.Since(t) < 30*time.Millisecond || strings.HasPrefix(s, progressPrefixFinish)) {
 		return
 	}
-	stat := b.stats.stats()
 	var lines []string
 	msg := s
 	switch {
@@ -160,7 +185,7 @@ func (p *progress) step(ctx context.Context, b *Builder, step *Step, s string) {
 		if strings.HasPrefix(s, progressPrefixStart) && step != nil {
 			msg = fmt.Sprintf("[%d/%d] %s %s",
 				stat.Done-stat.Skipped, stat.Total-stat.Skipped,
-				ui.FormatDuration(time.Since(b.start)),
+				dur,
 				step.def.Binding("command"))
 			fmt.Println(msg)
 		} else if step == nil {
@@ -225,7 +250,7 @@ func (p *progress) step(ctx context.Context, b *Builder, step *Step, s string) {
 		if step != nil {
 			msg = fmt.Sprintf("[%d/%d] %s %s",
 				stat.Done-stat.Skipped, stat.Total-stat.Skipped,
-				ui.FormatDuration(time.Since(b.start)),
+				dur,
 				s)
 		}
 		lines = append(lines, msg)

@@ -6,10 +6,12 @@
 package resultstore
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"fmt"
 	"slices"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -36,7 +38,6 @@ type Options struct {
 // Uploader is resultstore uploader.
 type Uploader struct {
 	// These are needed for upload and associate files in resultstore.
-	Dir         string
 	HashFS      *hashfs.HashFS
 	REAPIClient *reapi.Client
 
@@ -44,6 +45,9 @@ type Uploader struct {
 	client rspb.ResultStoreUploadClient
 
 	invocationID string
+
+	buildLogMu sync.Mutex
+	buildLog   bytes.Buffer
 
 	q    chan any
 	quit chan int
@@ -66,6 +70,9 @@ func New(ctx context.Context, opts Options) (*Uploader, error) {
 		quit: make(chan int),
 		done: make(chan struct{}),
 	}
+	// Preallocating 10 MB should be enough for typical builds.
+	uploader.buildLog.Grow(10 * 1024 * 1024)
+
 	authToken := uuid.New().String()
 	resumeToken := newResumeToken()
 
@@ -185,6 +192,7 @@ loop:
 	if err != nil {
 		clog.Warningf(ctx, "failed to upload resultstore: %v", err)
 	}
+
 	status := rspb.Status_BUILT
 	if exitCode != 0 {
 		status = rspb.Status_FAILED_TO_BUILD
