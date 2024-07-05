@@ -16,7 +16,6 @@ import (
 	"io/fs"
 	"math"
 	"os"
-	"os/user"
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
@@ -1767,16 +1766,11 @@ func cpuinfo() string {
 }
 
 func (c *ninjaCmdRun) invocation(ctx context.Context, buildID, projectID, execRoot string, properties resultstore.Properties) *rspb.Invocation {
-	userInfo, err := user.Current()
-	if err != nil {
-		clog.Warningf(ctx, "failed to get current user: %v", err)
-		userInfo = &user.User{
-			Username: "nobody",
-		}
-	}
+	username := lookupUser(ctx)
 	hostname, err := os.Hostname()
 	if err != nil {
 		clog.Warningf(ctx, "failed to get hostname: %v", err)
+		hostname = "unknownhost"
 	}
 
 	return &rspb.Invocation{
@@ -1785,7 +1779,7 @@ func (c *ninjaCmdRun) invocation(ctx context.Context, buildID, projectID, execRo
 		},
 		InvocationAttributes: &rspb.InvocationAttributes{
 			ProjectId:   projectID,
-			Users:       []string{userInfo.Username},
+			Users:       []string{username},
 			Labels:      []string{"siso", "build"},
 			Description: fmt.Sprintf("Invocation ID %s", buildID),
 		},
