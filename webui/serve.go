@@ -16,7 +16,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"path"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -185,6 +184,7 @@ func Serve(version string, localDevelopment bool, port int, outdir string) int {
 			".siso_filegroups",
 			"siso_output",
 			"siso_localexec",
+			"siso_trace.json",
 		}
 		file := r.PathValue("file")
 
@@ -194,10 +194,19 @@ func Serve(version string, localDevelopment bool, port int, outdir string) int {
 			return
 		}
 
-		fileContents, err := os.ReadFile(path.Join(outdir, file))
+		fileContents, err := os.ReadFile(filepath.Join(outdir, file))
 		if err != nil {
 			// TODO(b/349287453): proper error handling.
 			fmt.Fprintf(w, "failed to open file: %s\n", err)
+			return
+		}
+
+		if r.URL.Query().Get("raw") == "true" {
+			w.Header().Add("Content-Type", "text/plain; charset=UTF-8")
+			_, err := w.Write(fileContents)
+			if err != nil {
+				fmt.Fprintf(w, "failed to write: %v", err)
+			}
 			return
 		}
 
