@@ -55,6 +55,18 @@ found in the LICENSE file. */}}
         }
       }
     });
+    // Dark mode.
+    window.toggleDarkMode = () => {
+      const bodyEl = document.querySelector('body');
+      const isDark = bodyEl.classList.contains('dark');
+      if (isDark) {
+        bodyEl.classList.remove('dark');
+        bodyEl.classList.add('light');
+      } else {
+        bodyEl.classList.remove('light');
+        bodyEl.classList.add('dark');
+      }
+    };
     // Open in Perfetto.
     const PERFETTO_ORIGIN = 'https://ui.perfetto.dev';
     const TRACE_URL = new URL('/logs/siso_trace.json?raw=true', document.baseURI).href;
@@ -113,6 +125,9 @@ found in the LICENSE file. */}}
           Open in Perfetto
           <md-icon slot="icon">open_in_new</md-icon>
         </md-text-button>
+        <md-icon-button class="toggle-dark-mode" onclick="toggleDarkMode()">
+          <md-icon></md-icon>
+        </md-icon-button>
       </div>
     </header>
     <div id="page-container">

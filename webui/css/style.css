@@ -47,6 +47,14 @@ html, body {
 
 #page .header-controls {
     --md-text-button-container-height: 28px;
+    --md-icon-button-state-layer-height: 28px;
+}
+
+.light .toggle-dark-mode md-icon::before {
+    content: 'brightness_4';
+}
+.dark .toggle-dark-mode md-icon::before {
+    content: 'brightness_7';
 }
 
 #page-container {
