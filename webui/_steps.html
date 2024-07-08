@@ -6,11 +6,10 @@ found in the LICENSE file. */}}
 {{$currentURL:=.currentURL}}
 <form class="data-table-filter"
     action="/steps/" method="GET"
-    hx-select="#data-table-body" hx-target="#data-table-body" hx-swap="outerHTML show:window:top"
     hx-trigger="change,submit"
     hx-ext-md-filter-chip-as-checkbox>
   <div>
-    <div id="paginator" hx-swap-oob="true">
+    <div id="paginator">
       Showing {{.itemFirstLogical}}-{{.itemLastLogical}} of {{.itemsLen}}
     </div>
     <div class="page-controls">
@@ -32,7 +31,7 @@ found in the LICENSE file. */}}
   </div>
   <div class="filter-controls"
       {{/* Ensure state doesn't go out of sync with the backend by swapping this form whenever we see it in a fetched page. */}}
-      id="step-filter-controls" hx-swap-oob="true">
+      id="step-filter-controls">
     <md-filled-text-field name="q" type="search" value="{{.outputSearch}}" placeholder="Search outputs"
         oninput="this.querySelector('md-icon-button').style.display = this.value ? 'flex' : 'none'">
       <md-icon slot="leading-icon">search</md-icon>
