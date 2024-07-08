@@ -29,6 +29,22 @@ found in the LICENSE file. */}}
   {{/* Classical JS includes. */}}
   <script src="https://unpkg.com/htmx.org@2.0.0"></script>
   <script>
+    // HTMX error handling.
+    document.addEventListener('htmx:sendError', e => {
+      const dialog = document.createElement('md-dialog');
+      dialog.setAttribute('type', 'alert');
+      dialog.setAttribute('open', 'open');
+      dialog.innerHTML = `
+        <div slot="headline">Couldn't send request</div>
+        <form id="send-error-form" slot="content" method="dialog">
+          <p>Is <code>siso webui</code> still running?</p>
+          <p>Please file <a href="https://issues.chromium.org/issues" target="_blank">an issue</a> if this seems unexpected.</p>
+        </form>
+        <div slot="actions">
+          <md-text-button form="send-error-form" value="ok">OK</md-text-button>
+        </div>`;
+      document.body.appendChild(dialog);
+    });
     // HTMX extension to allow <md-filter-chip> values to be automatically reset like <input type=checkbox>.
     htmx.defineExtension('ext-md-filter-chip-as-checkbox', {
       onEvent: function(name, event) {
