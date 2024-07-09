@@ -136,7 +136,50 @@ found in the LICENSE file. */}}
       <div class="header-title">
         <h1>sisoweb</h1>
         <p class="subtitle">{{.versionID}}</p>
-        <div class="page-name">{{.outdir}}</div>
+        <div class="breadcrumbs">
+          <div class="breadcrumb">
+            <md-text-button id="outdir-menu-button" class="breadcrumb-menu-button" trailing-icon
+                onclick="document.getElementById('outdir-menu').open = !document.getElementById('outdir-menu').open">
+              {{.outdir}}
+              <md-icon slot="icon"></md-icon>
+            </md-text-button>
+            <md-menu id="outdir-menu" anchor="outdir-menu-button" positioning="popover">
+              <md-menu-item>
+                <div slot="headline">Not implemented yet! Testing only:</div>
+              </md-menu-item>
+              <md-menu-item>
+                <div slot="headline">/path/to/some/outdir</div>
+              </md-menu-item>
+              <md-menu-item>
+                <div slot="headline">/path/to/another/outdir</div>
+              </md-menu-item>
+              <md-menu-item>
+                <div slot="headline">/path/to/yet/another/outdir</div>
+              </md-menu-item>
+            </md-menu>
+          </div>
+          <div class="breadcrumb">
+            <md-text-button id="revision-menu-button" class="breadcrumb-menu-button" trailing-icon
+                onclick="document.getElementById('revision-menu').open = !document.getElementById('revision-menu').open">
+              siso_metrics.json
+              <md-icon slot="icon"></md-icon>
+            </md-text-button>
+            <md-menu id="revision-menu" anchor="revision-menu-button" positioning="popover">
+              <md-menu-item>
+                <div slot="headline">Not implemented yet! Testing only:</div>
+              </md-menu-item>
+              <md-menu-item>
+                <div slot="headline">siso_metrics.json</div>
+              </md-menu-item>
+              <md-menu-item>
+                <div slot="headline">siso_metrics.0.json</div>
+              </md-menu-item>
+              <md-menu-item>
+                <div slot="headline">siso_metrics.1.json</div>
+              </md-menu-item>
+            </md-menu>
+          </div>
+        </div>
       </div>
       <div class="header-controls">
         <md-text-button trailing-icon onclick="openInPerfetto()">

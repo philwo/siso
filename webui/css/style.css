@@ -14,18 +14,25 @@ html, body {
     justify-content: space-between;
     align-items: center;
     padding: 0 8px;
+    --md-text-button-container-height: 28px;
+    --md-icon-button-state-layer-height: 28px;
 }
 
 #page .header-title {
-    padding: 8px 0;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 0;
 }
 
 #page .header-title h1,
 #page .header-title .subtitle,
-#page .header-title .page-name {
+#page .header-title .breadcrumbs,
+#page .header-title .breadcrumb {
     margin: 0;
     padding: 0;
-    display: inline;
+    display: flex;
+    align-items: center;
     font-size: var(--md-sys-typescale-title-medium-size);
     font-weight: var(--md-sys-typescale-title-medium-weight);
 }
@@ -35,19 +42,36 @@ html, body {
     font-weight: var(--md-sys-typescale-title-small-weight);
 }
 
-#page .header-title .page-name::before {
+#page .breadcrumb::before {
     content: "\203A"; /* › character */
-    padding-right: 4px;
+    padding: 0 4px;
 }
 
-#page .header-title .page-name {
-    font-size: var(--md-sys-typescale-title-small-size);
-    font-weight: var(--md-sys-typescale-title-small-weight);
+#page .breadcrumb-menu-button {
+    /* default <md-text-button> color is --md-sys-color-primary which is the
+     * accent color, this stands out too much so use the same color that
+     * <md-icon-button> uses i.e. --md-sys-color-on-surface-variant. */
+    --md-text-button-icon-color: var(--md-sys-color-on-surface-variant);
+    --md-text-button-label-text-color: var(--md-sys-color-on-surface-variant);
+    --md-text-button-hover-icon-color: var(--md-sys-color-on-surface-variant);
+    --md-text-button-hover-label-text-color:
+        var(--md-sys-color-on-surface-variant);
+    --md-text-button-hover-state-layer-color:
+        var(--md-sys-color-on-surface-variant);
+    --md-text-button-focus-icon-color: var(--md-sys-color-on-surface-variant);
+    --md-text-button-focus-label-text-color:
+        var(--md-sys-color-on-surface-variant);
+    --md-text-button-focus-state-layer-color:
+        var(--md-sys-color-on-surface-variant);
+    --md-text-button-pressed-icon-color:
+        var(--md-sys-color-on-surface-variant);
+    --md-text-button-pressed-label-text-color:
+        var(--md-sys-color-on-surface-variant);
+    --md-text-button-pressed-state-layer-color:
+        var(--md-sys-color-on-surface-variant);
 }
-
-#page .header-controls {
-    --md-text-button-container-height: 28px;
-    --md-icon-button-state-layer-height: 28px;
+#page .breadcrumb-menu-button md-icon::before {
+    content: 'arrow_drop_down';
 }
 
 .light .toggle-dark-mode md-icon::before {
