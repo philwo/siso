@@ -208,8 +208,12 @@ func Serve(version string, localDevelopment bool, port int, outdir string) int {
 
 	renderBuildView := func(wr io.Writer, r *http.Request, tmpl *template.Template, data map[string]any) error {
 		rev := r.PathValue("rev")
+		outdirShort := outdir
+		if home, err := os.UserHomeDir(); err == nil {
+			outdirShort = strings.Replace(outdirShort, home, "~", 1)
+		}
 		data["prefix"] = fmt.Sprintf("/builds/%s", rev)
-		data["outdir"] = outdir
+		data["outdirShort"] = outdirShort
 		data["versionID"] = version
 		data["currentURL"] = r.URL
 		data["currentRev"] = rev
