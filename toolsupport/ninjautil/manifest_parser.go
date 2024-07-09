@@ -11,10 +11,12 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strconv"
 	"time"
 
 	log "github.com/golang/glog"
+	"golang.org/x/sync/errgroup"
 
 	"infra/build/siso/o11y/clog"
 )
@@ -30,6 +32,28 @@ type ManifestParser struct {
 	rules *ruleBinding
 	// Lexer instance used to parse the .ninja file.
 	lexer *lexer
+
+	eg *errgroup.Group
+}
+
+type fileState struct {
+	edges     []*Edge
+	defaults  []*Node
+	filenames []string
+}
+
+func (s *fileState) addEdge(rule *rule, env *BindingEnv) *Edge {
+	edge := &Edge{
+		rule: rule,
+		pool: defaultPool,
+		env:  env,
+	}
+	s.edges = append(s.edges, edge)
+	return edge
+}
+
+func (s *fileState) addDefault(n *Node) {
+	s.defaults = append(s.defaults, n)
 }
 
 // NewManifestParser creates a new manifest parser.
@@ -45,20 +69,52 @@ func NewManifestParser(state *State) *ManifestParser {
 
 // Load loads the Ninja manifest given an fname.
 func (p *ManifestParser) Load(ctx context.Context, fname string) error {
+	if p.eg == nil {
+		p.eg, ctx = errgroup.WithContext(ctx)
+		p.eg.SetLimit(runtime.NumCPU())
+	}
+	p.eg.Go(func() error {
+		return p.loadFile(ctx, fname)
+	})
+	return p.eg.Wait()
+}
+
+func (p *ManifestParser) loadFile(ctx context.Context, fname string) error {
 	buf, err := os.ReadFile(fname)
 	if err != nil {
 		return err
 	}
-	return p.parse(ctx, &lexer{fname: fname, buf: buf})
+	subninjas, err := p.parse(ctx, &lexer{fname: fname, buf: buf})
+	if err != nil {
+		return err
+	}
+	for _, fname := range subninjas {
+		fname := fname
+		p.eg.Go(func() error {
+			if log.V(1) {
+				clog.Infof(ctx, "subninja %s", fname)
+			}
+			subparser := &ManifestParser{
+				state: p.state,
+				env:   newBindingEnv(p.env),
+				rules: newRuleBinding(p.rules),
+				eg:    p.eg,
+			}
+			return subparser.loadFile(ctx, fname)
+		})
+	}
+	return nil
 }
 
-func (p *ManifestParser) parse(ctx context.Context, l *lexer) error {
-	p.state.filenames = append(p.state.filenames, l.fname)
+func (p *ManifestParser) parse(ctx context.Context, l *lexer) ([]string, error) {
+	var fstate fileState
+	var subninjas []string
+	fstate.filenames = append(fstate.filenames, l.fname)
 	p.lexer = l
 	for {
 		tok, err := l.Next()
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if log.V(5) {
 			clog.Infof(ctx, "token %T %q", tok, tok)
@@ -67,47 +123,62 @@ func (p *ManifestParser) parse(ctx context.Context, l *lexer) error {
 		case tokenPool:
 			err := p.parsePool()
 			if err != nil {
-				return err
+				return nil, err
 			}
 		case tokenBuild:
-			err := p.parseEdge()
+			err := p.parseEdge(&fstate)
 			if err != nil {
-				return err
+				return nil, err
 			}
 		case tokenRule:
 			err := p.parseRule()
 			if err != nil {
-				return err
+				return nil, err
 			}
 		case tokenDefault:
-			err := p.parseDefault()
+			err := p.parseDefault(&fstate)
 			if err != nil {
-				return err
+				return nil, err
 			}
 		case tokenIdent:
 			l.Back()
 			name, letval, err := p.parseLet()
 			if err != nil {
-				return err
+				return nil, err
 			}
 			val := string(letval.Evaluate(p.env))
 			// TODO(ukai): check ninja version if name == "ninja_required_version"
 			p.env.addBinding(name, val)
+
+			// .ninja files may be included, either as part of a new scope, or in the current scope.
 		case tokenInclude:
-			err := p.parseFileInclude(ctx, false)
+			// Using the `include` keyword includes in the current scope, similar to a C #include statement.
+			// need to parse serially.
+			err := p.parseFileInclude(ctx)
 			if err != nil {
-				return err
+				return nil, err
 			}
 		case tokenSubninja:
-			err := p.parseFileInclude(ctx, true)
+			// Using the `subninja` keyword includes in a new scope, that is, variables and rules may be used
+			// from the current .ninja files, however its scope won't affect the parent .ninja file.
+			// can parse concurrently.
+			s, err := p.lexer.Path()
 			if err != nil {
-				return err
+				return nil, err
 			}
+			path := string(s.Evaluate(p.env))
+			subninjas = append(subninjas, path)
+			err = p.expectToken(tokenNewline{})
+			if err != nil {
+				return nil, err
+			}
+
 		case tokenEOF:
-			return nil
+			p.state.mergeFileState(&fstate)
+			return subninjas, nil
 		case tokenNewline:
 		default:
-			return l.errorf("unexpected %T %q", tok, tok)
+			return nil, l.errorf("unexpected %T %q", tok, tok)
 		}
 	}
 }
@@ -158,7 +229,7 @@ func (p *ManifestParser) parsePool() error {
 	return nil
 }
 
-func (p *ManifestParser) parseEdge() error {
+func (p *ManifestParser) parseEdge(fstate *fileState) error {
 	// After the `build` keyword, an edge (action) is defined by a space-separated list of output files,
 	// a colon `:`, and a space-separated list of inputs. That is, the format:
 	// `build outputs: rulename inputs`
@@ -290,7 +361,7 @@ func (p *ManifestParser) parseEdge() error {
 
 	// Finished parsing.
 	// Add a new Edge to current state and begin populating it.
-	edge := p.state.addEdge(rule, env)
+	edge := fstate.addEdge(rule, env)
 
 	// Populate this Edge with the properties we collected above.
 	poolName := edge.Binding("pool")
@@ -360,7 +431,7 @@ func (p *ManifestParser) parseRule() error {
 	return nil
 }
 
-func (p *ManifestParser) parseDefault() error {
+func (p *ManifestParser) parseDefault(fstate *fileState) error {
 	// After the `default` keyword, one or more default targets are defined by a space-separated list of target names.
 	// For example, `default foo bar` specifies that `foo` and `bar` will be built by default.
 	v, err := p.lexer.Path()
@@ -373,10 +444,11 @@ func (p *ManifestParser) parseDefault() error {
 	for {
 		path := string(v.Evaluate(p.env))
 		path = filepath.ToSlash(filepath.Clean(path))
-		err := p.state.addDefault(path)
-		if err != nil {
-			return p.lexer.errorf("%v", err)
+		n, ok := p.state.LookupNode(path)
+		if !ok {
+			return p.lexer.errorf("unknown target for default %q", path)
 		}
+		fstate.addDefault(n)
 		v, err = p.lexer.Path()
 		if err != nil {
 			return err
@@ -405,27 +477,12 @@ func (p *ManifestParser) parseLet() (string, EvalString, error) {
 	return name.String(), value, nil
 }
 
-func (p *ManifestParser) parseFileInclude(ctx context.Context, newScope bool) error {
-	// .ninja files may be included, either as part of a new scope, or in the current scope.
-	// Using the `include` keyword includes in the current scope, similar to a C #include statement.
-	// Using the `subninja` keyword includes in a new scope, that is, variables and rules may be used
-	// from the current .ninja files, however its scope won't affect the parent .ninja file.
+func (p *ManifestParser) parseFileInclude(ctx context.Context) error {
 	s, err := p.lexer.Path()
 	if err != nil {
 		return err
 	}
 	path := string(s.Evaluate(p.env))
-
-	op := "include"
-	subparser := NewManifestParser(p.state)
-	if newScope {
-		subparser.env = newBindingEnv(p.env)
-		subparser.rules = newRuleBinding(p.rules)
-		op = "subninja"
-	} else {
-		subparser.env = p.env
-		subparser.rules = p.rules
-	}
 
 	select {
 	case <-ctx.Done():
@@ -434,14 +491,14 @@ func (p *ManifestParser) parseFileInclude(ctx context.Context, newScope bool) er
 	default:
 	}
 	start := time.Now()
-	err = subparser.Load(ctx, path)
+	err = p.loadFile(ctx, path)
 	if err != nil {
-		clog.Errorf(ctx, "Failed %s %s %s: %v", op, path, time.Since(start), err)
+		clog.Errorf(ctx, "Failed include %s %s: %v", path, time.Since(start), err)
 
 		return err
 	}
 	if log.V(1) {
-		clog.Infof(ctx, "%s %s %s", op, path, time.Since(start))
+		clog.Infof(ctx, "include %s %s", path, time.Since(start))
 	}
 
 	err = p.expectToken(tokenNewline{})

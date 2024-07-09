@@ -12,7 +12,7 @@ import (
 func TestParser_Empty(t *testing.T) {
 	state := NewState()
 	p := NewManifestParser(state)
-	err := p.parse(context.Background(), &lexer{fname: "input"})
+	_, err := p.parse(context.Background(), &lexer{fname: "input"})
 	if err != nil {
 		t.Errorf("parse %v", err)
 	}
@@ -21,7 +21,7 @@ func TestParser_Empty(t *testing.T) {
 func TestParser_Rules(t *testing.T) {
 	state := NewState()
 	p := NewManifestParser(state)
-	err := p.parse(context.Background(),
+	_, err := p.parse(context.Background(),
 		&lexer{
 			fname: "input",
 			buf: []byte(`rule cat
@@ -62,7 +62,7 @@ build result: cat in_1.cc in-2.O
 func TestParser_Dupbuild_Error(t *testing.T) {
 	state := NewState()
 	p := NewManifestParser(state)
-	err := p.parse(context.Background(),
+	_, err := p.parse(context.Background(),
 		&lexer{
 			fname: "build.ninja",
 			buf: []byte(`

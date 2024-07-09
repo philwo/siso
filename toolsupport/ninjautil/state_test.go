@@ -133,7 +133,7 @@ default all
 		t.Run(tc.name, func(t *testing.T) {
 			state := NewState()
 			p := NewManifestParser(state)
-			err := p.parse(context.Background(),
+			_, err := p.parse(context.Background(),
 				&lexer{
 					fname: "input",
 					buf:   []byte(tc.input),

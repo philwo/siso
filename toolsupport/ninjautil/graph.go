@@ -9,11 +9,13 @@ import (
 	"io"
 	"sort"
 	"strings"
+	"sync"
 )
 
 // Node represents a node (target file) in build graph.
 type Node struct {
 	path   string
+	mu     sync.Mutex
 	inEdge *Edge // the edge that generates the file for this node.
 	outs   []*Edge
 }

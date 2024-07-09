@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"fmt"
 	"reflect"
+	"sync"
 )
 
 // Reference:
@@ -380,11 +381,19 @@ func matchVarref(buf []byte) (n int, simple, ok bool) {
 
 }
 
-var esbuf = EvalString{
-	s: make([]tokenStr, 0, 32),
+var esbufPool = sync.Pool{
+	New: func() any {
+		return &EvalString{
+			s: make([]tokenStr, 0, 32),
+		}
+	},
 }
 
 func (l *lexer) evalString(path bool) (EvalString, error) {
+	esbuf := *(esbufPool.Get().(*EvalString))
+	defer func() {
+		esbufPool.Put(&esbuf)
+	}()
 	esbuf.s = esbuf.s[:0]
 	var s int
 loop:

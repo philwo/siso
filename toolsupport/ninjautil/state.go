@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
+	"sync/atomic"
 
 	"infra/build/siso/scandeps"
 )
@@ -51,13 +53,19 @@ func newPool(name string, depth int) *Pool {
 // such as pools, edges (= actions) and variable bindings.
 type State struct {
 	// Pools map from pool name to *Pool.
-	pools map[string]*Pool
+	pools sync.Map // string:poolName -> *Pool
+
 	// Paths map from target name (or pathname used in build's inputs/outputs) to *Node.
-	paths map[string]*Node
-	// Edges is a list of all actions defined in the Ninja file.
-	edges []*Edge
+	paths    sync.Map // map[string]*Node
+	numPaths atomic.Int64
+
 	// Bindings contains all rules and variables defined in this scope.
 	bindings *BindingEnv
+
+	mu sync.Mutex // protects edges, defaults, filenames
+
+	// Edges is a list of all actions defined in the Ninja file.
+	edges []*Edge
 	// Defaults is a list of default targets, i.e. those built if the user does not specify targets to build.
 	defaults []*Node
 	// Filenames parsed by the parser (e.g. build.ninja and its subninja etc.)
@@ -67,94 +75,86 @@ type State struct {
 // NewState creates new state.
 func NewState() *State {
 	bindings := newBindingEnv(nil)
-	return &State{
-		pools: map[string]*Pool{
-			"":        defaultPool,
-			"console": consolePool,
-		},
-		// Pre-allocate for performance.
-		// TODO(ukai): Benchmark this.
-		paths:    make(map[string]*Node, 65536),
+	s := &State{
 		bindings: bindings,
 	}
+	s.pools.Store("", defaultPool)
+	s.pools.Store("console", consolePool)
+	return s
 }
 
 func (s *State) addPool(pool *Pool) {
-	s.pools[pool.name] = pool
+	s.pools.Store(pool.name, pool)
 }
 
 // LookupPool looks up pool.
 func (s *State) LookupPool(poolName string) (*Pool, bool) {
-	p, ok := s.pools[poolName]
-	return p, ok
+	p, ok := s.pools.Load(poolName)
+	if !ok {
+		return nil, false
+	}
+	return p.(*Pool), ok
 }
 
 // Pools returns a map of pools
 func (s *State) Pools() map[string]*Pool {
 	m := make(map[string]*Pool)
-	for k, v := range s.pools {
-		m[k] = v
-	}
+	s.pools.Range(func(key, value any) bool {
+		poolName := key.(string)
+		pool := value.(*Pool)
+		m[poolName] = pool
+		return true
+	})
 	return m
-}
-
-func (s *State) addEdge(rule *rule, env *BindingEnv) *Edge {
-	edge := &Edge{
-		rule: rule,
-		pool: defaultPool,
-		env:  env,
-	}
-	s.edges = append(s.edges, edge)
-	return edge
 }
 
 // node returns a node.
 func (s *State) node(path []byte) *Node {
-	n, ok := s.paths[string(path)]
-	if ok {
-		return n
+	nv, loaded := s.paths.LoadOrStore(string(path), &Node{})
+	if loaded {
+		return nv.(*Node)
 	}
+	s.numPaths.Add(1)
 	pathStr := string(path)
-	n = &Node{path: pathStr}
-	s.paths[pathStr] = n
+	n := nv.(*Node)
+	n.path = pathStr
 	return n
 }
 
 // NumNodes returns a number of nodes.
 func (s *State) NumNodes() int {
-	return len(s.paths)
+	return int(s.numPaths.Load())
 }
 
 // LookupNode returns a node.
 func (s *State) LookupNode(path string) (*Node, bool) {
-	n, ok := s.paths[path]
-	return n, ok
+	nv, ok := s.paths.Load(path)
+	if ok {
+		return nv.(*Node), true
+	}
+	return nil, false
 }
 
 func (s *State) addIn(edge *Edge, path []byte) {
 	n := s.node(path)
 	edge.inputs = append(edge.inputs, n)
+	n.mu.Lock()
+	defer n.mu.Unlock()
 	n.addOutEdge(edge)
 }
 
 func (s *State) addOut(edge *Edge, path []byte) bool {
 	// Nodes can only have one incoming edge
 	n := s.node(path)
+	n.mu.Lock()
 	if n.hasInEdge() {
+		n.mu.Unlock()
 		return false
 	}
-	edge.outputs = append(edge.outputs, n)
 	n.inEdge = edge
+	n.mu.Unlock()
+	edge.outputs = append(edge.outputs, n)
 	return true
-}
-
-func (s *State) addDefault(path string) error {
-	n, ok := s.LookupNode(path)
-	if !ok {
-		return fmt.Errorf("unknown target %q", path)
-	}
-	s.defaults = append(s.defaults, n)
-	return nil
 }
 
 // RootNodes returns root nodes, that are nodes without output actions.
@@ -303,6 +303,14 @@ func (s *State) hatTarget(t string) (*Node, bool) {
 		}
 	}
 	return nil, false
+}
+
+func (s *State) mergeFileState(fstate *fileState) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.edges = append(s.edges, fstate.edges...)
+	s.defaults = append(s.defaults, fstate.defaults...)
+	s.filenames = append(s.filenames, fstate.filenames...)
 }
 
 // PhonyNodes returns phony's output nodes.
