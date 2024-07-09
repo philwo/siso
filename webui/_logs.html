@@ -3,10 +3,11 @@ Use of this source code is governed by a BSD-style license that can be
 found in the LICENSE file. */}}
 
 {{define "sidebar"}}
+{{$prefix:=.prefix}}
 {{$currentURL:=.currentURL}}
 <md-list>
   {{range $allowedFile := .allowedFiles}}
-    {{$logURL := printf "/logs/%s" $allowedFile}}
+    {{$logURL := printf "%s/logs/%s" $prefix $allowedFile}}
     <md-list-item {{if not (urlPathEq $currentURL $logURL)}}type="button" href="{{$logURL}}"{{end}}>
       {{$allowedFile}}
     </md-list-item>

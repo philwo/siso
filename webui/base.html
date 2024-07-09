@@ -85,7 +85,7 @@ found in the LICENSE file. */}}
     };
     // Open in Perfetto.
     const PERFETTO_ORIGIN = 'https://ui.perfetto.dev';
-    const TRACE_URL = new URL('/logs/siso_trace.json?raw=true', document.baseURI).href;
+    const TRACE_URL = new URL('{{.prefix}}/logs/siso_trace.json?raw=true', document.baseURI).href;
     window.openInPerfetto = async () => {
       // TODO: check for and present errors.
       const resp = await fetch(TRACE_URL);
@@ -161,22 +161,15 @@ found in the LICENSE file. */}}
           <div class="breadcrumb">
             <md-text-button id="revision-menu-button" class="breadcrumb-menu-button" trailing-icon
                 onclick="document.getElementById('revision-menu').open = !document.getElementById('revision-menu').open">
-              siso_metrics.json
+              {{.currentRev}}
               <md-icon slot="icon"></md-icon>
             </md-text-button>
             <md-menu id="revision-menu" anchor="revision-menu-button" positioning="popover">
-              <md-menu-item>
-                <div slot="headline">Not implemented yet! Testing only:</div>
+              {{range $rev := .revs}}
+              <md-menu-item href="/builds/{{$rev}}/steps/">
+                <div slot="headline">{{if eq $rev "latest"}}latest{{else}}{{$rev}}{{end}}</div>
               </md-menu-item>
-              <md-menu-item>
-                <div slot="headline">siso_metrics.json</div>
-              </md-menu-item>
-              <md-menu-item>
-                <div slot="headline">siso_metrics.0.json</div>
-              </md-menu-item>
-              <md-menu-item>
-                <div slot="headline">siso_metrics.1.json</div>
-              </md-menu-item>
+              {{end}}
             </md-menu>
           </div>
         </div>
@@ -193,9 +186,9 @@ found in the LICENSE file. */}}
     </header>
     <div id="page-container">
       <md-tabs id="page-tabs" hx-push-url="true">
-        <md-primary-tab hx-get="/steps/" {{if urlPathHasPrefix .currentURL "/steps/"}}selected{{end}}>Build Steps</md-primary-tab>
+        <md-primary-tab hx-get="{{.prefix}}/steps/" {{if urlPathHasPrefix .currentURL (printf "%s/steps/" .prefix)}}selected{{end}}>Build Steps</md-primary-tab>
         <md-primary-tab>Aggregates</md-primary-tab>
-        <md-primary-tab hx-get="/logs/" {{if urlPathHasPrefix .currentURL "/logs/"}}selected{{end}}>Raw Logs</md-primary-tab>
+        <md-primary-tab hx-get="{{.prefix}}/logs/" {{if urlPathHasPrefix .currentURL (printf "%s/logs/" .prefix)}}selected{{end}}>Raw Logs</md-primary-tab>
       </md-tabs>
       <div id="page-view">
         <div id="page-content" class="content">{{template "content" .}}</div>

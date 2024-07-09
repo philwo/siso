@@ -17,6 +17,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -61,6 +62,11 @@ var (
 )
 
 type outdirInfo struct {
+	metrics []*buildMetrics
+}
+
+type buildMetrics struct {
+	rev           string
 	buildMetrics  []build.StepMetric
 	buildDuration build.IntervalMetric
 	stepMetrics   map[string]build.StepMetric
@@ -69,16 +75,14 @@ type outdirInfo struct {
 	actionCounts  map[string]int
 }
 
-func loadOutdirInfo(outdirPath string) (*outdirInfo, error) {
-	metricsPath := filepath.Join(outdirPath, "siso_metrics.json")
-
+func loadBuildMetrics(metricsPath string) (*buildMetrics, error) {
 	f, err := os.Open(metricsPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read metrics: %w", err)
 	}
 	defer f.Close()
 
-	outdirInfo := &outdirInfo{
+	metricsData := &buildMetrics{
 		buildMetrics: []build.StepMetric{},
 		stepMetrics:  make(map[string]build.StepMetric),
 		ruleCounts:   make(map[string]int),
@@ -96,29 +100,75 @@ func loadOutdirInfo(outdirPath string) (*outdirInfo, error) {
 			return nil, fmt.Errorf("parse error in %s:%d: %w", metricsPath, d.InputOffset(), err)
 		}
 		if m.BuildID != "" {
-			outdirInfo.buildMetrics = append(outdirInfo.buildMetrics, m)
+			metricsData.buildMetrics = append(metricsData.buildMetrics, m)
 			// The last build metric found has the actual build duration.
-			outdirInfo.buildDuration = m.Duration
+			metricsData.buildDuration = m.Duration
 		} else if m.StepID != "" {
-			outdirInfo.stepMetrics[m.StepID] = m
-			outdirInfo.lastStepID = m.StepID
+			metricsData.stepMetrics[m.StepID] = m
+			metricsData.lastStepID = m.StepID
 		} else {
 			return nil, fmt.Errorf("unexpected metric found %v", m)
 		}
 	}
 
-	for _, metric := range outdirInfo.stepMetrics {
+	for _, metric := range metricsData.stepMetrics {
 		if metric.Action != "" {
-			outdirInfo.actionCounts[metric.Action]++
+			metricsData.actionCounts[metric.Action]++
 		}
 	}
-	for _, metric := range outdirInfo.stepMetrics {
+	for _, metric := range metricsData.stepMetrics {
 		if metric.Rule != "" {
-			outdirInfo.ruleCounts[metric.Rule]++
+			metricsData.ruleCounts[metric.Rule]++
 		}
 	}
 
-	return outdirInfo, err
+	return metricsData, nil
+}
+
+// loadOutdirInfo attempts to load all metrics found in the outdir.
+func loadOutdirInfo(outdirPath string) (*outdirInfo, error) {
+	outdirInfo := &outdirInfo{}
+
+	// Attempt to load latest metrics first.
+	// Only silently ignore if it doesn't exist, otherwise always return error.
+	// TODO(b/349287453): consider tolerate fail, so frontend can show error?
+	latestMetricsPath := filepath.Join(outdirPath, "siso_metrics.json")
+	_, err := os.Stat(latestMetricsPath)
+	if err == nil {
+		latestMetrics, err := loadBuildMetrics(latestMetricsPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load latest metrics: %w", err)
+		}
+		latestMetrics.rev = "latest"
+		outdirInfo.metrics = append(outdirInfo.metrics, latestMetrics)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return nil, fmt.Errorf("failed to stat latest metrics: %w", err)
+	}
+
+	// Then load revisions if available.
+	// Always return error if loading any fails.
+	// TODO(b/349287453): consider tolerate fail, so frontend can show error?
+	revPaths, err := filepath.Glob(filepath.Join(outdirPath, "siso_metrics.*.json"))
+	if err != nil {
+		return nil, fmt.Errorf("failed to glob revs: %w", err)
+	}
+	for _, revPath := range revPaths {
+		baseName := filepath.Base(revPath)
+		re := regexp.MustCompile(`siso_metrics.(\d+).json`)
+		matches := re.FindStringSubmatch(baseName)
+		if matches == nil {
+			fmt.Fprintf(os.Stderr, "ignoring invalid %s\n", revPath)
+		}
+		rev := matches[1]
+
+		revMetrics, err := loadBuildMetrics(revPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load %s: %w", revPath, err)
+		}
+		revMetrics.rev = rev
+		outdirInfo.metrics = append(outdirInfo.metrics, revMetrics)
+	}
+	return outdirInfo, nil
 }
 
 // loadView lazy-parses a view once, or parses every time if in local development mode.
@@ -138,17 +188,6 @@ func loadView(localDevelopment bool, fs fs.FS, view string) (*template.Template,
 
 // Serve serves the webui.
 func Serve(version string, localDevelopment bool, port int, outdir string) int {
-	renderView := func(wr io.Writer, r *http.Request, tmpl *template.Template, data map[string]any) error {
-		data["outdir"] = outdir
-		data["versionID"] = version
-		data["currentURL"] = r.URL
-		err := tmpl.ExecuteTemplate(wr, "base", data)
-		if err != nil {
-			return fmt.Errorf("failed to execute template: %w", err)
-		}
-		return nil
-	}
-
 	// Use templates from embed or local.
 	fs := fs.FS(content)
 	if localDevelopment {
@@ -157,21 +196,36 @@ func Serve(version string, localDevelopment bool, port int, outdir string) int {
 
 	// Read metrics.
 	// TODO(b/349287453): support multiple outdirs.
-	metrics, err := loadOutdirInfo(outdir)
+	outdirInfo, err := loadOutdirInfo(outdir)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to load outdir: %v", err)
 		return 1
 	}
+	var knownRevs []string
+	for _, metrics := range outdirInfo.metrics {
+		knownRevs = append(knownRevs, metrics.rev)
+	}
 
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, "/steps/", http.StatusTemporaryRedirect)
+	renderBuildView := func(wr io.Writer, r *http.Request, tmpl *template.Template, data map[string]any) error {
+		rev := r.PathValue("rev")
+		data["prefix"] = fmt.Sprintf("/builds/%s", rev)
+		data["outdir"] = outdir
+		data["versionID"] = version
+		data["currentURL"] = r.URL
+		data["currentRev"] = rev
+		data["revs"] = knownRevs
+		err := tmpl.ExecuteTemplate(wr, "base", data)
+		if err != nil {
+			return fmt.Errorf("failed to execute template: %w", err)
+		}
+		return nil
+	}
+
+	http.HandleFunc("/builds/{rev}/logs/", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, fmt.Sprintf("/builds/%s/logs/.siso_config", r.PathValue("rev")), http.StatusTemporaryRedirect)
 	})
 
-	http.HandleFunc("/logs/", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, "/logs/.siso_config", http.StatusTemporaryRedirect)
-	})
-
-	http.HandleFunc("/logs/{file}", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/builds/{rev}/logs/{file}", func(w http.ResponseWriter, r *http.Request) {
 		tmpl, err := loadView(localDevelopment, fs, "_logs.html")
 		if err != nil {
 			// TODO(b/349287453): proper error handling.
@@ -179,22 +233,27 @@ func Serve(version string, localDevelopment bool, port int, outdir string) int {
 			return
 		}
 
-		allowedFiles := []string{
-			".siso_config",
-			".siso_filegroups",
-			"siso_output",
-			"siso_localexec",
-			"siso_trace.json",
+		allowedFilesMap := map[string]string{
+			".siso_config":     ".siso_config%.0s",
+			".siso_filegroups": ".siso_filegroups%.0s",
+			"siso_localexec":   "siso_localexec.%s",
+			"siso_output":      "siso_output.%s",
+			"siso_trace.json":  "siso_trace.%s.json",
 		}
-		file := r.PathValue("file")
-
-		if !slices.Contains(allowedFiles, file) {
+		requestedFile := r.PathValue("file")
+		revFileFormatter, ok := allowedFilesMap[requestedFile]
+		if !ok {
 			// TODO(b/349287453): proper error handling.
 			fmt.Fprintf(w, "unknown file: %v\n", err)
 			return
 		}
 
-		fileContents, err := os.ReadFile(filepath.Join(outdir, file))
+		rev := r.PathValue("rev")
+		actualFile := requestedFile
+		if rev != "latest" {
+			actualFile = fmt.Sprintf(revFileFormatter, rev)
+		}
+		fileContents, err := os.ReadFile(filepath.Join(outdir, actualFile))
 		if err != nil {
 			// TODO(b/349287453): proper error handling.
 			fmt.Fprintf(w, "failed to open file: %s\n", err)
@@ -210,9 +269,16 @@ func Serve(version string, localDevelopment bool, port int, outdir string) int {
 			return
 		}
 
-		err = renderView(w, r, tmpl, map[string]any{
+		// TODO(b/349287453): use maps.Keys once go 1.23
+		var allowedFiles []string
+		for allowedFile := range allowedFilesMap {
+			allowedFiles = append(allowedFiles, allowedFile)
+		}
+		slices.Sort(allowedFiles)
+
+		err = renderBuildView(w, r, tmpl, map[string]any{
 			"allowedFiles": allowedFiles,
-			"file":         file,
+			"file":         requestedFile,
 			"fileContents": string(fileContents),
 		})
 		if err != nil {
@@ -221,7 +287,19 @@ func Serve(version string, localDevelopment bool, port int, outdir string) int {
 		}
 	})
 
-	http.HandleFunc("POST /steps/{id}/recall/", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("POST /builds/{rev}/steps/{id}/recall/", func(w http.ResponseWriter, r *http.Request) {
+		var metrics *buildMetrics
+		for _, m := range outdirInfo.metrics {
+			if m.rev == r.PathValue("rev") {
+				metrics = m
+				break
+			}
+		}
+		if metrics == nil {
+			http.NotFound(w, r)
+			return
+		}
+
 		tmpl, err := loadView(localDevelopment, fs, "_recall.html")
 		if err != nil {
 			// TODO(b/349287453): proper error handling.
@@ -235,7 +313,7 @@ func Serve(version string, localDevelopment bool, port int, outdir string) int {
 			return
 		}
 
-		err = renderView(w, r, tmpl, map[string]any{
+		err = renderBuildView(w, r, tmpl, map[string]any{
 			"stepID":        metric.StepID,
 			"digest":        metric.Digest,
 			"project":       r.FormValue("project"),
@@ -246,7 +324,19 @@ func Serve(version string, localDevelopment bool, port int, outdir string) int {
 		}
 	})
 
-	http.HandleFunc("/steps/{id}/", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/builds/{rev}/steps/{id}/", func(w http.ResponseWriter, r *http.Request) {
+		var metrics *buildMetrics
+		for _, m := range outdirInfo.metrics {
+			if m.rev == r.PathValue("rev") {
+				metrics = m
+				break
+			}
+		}
+		if metrics == nil {
+			http.NotFound(w, r)
+			return
+		}
+
 		tmpl, err := loadView(localDevelopment, fs, "_step.html")
 		if err != nil {
 			// TODO(b/349287453): proper error handling.
@@ -272,13 +362,25 @@ func Serve(version string, localDevelopment bool, port int, outdir string) int {
 			fmt.Fprintf(w, "failed to unmarshal metrics: %v\n", err)
 		}
 
-		err = renderView(w, r, tmpl, asMap)
+		err = renderBuildView(w, r, tmpl, asMap)
 		if err != nil {
 			fmt.Fprintf(w, "failed to render view: %v\n", err)
 		}
 	})
 
-	http.HandleFunc("/steps/", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/builds/{rev}/steps/", func(w http.ResponseWriter, r *http.Request) {
+		var metrics *buildMetrics
+		for _, m := range outdirInfo.metrics {
+			if m.rev == r.PathValue("rev") {
+				metrics = m
+				break
+			}
+		}
+		if metrics == nil {
+			http.NotFound(w, r)
+			return
+		}
+
 		tmpl, err := loadView(localDevelopment, fs, "_steps.html")
 		if err != nil {
 			// TODO(b/349287453): proper error handling.
@@ -364,10 +466,14 @@ func Serve(version string, localDevelopment bool, port int, outdir string) int {
 			"ruleCounts":       metrics.ruleCounts,
 			"buildDuration":    metrics.buildDuration,
 		}
-		err = renderView(w, r, tmpl, data)
+		err = renderBuildView(w, r, tmpl, data)
 		if err != nil {
 			fmt.Fprintf(w, "failed to render view: %s\n", err)
 		}
+	})
+
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/builds/latest/steps/", http.StatusTemporaryRedirect)
 	})
 
 	http.Handle("/css/", http.FileServerFS(fs))

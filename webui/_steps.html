@@ -3,9 +3,10 @@ Use of this source code is governed by a BSD-style license that can be
 found in the LICENSE file. */}}
 
 {{define "sidebar"}}
+{{$prefix:=.prefix}}
 {{$currentURL:=.currentURL}}
 <form class="data-table-filter"
-    action="/steps/" method="GET"
+    action="{{$prefix}}/steps/" method="GET"
     hx-trigger="change,submit"
     hx-ext-md-filter-chip-as-checkbox>
   <div>
@@ -71,6 +72,7 @@ found in the LICENSE file. */}}
 {{end}}
 
 {{define "content"}}
+{{$prefix:=.prefix}}
 {{$buildDuration:=.buildDuration}}
 <div class="data-table-container">
   <cds-table>
@@ -90,7 +92,7 @@ found in the LICENSE file. */}}
       {{range .subset}}
       <cds-table-row>
         <cds-table-cell>
-          <a href="/steps/{{.StepID}}">{{.Output}}</a>
+          <a href="{{$prefix}}/steps/{{.StepID}}">{{.Output}}</a>
           <cds-table-cell-content>
             <span class="step-rule">{{.Rule}}</span>
             <span class="step-action">{{.Action}}</span>
