@@ -7,7 +7,6 @@ package build
 import (
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -24,20 +23,14 @@ type fakeGraph struct {
 	inputDeps map[string][]string
 }
 
+func (g fakeGraph) NumTargets() int { return len(g.inputDeps) }
+
 func (fakeGraph) Targets(ctx context.Context, args ...string) ([]Target, error) {
-	var targets []Target
-	for _, arg := range args {
-		targets = append(targets, arg)
-	}
-	return targets, nil
+	return nil, nil
 }
 
 func (fakeGraph) TargetPath(ctx context.Context, target Target) (string, error) {
-	t, ok := target.(string)
-	if !ok {
-		return "", fmt.Errorf("unexpected target type %T", target)
-	}
-	return t, nil
+	return "", errors.New("not implemented")
 }
 
 func (fakeGraph) StepDef(ctx context.Context, target Target, next StepDef) (StepDef, []Target, []Target, error) {

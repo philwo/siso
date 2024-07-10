@@ -14,11 +14,14 @@ import (
 
 // Node represents a node (target file) in build graph.
 type Node struct {
+	id     int
 	path   string
 	mu     sync.Mutex
 	inEdge *Edge // the edge that generates the file for this node.
 	outs   []*Edge
 }
+
+func (n *Node) ID() int { return n.id }
 
 func (n *Node) String() string { return n.path }
 

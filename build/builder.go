@@ -404,9 +404,10 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 	// scheduling
 	// TODO: run asynchronously?
 	schedOpts := schedulerOption{
-		Path:    b.path,
-		HashFS:  b.hashFS,
-		Prepare: b.prepare,
+		NumTargets: b.graph.NumTargets(),
+		Path:       b.path,
+		HashFS:     b.hashFS,
+		Prepare:    b.prepare,
 	}
 	sched := newScheduler(ctx, schedOpts)
 	err = schedule(ctx, sched, b.graph, args...)
@@ -1008,8 +1009,11 @@ func (b *Builder) prepareAllOutDirs(ctx context.Context) error {
 	started := time.Now()
 	seen := make(map[string]struct{})
 	// Collect only the deepest directories to avoid redundant `os.MkdirAll`.
-	for target := range b.plan.outputs {
-		p, err := b.graph.TargetPath(ctx, target)
+	for target, ok := range b.plan.outputs {
+		if !ok {
+			continue
+		}
+		p, err := b.graph.TargetPath(ctx, Target(target))
 		if err != nil {
 			return err
 		}

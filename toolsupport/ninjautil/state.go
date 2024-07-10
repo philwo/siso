@@ -12,7 +12,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"sync/atomic"
 
 	"infra/build/siso/scandeps"
 )
@@ -56,8 +55,8 @@ type State struct {
 	pools sync.Map // string:poolName -> *Pool
 
 	// Paths map from target name (or pathname used in build's inputs/outputs) to *Node.
-	paths    sync.Map // map[string]*Node
-	numPaths atomic.Int64
+	paths sync.Map // map[string]*Node
+	nodes []*Node
 
 	// Bindings contains all rules and variables defined in this scope.
 	bindings *BindingEnv
@@ -114,7 +113,6 @@ func (s *State) node(path []byte) *Node {
 	if loaded {
 		return nv.(*Node)
 	}
-	s.numPaths.Add(1)
 	pathStr := string(path)
 	n := nv.(*Node)
 	n.path = pathStr
@@ -123,11 +121,19 @@ func (s *State) node(path []byte) *Node {
 
 // NumNodes returns a number of nodes.
 func (s *State) NumNodes() int {
-	return int(s.numPaths.Load())
+	return len(s.nodes)
 }
 
 // LookupNode returns a node.
-func (s *State) LookupNode(path string) (*Node, bool) {
+func (s *State) LookupNode(id int) (*Node, bool) {
+	if id <= 0 || id >= len(s.nodes) {
+		return nil, false
+	}
+	return s.nodes[id], true
+}
+
+// LookupNodeByPath returns a node.
+func (s *State) LookupNodeByPath(path string) (*Node, bool) {
 	nv, ok := s.paths.Load(path)
 	if ok {
 		return nv.(*Node), true
@@ -212,7 +218,7 @@ func (s *State) Targets(args []string) ([]*Node, error) {
 			}
 			node = outputs[0]
 		} else {
-			n, ok := s.LookupNode(t)
+			n, ok := s.LookupNodeByPath(t)
 			if !ok {
 				return nil, fmt.Errorf("unknown target %q", t)
 			}
@@ -231,7 +237,7 @@ func (s *State) Targets(args []string) ([]*Node, error) {
 func (s *State) hatTarget(t string) (*Node, bool) {
 	ctx := context.Background() // TODO: take from caller.
 	t = strings.TrimSuffix(t, "^")
-	n, ok := s.LookupNode(t)
+	n, ok := s.LookupNodeByPath(t)
 	if ok {
 		return n, true
 	}
@@ -273,7 +279,7 @@ func (s *State) hatTarget(t string) (*Node, bool) {
 				continue
 			}
 			if filepath.Base(inc) == incname {
-				n, ok := s.LookupNode(fname)
+				n, ok := s.LookupNodeByPath(fname)
 				if ok {
 					return n, true
 				}

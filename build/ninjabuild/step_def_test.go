@@ -112,6 +112,7 @@ build target1: __rule target2 | ../../source1 || target3
 					},
 				},
 			},
+			targetPaths: make([]string, state.NumNodes()),
 		},
 	}
 	err = graph.globals.stepConfig.Init(ctx)
@@ -119,7 +120,7 @@ build target1: __rule target2 | ../../source1 || target3
 		t.Fatal(err)
 	}
 	newStepDef := func(target string) *StepDef {
-		node, ok := state.LookupNode(target)
+		node, ok := state.LookupNodeByPath(target)
 		if !ok {
 			t.Fatalf("target %q not found in build.ninja", target)
 		}
@@ -229,6 +230,7 @@ build target1: __rule ../../source1 foo.stamp foo.a
 					},
 				},
 			},
+			targetPaths: make([]string, state.NumNodes()),
 		},
 	}
 	err = graph.globals.stepConfig.Init(ctx)
@@ -236,7 +238,7 @@ build target1: __rule ../../source1 foo.stamp foo.a
 		t.Fatal(err)
 	}
 	newStepDef := func(target string) *StepDef {
-		node, ok := state.LookupNode(target)
+		node, ok := state.LookupNodeByPath(target)
 		if !ok {
 			t.Fatalf("target %q not found in build.ninja", target)
 		}
@@ -313,13 +315,14 @@ build foo.h: __rule | ./protoc
 		nstate:  state,
 		visited: make(map[*ninjautil.Edge]bool),
 		globals: &globals{
-			path:       build.NewPath(dir, "out/Default"),
-			hashFS:     hashFS,
-			stepConfig: &StepConfig{},
+			path:        build.NewPath(dir, "out/Default"),
+			hashFS:      hashFS,
+			stepConfig:  &StepConfig{},
+			targetPaths: make([]string, state.NumNodes()),
 		},
 	}
 	newStepDef := func(target string) *StepDef {
-		node, ok := state.LookupNode(target)
+		node, ok := state.LookupNodeByPath(target)
 		if !ok {
 			t.Fatalf("target %q not found in build.ninja", target)
 		}
@@ -425,6 +428,7 @@ build target1: __rule ../../source1.cc target2.h target3.h
 					},
 				},
 			},
+			targetPaths: make([]string, state.NumNodes()),
 		},
 	}
 	err = graph.globals.stepConfig.Init(ctx)
@@ -432,7 +436,7 @@ build target1: __rule ../../source1.cc target2.h target3.h
 		t.Fatal(err)
 	}
 	newStepDef := func(target string) *StepDef {
-		node, ok := state.LookupNode(target)
+		node, ok := state.LookupNodeByPath(target)
 		if !ok {
 			t.Fatalf("target %q not found in build.ninja", target)
 		}

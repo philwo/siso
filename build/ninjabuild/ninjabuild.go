@@ -42,8 +42,8 @@ type globals struct {
 	buildConfig *buildconfig.Config
 	stepConfig  *StepConfig
 
-	// *ninjautil.Node -> string
-	targetPaths sync.Map
+	// node id -> string
+	targetPaths []string
 
 	// output -> *edgeRule that produces the output
 	edgeRules sync.Map
@@ -199,6 +199,7 @@ func NewGraph(ctx context.Context, fname string, nstate *ninjautil.State, config
 			depsLog:        depsLog,
 			buildConfig:    config,
 			stepConfig:     stepConfig,
+			targetPaths:    make([]string, nstate.NumNodes()),
 			phony:          make(map[string]bool),
 			caseSensitives: make(map[string][]string),
 			gnTargets:      make(map[*ninjautil.Edge]gnTarget),
@@ -238,6 +239,7 @@ func (g *Graph) Reload(ctx context.Context) error {
 // Reset resets graph status.
 func (g *Graph) Reset(ctx context.Context) {
 	g.visited = make(map[*ninjautil.Edge]bool)
+	g.globals.targetPaths = make([]string, g.nstate.NumNodes())
 	g.globals.phony = make(map[string]bool)
 	g.globals.caseSensitives = make(map[string][]string)
 	g.globals.gnTargets = make(map[*ninjautil.Edge]gnTarget)
@@ -361,6 +363,10 @@ func (g *Graph) ConfigProperties() map[string]string {
 	return g.globals.stepConfig.Properties
 }
 
+func (g *Graph) NumTargets() int {
+	return g.nstate.NumNodes()
+}
+
 // Targets returns targets for ninja args.
 // If args is not given, returns default build targets.
 func (g *Graph) Targets(ctx context.Context, args ...string) ([]build.Target, error) {
@@ -370,35 +376,35 @@ func (g *Graph) Targets(ctx context.Context, args ...string) ([]build.Target, er
 	}
 	targets := make([]build.Target, 0, len(nodes))
 	for _, n := range nodes {
-		targets = append(targets, build.Target(n))
+		targets = append(targets, build.Target(n.ID()))
 	}
 	return targets, nil
 }
 
 // TargetPath returns exec-root relative path of the target.
 func (g *Graph) TargetPath(ctx context.Context, target build.Target) (string, error) {
-	node, ok := target.(*ninjautil.Node)
+	node, ok := g.nstate.LookupNode(int(target))
 	if !ok {
-		return "", fmt.Errorf("unexpected target type %T", target)
+		return "", fmt.Errorf("invalid target %v", target)
 	}
 	return g.globals.targetPath(ctx, node), nil
 }
 
 func (g *globals) targetPath(ctx context.Context, node *ninjautil.Node) string {
-	p, ok := g.targetPaths.Load(node)
-	if ok {
-		return p.(string)
+	p := g.targetPaths[node.ID()]
+	if p != "" {
+		return p
 	}
 	s := g.path.MaybeFromWD(ctx, node.Path())
-	p, _ = g.targetPaths.LoadOrStore(node, s)
-	return p.(string)
+	g.targetPaths[node.ID()] = s
+	return s
 }
 
 // StepDef creates new StepDef to build target (exec-root relative), needed for next.
 // top-level target will use nil for next.
 // It returns a StepDef for the target and inputs/outputs targets.
 func (g *Graph) StepDef(ctx context.Context, target build.Target, next build.StepDef) (build.StepDef, []build.Target, []build.Target, error) {
-	n, ok := target.(*ninjautil.Node)
+	n, ok := g.nstate.LookupNode(int(target))
 	if !ok {
 		return nil, nil, nil, build.ErrNoTarget
 	}
@@ -417,12 +423,12 @@ func (g *Graph) StepDef(ctx context.Context, target build.Target, next build.Ste
 	edgeInputs := edge.Inputs()
 	inputs := make([]build.Target, 0, len(edgeInputs))
 	for _, in := range edgeInputs {
-		inputs = append(inputs, build.Target(in))
+		inputs = append(inputs, build.Target(in.ID()))
 	}
 	edgeOutputs := edge.Outputs()
 	outputs := make([]build.Target, 0, len(edgeOutputs))
 	for _, out := range edgeOutputs {
-		outputs = append(outputs, build.Target(out))
+		outputs = append(outputs, build.Target(out.ID()))
 	}
 	return stepDef, inputs, outputs, nil
 }
@@ -493,7 +499,7 @@ func (g *Graph) CleanDead(ctx context.Context) (int, int, error) {
 //
 // https://github.com/ninja-build/ninja/blob/a524bf3f6bacd1b4ad85d719eed2737d8562f27a/src/clean.cc#L141
 func (g *Graph) isDead(fname string) bool {
-	n, ok := g.nstate.LookupNode(fname)
+	n, ok := g.nstate.LookupNodeByPath(fname)
 	if !ok {
 		return true
 	}

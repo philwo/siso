@@ -169,7 +169,7 @@ func (s *Step) NumWaits() int {
 // ReadyToRun checks whether the step is ready to run
 // when prev step's out becomes ready.
 func (s *Step) ReadyToRun(prev string, out Target) bool {
-	if out != nil {
+	if out != 0 {
 		s.nwaits--
 	}
 	ready := s.nwaits == 0

@@ -205,7 +205,7 @@ build build.ninja: phony
 		t.Fatal(err)
 	}
 
-	node, ok := state.LookupNode("obj/foo.o")
+	node, ok := state.LookupNodeByPath("obj/foo.o")
 	if !ok {
 		t.Errorf("obj/foo.o not found in build.ninja")
 	}

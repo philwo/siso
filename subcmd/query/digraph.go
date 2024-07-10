@@ -117,7 +117,7 @@ func (d *digraph) Traverse(ctx context.Context, state *ninjautil.State, target s
 		return nil
 	}
 	d.seen[target] = true
-	n, ok := state.LookupNode(target)
+	n, ok := state.LookupNodeByPath(target)
 	if !ok {
 		return fmt.Errorf("target not found: %q", target)
 	}

@@ -106,7 +106,7 @@ func (g *commandsGraph) Traverse(ctx context.Context, state *ninjautil.State, ta
 		return nil
 	}
 	g.seen[target] = true
-	n, ok := state.LookupNode(target)
+	n, ok := state.LookupNodeByPath(target)
 	if !ok {
 		return fmt.Errorf("target not found: %q", target)
 	}

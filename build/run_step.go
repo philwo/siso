@@ -200,7 +200,7 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 }
 
 func (b *Builder) prevStepOut(ctx context.Context, step *Step) string {
-	if step.prevStepOut == nil {
+	if step.prevStepOut == 0 {
 		return ""
 	}
 	s, err := b.graph.TargetPath(ctx, step.prevStepOut)

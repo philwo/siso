@@ -336,7 +336,7 @@ func (a *ideAnalyzer) analyzeCPP(ctx context.Context, edge *ninjautil.Edge, resu
 
 	for _, inc := range incs {
 		incTarget := a.path.MaybeToWD(ctx, inc)
-		node, ok := a.state.LookupNode(incTarget)
+		node, ok := a.state.LookupNodeByPath(incTarget)
 		if !ok {
 			clog.Infof(ctx, "not in build graph: %s", incTarget)
 			continue
