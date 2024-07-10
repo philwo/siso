@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"errors"
 	"flag"
+	"fmt"
 	"io"
 	"io/fs"
 	"os"
@@ -388,10 +389,24 @@ func Save(ctx context.Context, fname string, state *pb.State) error {
 			return
 		}
 		// state is broken?? panic in proto.Marshal b/323265794
-		clog.Warningf(ctx, "state: %d entries", len(state.Entries))
+		// use glog, not cloud logging
+		// because siso terminates before cloud logging entries
+		// are uploaded.
+		log.Errorf("state: %d entries", len(state.Entries))
 		for i, ent := range state.Entries {
-			clog.Warningf(ctx, "entries[%d] = %v", i, ent)
+			err := func(ent *pb.Entry) (err error) {
+				defer func() {
+					r := recover()
+					if r != nil {
+						err = fmt.Errorf("panic in marshal: %v", r)
+					}
+				}()
+				_, err = proto.Marshal(ent)
+				return err
+			}(ent)
+			log.Errorf("entries[%d] = %v: %v", i, ent, err)
 		}
+		log.Flush()
 		panic(r)
 	}()
 	b, err := proto.Marshal(state)
