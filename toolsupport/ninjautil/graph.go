@@ -14,6 +14,8 @@ import (
 
 // Node represents a node (target file) in build graph.
 type Node struct {
+	next *Node // used for bigMap
+
 	id     int
 	path   string
 	mu     sync.Mutex

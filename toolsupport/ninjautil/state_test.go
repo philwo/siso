@@ -6,8 +6,10 @@ package ninjautil
 
 import (
 	"context"
+	"hash/maphash"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -156,5 +158,76 @@ default all
 				t.Errorf("state.Targets(%q) diff -want +got:\n%s", tc.args, diff)
 			}
 		})
+	}
+}
+
+func TestBigMap(t *testing.T) {
+	bm := bigMap{
+		seed: maphash.MakeSeed(),
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(100)
+	type result struct {
+		foo, bar *Node
+	}
+	results := make([]result, 100)
+	for i := range 100 {
+		go func() {
+			wg.Done()
+			for range 1000 {
+				n := bm.node([]byte("foo"))
+				if n == nil {
+					t.Errorf("bm.node(%q)=nil; want non nil", "foo")
+					return
+				}
+				if n.path != "foo" {
+					t.Errorf("bm.node(%q).path=%q; want %q", "foo", n.path, "foo")
+				}
+				if results[i].foo == nil {
+					results[i].foo = n
+				}
+				n = bm.node([]byte("foo"))
+				if n != results[i].foo {
+					t.Errorf("bm.node(%q)=%p; want %p", "foo", n, results[i].foo)
+				}
+				n = bm.node([]byte("bar"))
+				if n == nil {
+					t.Errorf("bm.node(%q)=nil; want non nil", "bar")
+					return
+				}
+				if n.path != "bar" {
+					t.Errorf("bm.node(%q).path=%q; want %q", "bar", n.path, "bar")
+				}
+				if results[i].bar == nil {
+					results[i].bar = n
+				}
+				if n != results[i].bar {
+					t.Errorf("bm.node(%q)=%p; want %p", "bar", n, results[i].bar)
+				}
+				n, ok := bm.lookup("foo")
+				if n != results[i].foo || !ok {
+					t.Errorf("bm.lookup(%q)=%p, %t; want %p, true", "foo", n, ok, results[i].foo)
+				}
+				n, ok = bm.lookup("bar")
+				if n != results[i].bar || !ok {
+					t.Errorf("bm.lookup(%q)=%p, %t; want %p, true", "bar", n, ok, results[i].bar)
+				}
+				n, ok = bm.lookup("baz")
+				if n != nil || ok {
+					t.Errorf("bm.lookup(%q)=%p, %t; want false", "baz", n, ok)
+				}
+
+			}
+		}()
+	}
+	wg.Wait()
+	for i := range 100 {
+		if results[i].foo != results[0].foo {
+			t.Errorf("%d: foo=%p want=%p", i, results[i].foo, results[0].foo)
+		}
+		if results[i].bar != results[0].bar {
+			t.Errorf("%d: bar=%p want=%p", i, results[i].bar, results[0].bar)
+		}
 	}
 }
