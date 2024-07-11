@@ -50,7 +50,7 @@ func (b *Builder) execRemote(ctx context.Context, step *Step) error {
 			step.setPhase(stepOutput)
 			step.metrics.IsRemote = true
 			result, cached := step.cmd.ActionResult()
-			if err == nil && !validateActionResult(result) {
+			if err == nil && !validateRemoteActionResult(result) {
 				clog.Errorf(ctx, "no outputs in action result. retry without cache lookup. b/350360391")
 				step.cmd.SkipCacheLookup = true
 				step.setPhase(stepRemoteRun)
@@ -58,7 +58,7 @@ func (b *Builder) execRemote(ctx context.Context, step *Step) error {
 				step.setPhase(stepOutput)
 				step.metrics.IsRemote = true
 				result, cached = step.cmd.ActionResult()
-				if err == nil && !validateActionResult(result) {
+				if err == nil && !validateRemoteActionResult(result) {
 					clog.Errorf(ctx, "no outputs in action result again. b/350360391")
 				}
 			}
@@ -98,7 +98,7 @@ func (b *Builder) execRemoteCache(ctx context.Context, step *Step) error {
 			return err
 		}
 		result, _ := step.cmd.ActionResult()
-		if !validateActionResult(result) {
+		if !validateRemoteActionResult(result) {
 			clog.Errorf(ctx, "no outputs in action result. ignore cache lookup. b/350360391")
 			step.cmd.SkipCacheLookup = true
 			return errors.New("no output in action result")

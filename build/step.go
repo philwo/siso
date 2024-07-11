@@ -17,6 +17,7 @@ import (
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
 
 	"infra/build/siso/execute"
+	"infra/build/siso/execute/reproxyexec"
 	"infra/build/siso/o11y/clog"
 	"infra/build/siso/o11y/trace"
 )
@@ -448,9 +449,16 @@ func calculateCmdHash(cmdline, rspfileContent string) []byte {
 	return h.Sum(nil)
 }
 
-func validateActionResult(result *rpb.ActionResult) bool {
+func validateRemoteActionResult(result *rpb.ActionResult) bool {
 	if result == nil {
 		return false
+	}
+
+	// When the action runs locally, Reproxy doesn't add outputs to the result.
+	// Then, the next condition will pass which ends up with retring the same action.
+	switch result.GetExecutionMetadata().GetWorker() {
+	case reproxyexec.WorkerNameFallback, reproxyexec.WorkerNameRacingLocal, reproxyexec.WorkerNameLocal:
+		return true
 	}
 	if result.ExitCode == 0 && len(result.GetOutputFiles()) == 0 {
 		// succeeded result should have at least one output. b/350360391

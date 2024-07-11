@@ -59,14 +59,14 @@ func (b *Builder) execReproxy(ctx context.Context, step *Step) error {
 		err := b.reproxyExec.Run(ctx, step.cmd)
 		step.setPhase(stepOutput)
 		ar, cached := step.cmd.ActionResult()
-		if err == nil && !validateActionResult(ar) {
+		if err == nil && !validateRemoteActionResult(ar) {
 			clog.Errorf(ctx, "no outputs in action result. retry without cache lookup. b/350360391")
 			step.cmd.SkipCacheLookup = true
 			step.setPhase(stepRemoteRun)
 			err = b.reproxyExec.Run(ctx, step.cmd)
 			step.setPhase(stepOutput)
 			ar, cached = step.cmd.ActionResult()
-			if err == nil && !validateActionResult(ar) {
+			if err == nil && !validateRemoteActionResult(ar) {
 				clog.Errorf(ctx, "no outputs in action result again. b/350360391")
 			}
 		}
