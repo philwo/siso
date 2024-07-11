@@ -33,14 +33,16 @@ type webuiRun struct {
 	localDevelopment bool
 	port             int
 	outdir           string
+	configRepoDir    string
 }
 
 func (c *webuiRun) init() {
 	c.Flags.BoolVar(&c.localDevelopment, "local_development", false, "whether to use local instead of embedded files")
 	c.Flags.IntVar(&c.port, "port", 8080, "port to use (defaults to 8080)")
 	c.Flags.StringVar(&c.outdir, "C", "", "path to outdir")
+	c.Flags.StringVar(&c.configRepoDir, "config_repo_dir", "build/config/siso", "config repo directory (relative to exec root)")
 }
 
 func (c *webuiRun) Run(a subcommands.Application, args []string, env subcommands.Env) int {
-	return webui.Serve(c.version, c.localDevelopment, c.port, c.outdir)
+	return webui.Serve(c.version, c.localDevelopment, c.port, c.outdir, c.configRepoDir)
 }

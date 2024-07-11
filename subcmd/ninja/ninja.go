@@ -970,7 +970,7 @@ func (c *ninjaCmdRun) initWorkdirs(ctx context.Context) (string, error) {
 	}
 
 	if !filepath.IsAbs(c.configRepoDir) {
-		execRoot, err = detectExecRoot(ctx, cwd, c.configRepoDir)
+		execRoot, err = build.DetectExecRoot(cwd, c.configRepoDir)
 		if err != nil {
 			return "", err
 		}
@@ -1496,21 +1496,6 @@ func doBuild(ctx context.Context, graph *ninjabuild.Graph, bopts build.Options, 
 	}
 	// TODO(b/266518906): wait for completion of uploading manifest
 	return stats, err
-}
-
-func detectExecRoot(ctx context.Context, execRoot, crdir string) (string, error) {
-	for {
-		_, err := os.Stat(filepath.Join(execRoot, crdir))
-		if err == nil {
-			return execRoot, nil
-		}
-		dir := filepath.Dir(execRoot)
-		if dir == execRoot {
-			// reached to root dir
-			return "", fmt.Errorf("can not detect exec_root: %s not found", crdir)
-		}
-		execRoot = dir
-	}
 }
 
 func dumpResourceUsageTable(ctx context.Context, semaTraces map[string]semaTrace) string {

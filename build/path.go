@@ -7,6 +7,7 @@ package build
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"sync"
 
@@ -116,4 +117,20 @@ func (p *Path) AbsFromWD(path string) string {
 		return path
 	}
 	return filepath.Join(p.ExecRoot, p.Dir, path)
+}
+
+// DetectExecRoot detects exec root from path given config repo dir crdir.
+func DetectExecRoot(execRoot, crdir string) (string, error) {
+	for {
+		_, err := os.Stat(filepath.Join(execRoot, crdir))
+		if err == nil {
+			return execRoot, nil
+		}
+		dir := filepath.Dir(execRoot)
+		if dir == execRoot {
+			// reached to root dir
+			return "", fmt.Errorf("can not detect exec_root: %s not found", crdir)
+		}
+		execRoot = dir
+	}
 }

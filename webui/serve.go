@@ -187,7 +187,7 @@ func loadView(localDevelopment bool, fs fs.FS, view string) (*template.Template,
 }
 
 // Serve serves the webui.
-func Serve(version string, localDevelopment bool, port int, outdir string) int {
+func Serve(version string, localDevelopment bool, port int, defaultOutdir, configRepoDir string) int {
 	// Use templates from embed or local.
 	fs := fs.FS(content)
 	if localDevelopment {
@@ -196,7 +196,7 @@ func Serve(version string, localDevelopment bool, port int, outdir string) int {
 
 	// Read metrics.
 	// TODO(b/349287453): support multiple outdirs.
-	outdirInfo, err := loadOutdirInfo(outdir)
+	outdirInfo, err := loadOutdirInfo(defaultOutdir)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to load outdir: %v", err)
 		return 1
@@ -206,14 +206,39 @@ func Serve(version string, localDevelopment bool, port int, outdir string) int {
 		knownRevs = append(knownRevs, metrics.rev)
 	}
 
+	// Find other outdirs.
+	// TODO(b/349287453): use list to implement outdir switching.
+	execRoot, err := build.DetectExecRoot(defaultOutdir, configRepoDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to find execroot: %v", err)
+		return 1
+	}
+	matches, err := filepath.Glob(filepath.Join(execRoot, "out/*"))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to glob %s: %v", execRoot, err)
+		return 1
+	}
+	var outdirs []string
+	for _, match := range matches {
+		m, err := os.Stat(match)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "failed to stat outdir %s: %v", match, err)
+			return 1
+		}
+		if m.IsDir() {
+			outdirs = append(outdirs, match)
+		}
+	}
+
 	renderBuildView := func(wr io.Writer, r *http.Request, tmpl *template.Template, data map[string]any) error {
 		rev := r.PathValue("rev")
-		outdirShort := outdir
+		outdirShort := defaultOutdir
 		if home, err := os.UserHomeDir(); err == nil {
 			outdirShort = strings.Replace(outdirShort, home, "~", 1)
 		}
 		data["prefix"] = fmt.Sprintf("/builds/%s", rev)
 		data["outdirShort"] = outdirShort
+		data["outdirs"] = outdirs
 		data["versionID"] = version
 		data["currentURL"] = r.URL
 		data["currentRev"] = rev
@@ -257,7 +282,7 @@ func Serve(version string, localDevelopment bool, port int, outdir string) int {
 		if rev != "latest" {
 			actualFile = fmt.Sprintf(revFileFormatter, rev)
 		}
-		fileContents, err := os.ReadFile(filepath.Join(outdir, actualFile))
+		fileContents, err := os.ReadFile(filepath.Join(defaultOutdir, actualFile))
 		if err != nil {
 			// TODO(b/349287453): proper error handling.
 			fmt.Fprintf(w, "failed to open file: %s\n", err)

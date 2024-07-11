@@ -144,18 +144,11 @@ found in the LICENSE file. */}}
               <md-icon slot="icon"></md-icon>
             </md-text-button>
             <md-menu id="outdir-menu" anchor="outdir-menu-button" positioning="popover">
+              {{range $outdir := .outdirs}}
               <md-menu-item>
-                <div slot="headline">Not implemented yet! Testing only:</div>
+                <div slot="headline">{{$outdir}}</div>
               </md-menu-item>
-              <md-menu-item>
-                <div slot="headline">/path/to/some/outdir</div>
-              </md-menu-item>
-              <md-menu-item>
-                <div slot="headline">/path/to/another/outdir</div>
-              </md-menu-item>
-              <md-menu-item>
-                <div slot="headline">/path/to/yet/another/outdir</div>
-              </md-menu-item>
+              {{end}}
             </md-menu>
           </div>
           <div class="breadcrumb">
