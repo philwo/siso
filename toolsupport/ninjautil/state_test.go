@@ -131,6 +131,7 @@ default all
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
 			state := NewState()
 			p := NewManifestParser(state)
 			_, err := p.parse(context.Background(),
@@ -142,6 +143,7 @@ default all
 			if err != nil {
 				t.Fatalf("parse %v", err)
 			}
+			p.state.nodes, p.state.paths = p.state.nodeMap.freeze(ctx)
 			nodes, err := state.Targets(tc.args)
 			if gotErr := err != nil; gotErr != tc.wantErr {
 				t.Errorf("state.Targets(%q)=%q, %v; want %q; err=%t", tc.args, nodes, err, tc.want, tc.wantErr)

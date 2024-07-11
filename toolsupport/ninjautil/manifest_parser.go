@@ -12,7 +12,6 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
-	"sort"
 	"strconv"
 	"time"
 
@@ -81,22 +80,7 @@ func (p *ManifestParser) Load(ctx context.Context, fname string) error {
 	if err != nil {
 		return err
 	}
-	var names []string
-	p.state.paths.Range(func(k, v any) bool {
-		names = append(names, k.(string))
-		return true
-	})
-	sort.Strings(names)
-	p.state.nodes = make([]*Node, len(names)+1)
-	for i, name := range names {
-		v, ok := p.state.paths.Load(name)
-		if !ok {
-			log.Fatalf("node not found %q", name)
-		}
-		node := v.(*Node)
-		node.id = i + 1
-		p.state.nodes[i+1] = node
-	}
+	p.state.nodes, p.state.paths = p.state.nodeMap.freeze(ctx)
 	return nil
 }
 
@@ -465,7 +449,7 @@ func (p *ManifestParser) parseDefault(fstate *fileState) error {
 	for {
 		path := string(v.Evaluate(p.env))
 		path = filepath.ToSlash(filepath.Clean(path))
-		n, ok := p.state.LookupNodeByPath(path)
+		n, ok := p.state.nodeByPath(path)
 		if !ok {
 			return p.lexer.errorf("unknown target for default %q", path)
 		}

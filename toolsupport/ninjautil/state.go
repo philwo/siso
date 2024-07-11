@@ -7,12 +7,14 @@ package ninjautil
 import (
 	"context"
 	"fmt"
+	"hash/maphash"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
 
+	"infra/build/siso/o11y/clog"
 	"infra/build/siso/scandeps"
 )
 
@@ -55,8 +57,10 @@ type State struct {
 	pools sync.Map // string:poolName -> *Pool
 
 	// Paths map from target name (or pathname used in build's inputs/outputs) to *Node.
-	paths sync.Map // map[string]*Node
-	nodes []*Node
+	// nodeMap is used during parse, and freeze it in nodes, paths.
+	nodeMap nodeMap
+	nodes   []*Node
+	paths   map[string]*Node
 
 	// Bindings contains all rules and variables defined in this scope.
 	bindings *BindingEnv
@@ -75,6 +79,9 @@ type State struct {
 func NewState() *State {
 	bindings := newBindingEnv(nil)
 	s := &State{
+		nodeMap: nodeMap{
+			seed: maphash.MakeSeed(),
+		},
 		bindings: bindings,
 	}
 	s.pools.Store("", defaultPool)
@@ -109,14 +116,11 @@ func (s *State) Pools() map[string]*Pool {
 
 // node returns a node.
 func (s *State) node(path []byte) *Node {
-	nv, loaded := s.paths.LoadOrStore(string(path), &Node{})
-	if loaded {
-		return nv.(*Node)
-	}
-	pathStr := string(path)
-	n := nv.(*Node)
-	n.path = pathStr
-	return n
+	return s.nodeMap.node(path)
+}
+
+func (s *State) nodeByPath(path string) (*Node, bool) {
+	return s.nodeMap.lookup(path)
 }
 
 // NumNodes returns a number of nodes.
@@ -134,11 +138,8 @@ func (s *State) LookupNode(id int) (*Node, bool) {
 
 // LookupNodeByPath returns a node.
 func (s *State) LookupNodeByPath(path string) (*Node, bool) {
-	nv, ok := s.paths.Load(path)
-	if ok {
-		return nv.(*Node), true
-	}
-	return nil, false
+	n, ok := s.paths[path]
+	return n, ok
 }
 
 func (s *State) addIn(edge *Edge, path []byte) {
@@ -343,4 +344,77 @@ func (s *State) LookupBinding(name string) string {
 // Filenames returns files parsed by the parser (e.g. build.ninja and its subninja etc.)
 func (s *State) Filenames() []string {
 	return s.filenames
+}
+
+const nodeMapShardBits = 8
+
+// sharded sync.Map
+type nodeMap struct {
+	seed   maphash.Seed
+	shards [1 << nodeMapShardBits]sync.Map // hash -> *nodeMapBucket
+}
+
+type nodeMapBucket struct {
+	mu      sync.Mutex
+	entries []*Node
+}
+
+func (s *nodeMap) node(key []byte) *Node {
+	h := maphash.Bytes(s.seed, key)
+	m := &s.shards[h&(1<<nodeMapShardBits-1)]
+	v, _ := m.LoadOrStore(h>>nodeMapShardBits, &nodeMapBucket{})
+	b := v.(*nodeMapBucket)
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	for _, n := range b.entries {
+		if n.path == string(key) {
+			return n
+		}
+	}
+	n := &Node{
+		path: string(key),
+	}
+	b.entries = append(b.entries, n)
+	return n
+}
+
+func (s *nodeMap) lookup(key string) (*Node, bool) {
+	h := maphash.Bytes(s.seed, []byte(key))
+	m := &s.shards[h&(1<<nodeMapShardBits-1)]
+	v, ok := m.Load(h >> nodeMapShardBits)
+	if !ok {
+		return nil, false
+	}
+	b := v.(*nodeMapBucket)
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	for _, n := range b.entries {
+		if n.path == key {
+			return n, true
+		}
+	}
+	return nil, false
+}
+
+func (s *nodeMap) freeze(ctx context.Context) ([]*Node, map[string]*Node) {
+	nodes := []*Node{nil} // 0: invalid target.
+	paths := make(map[string]*Node)
+	id := 1
+	clog.Infof(ctx, "freeze nodemap")
+	for i := range 1 << nodeMapShardBits {
+		m := &s.shards[i]
+		m.Range(func(_, v any) bool {
+			b := v.(*nodeMapBucket)
+			b.mu.Lock()
+			defer b.mu.Unlock()
+			for _, n := range b.entries {
+				n.id = id
+				id++
+				nodes = append(nodes, n)
+				paths[n.path] = n
+			}
+			return true
+		})
+	}
+	return nodes, paths
 }
