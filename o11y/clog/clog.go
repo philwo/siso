@@ -277,7 +277,7 @@ func (l *Logger) Errorf(format string, args ...any) {
 // Errorf logs at error log level in the manner of fmt.Printf.
 func Errorf(ctx context.Context, format string, args ...any) {
 	logger := FromContext(ctx)
-	logger.log(logger.Entry(logging.Warning, fmt.Sprintf(format, args...)))
+	logger.log(logger.Entry(logging.Error, fmt.Sprintf(format, args...)))
 }
 
 // Fatal logs at fatal log level in the manner of fmt.Print with stacktrace, and exit.
