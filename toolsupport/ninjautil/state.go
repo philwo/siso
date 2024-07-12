@@ -13,7 +13,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"sync/atomic"
 
 	"infra/build/siso/o11y/clog"
 	"infra/build/siso/scandeps"
@@ -58,8 +57,8 @@ type State struct {
 	pools sync.Map // string:poolName -> *Pool
 
 	// Paths map from target name (or pathname used in build's inputs/outputs) to *Node.
-	// bigMap is used during parse, and freeze it in nodes, paths.
-	nodeMap bigMap
+	// nodeMap is used during parse, and freeze it in nodes, paths.
+	nodeMap nodeMap
 	nodes   []*Node
 	paths   map[string]*Node
 
@@ -80,7 +79,7 @@ type State struct {
 func NewState() *State {
 	bindings := newBindingEnv(nil)
 	s := &State{
-		nodeMap: bigMap{
+		nodeMap: nodeMap{
 			seed: maphash.MakeSeed(),
 		},
 		bindings: bindings,
@@ -347,73 +346,75 @@ func (s *State) Filenames() []string {
 	return s.filenames
 }
 
-// bigMap is originally designed by
-// https://github.com/pcc/ninja/commit/05cddede820a641a1d7793d7f90423e0cf63c3b3.
-// This is the lock free hash table from path to node mapping.
+const nodeMapShardBits = 8
 
-const bigMapArraySize = 1 << 20
-
-type bigMap struct {
-	seed  maphash.Seed
-	nodes [bigMapArraySize]atomic.Pointer[Node] // *Node
+// sharded sync.Map
+type nodeMap struct {
+	seed   maphash.Seed
+	shards [1 << nodeMapShardBits]sync.Map // hash -> *nodeMapBucket
 }
 
-func (bm *bigMap) node(key []byte) *Node {
-	h := maphash.Bytes(bm.seed, key)
-	slot := &bm.nodes[h&(bigMapArraySize-1)]
-	var newHead *Node
-	var search *Node
-	for {
-		head := slot.Load()
-		search = head
-		for search != nil {
-			if search.path == string(key) {
-				return search
-			}
-			search = search.next
-		}
-		if newHead == nil {
-			newHead = &Node{path: string(key)}
-		}
-		newHead.next = head
-		if slot.CompareAndSwap(head, newHead) {
-			return newHead
+type nodeMapBucket struct {
+	mu      sync.Mutex
+	entries []*Node
+}
+
+func (s *nodeMap) node(key []byte) *Node {
+	h := maphash.Bytes(s.seed, key)
+	m := &s.shards[h&(1<<nodeMapShardBits-1)]
+	v, _ := m.LoadOrStore(h>>nodeMapShardBits, &nodeMapBucket{})
+	b := v.(*nodeMapBucket)
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	for _, n := range b.entries {
+		if n.path == string(key) {
+			return n
 		}
 	}
+	n := &Node{
+		path: string(key),
+	}
+	b.entries = append(b.entries, n)
+	return n
 }
 
-func (bm *bigMap) lookup(key string) (*Node, bool) {
-	h := maphash.Bytes(bm.seed, []byte(key))
-	node := bm.nodes[h&(bigMapArraySize-1)].Load()
-	for node != nil {
-		if node.path == key {
-			return node, true
+func (s *nodeMap) lookup(key string) (*Node, bool) {
+	h := maphash.Bytes(s.seed, []byte(key))
+	m := &s.shards[h&(1<<nodeMapShardBits-1)]
+	v, ok := m.Load(h >> nodeMapShardBits)
+	if !ok {
+		return nil, false
+	}
+	b := v.(*nodeMapBucket)
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	for _, n := range b.entries {
+		if n.path == key {
+			return n, true
 		}
-		node = node.next
 	}
 	return nil, false
 }
 
-func (bm *bigMap) freeze(ctx context.Context) ([]*Node, map[string]*Node) {
+func (s *nodeMap) freeze(ctx context.Context) ([]*Node, map[string]*Node) {
 	nodes := []*Node{nil} // 0: invalid target.
 	paths := make(map[string]*Node)
 	id := 1
-	clog.Infof(ctx, "freeze bigmap")
-	maxDepth := 0
-	for i := range bigMapArraySize {
-		n := bm.nodes[i].Load()
-		depth := 0
-		for n != nil {
-			n.id = id
-			id++
-			nodes = append(nodes, n)
-			paths[n.path] = n
-			n = n.next
-			depth++
-		}
-		maxDepth = max(depth, maxDepth)
-
+	clog.Infof(ctx, "freeze nodemap")
+	for i := range 1 << nodeMapShardBits {
+		m := &s.shards[i]
+		m.Range(func(_, v any) bool {
+			b := v.(*nodeMapBucket)
+			b.mu.Lock()
+			defer b.mu.Unlock()
+			for _, n := range b.entries {
+				n.id = id
+				id++
+				nodes = append(nodes, n)
+				paths[n.path] = n
+			}
+			return true
+		})
 	}
-	clog.Infof(ctx, "nodes=%d max deps=%d", len(nodes), maxDepth)
 	return nodes, paths
 }
