@@ -350,7 +350,7 @@ func newStateEntry(ent *pb.Entry, ftime time.Time, dataSource DataSource, osfs *
 	return e, entType
 }
 
-func saveFile(ctx context.Context, fname string, data []byte) error {
+func saveFile(ctx context.Context, fname string, data []byte) (retErr error) {
 	// save old state in *.0
 	ofname := fname + ".0"
 	if err := os.Remove(ofname); err != nil && !errors.Is(err, fs.ErrNotExist) {
@@ -360,10 +360,16 @@ func saveFile(ctx context.Context, fname string, data []byte) error {
 		return err
 	}
 
-	f, err := os.Create(fname)
+	f, err := os.CreateTemp(filepath.Dir(fname), filepath.Base(fname)+".*")
 	if err != nil {
 		return err
 	}
+	defer func() {
+		if retErr != nil {
+			_ = os.Remove(f.Name())
+		}
+	}()
+	clog.Infof(ctx, "save fs_state in temp %s", f.Name())
 	w, err := gzip.NewWriterLevel(f, gzip.BestCompression)
 	if err != nil {
 		f.Close()
@@ -378,7 +384,13 @@ func saveFile(ctx context.Context, fname string, data []byte) error {
 		f.Close()
 		return err
 	}
-	return f.Close()
+	err = f.Close()
+	if err != nil {
+		return err
+	}
+	err = os.Rename(f.Name(), fname)
+	clog.Infof(ctx, "replace %s: %v", fname, err)
+	return err
 }
 
 // Save persists state in fname.
