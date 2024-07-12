@@ -146,21 +146,15 @@ func (s *State) LookupNodeByPath(path string) (*Node, bool) {
 func (s *State) addIn(edge *Edge, path []byte) {
 	n := s.node(path)
 	edge.inputs = append(edge.inputs, n)
-	n.mu.Lock()
-	defer n.mu.Unlock()
 	n.addOutEdge(edge)
 }
 
 func (s *State) addOut(edge *Edge, path []byte) bool {
 	// Nodes can only have one incoming edge
 	n := s.node(path)
-	n.mu.Lock()
-	if n.hasInEdge() {
-		n.mu.Unlock()
+	if !n.setInEdge(edge) {
 		return false
 	}
-	n.inEdge = edge
-	n.mu.Unlock()
 	edge.outputs = append(edge.outputs, n)
 	return true
 }

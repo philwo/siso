@@ -31,6 +31,8 @@ func (n *Node) String() string { return n.path }
 func (n *Node) Path() string { return n.path }
 
 func (n *Node) addOutEdge(e *Edge) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
 	n.outs = append(n.outs, e)
 }
 
@@ -41,6 +43,16 @@ func (n *Node) OutEdges() []*Edge {
 
 func (n *Node) hasInEdge() bool {
 	return n.inEdge != nil
+}
+
+func (n *Node) setInEdge(edge *Edge) bool {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	if n.hasInEdge() {
+		return false
+	}
+	n.inEdge = edge
+	return true
 }
 
 // InEdge returns in-edge of the node.
