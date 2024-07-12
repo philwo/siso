@@ -475,6 +475,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	clog.Infof(ctx, "%s", cpuinfo())
 	properties.Add("cpu", cpuinfo())
 
+	clog.Infof(ctx, "siso version %s", c.version)
 	if cmdver, err := version.GetStartupVersion(); err != nil {
 		clog.Warningf(ctx, "cannot determine CIPD package version: %s", err)
 	} else if cmdver.PackageName != "" {
