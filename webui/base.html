@@ -3,6 +3,7 @@ Use of this source code is governed by a BSD-style license that can be
 found in the LICENSE file. */}}
 
 {{define "base"}}
+{{$prefix:=.prefix}}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -159,7 +160,7 @@ found in the LICENSE file. */}}
             </md-text-button>
             <md-menu id="revision-menu" anchor="revision-menu-button" positioning="popover">
               {{range $rev := .revs}}
-              <md-menu-item href="/builds/{{$rev}}/steps/">
+              <md-menu-item href="{{$prefix}}/../{{$rev}}/steps/">
                 <div slot="headline">{{if eq $rev "latest"}}latest{{else}}{{$rev}}{{end}}</div>
               </md-menu-item>
               {{end}}

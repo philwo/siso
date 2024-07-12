@@ -206,13 +206,28 @@ func Serve(version string, localDevelopment bool, port int, defaultOutdir, confi
 		knownRevs = append(knownRevs, metrics.rev)
 	}
 
-	// Find other outdirs.
-	// TODO(b/349287453): use list to implement outdir switching.
+	// Get execroot.
 	execRoot, err := build.DetectExecRoot(defaultOutdir, configRepoDir)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to find execroot: %v", err)
 		return 1
 	}
+
+	// Get path relative to execroot.
+	// TODO: support paths non-relative to execroot?
+	defaultOutdirExecRel, err := filepath.Rel(execRoot, defaultOutdir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "couldn't get outdir relative to execdir: %v", err)
+		return 1
+	}
+	defaultOutdirParent, defaultOutdirBase := filepath.Split(defaultOutdirExecRel)
+	if len(defaultOutdirParent) == 0 || strings.Contains(defaultOutdirBase, "/") {
+		fmt.Fprintf(os.Stderr, "outdir must match pattern `execroot/outroot/outsub`, others are not supported yet")
+		return 1
+	}
+
+	// Find other outdirs.
+	// TODO(b/349287453): use list to implement outdir switching.
 	matches, err := filepath.Glob(filepath.Join(execRoot, "out/*"))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to glob %s: %v", execRoot, err)
@@ -236,7 +251,7 @@ func Serve(version string, localDevelopment bool, port int, defaultOutdir, confi
 		if home, err := os.UserHomeDir(); err == nil {
 			outdirShort = strings.Replace(outdirShort, home, "~", 1)
 		}
-		data["prefix"] = fmt.Sprintf("/builds/%s", rev)
+		data["prefix"] = fmt.Sprintf("/%s/%s/builds/%s", url.PathEscape(r.PathValue("outroot")), url.PathEscape(r.PathValue("outsub")), rev)
 		data["outdirShort"] = outdirShort
 		data["outdirs"] = outdirs
 		data["versionID"] = version
@@ -250,11 +265,19 @@ func Serve(version string, localDevelopment bool, port int, defaultOutdir, confi
 		return nil
 	}
 
-	http.HandleFunc("/builds/{rev}/logs/", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, fmt.Sprintf("/builds/%s/logs/.siso_config", r.PathValue("rev")), http.StatusTemporaryRedirect)
+	// Group together outdir related handlers.
+	outdirHandlers := http.NewServeMux()
+
+	outdirHandlers.HandleFunc("/{outroot}/{outsub}/builds/{rev}/logs/", func(w http.ResponseWriter, r *http.Request) {
+		dest := fmt.Sprintf(
+			"/%s/%s/builds/%s/logs/.siso_config",
+			url.PathEscape(r.PathValue("outroot")),
+			url.PathEscape(r.PathValue("outsub")),
+			url.PathEscape(r.PathValue("rev")))
+		http.Redirect(w, r, dest, http.StatusTemporaryRedirect)
 	})
 
-	http.HandleFunc("/builds/{rev}/logs/{file}", func(w http.ResponseWriter, r *http.Request) {
+	outdirHandlers.HandleFunc("/{outroot}/{outsub}/builds/{rev}/logs/{file}", func(w http.ResponseWriter, r *http.Request) {
 		tmpl, err := loadView(localDevelopment, fs, "_logs.html")
 		if err != nil {
 			// TODO(b/349287453): proper error handling.
@@ -316,7 +339,7 @@ func Serve(version string, localDevelopment bool, port int, defaultOutdir, confi
 		}
 	})
 
-	http.HandleFunc("POST /builds/{rev}/steps/{id}/recall/", func(w http.ResponseWriter, r *http.Request) {
+	outdirHandlers.HandleFunc("POST /{outroot}/{outsub}/builds/{rev}/steps/{id}/recall/", func(w http.ResponseWriter, r *http.Request) {
 		var metrics *buildMetrics
 		for _, m := range outdirInfo.metrics {
 			if m.rev == r.PathValue("rev") {
@@ -353,7 +376,7 @@ func Serve(version string, localDevelopment bool, port int, defaultOutdir, confi
 		}
 	})
 
-	http.HandleFunc("/builds/{rev}/steps/{id}/", func(w http.ResponseWriter, r *http.Request) {
+	outdirHandlers.HandleFunc("/{outroot}/{outsub}/builds/{rev}/steps/{id}/", func(w http.ResponseWriter, r *http.Request) {
 		var metrics *buildMetrics
 		for _, m := range outdirInfo.metrics {
 			if m.rev == r.PathValue("rev") {
@@ -397,7 +420,7 @@ func Serve(version string, localDevelopment bool, port int, defaultOutdir, confi
 		}
 	})
 
-	http.HandleFunc("/builds/{rev}/steps/", func(w http.ResponseWriter, r *http.Request) {
+	outdirHandlers.HandleFunc("/{outroot}/{outsub}/builds/{rev}/steps/", func(w http.ResponseWriter, r *http.Request) {
 		var metrics *buildMetrics
 		for _, m := range outdirInfo.metrics {
 			if m.rev == r.PathValue("rev") {
@@ -501,13 +524,18 @@ func Serve(version string, localDevelopment bool, port int, defaultOutdir, confi
 		}
 	})
 
+	// Default catch-all handler.
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		// "/" handler becomes a catch-all for requests that didn't match a pattern, so those need to return 404.
-		if r.URL.Path != "/" {
-			http.NotFound(w, r)
+		// Redirect root to default outdir.
+		if r.URL.Path == "/" {
+			http.Redirect(w, r, fmt.Sprintf("/%s/%s/builds/latest/steps/", defaultOutdirParent, defaultOutdirBase), http.StatusTemporaryRedirect)
 			return
 		}
-		http.Redirect(w, r, "/builds/latest/steps/", http.StatusTemporaryRedirect)
+
+		// Delegate all other requests to outdir handlers.
+		// This is because outdir handlers start with a generic wildcard pattern "/{outroot}/...".
+		// We should give outdir handlers fallback for all paths that aren't matched by any other handler.
+		outdirHandlers.ServeHTTP(w, r)
 	})
 
 	http.Handle("/css/", http.FileServerFS(fs))
