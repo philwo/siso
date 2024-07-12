@@ -351,15 +351,6 @@ func newStateEntry(ent *pb.Entry, ftime time.Time, dataSource DataSource, osfs *
 }
 
 func saveFile(ctx context.Context, fname string, data []byte) (retErr error) {
-	// save old state in *.0
-	ofname := fname + ".0"
-	if err := os.Remove(ofname); err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return err
-	}
-	if err := os.Rename(fname, ofname); err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return err
-	}
-
 	f, err := os.CreateTemp(filepath.Dir(fname), filepath.Base(fname)+".*")
 	if err != nil {
 		return err
@@ -386,6 +377,14 @@ func saveFile(ctx context.Context, fname string, data []byte) (retErr error) {
 	}
 	err = f.Close()
 	if err != nil {
+		return err
+	}
+	// save old state in *.0
+	ofname := fname + ".0"
+	if err := os.Remove(ofname); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	if err := os.Rename(fname, ofname); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
 	err = os.Rename(f.Name(), fname)
