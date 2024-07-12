@@ -502,6 +502,11 @@ func Serve(version string, localDevelopment bool, port int, defaultOutdir, confi
 	})
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		// "/" handler becomes a catch-all for requests that didn't match a pattern, so those need to return 404.
+		if r.URL.Path != "/" {
+			http.NotFound(w, r)
+			return
+		}
 		http.Redirect(w, r, "/builds/latest/steps/", http.StatusTemporaryRedirect)
 	})
 
