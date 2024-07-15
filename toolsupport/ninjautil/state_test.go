@@ -174,7 +174,7 @@ func TestBigMap(t *testing.T) {
 	results := make([]result, 100)
 	for i := range 100 {
 		go func(r *result) {
-			wg.Done()
+			defer wg.Done()
 			for range 1000 {
 				n := bm.node([]byte("foo"))
 				if n == nil {
