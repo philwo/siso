@@ -21,6 +21,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"text/template"
 	"time"
 
@@ -35,6 +36,9 @@ const DefaultItemsPerPage = 100
 var (
 	templates     = make(map[string]*template.Template)
 	baseFunctions = template.FuncMap{
+		"pathEscape": func(s string) string {
+			return url.PathEscape(s)
+		},
 		"urlPathEq": func(url *url.URL, path string) bool {
 			return url.Path == path
 		},
@@ -59,13 +63,21 @@ var (
 			return fmt.Sprintf("%02d:%02d:%02d.%03d", hour, minute, second, milli)
 		},
 	}
+	sisoMetricsRe = regexp.MustCompile(`siso_metrics.(\d+).json`)
 )
 
+type outdirInfos struct {
+	outdirs map[string]*outdirInfo
+	mu      sync.Mutex
+}
+
 type outdirInfo struct {
+	path    string
 	metrics []*buildMetrics
 }
 
 type buildMetrics struct {
+	mtime         time.Time
 	rev           string
 	buildMetrics  []build.StepMetric
 	buildDuration build.IntervalMetric
@@ -82,7 +94,13 @@ func loadBuildMetrics(metricsPath string) (*buildMetrics, error) {
 	}
 	defer f.Close()
 
+	stat, err := f.Stat()
+	if err != nil {
+		return nil, fmt.Errorf("failed to stat metrics: %w", err)
+	}
+
 	metricsData := &buildMetrics{
+		mtime:        stat.ModTime(),
 		buildMetrics: []build.StepMetric{},
 		stepMetrics:  make(map[string]build.StepMetric),
 		ruleCounts:   make(map[string]int),
@@ -127,7 +145,15 @@ func loadBuildMetrics(metricsPath string) (*buildMetrics, error) {
 
 // loadOutdirInfo attempts to load all metrics found in the outdir.
 func loadOutdirInfo(outdirPath string) (*outdirInfo, error) {
-	outdirInfo := &outdirInfo{}
+	start := time.Now()
+	fmt.Fprintf(os.Stderr, "load data at %s...", outdirPath)
+	defer func() {
+		fmt.Fprintf(os.Stderr, " returned in %v\n", time.Since(start))
+	}()
+
+	outdirInfo := &outdirInfo{
+		path: outdirPath,
+	}
 
 	// Attempt to load latest metrics first.
 	// Only silently ignore if it doesn't exist, otherwise always return error.
@@ -154,10 +180,10 @@ func loadOutdirInfo(outdirPath string) (*outdirInfo, error) {
 	}
 	for _, revPath := range revPaths {
 		baseName := filepath.Base(revPath)
-		re := regexp.MustCompile(`siso_metrics.(\d+).json`)
-		matches := re.FindStringSubmatch(baseName)
+		matches := sisoMetricsRe.FindStringSubmatch(baseName)
 		if matches == nil {
 			fmt.Fprintf(os.Stderr, "ignoring invalid %s\n", revPath)
+			continue
 		}
 		rev := matches[1]
 
@@ -167,6 +193,23 @@ func loadOutdirInfo(outdirPath string) (*outdirInfo, error) {
 		}
 		revMetrics.rev = rev
 		outdirInfo.metrics = append(outdirInfo.metrics, revMetrics)
+	}
+	return outdirInfo, nil
+}
+
+// ensureOutdirForRequest lazy-loads outdir for the request, returning cached result if possible.
+func ensureOutdirForRequest(r *http.Request, outdirInfos *outdirInfos, execRoot string) (*outdirInfo, error) {
+	abs := filepath.Join(execRoot, r.PathValue("outroot"), r.PathValue("outsub"))
+	outdirInfos.mu.Lock()
+	defer outdirInfos.mu.Unlock()
+	outdirInfo, ok := outdirInfos.outdirs[abs]
+	if !ok {
+		var err error
+		outdirInfo, err = loadOutdirInfo(abs)
+		if err != nil {
+			return nil, fmt.Errorf("couldn't load outdir %s: %w", abs, err)
+		}
+		outdirInfos.outdirs[abs] = outdirInfo
 	}
 	return outdirInfo, nil
 }
@@ -194,18 +237,6 @@ func Serve(version string, localDevelopment bool, port int, defaultOutdir, confi
 		fs = os.DirFS("webui/")
 	}
 
-	// Read metrics.
-	// TODO(b/349287453): support multiple outdirs.
-	outdirInfo, err := loadOutdirInfo(defaultOutdir)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to load outdir: %v", err)
-		return 1
-	}
-	var knownRevs []string
-	for _, metrics := range outdirInfo.metrics {
-		knownRevs = append(knownRevs, metrics.rev)
-	}
-
 	// Get execroot.
 	execRoot, err := build.DetectExecRoot(defaultOutdir, configRepoDir)
 	if err != nil {
@@ -226,14 +257,25 @@ func Serve(version string, localDevelopment bool, port int, defaultOutdir, confi
 		return 1
 	}
 
+	// Preload default outdir.
+	outdirInfos := outdirInfos{
+		outdirs: make(map[string]*outdirInfo),
+	}
+	defaultOutdirInfo, err := loadOutdirInfo(defaultOutdir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to preload outdir: %v", err)
+		return 1
+	}
+	outdirInfos.outdirs[defaultOutdir] = defaultOutdirInfo
+
 	// Find other outdirs.
-	// TODO(b/349287453): use list to implement outdir switching.
+	// TODO: support out*/*
 	matches, err := filepath.Glob(filepath.Join(execRoot, "out/*"))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to glob %s: %v", execRoot, err)
 		return 1
 	}
-	var outdirs []string
+	var outsubs []string
 	for _, match := range matches {
 		m, err := os.Stat(match)
 		if err != nil {
@@ -241,22 +283,36 @@ func Serve(version string, localDevelopment bool, port int, defaultOutdir, confi
 			return 1
 		}
 		if m.IsDir() {
-			outdirs = append(outdirs, match)
+			outsub, err := filepath.Rel(filepath.Join(execRoot, defaultOutdirParent), match)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "failed to make %s execroot relative: %v", match, err)
+				return 1
+			}
+			outsubs = append(outsubs, outsub)
 		}
 	}
 
-	renderBuildView := func(wr io.Writer, r *http.Request, tmpl *template.Template, data map[string]any) error {
-		rev := r.PathValue("rev")
-		outdirShort := defaultOutdir
+	renderBuildView := func(wr http.ResponseWriter, r *http.Request, tmpl *template.Template, outdirInfo *outdirInfo, data map[string]any) error {
+		outdirShort := outdirInfo.path
 		if home, err := os.UserHomeDir(); err == nil {
 			outdirShort = strings.Replace(outdirShort, home, "~", 1)
 		}
+		rev := r.PathValue("rev")
 		data["prefix"] = fmt.Sprintf("/%s/%s/builds/%s", url.PathEscape(r.PathValue("outroot")), url.PathEscape(r.PathValue("outsub")), rev)
+		data["outroot"] = r.PathValue("outroot")
+		data["outsub"] = r.PathValue("outsub")
+		data["outsubs"] = outsubs
 		data["outdirShort"] = outdirShort
-		data["outdirs"] = outdirs
 		data["versionID"] = version
 		data["currentURL"] = r.URL
 		data["currentRev"] = rev
+		var knownRevs []string
+		for _, m := range outdirInfo.metrics {
+			if rev == m.rev {
+				data["currentRevMtime"] = m.mtime.Format(time.RFC3339)
+			}
+			knownRevs = append(knownRevs, m.rev)
+		}
 		data["revs"] = knownRevs
 		err := tmpl.ExecuteTemplate(wr, "base", data)
 		if err != nil {
@@ -268,6 +324,34 @@ func Serve(version string, localDevelopment bool, port int, defaultOutdir, confi
 	// Group together outdir related handlers.
 	outdirHandlers := http.NewServeMux()
 
+	outdirHandlers.HandleFunc("/{outroot}/{outsub}/reload", func(w http.ResponseWriter, r *http.Request) {
+		// Don't try to reload non-existing outdir.
+		outdirInfo, err := ensureOutdirForRequest(r, &outdirInfos, execRoot)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "outdir failed to load for request %s: %v", r.URL, err)
+			http.NotFound(w, r)
+			return
+		}
+
+		// loadOutdirInfo will always override existing cached data.
+		newOutdirInfo, err := loadOutdirInfo(outdirInfo.path)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "failed to reload outdir: %v", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		outdirInfos.mu.Lock()
+		outdirInfos.outdirs[outdirInfo.path] = newOutdirInfo
+		outdirInfos.mu.Unlock()
+
+		// Then redirect to steps page.
+		dest := fmt.Sprintf(
+			"/%s/%s/builds/latest/steps/",
+			url.PathEscape(r.PathValue("outroot")),
+			url.PathEscape(r.PathValue("outsub")))
+		http.Redirect(w, r, dest, http.StatusTemporaryRedirect)
+	})
+
 	outdirHandlers.HandleFunc("/{outroot}/{outsub}/builds/{rev}/logs/", func(w http.ResponseWriter, r *http.Request) {
 		dest := fmt.Sprintf(
 			"/%s/%s/builds/%s/logs/.siso_config",
@@ -278,6 +362,13 @@ func Serve(version string, localDevelopment bool, port int, defaultOutdir, confi
 	})
 
 	outdirHandlers.HandleFunc("/{outroot}/{outsub}/builds/{rev}/logs/{file}", func(w http.ResponseWriter, r *http.Request) {
+		outdirInfo, err := ensureOutdirForRequest(r, &outdirInfos, execRoot)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "outdir failed to load for request %s: %v", r.URL, err)
+			http.NotFound(w, r)
+			return
+		}
+
 		tmpl, err := loadView(localDevelopment, fs, "_logs.html")
 		if err != nil {
 			// TODO(b/349287453): proper error handling.
@@ -328,7 +419,7 @@ func Serve(version string, localDevelopment bool, port int, defaultOutdir, confi
 		}
 		slices.Sort(allowedFiles)
 
-		err = renderBuildView(w, r, tmpl, map[string]any{
+		err = renderBuildView(w, r, tmpl, outdirInfo, map[string]any{
 			"allowedFiles": allowedFiles,
 			"file":         requestedFile,
 			"fileContents": string(fileContents),
@@ -340,6 +431,12 @@ func Serve(version string, localDevelopment bool, port int, defaultOutdir, confi
 	})
 
 	outdirHandlers.HandleFunc("POST /{outroot}/{outsub}/builds/{rev}/steps/{id}/recall/", func(w http.ResponseWriter, r *http.Request) {
+		outdirInfo, err := ensureOutdirForRequest(r, &outdirInfos, execRoot)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "outdir failed to load for request %s: %v", r.URL, err)
+			http.NotFound(w, r)
+			return
+		}
 		var metrics *buildMetrics
 		for _, m := range outdirInfo.metrics {
 			if m.rev == r.PathValue("rev") {
@@ -347,6 +444,7 @@ func Serve(version string, localDevelopment bool, port int, defaultOutdir, confi
 				break
 			}
 		}
+		// TODO(b/349287453): custom 404 page that shows navbar.
 		if metrics == nil {
 			http.NotFound(w, r)
 			return
@@ -365,7 +463,7 @@ func Serve(version string, localDevelopment bool, port int, defaultOutdir, confi
 			return
 		}
 
-		err = renderBuildView(w, r, tmpl, map[string]any{
+		err = renderBuildView(w, r, tmpl, outdirInfo, map[string]any{
 			"stepID":        metric.StepID,
 			"digest":        metric.Digest,
 			"project":       r.FormValue("project"),
@@ -377,6 +475,13 @@ func Serve(version string, localDevelopment bool, port int, defaultOutdir, confi
 	})
 
 	outdirHandlers.HandleFunc("/{outroot}/{outsub}/builds/{rev}/steps/{id}/", func(w http.ResponseWriter, r *http.Request) {
+		outdirInfo, err := ensureOutdirForRequest(r, &outdirInfos, execRoot)
+		// TODO(b/349287453): custom 404 page that shows navbar.
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "outdir failed to load for request %s: %v", r.URL, err)
+			http.NotFound(w, r)
+			return
+		}
 		var metrics *buildMetrics
 		for _, m := range outdirInfo.metrics {
 			if m.rev == r.PathValue("rev") {
@@ -384,6 +489,7 @@ func Serve(version string, localDevelopment bool, port int, defaultOutdir, confi
 				break
 			}
 		}
+		// TODO(b/349287453): custom 404 page that shows navbar.
 		if metrics == nil {
 			http.NotFound(w, r)
 			return
@@ -414,13 +520,19 @@ func Serve(version string, localDevelopment bool, port int, defaultOutdir, confi
 			fmt.Fprintf(w, "failed to unmarshal metrics: %v\n", err)
 		}
 
-		err = renderBuildView(w, r, tmpl, asMap)
+		err = renderBuildView(w, r, tmpl, outdirInfo, asMap)
 		if err != nil {
 			fmt.Fprintf(w, "failed to render view: %v\n", err)
 		}
 	})
 
 	outdirHandlers.HandleFunc("/{outroot}/{outsub}/builds/{rev}/steps/", func(w http.ResponseWriter, r *http.Request) {
+		outdirInfo, err := ensureOutdirForRequest(r, &outdirInfos, execRoot)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "outdir failed to load for request %s: %v", r.URL, err)
+			http.NotFound(w, r)
+			return
+		}
 		var metrics *buildMetrics
 		for _, m := range outdirInfo.metrics {
 			if m.rev == r.PathValue("rev") {
@@ -518,7 +630,7 @@ func Serve(version string, localDevelopment bool, port int, defaultOutdir, confi
 			"ruleCounts":       metrics.ruleCounts,
 			"buildDuration":    metrics.buildDuration,
 		}
-		err = renderBuildView(w, r, tmpl, data)
+		err = renderBuildView(w, r, tmpl, outdirInfo, data)
 		if err != nil {
 			fmt.Fprintf(w, "failed to render view: %s\n", err)
 		}

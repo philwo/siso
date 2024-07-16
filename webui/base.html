@@ -3,6 +3,7 @@ Use of this source code is governed by a BSD-style license that can be
 found in the LICENSE file. */}}
 
 {{define "base"}}
+{{$outroot:=.outroot}}
 {{$prefix:=.prefix}}
 <!DOCTYPE html>
 <html lang="en">
@@ -25,6 +26,7 @@ found in the LICENSE file. */}}
     import '@material/web/all.js';
     import '@carbon/web-components/es/components/data-table/index.js';
     import '@github/clipboard-copy-element';
+    import '@github/relative-time-element';
   </script>
 
   {{/* Classical JS includes. */}}
@@ -145,9 +147,9 @@ found in the LICENSE file. */}}
               <md-icon slot="icon"></md-icon>
             </md-text-button>
             <md-menu id="outdir-menu" anchor="outdir-menu-button" positioning="popover">
-              {{range $outdir := .outdirs}}
-              <md-menu-item>
-                <div slot="headline">{{$outdir}}</div>
+              {{range $outsubs := .outsubs}}
+              <md-menu-item href="/{{$outroot}}/{{pathEscape $outsubs}}/builds/latest/steps/">
+                <div slot="headline">{{$outsubs}}</div>
               </md-menu-item>
               {{end}}
             </md-menu>
@@ -166,6 +168,12 @@ found in the LICENSE file. */}}
               {{end}}
             </md-menu>
           </div>
+          <div class="mtime-status">
+            <relative-time datetime="{{.currentRevMtime}}"></relative-time>
+          </div>
+          <md-icon-button href="/{{.outroot}}/{{.outsub}}/reload">
+            <md-icon>refresh</md-icon>
+          </md-icon-button>
         </div>
       </div>
       <div class="header-controls">

@@ -74,6 +74,12 @@ html, body {
     content: 'arrow_drop_down';
 }
 
+#page .mtime-status {
+    font-size: var(--md-sys-typescale-title-small-size);
+    font-weight: normal;
+    font-style: italic;
+}
+
 .light .toggle-dark-mode md-icon::before {
     content: 'brightness_4';
 }
