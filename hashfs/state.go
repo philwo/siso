@@ -563,7 +563,8 @@ func loadJournal(ctx context.Context, fname string, state *pb.State) bool {
 		}
 		return false
 	}
-	cnt, broken := 0, 0
+	var cnt int
+	var broken bool
 	m := StateMap(state)
 	dec := json.NewDecoder(bytes.NewReader(b))
 	for dec.More() {
@@ -571,8 +572,8 @@ func loadJournal(ctx context.Context, fname string, state *pb.State) bool {
 		err := dec.Decode(&ent)
 		if err != nil {
 			clog.Warningf(ctx, "Failed to decode journal: %v", err)
-			broken++
-			continue
+			broken = true
+			break
 		}
 		m[ent.Name] = ent
 		if log.V(1) {
@@ -592,7 +593,7 @@ func loadJournal(ctx context.Context, fname string, state *pb.State) bool {
 	for _, k := range keys {
 		state.Entries = append(state.Entries, m[k])
 	}
-	clog.Infof(ctx, "reconcile from journal %d entries (%d broken) in %s", cnt, broken, time.Since(started))
+	clog.Infof(ctx, "reconcile from journal %d entries (broken=%t) in %s", cnt, broken, time.Since(started))
 	return true
 }
 
