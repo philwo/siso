@@ -203,3 +203,68 @@ func TestRecompact(t *testing.T) {
 		t.Errorf("deps log size %d must be smaller than %d", fileSize3, fileSize2)
 	}
 }
+
+func TestDepsLog_broken(t *testing.T) {
+	ctx := context.Background()
+	fname := filepath.Join(t.TempDir(), "mydepslog")
+	t1 := time.Unix(1, 0)
+	t2 := time.Unix(2, 0)
+
+	t.Logf("-- create deps log")
+	dl1, err := NewDepsLog(ctx, fname)
+	if err != nil {
+		t.Fatalf("NewDepsLog(ctx, %q)=_, %v; want nil error", fname, err)
+	}
+	r, err := dl1.Record(ctx, "out.o", t1, []string{"foo.h", "bar.h"})
+	if err != nil || !r {
+		t.Fatalf(`dl1.Record(ctx, "out.o", %v, []string{"foo.h", "bar.h"})=%t, %v; want true, nil error`, t1, r, err)
+	}
+	r, err = dl1.Record(ctx, "out2.o", t2, []string{"foo.h", "bar2.h"})
+	if err != nil || !r {
+		t.Fatalf(`dl1.Record(ctx, "out2.o", %v, []string{"foo.h", "bar2.h"})=%t, %v; want true, nil error`, t2, r, err)
+	}
+	err = dl1.Close()
+	if err != nil {
+		t.Fatalf("dl1.Close=%v; want nil error", err)
+	}
+	t.Logf("-- truncate deps log")
+	fi, err := os.Stat(fname)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fi.Size() != 144 {
+		t.Errorf("deps log size=%d; want 144", fi.Size())
+	}
+	err = os.Truncate(fname, 144-5*8-1)
+	if err != nil {
+		t.Errorf("truncate(%d)=%v; want nil error", 144-5*8-1, err)
+	}
+	t.Logf("-- load deps log again. expect recompact")
+	dl2, err := NewDepsLog(ctx, fname)
+	if err != nil {
+		t.Errorf("NewDepsLog(ctx, %q)=_, %v; want nil error", fname, err)
+	}
+	if !dl2.needsRecompact {
+		t.Errorf("dl2.needsRecompact=%t; want true", dl2.needsRecompact)
+	}
+	err = dl2.Recompact(ctx)
+	if err != nil {
+		t.Errorf("dl2.Recompact=%v; want nil error", err)
+	}
+	err = dl2.Close()
+	if err != nil {
+		t.Errorf("dl2.Close=%v; want nil error", err)
+	}
+	t.Logf("-- load deps log again, no recompact")
+	dl3, err := NewDepsLog(ctx, fname)
+	if err != nil {
+		t.Errorf("NewDepsLog(ctx, %q)=_, %v; want nil error", fname, err)
+	}
+	if dl3.needsRecompact {
+		t.Errorf("dl3.needsRecompact=%t; want false", dl3.needsRecompact)
+	}
+	err = dl3.Close()
+	if err != nil {
+		t.Errorf("dl3.Close=%v; want nil error", err)
+	}
+}

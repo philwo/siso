@@ -171,7 +171,7 @@ func readPathRecord(ctx context.Context, buf []byte, size int, numDepsLogPaths i
 	}
 	expectedID := ^checksum
 	if numDepsLogPaths != int(expectedID) {
-		clog.Errorf(ctx, "failed to match checksum %x -> %d != %d", checksum, expectedID, numDepsLogPaths)
+		return "", fmt.Errorf("failed to match checksum %x -> %d != %d", checksum, expectedID, numDepsLogPaths)
 	}
 	return pathname, nil
 }
@@ -214,6 +214,7 @@ func NewDepsLog(ctx context.Context, fname string) (*DepsLog, error) {
 	// encountered while parsing (i.e. broken input should never cause error)
 	totalRecords := 0
 	uniqueRecords := 0
+	broken := false
 readLoop:
 	for {
 		offset, err = f.Seek(0, os.SEEK_CUR)
@@ -222,29 +223,34 @@ readLoop:
 		}
 		if err != nil {
 			clog.Errorf(ctx, "failed to get offset: %v", err)
+			broken = true
 			break readLoop
 		}
 		header, err := readRecordHeader(ctx, f)
 		if err != nil {
 			if err != io.EOF {
 				clog.Errorf(ctx, "failed to read header at %d: %v", offset, err)
+				broken = true
 			}
 			break readLoop
 		}
 		size := header.RecordSize()
 		if size > maxRecordSize {
 			clog.Errorf(ctx, "too large record %d at %d", size, offset)
+			broken = true
 			break readLoop
 		}
 		n, err := f.Read(buf[:size])
 		if err != nil || n != size {
 			clog.Errorf(ctx, "failed to read record %d at %d: n=%d, %v", size, offset, n, err)
+			broken = true
 			break readLoop
 		}
 		if header.IsDepsRecord() {
 			outID, deps, err := readDepsRecord(ctx, buf, size, depsLog.paths)
 			if err != nil {
 				clog.Errorf(ctx, "failed to parse deps record at %d: %v", offset, err)
+				broken = true
 				break readLoop
 			}
 			// don't update if deps record is invalid, but allow continuation
@@ -258,6 +264,7 @@ readLoop:
 			pathname, err := readPathRecord(ctx, buf, size, len(depsLog.paths))
 			if err != nil {
 				clog.Errorf(ctx, "failed to parse path record at %d: %v", offset, err)
+				broken = true
 				break readLoop
 			}
 			depsLog.pathIdx[pathname] = len(depsLog.paths)
@@ -268,9 +275,9 @@ readLoop:
 	// https://github.com/ninja-build/ninja/blob/36843d387cb0621c1a288179af223d4f1410be73/src/deps_log.cc#L280
 	const minCompactionEntryCount = 1000
 	const compactionRatio = 3
-	depsLog.needsRecompact = totalRecords > minCompactionEntryCount && totalRecords > uniqueRecords*compactionRatio
+	depsLog.needsRecompact = broken || (totalRecords > minCompactionEntryCount && totalRecords > uniqueRecords*compactionRatio) || totalRecords == 0
 
-	clog.Infof(ctx, "ninja deps %s => paths=%d, deps=%d total=%d uniqu=%d recompact=%t", depsLog.fname, len(depsLog.paths), len(depsLog.deps), totalRecords, uniqueRecords, depsLog.needsRecompact)
+	clog.Infof(ctx, "ninja deps %s => paths=%d, deps=%d total=%d unique=%d recompact=%t (broken:%t)", depsLog.fname, len(depsLog.paths), len(depsLog.deps), totalRecords, uniqueRecords, depsLog.needsRecompact, broken)
 	depsLog.rPaths = depsLog.paths
 	for k, v := range depsLog.pathIdx {
 		depsLog.rPathIdx[k] = v
