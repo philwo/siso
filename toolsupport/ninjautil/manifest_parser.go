@@ -33,7 +33,8 @@ type ManifestParser struct {
 	// Lexer instance used to parse the .ninja file.
 	lexer *lexer
 
-	eg *errgroup.Group
+	eg   *errgroup.Group
+	sema chan struct{}
 }
 
 type fileState struct {
@@ -67,11 +68,13 @@ func NewManifestParser(state *State) *ManifestParser {
 	}
 }
 
+var loaderConcurrency = runtime.NumCPU()
+
 // Load loads the Ninja manifest given an fname.
 func (p *ManifestParser) Load(ctx context.Context, fname string) error {
 	if p.eg == nil {
 		p.eg, ctx = errgroup.WithContext(ctx)
-		p.eg.SetLimit(runtime.NumCPU())
+		p.sema = make(chan struct{}, loaderConcurrency)
 	}
 	p.eg.Go(func() error {
 		return p.loadFile(ctx, fname)
@@ -96,6 +99,8 @@ func (p *ManifestParser) loadFile(ctx context.Context, fname string) error {
 	for _, fname := range subninjas {
 		fname := fname
 		p.eg.Go(func() error {
+			p.sema <- struct{}{}
+			defer func() { <-p.sema }()
 			if log.V(1) {
 				clog.Infof(ctx, "subninja %s", fname)
 			}
@@ -104,6 +109,7 @@ func (p *ManifestParser) loadFile(ctx context.Context, fname string) error {
 				env:   newBindingEnv(p.env),
 				rules: newRuleBinding(p.rules),
 				eg:    p.eg,
+				sema:  p.sema,
 			}
 			return subparser.loadFile(ctx, fname)
 		})

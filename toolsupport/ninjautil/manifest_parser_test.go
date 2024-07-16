@@ -6,6 +6,9 @@ package ninjautil
 
 import (
 	"context"
+	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -75,5 +78,83 @@ build b: cat c
 	want := p.lexer.errorf("multiple rules generate b")
 	if err != want {
 		t.Errorf("p.parse() got: %v; want: %v", err, want)
+	}
+}
+
+func TestParser_ConcurrentSubninja(t *testing.T) {
+	origLoaderConcurrency := loaderConcurrency
+	loaderConcurrency = 8
+	defer func() { loaderConcurrency = origLoaderConcurrency }()
+	ctx := context.Background()
+	state := NewState()
+	p := NewManifestParser(state)
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	dir := t.TempDir()
+	defer func() {
+		err = os.Chdir(wd)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}()
+	err = os.Chdir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	write := func(fname, content string) {
+		t.Helper()
+		err := os.MkdirAll(filepath.Dir(fname), 0755)
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = os.WriteFile(fname, []byte(content), 0644)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	write("build.ninja", `
+subninja a/build.ninja
+subninja b/build.ninja
+subninja c/build.ninja
+subninja d/build.ninja
+subninja e/build.ninja
+subninja f/build.ninja
+subninja g/build.ninja
+subninja h/build.ninja
+subninja i/build.ninja
+`)
+
+	for _, d := range []string{"a", "b", "c", "d", "e", "f", "g", "h", "i"} {
+		write(fmt.Sprintf("%s/build.ninja", d), fmt.Sprintf(`
+subninja %[1]s/a/build.ninja
+subninja %[1]s/a/build.ninja
+subninja %[1]s/b/build.ninja
+subninja %[1]s/c/build.ninja
+subninja %[1]s/d/build.ninja
+subninja %[1]s/e/build.ninja
+subninja %[1]s/f/build.ninja
+subninja %[1]s/g/build.ninja
+subninja %[1]s/h/build.ninja
+subninja %[1]s/i/build.ninja
+`, d))
+		write(fmt.Sprintf("%s/a/build.ninja", d), "")
+		write(fmt.Sprintf("%s/b/build.ninja", d), "")
+		write(fmt.Sprintf("%s/c/build.ninja", d), "")
+		write(fmt.Sprintf("%s/d/build.ninja", d), "")
+		write(fmt.Sprintf("%s/e/build.ninja", d), "")
+		write(fmt.Sprintf("%s/f/build.ninja", d), "")
+		write(fmt.Sprintf("%s/g/build.ninja", d), "")
+		write(fmt.Sprintf("%s/h/build.ninja", d), "")
+		write(fmt.Sprintf("%s/i/build.ninja", d), "")
+	}
+
+	err = p.Load(ctx, "build.ninja")
+	if err != nil {
+		t.Fatal(err)
 	}
 }
