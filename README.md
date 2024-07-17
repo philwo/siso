@@ -18,7 +18,13 @@ Please check [go/siso-faq](http://go/siso-faq).
 
 ## Status
 
-Siso is under development and not yet ready for general use.
+Siso is the primary build system for builder builds, and is being rolled out to
+Chrome developers. Chromium and Chrome are only supported projects.
+The projects that import //build/config from Chromium might be able to use Siso.
+However, they are not tested or supported, yet.
+
+As of July 2024, Siso is used in all Chromium and Chrome builders, including official
+builds released to users.
 
 As of end of 2024 Q1, Siso is used in all CQ builders in Chromium.
 
