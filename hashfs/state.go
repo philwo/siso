@@ -20,7 +20,6 @@ import (
 	"runtime"
 	"sort"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -135,10 +134,9 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 	var dirty atomic.Bool
 	eg, gctx := errgroup.WithContext(ctx)
 	eg.SetLimit(runtime.NumCPU())
-	var (
-		mu      sync.Mutex
-		entries = map[string]*entry{}
-	)
+	dirs := make([]*entry, len(state.Entries))
+	entries := make([]*entry, len(state.Entries))
+	prevGenerated := make([]bool, len(state.Entries))
 	for i, ent := range state.Entries {
 		i, ent := i, ent
 		eg.Go(func() error {
@@ -158,6 +156,7 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 			if runtime.GOOS == "windows" {
 				ent.Name = strings.TrimPrefix(ent.Name, `\`)
 			}
+			ent.Name = filepath.ToSlash(ent.Name)
 			if hfs.opt.Ignore(ctx, ent.Name) {
 				clog.Infof(ctx, "ignore %s", ent.Name)
 				return nil
@@ -182,9 +181,7 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 				e, _ := newStateEntry(ent, time.Time{}, hfs.opt.DataSource, hfs.OS)
 				e.cmdhash = h
 				e.action = toDigest(ent.Action)
-				mu.Lock()
-				entries[filepath.ToSlash(ent.Name)] = e
-				mu.Unlock()
+				entries[i] = e
 				return nil
 			}
 			if err != nil {
@@ -256,12 +253,14 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 			if log.V(1) {
 				clog.Infof(gctx, "set state %s: d:%s %s s:%s m:%s cmdhash:%s action:%s", ent.Name, e.d, e.mode, e.target, e.mtime, base64.StdEncoding.EncodeToString(e.cmdhash), e.action)
 			}
-			mu.Lock()
-			entries[filepath.ToSlash(ent.Name)] = e
-			mu.Unlock()
+			if ftype == "dir" {
+				dirs[i] = e
+			} else {
+				entries[i] = e
+			}
 			if len(e.cmdhash) > 0 {
 				// records generated files found in the loaded .siso_fs_state into previouslyGeneratedFiles.
-				hfs.previouslyGeneratedFiles.Store(ent.Name, true)
+				prevGenerated[i] = true
 			}
 			return err
 		})
@@ -270,23 +269,46 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 	if err != nil {
 		return err
 	}
-	// sort names, so update dir containing files first as Update.
-	// without this, flaky confirm no-op failure for step
-	// that outputs dir and dir/file.
-	// i.e. if dir/file is stored before dir, dir/file's cmdhash etc
-	// will be lost.
-	var names []string
-	for k := range entries {
-		names = append(names, k)
-	}
-	sort.Strings(names)
-	for _, name := range names {
-		_, err = hfs.directory.store(ctx, name, entries[name])
-		if err != nil {
-			return err
+	for i, ent := range state.Entries {
+		if prevGenerated[i] {
+			hfs.previouslyGeneratedFiles = append(hfs.previouslyGeneratedFiles, ent.Name)
 		}
 	}
+	hfs.setStateCh = make(chan error, 1)
+	// store in background.
+	go func() {
+		defer close(hfs.setStateCh)
+		// name is sorted in state.Entries.
 
+		// store dir early.
+		// otherwise, flaky confirm no-op failure
+		// for step that outputs dir and dir/file.
+		// i.e. if dir/file is stored before dir,
+		// dir/file's cmdhash etc will be lost.
+		for i, ent := range state.Entries {
+			e := dirs[i]
+			if e == nil {
+				continue
+			}
+			_, err := hfs.directory.store(ctx, ent.Name, e)
+			if err != nil {
+				hfs.setStateCh <- fmt.Errorf("failed to store dir %s: %w", ent.Name, err)
+				return
+			}
+		}
+		for i, ent := range state.Entries {
+			e := entries[i]
+			if e == nil {
+				continue
+			}
+			_, err := hfs.directory.store(ctx, ent.Name, e)
+			if err != nil {
+				hfs.setStateCh <- fmt.Errorf("failed to store file %s: %w", ent.Name, err)
+				return
+			}
+		}
+		hfs.setStateCh <- nil
+	}()
 	hfs.clean = nnew.Load() == 0 && nnotexist.Load() == 0 && nfail.Load() == 0 && ninvalidate.Load() == 0
 	clog.Infof(ctx, "set state done: clean:%t eq:%d new:%d not-exist:%d fail:%d invalidate:%d: %s", hfs.clean, neq.Load(), nnew.Load(), nnotexist.Load(), nfail.Load(), ninvalidate.Load(), time.Since(start))
 	return nil

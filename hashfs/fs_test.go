@@ -1145,6 +1145,7 @@ func TestUpdate_FromLocal_AbsSymlink(t *testing.T) {
 	if err != nil {
 		t.Errorf("Refresh(ctx,%q)=%v; want nil err", dir, err)
 	}
+
 	fi, err = hfs.Stat(ctx, dir, outname)
 	if err != nil {
 		t.Fatalf("Stat(ctx, %q, %q)=_, %v; want nil err", dir, outname, err)

@@ -68,14 +68,16 @@ type HashFS struct {
 	digester digester
 	clean    bool
 
-	// holds generated files in previous builds.
-	// key: full path, value: true
-	previouslyGeneratedFiles *sync.Map
+	// holds generated files (full path) in previous builds.
+	previouslyGeneratedFiles []string
 
 	executables map[string]bool
 
 	// writer for updated entries journal.
 	journal io.WriteCloser
+
+	// trigger for SetState background goroutine finish.
+	setStateCh chan error
 }
 
 // New creates a HashFS.
@@ -99,7 +101,6 @@ func New(ctx context.Context, opt Option) (*HashFS, error) {
 			quit: make(chan struct{}),
 			done: make(chan struct{}),
 		},
-		previouslyGeneratedFiles: new(sync.Map),
 	}
 	if opt.StateFile != "" {
 		start := time.Now()
@@ -139,6 +140,28 @@ func New(ctx context.Context, opt Option) (*HashFS, error) {
 	}
 	go fsys.digester.start()
 	return fsys, nil
+}
+
+// WaitReady waits fs state is updated in memory.
+func (hfs *HashFS) WaitReady(ctx context.Context) error {
+	if hfs.setStateCh == nil {
+		return nil
+	}
+	started := time.Now()
+	select {
+	case <-ctx.Done():
+		clog.Errorf(ctx, "hashfs does not become ready %s: %v", time.Since(started), context.Cause(ctx))
+		return context.Cause(ctx)
+
+	case err := <-hfs.setStateCh:
+		hfs.setStateCh = nil
+		if err != nil {
+			clog.Errorf(ctx, "hashfs does not become ready %s: %v", time.Since(started), err)
+			return err
+		}
+		clog.Infof(ctx, "hashfs becomes ready: %v", time.Since(started))
+	}
+	return nil
 }
 
 // Notify causes the hashfs to relay filesystem motification to f.
@@ -191,19 +214,9 @@ func (hfs *HashFS) IsClean() bool {
 // (i.e. has cmdhash) in the previous builds.
 // It will reset internal data, so next call will return nil
 func (hfs *HashFS) PreviouslyGeneratedFiles() []string {
-	if hfs.previouslyGeneratedFiles == nil {
-		return nil
-	}
-	var names []string
-	hfs.previouslyGeneratedFiles.Range(func(key, value any) bool {
-		k, ok := key.(string)
-		if ok {
-			names = append(names, k)
-		}
-		return true
-	})
+	p := hfs.previouslyGeneratedFiles
 	hfs.previouslyGeneratedFiles = nil
-	return names
+	return p
 }
 
 // FileSystem returns FileSystem interface at dir.
@@ -1293,7 +1306,12 @@ func (hfs *HashFS) Refresh(ctx context.Context, execRoot string) error {
 	// TODO: optimize?
 	state := hfs.State(ctx)
 	hfs.directory = &directory{isRoot: true}
-	return hfs.SetState(ctx, state)
+	err := hfs.SetState(ctx, state)
+	werr := hfs.WaitReady(ctx)
+	if err != nil {
+		return err
+	}
+	return werr
 }
 
 type entry struct {

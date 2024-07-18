@@ -91,6 +91,10 @@ func (g gnTarget) String() string {
 // NewStepConfig creates new *StepConfig and stores it in .siso_config
 // and .siso_filegroups.
 func NewStepConfig(ctx context.Context, config *buildconfig.Config, p *build.Path, hashFS *hashfs.HashFS, fname string) (*StepConfig, error) {
+	err := hashFS.WaitReady(ctx)
+	if err != nil {
+		return nil, err
+	}
 	s, err := config.Init(ctx, hashFS, p)
 	if err != nil {
 		return nil, err
