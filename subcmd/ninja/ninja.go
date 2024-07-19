@@ -491,7 +491,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 				properties.Add("go_version", buildInfo.GoVersion)
 			}
 			for _, s := range buildInfo.Settings {
-				if strings.HasPrefix(s.Key, "vcs.") {
+				if strings.HasPrefix(s.Key, "vcs.") || strings.HasPrefix(s.Key, "-") {
 					clog.Infof(ctx, "build_%s=%s", s.Key, s.Value)
 					properties.Add(fmt.Sprintf("build_%s", s.Key), s.Value)
 				}
