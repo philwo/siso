@@ -5,7 +5,9 @@
 package ninjabuild
 
 import (
+	"bufio"
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -83,8 +85,10 @@ func (er *edgeRule) ensure(ctx context.Context, globals *globals) (gotRule bool,
 	return true, rule, true
 }
 
+var randReader = bufio.NewReader(rand.Reader)
+
 func (g *Graph) newStepDef(ctx context.Context, edge *ninjautil.Edge, next build.StepDef) *StepDef {
-	id := uuid.New().String()
+	id := uuid.Must(uuid.NewRandomFromReader(randReader)).String()
 	stepDef := &StepDef{
 		id:      id,
 		edge:    edge,
