@@ -74,8 +74,7 @@ func (er *edgeRule) ensure(ctx context.Context, globals *globals) (gotRule bool,
 		// remove edgeRule for all outputs of the edge from edgeRules
 		// for non-pure and no solibs step.
 		for _, output := range er.edge.Outputs() {
-			outPath := globals.targetPath(ctx, output)
-			globals.edgeRules.Delete(outPath)
+			globals.edgeRules[output.ID()] = nil
 		}
 		return true, rule, false
 	}
@@ -100,9 +99,9 @@ func (g *Graph) newStepDef(ctx context.Context, edge *ninjautil.Edge, next build
 		}
 		globals := g.globals
 		for _, out := range edge.Outputs() {
-			outPath := globals.targetPath(ctx, out)
-			globals.edgeRules.Store(outPath, er)
+			globals.edgeRules[out.ID()] = er
 			if log.V(1) {
+				outPath := globals.targetPath(ctx, out)
 				clog.Infof(ctx, "add edgeRule for %s [newStepDef]", outPath)
 
 			}
@@ -125,15 +124,14 @@ func (s *StepDef) EnsureRule(ctx context.Context) {
 	if len(outputs) == 0 {
 		return
 	}
-	outPath := s.globals.targetPath(ctx, outputs[0])
 	// *edgeRule is stored in newStepDef for all outputs of the edge.
-	v, ok := s.globals.edgeRules.Load(outPath)
-	if !ok {
+	er := s.globals.edgeRules[outputs[0].ID()]
+	if er == nil {
 		// *edgeRule was removed by er.ensure by other output of the edge?
+		outPath := s.globals.targetPath(ctx, outputs[0])
 		clog.Warningf(ctx, "edgeRule not found for %s: pure=%t", outPath, s.pure)
 		return
 	}
-	er := v.(*edgeRule)
 	var gotRule bool
 	gotRule, s.rule, s.pure = er.ensure(ctx, s.globals)
 	if !gotRule {
@@ -695,12 +693,17 @@ func (s *StepDef) ExpandedInputs(ctx context.Context) []string {
 	var newInputs []string
 	changed := false
 	for i := 0; i < len(inputs); i++ {
-		v, ok := globals.edgeRules.Load(inputs[i])
+		inpath := globals.path.MaybeToWD(ctx, inputs[i])
+		innode, ok := globals.nstate.LookupNodeByPath(inpath)
 		if !ok {
 			newInputs = append(newInputs, inputs[i])
 			continue
 		}
-		er := v.(*edgeRule)
+		er := globals.edgeRules[innode.ID()]
+		if er == nil {
+			newInputs = append(newInputs, inputs[i])
+			continue
+		}
 		// check siso rule if it was not checked when input's step was skipped
 		er.ensure(ctx, globals)
 		if s.rule.Debug {

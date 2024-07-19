@@ -97,9 +97,9 @@ build target1: __rule target2 | ../../source1 || target3
 	setupFile("source0")
 
 	graph := &Graph{
-		nstate:  state,
 		visited: make(map[*ninjautil.Edge]bool),
 		globals: &globals{
+			nstate: state,
 			path:   build.NewPath(dir, "out/Default"),
 			hashFS: hashFS,
 			stepConfig: &StepConfig{
@@ -113,6 +113,7 @@ build target1: __rule target2 | ../../source1 || target3
 				},
 			},
 			targetPaths: make([]string, state.NumNodes()),
+			edgeRules:   make([]*edgeRule, state.NumNodes()),
 		},
 	}
 	err = graph.globals.stepConfig.Init(ctx)
@@ -205,9 +206,9 @@ build target1: __rule ../../source1 foo.stamp foo.a
 	setupFile("source0")
 
 	graph := &Graph{
-		nstate:  state,
 		visited: make(map[*ninjautil.Edge]bool),
 		globals: &globals{
+			nstate: state,
 			path:   build.NewPath(dir, "out/Default"),
 			hashFS: hashFS,
 			stepConfig: &StepConfig{
@@ -231,6 +232,7 @@ build target1: __rule ../../source1 foo.stamp foo.a
 				},
 			},
 			targetPaths: make([]string, state.NumNodes()),
+			edgeRules:   make([]*edgeRule, state.NumNodes()),
 		},
 	}
 	err = graph.globals.stepConfig.Init(ctx)
@@ -312,13 +314,14 @@ build foo.h: __rule | ./protoc
 	}
 
 	graph := &Graph{
-		nstate:  state,
 		visited: make(map[*ninjautil.Edge]bool),
 		globals: &globals{
+			nstate:      state,
 			path:        build.NewPath(dir, "out/Default"),
 			hashFS:      hashFS,
 			stepConfig:  &StepConfig{},
 			targetPaths: make([]string, state.NumNodes()),
+			edgeRules:   make([]*edgeRule, state.NumNodes()),
 		},
 	}
 	newStepDef := func(target string) *StepDef {
@@ -412,9 +415,9 @@ build target1: __rule ../../source1.cc target2.h target3.h
 	setupFile("source1.cc")
 
 	graph := &Graph{
-		nstate:  state,
 		visited: make(map[*ninjautil.Edge]bool),
 		globals: &globals{
+			nstate: state,
 			path:   build.NewPath(dir, "out/Default"),
 			hashFS: hashFS,
 			stepConfig: &StepConfig{
@@ -429,6 +432,7 @@ build target1: __rule ../../source1.cc target2.h target3.h
 				},
 			},
 			targetPaths: make([]string, state.NumNodes()),
+			edgeRules:   make([]*edgeRule, state.NumNodes()),
 		},
 	}
 	err = graph.globals.stepConfig.Init(ctx)
