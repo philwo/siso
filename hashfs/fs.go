@@ -19,6 +19,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -66,7 +67,9 @@ type HashFS struct {
 	OS *osfs.OSFS
 
 	digester digester
-	clean    bool
+
+	// clean if loaded state is matched with local disk's state.
+	clean atomic.Bool
 
 	// holds generated files (full path) in previous builds.
 	previouslyGeneratedFiles []string
@@ -190,7 +193,7 @@ func (hfs *HashFS) Close(ctx context.Context) error {
 		}
 		hfs.journal = nil
 	}
-	if hfs.clean {
+	if hfs.clean.Load() {
 		return nil
 	}
 	err := Save(ctx, hfs.opt.StateFile, hfs.State(ctx))
@@ -207,7 +210,7 @@ func (hfs *HashFS) Close(ctx context.Context) error {
 
 // IsClean returns whether hashfs is clean (i.e. sync with local disk).
 func (hfs *HashFS) IsClean() bool {
-	return hfs.clean
+	return hfs.clean.Load()
 }
 
 // PreviouslyGeneratedFiles returns a list of generated files
@@ -468,7 +471,7 @@ func (hfs *HashFS) WriteFile(ctx context.Context, root, fname string, b []byte, 
 	if log.V(1) {
 		clog.Infof(ctx, "writefile @%s %s x:%t mtime:%s", root, fname, isExecutable, mtime)
 	}
-	hfs.clean = false
+	hfs.clean.Store(false)
 	data := digest.FromBytes(fname, b)
 	fname = filepath.Join(root, fname)
 	fname = filepath.ToSlash(fname)
@@ -505,7 +508,7 @@ func (hfs *HashFS) Symlink(ctx context.Context, root, target, linkpath string, m
 	if log.V(1) {
 		clog.Infof(ctx, "symlink @%s %s -> %s", root, linkpath, target)
 	}
-	hfs.clean = false
+	hfs.clean.Store(false)
 	linkfname := filepath.Join(root, linkpath)
 	linkfname = filepath.ToSlash(linkfname)
 	lready := make(chan bool, 1)
@@ -534,7 +537,7 @@ func (hfs *HashFS) Copy(ctx context.Context, root, src, dst string, mtime time.T
 	if log.V(1) {
 		clog.Infof(ctx, "copy @%s %s to %s", root, src, dst)
 	}
-	hfs.clean = false
+	hfs.clean.Store(false)
 	srcname := src
 	if !filepath.IsAbs(src) {
 		srcname = filepath.Join(root, src)
@@ -597,7 +600,7 @@ func (hfs *HashFS) Mkdir(ctx context.Context, root, dirname string, cmdhash []by
 	if log.V(1) {
 		clog.Infof(ctx, "mkdir @%s %s", root, dirname)
 	}
-	hfs.clean = false
+	hfs.clean.Store(false)
 	dirname = filepath.Join(root, dirname)
 	dirname = filepath.ToSlash(dirname)
 	fi, err := hfs.OS.Lstat(ctx, dirname)
@@ -658,7 +661,7 @@ func (hfs *HashFS) Remove(ctx context.Context, root, fname string) error {
 	if log.V(1) {
 		clog.Infof(ctx, "remove @%s %s", root, fname)
 	}
-	hfs.clean = false
+	hfs.clean.Store(false)
 	fname = filepath.Join(root, fname)
 	fname = filepath.ToSlash(fname)
 	lready := make(chan bool, 1)
@@ -678,7 +681,7 @@ func (hfs *HashFS) RemoveAll(ctx context.Context, root, name string) error {
 	if log.V(1) {
 		clog.Infof(ctx, "removeAll @%s %s", root, name)
 	}
-	hfs.clean = false
+	hfs.clean.Store(false)
 	name = filepath.Join(root, name)
 	name = filepath.ToSlash(name)
 	err := os.RemoveAll(name)
@@ -943,7 +946,7 @@ func (e UpdateEntry) String() string {
 func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []UpdateEntry) error {
 	ctx, span := trace.NewSpan(ctx, "fs-update")
 	defer span.Close(nil)
-	hfs.clean = false
+	hfs.clean.Store(false)
 
 	// sort inputs, so update dir containing files first. b/300385880
 	sort.Slice(entries, func(i, j int) bool {
@@ -2225,6 +2228,8 @@ func (fi FileInfo) UpdatedTime() time.Time {
 
 // IsChanged returns true if file has been changed in the session.
 func (fi FileInfo) IsChanged() bool {
+	fi.e.mu.Lock()
+	defer fi.e.mu.Unlock()
 	return fi.e.isChanged
 }
 

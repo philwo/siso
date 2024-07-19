@@ -15,27 +15,31 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"sync"
 
 	log "github.com/golang/glog"
 
 	"infra/build/siso/o11y/clog"
 )
 
+var once sync.Once
 var path string
 
 // Available returns whether strace is available or not.
 func Available(ctx context.Context) bool {
-	if runtime.GOOS == "windows" {
-		// strace exists in msys, but we don't use this
-		return false
-	}
-	var err error
-	path, err = exec.LookPath("strace")
-	if err != nil {
-		clog.Warningf(ctx, "strace is not found: %v", err)
-		return false
-	}
-	return true
+	once.Do(func() {
+		if runtime.GOOS == "windows" {
+			// strace exists in msys, but we don't use this
+			return
+		}
+		var err error
+		path, err = exec.LookPath("strace")
+		if err != nil {
+			clog.Warningf(ctx, "strace is not found: %v", err)
+			return
+		}
+	})
+	return path != ""
 }
 
 // Strace represents a cmd traced by strace.

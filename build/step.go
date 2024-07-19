@@ -184,9 +184,6 @@ func (s *Step) ReadyToRun(prev string, out Target) bool {
 
 // String returns id of the step.
 func (s *Step) String() string {
-	if s.cmd != nil {
-		return s.cmd.ID
-	}
 	return s.def.String()
 }
 
