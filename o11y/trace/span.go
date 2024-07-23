@@ -47,7 +47,7 @@ func New(ctx context.Context, id string) *Context {
 		clog.Errorf(ctx, "bad id %q: %v", id, err)
 	}
 	return &Context{
-		traceID: ([16]byte)(u),
+		traceID: u,
 	}
 }
 
