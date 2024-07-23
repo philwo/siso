@@ -401,9 +401,12 @@ func (g *globals) targetPath(ctx context.Context, node *ninjautil.Node) string {
 	if p != "" {
 		return p
 	}
-	s := filepath.ToSlash(filepath.Join(g.path.Dir, node.Path()))
-	g.targetPaths[node.ID()] = s
-	return s
+	p = node.Path()
+	if !filepath.IsAbs(p) {
+		p = filepath.ToSlash(filepath.Join(g.path.Dir, p))
+	}
+	g.targetPaths[node.ID()] = p
+	return p
 }
 
 // StepDef creates new StepDef to build target (exec-root relative), needed for next.
