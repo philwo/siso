@@ -321,6 +321,22 @@ func Serve(version string, localDevelopment bool, port int, defaultOutdir, confi
 		return nil
 	}
 
+	renderBuildViewError := func(status int, message string, w http.ResponseWriter, r *http.Request, outdirInfo *outdirInfo) {
+		w.WriteHeader(status)
+		tmpl, err := loadView(localDevelopment, fs, "_error.html")
+		if err != nil {
+			fmt.Fprintf(w, "failed to load error view: %s\n", err)
+			return
+		}
+		err = renderBuildView(w, r, tmpl, outdirInfo, map[string]any{
+			"errorTitle":   http.StatusText(status),
+			"errorMessage": message,
+		})
+		if err != nil {
+			fmt.Fprintf(w, "failed to render error view: %s\n", err)
+		}
+	}
+
 	// Group together outdir related handlers.
 	outdirHandlers := http.NewServeMux()
 
@@ -328,8 +344,7 @@ func Serve(version string, localDevelopment bool, port int, defaultOutdir, confi
 		// Don't try to reload non-existing outdir.
 		outdirInfo, err := ensureOutdirForRequest(r, &outdirInfos, execRoot)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "outdir failed to load for request %s: %v", r.URL, err)
-			http.NotFound(w, r)
+			renderBuildViewError(http.StatusNotFound, fmt.Sprintf("outdir failed to load for request %s: %v", r.URL, err), w, r, outdirInfo)
 			return
 		}
 
@@ -364,15 +379,13 @@ func Serve(version string, localDevelopment bool, port int, defaultOutdir, confi
 	outdirHandlers.HandleFunc("/{outroot}/{outsub}/builds/{rev}/logs/{file}", func(w http.ResponseWriter, r *http.Request) {
 		outdirInfo, err := ensureOutdirForRequest(r, &outdirInfos, execRoot)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "outdir failed to load for request %s: %v", r.URL, err)
-			http.NotFound(w, r)
+			renderBuildViewError(http.StatusNotFound, fmt.Sprintf("outdir failed to load for request %s: %v", r.URL, err), w, r, outdirInfo)
 			return
 		}
 
 		tmpl, err := loadView(localDevelopment, fs, "_logs.html")
 		if err != nil {
-			// TODO(b/349287453): proper error handling.
-			fmt.Fprintf(w, "failed to load view: %s\n", err)
+			renderBuildViewError(http.StatusInternalServerError, fmt.Sprintf("failed to load view: %s", err), w, r, outdirInfo)
 			return
 		}
 
@@ -386,8 +399,7 @@ func Serve(version string, localDevelopment bool, port int, defaultOutdir, confi
 		requestedFile := r.PathValue("file")
 		revFileFormatter, ok := allowedFilesMap[requestedFile]
 		if !ok {
-			// TODO(b/349287453): proper error handling.
-			fmt.Fprintf(w, "unknown file: %v\n", err)
+			renderBuildViewError(http.StatusNotFound, fmt.Sprintf("unknown file: %s", requestedFile), w, r, outdirInfo)
 			return
 		}
 
@@ -398,8 +410,7 @@ func Serve(version string, localDevelopment bool, port int, defaultOutdir, confi
 		}
 		fileContents, err := os.ReadFile(filepath.Join(defaultOutdir, actualFile))
 		if err != nil {
-			// TODO(b/349287453): proper error handling.
-			fmt.Fprintf(w, "failed to open file: %s\n", err)
+			renderBuildViewError(http.StatusInternalServerError, fmt.Sprintf("failed to open file: %v", err), w, r, outdirInfo)
 			return
 		}
 
@@ -407,7 +418,7 @@ func Serve(version string, localDevelopment bool, port int, defaultOutdir, confi
 			w.Header().Add("Content-Type", "text/plain; charset=UTF-8")
 			_, err := w.Write(fileContents)
 			if err != nil {
-				fmt.Fprintf(w, "failed to write: %v", err)
+				renderBuildViewError(http.StatusInternalServerError, fmt.Sprintf("failed to write file contents: %v", err), w, r, outdirInfo)
 			}
 			return
 		}
@@ -425,16 +436,14 @@ func Serve(version string, localDevelopment bool, port int, defaultOutdir, confi
 			"fileContents": string(fileContents),
 		})
 		if err != nil {
-			// TODO(b/349287453): proper error handling.
-			fmt.Fprintf(w, "failed to render view: %v\n", err)
+			renderBuildViewError(http.StatusInternalServerError, fmt.Sprintf("failed to render view: %v", err), w, r, outdirInfo)
 		}
 	})
 
 	outdirHandlers.HandleFunc("POST /{outroot}/{outsub}/builds/{rev}/steps/{id}/recall/", func(w http.ResponseWriter, r *http.Request) {
 		outdirInfo, err := ensureOutdirForRequest(r, &outdirInfos, execRoot)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "outdir failed to load for request %s: %v", r.URL, err)
-			http.NotFound(w, r)
+			renderBuildViewError(http.StatusNotFound, fmt.Sprintf("outdir failed to load for request %s: %v", r.URL, err), w, r, outdirInfo)
 			return
 		}
 		var metrics *buildMetrics
@@ -444,22 +453,20 @@ func Serve(version string, localDevelopment bool, port int, defaultOutdir, confi
 				break
 			}
 		}
-		// TODO(b/349287453): custom 404 page that shows navbar.
 		if metrics == nil {
-			http.NotFound(w, r)
+			renderBuildViewError(http.StatusNotFound, fmt.Sprintf("no metrics found for request %s", r.URL), w, r, outdirInfo)
 			return
 		}
 
 		tmpl, err := loadView(localDevelopment, fs, "_recall.html")
 		if err != nil {
-			// TODO(b/349287453): proper error handling.
-			fmt.Fprintf(w, "failed to load view: %s\n", err)
+			renderBuildViewError(http.StatusInternalServerError, fmt.Sprintf("failed to load view: %s", err), w, r, outdirInfo)
 			return
 		}
 
 		metric, ok := metrics.stepMetrics[r.PathValue("id")]
 		if !ok {
-			http.NotFound(w, r)
+			renderBuildViewError(http.StatusNotFound, fmt.Sprintf("stepID %s not found", r.PathValue("id")), w, r, outdirInfo)
 			return
 		}
 
@@ -470,16 +477,14 @@ func Serve(version string, localDevelopment bool, port int, defaultOutdir, confi
 			"reapiInstance": r.FormValue("reapi_instance"),
 		})
 		if err != nil {
-			fmt.Fprintf(w, "failed to render view: %s\n", err)
+			renderBuildViewError(http.StatusInternalServerError, fmt.Sprintf("failed to render view: %v", err), w, r, outdirInfo)
 		}
 	})
 
 	outdirHandlers.HandleFunc("/{outroot}/{outsub}/builds/{rev}/steps/{id}/", func(w http.ResponseWriter, r *http.Request) {
 		outdirInfo, err := ensureOutdirForRequest(r, &outdirInfos, execRoot)
-		// TODO(b/349287453): custom 404 page that shows navbar.
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "outdir failed to load for request %s: %v", r.URL, err)
-			http.NotFound(w, r)
+			renderBuildViewError(http.StatusNotFound, fmt.Sprintf("outdir failed to load for request %s: %v", r.URL, err), w, r, outdirInfo)
 			return
 		}
 		var metrics *buildMetrics
@@ -489,48 +494,43 @@ func Serve(version string, localDevelopment bool, port int, defaultOutdir, confi
 				break
 			}
 		}
-		// TODO(b/349287453): custom 404 page that shows navbar.
 		if metrics == nil {
-			http.NotFound(w, r)
+			renderBuildViewError(http.StatusNotFound, fmt.Sprintf("no metrics found for request %s", r.URL), w, r, outdirInfo)
 			return
 		}
 
 		tmpl, err := loadView(localDevelopment, fs, "_step.html")
 		if err != nil {
-			// TODO(b/349287453): proper error handling.
-			fmt.Fprintf(w, "failed to load view: %s\n", err)
+			renderBuildViewError(http.StatusInternalServerError, fmt.Sprintf("failed to load view: %s", err), w, r, outdirInfo)
 			return
 		}
 
 		metric, ok := metrics.stepMetrics[r.PathValue("id")]
 		if !ok {
-			http.NotFound(w, r)
+			renderBuildViewError(http.StatusNotFound, fmt.Sprintf("stepID %s not found", r.PathValue("id")), w, r, outdirInfo)
 			return
 		}
 
 		var asMap map[string]any
 		asJSON, err := json.Marshal(metric)
 		if err != nil {
-			// TODO(b/349287453): proper error handling.
-			fmt.Fprintf(w, "failed to marshal metrics: %v\n", err)
+			renderBuildViewError(http.StatusInternalServerError, fmt.Sprintf("failed to marshal metrics: %v", err), w, r, outdirInfo)
 		}
 		err = json.Unmarshal(asJSON, &asMap)
 		if err != nil {
-			// TODO(b/349287453): proper error handling.
-			fmt.Fprintf(w, "failed to unmarshal metrics: %v\n", err)
+			renderBuildViewError(http.StatusInternalServerError, fmt.Sprintf("failed to unmarshal metrics: %v", err), w, r, outdirInfo)
 		}
 
 		err = renderBuildView(w, r, tmpl, outdirInfo, asMap)
 		if err != nil {
-			fmt.Fprintf(w, "failed to render view: %v\n", err)
+			renderBuildViewError(http.StatusInternalServerError, fmt.Sprintf("failed to render view: %v", err), w, r, outdirInfo)
 		}
 	})
 
 	outdirHandlers.HandleFunc("/{outroot}/{outsub}/builds/{rev}/steps/", func(w http.ResponseWriter, r *http.Request) {
 		outdirInfo, err := ensureOutdirForRequest(r, &outdirInfos, execRoot)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "outdir failed to load for request %s: %v", r.URL, err)
-			http.NotFound(w, r)
+			renderBuildViewError(http.StatusNotFound, fmt.Sprintf("outdir failed to load for request %s: %v", r.URL, err), w, r, outdirInfo)
 			return
 		}
 		var metrics *buildMetrics
@@ -541,14 +541,13 @@ func Serve(version string, localDevelopment bool, port int, defaultOutdir, confi
 			}
 		}
 		if metrics == nil {
-			http.NotFound(w, r)
+			renderBuildViewError(http.StatusNotFound, fmt.Sprintf("no metrics found for request %s", r.URL), w, r, outdirInfo)
 			return
 		}
 
 		tmpl, err := loadView(localDevelopment, fs, "_steps.html")
 		if err != nil {
-			// TODO(b/349287453): proper error handling.
-			fmt.Fprintf(w, "failed to load view: %s\n", err)
+			renderBuildViewError(http.StatusInternalServerError, fmt.Sprintf("failed to load view: %s", err), w, r, outdirInfo)
 			return
 		}
 
@@ -632,7 +631,7 @@ func Serve(version string, localDevelopment bool, port int, defaultOutdir, confi
 		}
 		err = renderBuildView(w, r, tmpl, outdirInfo, data)
 		if err != nil {
-			fmt.Fprintf(w, "failed to render view: %s\n", err)
+			renderBuildViewError(http.StatusInternalServerError, fmt.Sprintf("failed to render view: %v", err), w, r, outdirInfo)
 		}
 	})
 
