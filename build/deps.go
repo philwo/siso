@@ -249,6 +249,11 @@ func fixInputsByDeps(ctx context.Context, b *Builder, stepInputs, depsIns []stri
 }
 
 func checkDepfile(ctx context.Context, b *Builder, step *Step) error {
+	// need to write depfile on disk even if output_local_strategy skips downloading. b/355099718
+	err := b.hashFS.Flush(ctx, b.path.ExecRoot, []string{step.cmd.Depfile})
+	if err != nil {
+		return fmt.Errorf("failed to fetch depfile %q: %w", step.cmd.Depfile, err)
+	}
 	fsys := b.hashFS.FileSystem(ctx, b.path.ExecRoot)
 	deps, err := makeutil.ParseDepsFile(ctx, fsys, step.cmd.Depfile)
 	if err != nil {
