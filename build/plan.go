@@ -85,17 +85,25 @@ func (e MissingSourceError) Error() string {
 	return fmt.Sprintf("%q missing and no known rule to make it", e.Target)
 }
 
+type targetInfo struct {
+	// true once scheduler scanned the target.
+	scanned bool
+	// true if the target is source (no step generates the target).
+	source bool
+	// true if the target is generated output.
+	output bool
+	// list of steps that wait the target becomes ready.
+	waits []*Step
+}
+
 // plan maintains which step to execute next.
 type plan struct {
-	// marked source target. indexed by Target.
-	m []bool
-
-	mu        sync.Mutex
-	q         chan *Step
-	closed    bool
-	ready     []*Step
-	waits     [][]*Step // indexed by Target.
-	outputs   []bool    // indexed by Target.
+	mu     sync.Mutex
+	closed bool
+	q      chan *Step // queue for ready to run
+	ready  []*Step    // spilled over from q
+	// indexed by Target
+	targets   []targetInfo
 	npendings int
 }
 
@@ -120,7 +128,6 @@ type scheduler struct {
 
 	lastProgress time.Time
 	visited      int
-	scanned      []bool // indexed by Target
 
 	// prepare runs steps to generate inputs for the requested targets,
 	// but not run steps to generate requested targets.
@@ -150,7 +157,7 @@ func schedule(ctx context.Context, sched *scheduler, graph Graph, args ...string
 		return err
 	}
 	for _, t := range targets {
-		if sched.scanned[t] {
+		if sched.plan.targets[t].scanned {
 			continue
 		}
 		err := scheduleTarget(ctx, sched, graph, t, nil, sched.prepare)
@@ -164,8 +171,9 @@ func schedule(ctx context.Context, sched *scheduler, graph Graph, args ...string
 
 // scheduleTarget schedules a build plan for target, which is required to next StepDef, from graph into sched.
 func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target Target, next StepDef, ignore bool) error {
-	sched.scanned[target] = true
-	if sched.marked(target) {
+	targets := sched.plan.targets
+	targets[target].scanned = true
+	if targets[target].source {
 		if log.V(1) {
 			clog.Infof(ctx, "sched target already marked: %v", targetPath(ctx, graph, target))
 		}
@@ -224,9 +232,12 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 	//     it means original build graph without depfile contains
 	//     missing dependencies. It would be better to fix gn/ninja's
 	//     build graph, rather than mitigating here in the siso.
-	waits := make(map[Target]struct{}, len(inputs))
+	step := &Step{
+		def:   newStep,
+		state: &stepState{},
+	}
 	for _, in := range inputs {
-		if !sched.scanned[in] {
+		if !targets[in].scanned {
 			// if this target is ignored, but "in" is header,
 			// then it will not ignore steps to generate "in"
 			// and "in"'s inputs recursively.
@@ -248,18 +259,20 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 				return fmt.Errorf("schedule %s: %w", targetPath(ctx, graph, in), err)
 			}
 		}
-		if !sched.marked(in) {
+		if !targets[in].source {
 			// If in is not marked (i.e. source), some step
 			// will generate it, so need to wait for it
 			// before running this step.
-			waits[in] = struct{}{}
+			targets[in].waits = append(targets[in].waits, step)
+			step.nwaits++
 		}
 	}
 	if ignore {
 		clog.Infof(ctx, "sched: ignore target %s", targetPath(ctx, graph, target))
 		return nil
 	}
-	sched.add(ctx, graph, newStep, waits, outputs)
+	step.outputs = outputs
+	sched.add(ctx, graph, step)
 	return nil
 }
 
@@ -281,13 +294,10 @@ func newScheduler(ctx context.Context, opt schedulerOption) *scheduler {
 		path:   opt.Path,
 		hashFS: opt.HashFS,
 		plan: &plan{
-			m: make([]bool, opt.NumTargets),
 			// preallocate capacity for performance optimization.
 			q:       make(chan *Step, 10000),
-			waits:   make([][]*Step, opt.NumTargets),
-			outputs: make([]bool, opt.NumTargets),
+			targets: make([]targetInfo, opt.NumTargets),
 		},
-		scanned:           make([]bool, opt.NumTargets),
 		prepare:           opt.Prepare,
 		prepareHeaderOnly: prepareHeaderOnly,
 		enableTrace:       opt.EnableTrace,
@@ -311,13 +321,8 @@ func (s *scheduler) mark(ctx context.Context, graph Graph, target Target, next S
 			NeededBy: neededBy,
 		}
 	}
-	s.plan.m[target] = true
+	s.plan.targets[target].source = true
 	return nil
-}
-
-// marked checks target is already marked.
-func (s *scheduler) marked(target Target) bool {
-	return s.plan.m[target]
 }
 
 func (s *scheduler) progressReport(format string, args ...any) {
@@ -331,14 +336,15 @@ func (s *scheduler) finish(ctx context.Context, d time.Duration) {
 	defer s.plan.mu.Unlock()
 	nready := len(s.plan.q) + len(s.plan.ready)
 	npendings := s.plan.npendings
+	clog.Infof(ctx, "schedule finish pending:%d+ready:%d (node:%d edge:%d) in %s", npendings, nready, len(s.plan.targets), s.visited, d)
 	if d < ui.DurationThreshold {
 		return
 	}
-	s.progressReport("%6s schedule pending:%d+ready:%d (node:%d edge:%d)\n", ui.FormatDuration(d), npendings, nready, len(s.plan.m), s.visited)
+	s.progressReport("%6s schedule pending:%d+ready:%d (node:%d edge:%d)\n", ui.FormatDuration(d), npendings, nready, len(s.plan.targets), s.visited)
 }
 
 // add adds new stepDef to run.
-func (s *scheduler) add(ctx context.Context, graph Graph, stepDef StepDef, waits map[Target]struct{}, outputs []Target) {
+func (s *scheduler) add(ctx context.Context, graph Graph, step *Step) {
 	s.plan.mu.Lock()
 	defer s.plan.mu.Unlock()
 	defer func() {
@@ -347,15 +353,14 @@ func (s *scheduler) add(ctx context.Context, graph Graph, stepDef StepDef, waits
 		}
 		nready := len(s.plan.q) + len(s.plan.ready)
 		npendings := s.plan.npendings
-		s.progressReport("schedule pending:%d+ready:%d (node:%d edge:%d)", npendings, nready, len(s.plan.m), s.visited)
+		s.progressReport("schedule pending:%d+ready:%d (node:%d edge:%d)", npendings, nready, len(s.plan.targets), s.visited)
 		s.lastProgress = time.Now()
 	}()
 	s.total++
-	step := newStep(stepDef, len(waits), outputs)
-	if !stepDef.IsPhony() {
+	if !step.def.IsPhony() {
 		// don't add output for phony targets. https://crbug.com/1517575
-		for _, output := range outputs {
-			s.plan.outputs[output] = true
+		for _, output := range step.outputs {
+			s.plan.targets[output].output = true
 		}
 	}
 	if step.ReadyToRun("", Target(0)) {
@@ -375,9 +380,6 @@ func (s *scheduler) add(ctx context.Context, graph Graph, stepDef StepDef, waits
 		clog.Infof(ctx, "pending to run: %s (waits: %d)", step, step.NumWaits())
 	}
 	s.plan.npendings++
-	for w := range waits {
-		s.plan.waits[w] = append(s.plan.waits[w], step)
-	}
 }
 
 type planStats struct {
@@ -448,7 +450,7 @@ func (p *plan) done(ctx context.Context, step *Step) {
 			clog.Infof(ctx, "done %v", out)
 		}
 		i = 0
-		for _, s := range p.waits[out] {
+		for _, s := range p.targets[out].waits {
 			if s.ReadyToRun(step.String(), out) {
 				p.npendings--
 				nready++
@@ -464,17 +466,17 @@ func (p *plan) done(ctx context.Context, step *Step) {
 				}
 				continue
 			}
-			p.waits[out][i] = s
+			p.targets[out].waits[i] = s
 			i++
 		}
-		for j := i; j < len(p.waits[out]); j++ {
-			p.waits[out][j] = nil
+		for j := i; j < len(p.targets[out].waits); j++ {
+			p.targets[out].waits[j] = nil
 		}
 		if i == 0 {
-			p.waits[out] = nil
+			p.targets[out].waits = nil
 			continue
 		}
-		p.waits[out] = p.waits[out][:i]
+		p.targets[out].waits = p.targets[out].waits[:i]
 	}
 	if log.V(1) {
 		if nready > 0 {
@@ -505,8 +507,13 @@ func (p *plan) dump(ctx context.Context, graph Graph) {
 		seen[s] = true
 		steps = append(steps, s)
 	}
+	waitTargets := 0
 	clog.Infof(ctx, "ready=%q", ready)
-	for node, ws := range p.waits {
+	for node, ti := range p.targets {
+		ws := ti.waits
+		if len(ws) > 0 {
+			waitTargets++
+		}
 		path, err := graph.TargetPath(ctx, Target(node))
 		if err != nil {
 			clog.Warningf(ctx, "invalid node %v: %v", node, err)
@@ -535,6 +542,6 @@ func (p *plan) dump(ctx context.Context, graph Graph) {
 		outs = append(outs, out)
 	}
 	sort.Strings(outs)
-	clog.Infof(ctx, "waits=%d no-trigger=%d", len(p.waits), len(outs))
+	clog.Infof(ctx, "waits=%d no-trigger=%d", waitTargets, len(outs))
 	clog.Infof(ctx, "no steps will trigger %q", outs)
 }

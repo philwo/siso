@@ -153,15 +153,6 @@ func (s *stepState) Phase() stepPhase {
 	return s.phase
 }
 
-func newStep(stepDef StepDef, numWaits int, outputs []Target) *Step {
-	return &Step{
-		def:     stepDef,
-		nwaits:  numWaits,
-		outputs: outputs,
-		state:   &stepState{},
-	}
-}
-
 // NumWaits returns number of waits for the step.
 func (s *Step) NumWaits() int {
 	return s.nwaits

@@ -1009,8 +1009,8 @@ func (b *Builder) prepareAllOutDirs(ctx context.Context) error {
 	started := time.Now()
 	seen := make(map[string]struct{})
 	// Collect only the deepest directories to avoid redundant `os.MkdirAll`.
-	for target, ok := range b.plan.outputs {
-		if !ok {
+	for target, ti := range b.plan.targets {
+		if !ti.output {
 			continue
 		}
 		p, err := b.graph.TargetPath(ctx, Target(target))
@@ -1043,7 +1043,7 @@ func (b *Builder) prepareAllOutDirs(ctx context.Context) error {
 		dirs = append(dirs, dir)
 	}
 	sort.Strings(dirs)
-	clog.Infof(ctx, "prepare out dirs: targets:%d -> %d -> %d ", len(b.plan.outputs), ndirs, len(dirs))
+	clog.Infof(ctx, "prepare out dirs: targets:%d -> %d -> %d ", len(b.plan.targets), ndirs, len(dirs))
 	for _, dir := range dirs {
 		// we don't use hashfs here for performance.
 		// just create dirs on local disk, so reproxy and local process
