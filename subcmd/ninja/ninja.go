@@ -92,7 +92,8 @@ type ninjaCmdRun struct {
 	configName string
 	projectID  string
 
-	jobID string
+	buildID string
+	jobID   string
 
 	offline         bool
 	batch           bool
@@ -439,7 +440,13 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	}
 	buildPath := build.NewPath(execRoot, c.dir)
 
-	buildID := uuid.New().String()
+	if err = uuid.Validate(c.buildID); err != nil {
+		return stats, flagError{err: fmt.Errorf("%q is an invalid build ID. -build_id must be a UUID", c.buildID)}
+	}
+	if len(c.jobID) > 1024 {
+		return stats, flagError{err: fmt.Errorf("-job_id length must be less than 1024")}
+	}
+
 	projectID := c.reopt.UpdateProjectID(c.projectID)
 
 	var credential cred.Cred
@@ -455,7 +462,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		spin.Stop(nil)
 	}
 	if c.enableCloudLogging {
-		logCtx, loggerURL, done, err := c.initCloudLogging(ctx, projectID, buildID, execRoot, credential)
+		logCtx, loggerURL, done, err := c.initCloudLogging(ctx, projectID, execRoot, credential)
 		if err != nil {
 			// b/335295396 Compile step hitting write requests quota
 			// rather than build fails, fallback to glog.
@@ -502,7 +509,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 
 	properties.Add("job_id", c.jobID)
 	clog.Infof(ctx, "job id: %q", c.jobID)
-	clog.Infof(ctx, "build id: %q", buildID)
+	clog.Infof(ctx, "build id: %q", c.buildID)
 	clog.Infof(ctx, "project id: %q", projectID)
 	clog.Infof(ctx, "commandline %q", os.Args)
 
@@ -510,14 +517,14 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 
 	if c.enableResultstore {
 		c.resultstoreUploader, err = resultstore.New(ctx, resultstore.Options{
-			InvocationID: buildID,
-			Invocation:   c.invocation(ctx, buildID, projectID, execRoot, properties),
+			InvocationID: c.buildID,
+			Invocation:   c.invocation(ctx, c.buildID, projectID, execRoot, properties),
 			DialOptions:  credential.GRPCDialOptions(),
 		})
 		if err != nil {
 			return stats, err
 		}
-		fmt.Fprintf(os.Stderr, "https://btx.cloud.google.com/invocations/%s\n", buildID)
+		fmt.Fprintf(os.Stderr, "https://btx.cloud.google.com/invocations/%s\n", c.buildID)
 		defer func() {
 			spin.Start("finishing upload to resultstore")
 			exitCode := 0
@@ -731,7 +738,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		}()
 	}
 
-	bopts, done, err := c.initBuildOpts(ctx, projectID, buildID, buildPath, config, ds, hashFS, limits, traceExporter)
+	bopts, done, err := c.initBuildOpts(ctx, projectID, buildPath, config, ds, hashFS, limits, traceExporter)
 	if err != nil {
 		return stats, err
 	}
@@ -867,7 +874,8 @@ func (c *ninjaCmdRun) init() {
 	c.Flags.StringVar(&c.configName, "config", "", "config name passed to starlark")
 	c.Flags.StringVar(&c.projectID, "project", os.Getenv("SISO_PROJECT"), "cloud project ID. can set by $SISO_PROJECT")
 
-	c.Flags.StringVar(&c.jobID, "job_id", uuid.New().String(), "job id for a grouping of related builds. used for cloud logging resource labels job (truncated to 1024), or correlated_invocations_id for remote-apis request metadata")
+	c.Flags.StringVar(&c.buildID, "build_id", uuid.New().String(), "ID for the build. used for `invocation_id` of remote-apis-sdks and `tool_invocation_id` of remote-apis, and Cloud logging resource `build_id` label.")
+	c.Flags.StringVar(&c.jobID, "job_id", uuid.New().String(), "ID for a grouping of related builds such as a Buildbucket job. used for `correlated_invocations_id` of remote-apis and remote-apis-sdks, and Cloud logging resource `job_id` label.")
 
 	c.Flags.BoolVar(&c.offline, "offline", false, "offline mode.")
 	c.Flags.BoolVar(&c.offline, "o", false, "alias of `-offline`")
@@ -996,8 +1004,8 @@ func (c *ninjaCmdRun) initWorkdirs(ctx context.Context) (string, error) {
 	return execRoot, nil
 }
 
-func (c *ninjaCmdRun) initCloudLogging(ctx context.Context, projectID, buildID, execRoot string, credential cred.Cred) (context.Context, string, func(), error) {
-	log.Infof("enable cloud logging project=%s id=%s", projectID, buildID)
+func (c *ninjaCmdRun) initCloudLogging(ctx context.Context, projectID, execRoot string, credential cred.Cred) (context.Context, string, func(), error) {
+	log.Infof("enable cloud logging project=%s id=%s", projectID, c.buildID)
 
 	// log_id: "siso.log" and "siso.step"
 	// use generic_task resource
@@ -1011,19 +1019,14 @@ func (c *ninjaCmdRun) initCloudLogging(ctx context.Context, projectID, buildID, 
 	if err != nil {
 		return ctx, "", func() {}, err
 	}
-	// Monitored resource labels have a maximum length of 1024. b/295251052
-	job := c.jobID
-	if len(job) > 1024 {
-		job = job[:1024]
-	}
 	logger, err := clog.New(ctx, client, "siso.log", "siso.step", &mrpb.MonitoredResource{
 		Type: "generic_task",
 		Labels: map[string]string{
 			"project_id": projectID,
+			"job_id":     c.jobID,
+			"build_id":   c.buildID,
 			"location":   hostname,
 			"namespace":  execRoot,
-			"job":        job,
-			"task_id":    buildID,
 		},
 	})
 	if err != nil {
@@ -1143,7 +1146,7 @@ func (c *ninjaCmdRun) initDepsLog(ctx context.Context) (*ninjautil.DepsLog, erro
 	return depsLog, nil
 }
 
-func (c *ninjaCmdRun) initBuildOpts(ctx context.Context, projectID, buildID string, buildPath *build.Path, config *buildconfig.Config, ds dataSource, hashFS *hashfs.HashFS, limits build.Limits, traceExporter *trace.Exporter) (bopts build.Options, done func(*error), err error) {
+func (c *ninjaCmdRun) initBuildOpts(ctx context.Context, projectID string, buildPath *build.Path, config *buildconfig.Config, ds dataSource, hashFS *hashfs.HashFS, limits build.Limits, traceExporter *trace.Exporter) (bopts build.Options, done func(*error), err error) {
 	var dones []func(*error)
 	defer func() {
 		if err != nil {
@@ -1250,7 +1253,7 @@ func (c *ninjaCmdRun) initBuildOpts(ctx context.Context, projectID, buildID stri
 	}
 	bopts = build.Options{
 		JobID:                c.jobID,
-		ID:                   buildID,
+		ID:                   c.buildID,
 		StartTime:            c.started,
 		ProjectID:            projectID,
 		Metadata:             config.Metadata,
