@@ -189,7 +189,7 @@ found in the LICENSE file. */}}
     <div id="page-container">
       <md-tabs id="page-tabs" hx-push-url="true">
         <md-primary-tab hx-get="{{.prefix}}/steps/" {{if urlPathHasPrefix .currentURL (printf "%s/steps/" .prefix)}}selected{{end}}>Build Steps</md-primary-tab>
-        <md-primary-tab>Aggregates</md-primary-tab>
+        <md-primary-tab hx-get="{{.prefix}}/aggregates/" {{if urlPathHasPrefix .currentURL (printf "%s/aggregates/" .prefix)}}selected{{end}}>Aggregates</md-primary-tab>
         <md-primary-tab hx-get="{{.prefix}}/logs/" {{if urlPathHasPrefix .currentURL (printf "%s/logs/" .prefix)}}selected{{end}}>Raw Logs</md-primary-tab>
       </md-tabs>
       <div id="page-view">

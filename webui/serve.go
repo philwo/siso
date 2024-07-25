@@ -87,6 +87,15 @@ type buildMetrics struct {
 	actionCounts  map[string]int
 }
 
+type aggregateMetric struct {
+	// All fields must be exported to be usable in a Go template.
+	AggregateBy           string
+	Count                 int
+	TotalUtime            build.IntervalMetric
+	TotalDuration         build.IntervalMetric
+	TotalWeightedDuration build.IntervalMetric
+}
+
 func loadBuildMetrics(metricsPath string) (*buildMetrics, error) {
 	f, err := os.Open(metricsPath)
 	if err != nil {
@@ -434,6 +443,66 @@ func Serve(version string, localDevelopment bool, port int, defaultOutdir, confi
 			"allowedFiles": allowedFiles,
 			"file":         requestedFile,
 			"fileContents": string(fileContents),
+		})
+		if err != nil {
+			renderBuildViewError(http.StatusInternalServerError, fmt.Sprintf("failed to render view: %v", err), w, r, outdirInfo)
+		}
+	})
+
+	outdirHandlers.HandleFunc("/{outroot}/{outsub}/builds/{rev}/aggregates/", func(w http.ResponseWriter, r *http.Request) {
+		outdirInfo, err := ensureOutdirForRequest(r, &outdirInfos, execRoot)
+		if err != nil {
+			renderBuildViewError(http.StatusNotFound, fmt.Sprintf("outdir failed to load for request %s: %v", r.URL, err), w, r, outdirInfo)
+			return
+		}
+		var metrics *buildMetrics
+		for _, m := range outdirInfo.metrics {
+			if m.rev == r.PathValue("rev") {
+				metrics = m
+				break
+			}
+		}
+		if metrics == nil {
+			renderBuildViewError(http.StatusNotFound, fmt.Sprintf("no metrics found for request %s", r.URL), w, r, outdirInfo)
+			return
+		}
+
+		aggregates := make(map[string]aggregateMetric)
+		for _, m := range metrics.stepMetrics {
+			// Aggregate by rule if exists otherwise action.
+			aggregateBy := m.Action
+			if len(m.Rule) > 0 {
+				aggregateBy = m.Rule
+			}
+			entry, ok := aggregates[aggregateBy]
+			if !ok {
+				entry.AggregateBy = aggregateBy
+			}
+			entry.Count++
+			entry.TotalUtime += m.Utime
+			entry.TotalDuration += m.Duration
+			entry.TotalWeightedDuration += m.WeightedDuration
+			aggregates[aggregateBy] = entry
+		}
+
+		// Sort by utime descending.
+		// TODO(b/349287453): use maps.Values once go 1.23
+		var sortedAggregates []aggregateMetric
+		for _, v := range aggregates {
+			sortedAggregates = append(sortedAggregates, v)
+		}
+		slices.SortFunc(sortedAggregates, func(a, b aggregateMetric) int {
+			return cmp.Compare(b.TotalUtime, a.TotalUtime)
+		})
+
+		tmpl, err := loadView(localDevelopment, fs, "_aggregates.html")
+		if err != nil {
+			renderBuildViewError(http.StatusInternalServerError, fmt.Sprintf("failed to load view: %s", err), w, r, outdirInfo)
+			return
+		}
+
+		err = renderBuildView(w, r, tmpl, outdirInfo, map[string]any{
+			"aggregates": sortedAggregates,
 		})
 		if err != nil {
 			renderBuildViewError(http.StatusInternalServerError, fmt.Sprintf("failed to render view: %v", err), w, r, outdirInfo)
