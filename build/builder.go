@@ -733,6 +733,12 @@ func (b *Builder) uploadBuildNinja(ctx context.Context) {
 		clog.Warningf(ctx, "failed to upload build files tree %s: %v", d, err)
 		return
 	}
+	if b.resultstoreUploader != nil {
+		err := b.resultstoreUploader.SetFile(ctx, "build.ninja.dir", d)
+		if err != nil {
+			clog.Warningf(ctx, "failed to set build files tree %s: %v", d, err)
+		}
+	}
 	clog.Infof(ctx, "uploaded build files tree %s (%d entries) in %s", d, len(ents), time.Since(started))
 }
 

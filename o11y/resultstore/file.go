@@ -63,3 +63,35 @@ func (u *Uploader) UploadFiles(ctx context.Context, ents []merkletree.Entry) err
 	return u.Upload(ctx, req)
 
 }
+
+// SetFile set a file as the invocation's artifact.
+func (u *Uploader) SetFile(ctx context.Context, name string, d digest.Digest) error {
+	var uri string
+	if u.REAPIClient != nil {
+		uri = u.REAPIClient.FileURI(d)
+	}
+	req := &rspb.UploadRequest{
+		UploadOperation: rspb.UploadRequest_MERGE,
+		UpdateMask: &fieldmaskpb.FieldMask{
+			Paths: []string{
+				"files",
+			},
+		},
+		Resource: &rspb.UploadRequest_Invocation{
+			Invocation: &rspb.Invocation{
+				Files: []*rspb.File{
+					{
+						Uid: name,
+						Uri: uri,
+						Length: &wrapperspb.Int64Value{
+							Value: d.SizeBytes,
+						},
+						Digest:   d.Hash,
+						HashType: rspb.File_SHA256,
+					},
+				},
+			},
+		},
+	}
+	return u.Upload(ctx, req)
+}
