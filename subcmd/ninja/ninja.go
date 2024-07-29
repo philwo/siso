@@ -874,7 +874,11 @@ func (c *ninjaCmdRun) init() {
 	c.Flags.StringVar(&c.configName, "config", "", "config name passed to starlark")
 	c.Flags.StringVar(&c.projectID, "project", os.Getenv("SISO_PROJECT"), "cloud project ID. can set by $SISO_PROJECT")
 
-	c.Flags.StringVar(&c.buildID, "build_id", uuid.New().String(), "ID for the build. used for `invocation_id` of remote-apis-sdks and `tool_invocation_id` of remote-apis, and Cloud logging resource `build_id` label.")
+	defaultBuildID := os.Getenv("SISO_BUILD_ID")
+	if defaultBuildID == "" {
+		defaultBuildID = uuid.New().String()
+	}
+	c.Flags.StringVar(&c.buildID, "build_id", defaultBuildID, "ID for the build. used for `invocation_id` of remote-apis-sdks and `tool_invocation_id` of remote-apis, and Cloud logging resource `build_id` label.")
 	c.Flags.StringVar(&c.jobID, "job_id", uuid.New().String(), "ID for a grouping of related builds such as a Buildbucket job. used for `correlated_invocations_id` of remote-apis and remote-apis-sdks, and Cloud logging resource `job_id` label.")
 
 	c.Flags.BoolVar(&c.offline, "offline", false, "offline mode.")
