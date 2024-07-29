@@ -590,7 +590,9 @@ func Serve(version string, localDevelopment bool, port int, defaultOutdir, confi
 			renderBuildViewError(http.StatusInternalServerError, fmt.Sprintf("failed to unmarshal metrics: %v", err), w, r, outdirInfo)
 		}
 
-		err = renderBuildView(w, r, tmpl, outdirInfo, asMap)
+		err = renderBuildView(w, r, tmpl, outdirInfo, map[string]any{
+			"step": asMap,
+		})
 		if err != nil {
 			renderBuildViewError(http.StatusInternalServerError, fmt.Sprintf("failed to render view: %v", err), w, r, outdirInfo)
 		}

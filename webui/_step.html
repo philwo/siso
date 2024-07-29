@@ -7,7 +7,7 @@ found in the LICENSE file. */}}
 
 {{define "content"}}
 {{$prefix:=.prefix}}
-{{$step_id:=.step_id}}
+{{$step_id:=.step.step_id}}
 <div class="step-header">
   <md-icon-button>
     <md-icon>arrow_back</md-icon>
@@ -17,7 +17,7 @@ found in the LICENSE file. */}}
 
 <div class="step-page">
   <dl class="step-details">
-    {{range $key, $value := .}}
+    {{range $key, $value := .step}}
     <dt>{{$key}}</dt>
     <dd>
       <span id="step-{{$step_id}}-{{$key}}-value">{{$value}}</span>
