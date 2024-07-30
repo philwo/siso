@@ -76,6 +76,7 @@ type HashFS struct {
 
 	executables map[string]bool
 
+	journalMu sync.Mutex
 	// writer for updated entries journal.
 	journal io.WriteCloser
 
@@ -186,6 +187,7 @@ func (hfs *HashFS) Close(ctx context.Context) error {
 	if hfs.opt.StateFile == "" {
 		return nil
 	}
+	hfs.journalMu.Lock()
 	if hfs.journal != nil {
 		err := hfs.journal.Close()
 		if err != nil {
@@ -193,6 +195,7 @@ func (hfs *HashFS) Close(ctx context.Context) error {
 		}
 		hfs.journal = nil
 	}
+	hfs.journalMu.Unlock()
 	if hfs.clean.Load() {
 		return nil
 	}

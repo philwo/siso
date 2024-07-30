@@ -620,9 +620,6 @@ func loadJournal(ctx context.Context, fname string, state *pb.State) bool {
 }
 
 func (hfs *HashFS) journalEntry(ctx context.Context, fname string, e *entry) {
-	if hfs.journal == nil {
-		return
-	}
 	if e.digest().IsZero() {
 		hfs.digester.compute(ctx, fname, e)
 	}
@@ -640,9 +637,20 @@ func (hfs *HashFS) journalEntry(ctx context.Context, fname string, e *entry) {
 		UpdatedTime:  e.updatedTime.UnixNano(),
 	}
 	e.mu.Unlock()
-	enc := json.NewEncoder(hfs.journal)
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
 	err := enc.Encode(ent)
 	if err != nil {
-		clog.Warningf(ctx, "Failed to journal entry %s: %v", fname, err)
+		clog.Warningf(ctx, "Failed to marshal journal entry %s: %v", fname, err)
+		return
+	}
+	hfs.journalMu.Lock()
+	defer hfs.journalMu.Unlock()
+	if hfs.journal == nil {
+		return
+	}
+	_, err = hfs.journal.Write(buf.Bytes())
+	if err != nil {
+		clog.Warningf(ctx, "Failed to write journal entry %s: %v", fname, err)
 	}
 }
