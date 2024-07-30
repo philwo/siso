@@ -377,6 +377,7 @@ func (b numBytes) String() string {
 
 // Build builds args with the name.
 func (b *Builder) Build(ctx context.Context, name string, args ...string) (err error) {
+	started := time.Now()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -468,15 +469,15 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 			if err != nil {
 				return
 			}
-			clog.Infof(ctx, "rebuild manifest %#v %s: %s->%s: %s", stat, b.rebuildManifest, mftime, fi.ModTime(), time.Since(b.start))
+			clog.Infof(ctx, "rebuild manifest %#v %s: %s->%s: %s", stat, b.rebuildManifest, mftime, fi.ModTime(), time.Since(started))
 			if fi.ModTime().After(mftime) || stat.Done != stat.Skipped {
-				ui.Default.PrintLines(fmt.Sprintf("%6s Regenerating ninja files\n", ui.FormatDuration(time.Since(b.start))))
+				ui.Default.PrintLines(fmt.Sprintf("%6s Regenerating ninja files\n", ui.FormatDuration(time.Since(started))))
 				err = ErrManifestModified
 				return
 			}
 			return
 		}
-		clog.Infof(ctx, "build %s: %v", time.Since(b.start), err)
+		clog.Infof(ctx, "build %s %s: %v", time.Since(started), time.Since(b.start), err)
 		if stat.Skipped == stat.Total {
 			ui.Default.PrintLines(ninjaNoWorkToDo)
 			return
