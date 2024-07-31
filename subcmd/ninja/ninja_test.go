@@ -78,7 +78,7 @@ func modifyFile(t *testing.T, dir, name string, gen func([]byte) []byte) {
 		t.Fatal(err)
 	}
 	for {
-		err = os.Chtimes(fullname, time.Now(), time.Now())
+		err = os.Chtimes(fullname, time.Time{}, time.Now())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -109,7 +109,7 @@ func touchFile(t *testing.T, dir, name string) {
 		t.Fatal(err)
 	}
 	for {
-		err = os.Chtimes(fullname, time.Now(), time.Now())
+		err = os.Chtimes(fullname, time.Time{}, time.Now())
 		if err != nil {
 			t.Fatal(err)
 		}

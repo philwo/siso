@@ -1034,7 +1034,7 @@ func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []Update
 				// since os.Chtimes updates the mtime of target
 				// and it makes the target invalidated
 				// in .siso_fs_state since mtime doesn't match.
-				err := hfs.OS.Chtimes(ctx, fname, time.Now(), e.getMtime())
+				err := hfs.OS.Chtimes(ctx, fname, time.Time{}, e.getMtime())
 				if errors.Is(err, fs.ErrNotExist) {
 					clog.Warningf(ctx, "failed to update mtime of %s: %v", fname, err)
 					continue
@@ -1274,7 +1274,7 @@ func (hfs *HashFS) Flush(ctx context.Context, execRoot string, files []string) e
 					// since os.Chtimes updates the mtime of target
 					// and it makes the target invalidated
 					// in .siso_fs_state since mtime doesn't match.
-					err := os.Chtimes(fname, time.Now(), e.mtime)
+					err := hfs.OS.Chtimes(ctx, fname, time.Time{}, e.mtime)
 					clog.Infof(ctx, "flush %s local ready mtime update: %v", fname, err)
 					if err == nil {
 						e.mtimeUpdated = false

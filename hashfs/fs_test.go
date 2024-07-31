@@ -1658,7 +1658,7 @@ func TestRefresh(t *testing.T) {
 		"out/siso/gen/expected.json": `["foo"]`,
 	})
 	fullname := filepath.Join(dir, "out/siso/gen/expected.json")
-	err = os.Chtimes(fullname, time.Now(), time.Now())
+	err = os.Chtimes(fullname, time.Time{}, time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1852,9 +1852,9 @@ func TestMkdirFlush_mtime(t *testing.T) {
 		t.Errorf("now=%v should not equal to mtime=%v", now, fi.ModTime())
 	}
 	fullpath := filepath.Join(dir, dirname)
-	err = os.Chtimes(fullpath, now, now)
+	err = os.Chtimes(fullpath, time.Time{}, now)
 	if err != nil {
-		t.Errorf("os.Chtimes(%s, %v, %v)=%v; want nil err", fullpath, now, now, err)
+		t.Errorf("os.Chtimes(%s, %v, %v)=%v; want nil err", fullpath, time.Time{}, now, err)
 	}
 	lfi, err := os.Lstat(fullpath)
 	if err != nil {

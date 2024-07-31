@@ -132,7 +132,7 @@ func setupFiles(t *testing.T, dir string, files map[string]string) {
 		}
 		// make sure mtime is updated.
 		now := time.Now()
-		err = os.Chtimes(fname, now, now)
+		err = os.Chtimes(fname, time.Time{}, now)
 		if err != nil {
 			t.Fatal(err)
 		}
