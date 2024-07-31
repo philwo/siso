@@ -24,6 +24,7 @@ import (
 	"time"
 
 	log "github.com/golang/glog"
+	"github.com/klauspost/compress/zstd"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/protobuf/proto"
 
@@ -63,37 +64,78 @@ type DataSource interface {
 	Source(digest.Digest, string) digest.Source
 }
 
+func isGzip(b []byte) bool {
+	// Files compressed with gzip always start with the magic bytes 0x1f 0x8b.
+	return len(b) >= 2 && b[0] == 0x1f && b[1] == 0x8b
+}
+
+func isZstd(b []byte) bool {
+	// Files compressed with zstd always start with the magic bytes 0x28 0xb5 0x2f 0xfd.
+	return len(b) >= 4 && b[0] == 0x28 && b[1] == 0xb5 && b[2] == 0x2f && b[3] == 0xfd
+}
+
 func loadFile(ctx context.Context, fname string) ([]byte, error) {
-	b, err := os.ReadFile(fname)
+	srcBuf, err := os.ReadFile(fname)
 	if err != nil {
 		return nil, err
 	}
-	r, err := gzip.NewReader(bytes.NewReader(b))
-	if err != nil {
+
+	var r io.ReadCloser
+	if isZstd(srcBuf) {
+		clog.Infof(ctx, "fs_state is zstd compressed")
+		var zd *zstd.Decoder
+		zd, err = zstd.NewReader(bytes.NewReader(srcBuf))
+		if err != nil {
+			return nil, err
+		}
+		r = zd.IOReadCloser()
+	} else if isGzip(srcBuf) {
+		clog.Infof(ctx, "fs_state is gzip compressed")
+		r, err = gzip.NewReader(bytes.NewReader(srcBuf))
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		return nil, errors.New("unknown compression format, neither gzip nor zstd?")
+	}
+
+	// Unfortunately, neither zstd nor gzip are able to provide the uncompressed size
+	// of the data. However, it's a safe assumption that the uncompressed size is at
+	// least as large as the compressed size (and even if not we're only wasting a
+	// few bytes of memory).
+	b := bytes.NewBuffer(make([]byte, 0, len(srcBuf)))
+
+	if _, err = io.Copy(b, r); err != nil {
+		_ = r.Close()
 		return nil, err
 	}
-	b, err = io.ReadAll(r)
-	if err != nil {
+
+	if err = r.Close(); err != nil {
 		return nil, err
 	}
-	err = r.Close()
-	if err != nil {
-		return nil, err
-	}
-	return b, nil
+
+	return b.Bytes(), nil
 }
 
 // Load loads a HashFS's state.
 func Load(ctx context.Context, fname string) (*pb.State, error) {
+	start := time.Now()
 	b, err := loadFile(ctx, fname)
 	if err != nil {
 		return nil, err
 	}
+	durUncompress := time.Since(start)
+
+	start = time.Now()
 	state := &pb.State{}
 	err = proto.Unmarshal(b, state)
 	if err != nil {
 		return nil, err
 	}
+	durUnmarshal := time.Since(start)
+
+	clog.Infof(ctx, "Load fs state from %s: read/uncompress %s + unmarshal %s = total %s", fname, durUncompress, durUnmarshal, durUncompress+durUnmarshal)
+
 	return state, nil
 }
 
@@ -383,7 +425,7 @@ func saveFile(ctx context.Context, fname string, data []byte) (retErr error) {
 		}
 	}()
 	clog.Infof(ctx, "save fs_state in temp %s", f.Name())
-	w, err := gzip.NewWriterLevel(f, gzip.BestCompression)
+	w, err := zstd.NewWriter(f, zstd.WithEncoderCRC(true), zstd.WithZeroFrames(true))
 	if err != nil {
 		f.Close()
 		return err
@@ -442,14 +484,22 @@ func Save(ctx context.Context, fname string, state *pb.State) error {
 		log.Flush()
 		panic(r)
 	}()
+	start := time.Now()
 	b, err := proto.Marshal(state)
 	if err != nil {
 		return err
 	}
+	durMarshal := time.Since(start)
+
+	start = time.Now()
 	err = saveFile(ctx, fname, b)
 	if err != nil {
 		return err
 	}
+	durSave := time.Since(start)
+
+	clog.Infof(ctx, "Save fs state to %s: marshal %s + compress/save %s = total %s", fname, durMarshal, durSave, durMarshal+durSave)
+
 	// Journal data are already included in state.
 	// Remove journal file as it is not needed to reconcile in next build.
 	err = os.Remove(fname + ".journal")
