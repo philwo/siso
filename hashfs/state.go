@@ -75,23 +75,42 @@ func isZstd(b []byte) bool {
 }
 
 func loadFile(ctx context.Context, fname string) ([]byte, error) {
-	srcBuf, err := os.ReadFile(fname)
+	f, err := os.Open(fname)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := f.Close(); err != nil {
+			clog.Warningf(ctx, "Failed to close %s: %v", fname, err)
+		}
+	}()
+
+	fi, err := f.Stat()
 	if err != nil {
 		return nil, err
 	}
 
+	// The first 4 bytes of the file are enough to determine the compression format.
+	magicBytes := make([]byte, 4)
+	if _, err := io.ReadFull(f, magicBytes); err != nil {
+		return nil, err
+	}
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
+		return nil, err
+	}
+
 	var r io.ReadCloser
-	if isZstd(srcBuf) {
+	if isZstd(magicBytes) {
 		clog.Infof(ctx, "fs_state is zstd compressed")
 		var zd *zstd.Decoder
-		zd, err = zstd.NewReader(bytes.NewReader(srcBuf))
+		zd, err = zstd.NewReader(f)
 		if err != nil {
 			return nil, err
 		}
 		r = zd.IOReadCloser()
-	} else if isGzip(srcBuf) {
+	} else if isGzip(magicBytes) {
 		clog.Infof(ctx, "fs_state is gzip compressed")
-		r, err = gzip.NewReader(bytes.NewReader(srcBuf))
+		r, err = gzip.NewReader(f)
 		if err != nil {
 			return nil, err
 		}
@@ -103,7 +122,7 @@ func loadFile(ctx context.Context, fname string) ([]byte, error) {
 	// of the data. However, it's a safe assumption that the uncompressed size is at
 	// least as large as the compressed size (and even if not we're only wasting a
 	// few bytes of memory).
-	b := bytes.NewBuffer(make([]byte, 0, len(srcBuf)))
+	b := bytes.NewBuffer(make([]byte, 0, fi.Size()))
 
 	if _, err = io.Copy(b, r); err != nil {
 		_ = r.Close()
