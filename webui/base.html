@@ -10,15 +10,12 @@ found in the LICENSE file. */}}
 <head>
   <meta charset="utf-8">
   <title>sisod</title>
-
-  {{/* Use an importmap for JS libraries where ES import is the canonical installation method,
-    or if using ES imports lets us import only the parts we need. */}}
   <script type="importmap">
     {
       "imports": {
         "@github/": "https://esm.run/@github/",
         "@carbon/web-components/": "https://esm.run/@carbon/web-components/",
-        "@material/web/": "https://esm.run/@material/web/"
+        "@material/web/": "/third_party/@material/web/"
       }
     }
   </script>
@@ -28,9 +25,7 @@ found in the LICENSE file. */}}
     import '@github/clipboard-copy-element';
     import '@github/relative-time-element';
   </script>
-
-  {{/* Classical JS includes. */}}
-  <script src="https://unpkg.com/htmx.org@2.0.0"></script>
+  <script src="https://unpkg.com/htmx.org@2.0.0" integrity="sha512-Cpedvic0/Mgc3uRJ5apQ/ZYroPCZpatYEXGJayRaRNjKLaFualFxfxn97LJymznV+nC7y0/Hp/apHNwGpMimuw==" crossorigin="anonymous"></script>
   <script>
     // HTMX error handling.
     document.addEventListener('htmx:sendError', e => {

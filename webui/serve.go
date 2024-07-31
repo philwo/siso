@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"infra/build/siso/build"
+	mwc "infra/third_party/material_web_components"
 )
 
 //go:embed *.html css/*.css
@@ -241,9 +242,9 @@ func loadView(localDevelopment bool, fs fs.FS, view string) (*template.Template,
 // Serve serves the webui.
 func Serve(version string, localDevelopment bool, port int, defaultOutdir, configRepoDir string) int {
 	// Use templates from embed or local.
-	fs := fs.FS(content)
+	templatesFS := fs.FS(content)
 	if localDevelopment {
-		fs = os.DirFS("webui/")
+		templatesFS = os.DirFS("webui/")
 	}
 
 	// Get execroot.
@@ -332,7 +333,7 @@ func Serve(version string, localDevelopment bool, port int, defaultOutdir, confi
 
 	renderBuildViewError := func(status int, message string, w http.ResponseWriter, r *http.Request, outdirInfo *outdirInfo) {
 		w.WriteHeader(status)
-		tmpl, err := loadView(localDevelopment, fs, "_error.html")
+		tmpl, err := loadView(localDevelopment, templatesFS, "_error.html")
 		if err != nil {
 			fmt.Fprintf(w, "failed to load error view: %s\n", err)
 			return
@@ -392,7 +393,7 @@ func Serve(version string, localDevelopment bool, port int, defaultOutdir, confi
 			return
 		}
 
-		tmpl, err := loadView(localDevelopment, fs, "_logs.html")
+		tmpl, err := loadView(localDevelopment, templatesFS, "_logs.html")
 		if err != nil {
 			renderBuildViewError(http.StatusInternalServerError, fmt.Sprintf("failed to load view: %s", err), w, r, outdirInfo)
 			return
@@ -495,7 +496,7 @@ func Serve(version string, localDevelopment bool, port int, defaultOutdir, confi
 			return cmp.Compare(b.TotalUtime, a.TotalUtime)
 		})
 
-		tmpl, err := loadView(localDevelopment, fs, "_aggregates.html")
+		tmpl, err := loadView(localDevelopment, templatesFS, "_aggregates.html")
 		if err != nil {
 			renderBuildViewError(http.StatusInternalServerError, fmt.Sprintf("failed to load view: %s", err), w, r, outdirInfo)
 			return
@@ -527,7 +528,7 @@ func Serve(version string, localDevelopment bool, port int, defaultOutdir, confi
 			return
 		}
 
-		tmpl, err := loadView(localDevelopment, fs, "_recall.html")
+		tmpl, err := loadView(localDevelopment, templatesFS, "_recall.html")
 		if err != nil {
 			renderBuildViewError(http.StatusInternalServerError, fmt.Sprintf("failed to load view: %s", err), w, r, outdirInfo)
 			return
@@ -568,7 +569,7 @@ func Serve(version string, localDevelopment bool, port int, defaultOutdir, confi
 			return
 		}
 
-		tmpl, err := loadView(localDevelopment, fs, "_step.html")
+		tmpl, err := loadView(localDevelopment, templatesFS, "_step.html")
 		if err != nil {
 			renderBuildViewError(http.StatusInternalServerError, fmt.Sprintf("failed to load view: %s", err), w, r, outdirInfo)
 			return
@@ -616,7 +617,7 @@ func Serve(version string, localDevelopment bool, port int, defaultOutdir, confi
 			return
 		}
 
-		tmpl, err := loadView(localDevelopment, fs, "_steps.html")
+		tmpl, err := loadView(localDevelopment, templatesFS, "_steps.html")
 		if err != nil {
 			renderBuildViewError(http.StatusInternalServerError, fmt.Sprintf("failed to load view: %s", err), w, r, outdirInfo)
 			return
@@ -720,7 +721,10 @@ func Serve(version string, localDevelopment bool, port int, defaultOutdir, confi
 		outdirHandlers.ServeHTTP(w, r)
 	})
 
-	http.Handle("/css/", http.FileServerFS(fs))
+	http.Handle("/css/", http.FileServerFS(templatesFS))
+
+	// Serve third party JS. No other third party libraries right now, so just serve Material Design node_modules root.
+	http.Handle("/third_party/", http.StripPrefix("/third_party/", http.FileServerFS(mwc.NodeModulesFS)))
 
 	fmt.Printf("listening on http://localhost:%d/...\n", port)
 	err = http.ListenAndServe(fmt.Sprintf(":%d", port), nil)
