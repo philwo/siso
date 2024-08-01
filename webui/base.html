@@ -10,22 +10,10 @@ found in the LICENSE file. */}}
 <head>
   <meta charset="utf-8">
   <title>sisod</title>
-  <script type="importmap">
-    {
-      "imports": {
-        "@github/": "https://esm.run/@github/",
-        "@carbon/web-components/": "https://esm.run/@carbon/web-components/",
-        "@material/web/": "/third_party/@material/web/"
-      }
-    }
-  </script>
-  <script type="module">
-    import '@material/web/all.js';
-    import '@carbon/web-components/es/components/data-table/index.js';
-    import '@github/clipboard-copy-element';
-    import '@github/relative-time-element';
-  </script>
   <script src="https://unpkg.com/htmx.org@2.0.0" integrity="sha512-Cpedvic0/Mgc3uRJ5apQ/ZYroPCZpatYEXGJayRaRNjKLaFualFxfxn97LJymznV+nC7y0/Hp/apHNwGpMimuw==" crossorigin="anonymous"></script>
+  <script type="module" src="https://unpkg.com/@github/clipboard-copy-element@1.3.0/dist/bundle.js" integrity="sha512-CA8FL6M22IbBkRz2ISw1hUCXYP2BcJl/Blepvhc0DgBD9iftu4K0mqrTxdzRf346jmxqKKQvsE1NHUIjT/S7lw==" crossorigin="anonymous"></script>
+  <script type="module" src="https://unpkg.com/@github/relative-time-element@4.4.2/dist/bundle.js" integrity="sha512-ifMrdUvZ6TAfn25Mphz2etXTxuuZYjy+1BDcEO6u2XVM2GBrdnsCexdIfn1FOQVmO7lQYQeotN0xU3WGSuT14A==" crossorigin="anonymous"></script>
+  <script type="module" src="/third_party/@material/web/all.js"></script>
   <script>
     // HTMX error handling.
     document.addEventListener('htmx:sendError', e => {

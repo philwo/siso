@@ -158,15 +158,44 @@ html, body {
     display: none;
 }
 
-cds-table-head {
+.data-table-container table {
+    border-collapse: collapse;
+    width: max(65rem, 100%);
+    line-height: var(--md-sys-typescale-body-small-line-height);
+    letter-spacing: 0.01rem;
+}
+
+.data-table-container thead {
     position: sticky;
     top: 0;
-}
-cds-table-header-cell {
     background: var(--md-sys-color-surface);
 }
-cds-table-body {
-    background: var(--md-sys-color-surface);
+
+.data-table-container th {
+    font-size: var(--md-sys-typescale-body-medium-size);
+    font-weight: var(--md-ref-typeface-weight-medium);
+    text-align: start;
+}
+
+.data-table-container th,
+.data-table-container td {
+    padding: 8px 16px;
+}
+
+.data-table-container .subrow {
+    color: var(--md-sys-color-on-surface-variant);
+    font-size: var(--md-sys-typescale-body-small-size);
+    font-weight: var(--md-sys-typescale-body-medium-weight);
+    letter-spacing: 0.02rem;
+}
+
+.data-table-container tbody tr:hover {
+    background: var(--md-sys-color-surface-container);
+}
+.data-table-container tbody th,
+.data-table-container tbody td {
+    font-size: var(--md-sys-typescale-body-medium-size);
+    font-weight: var(--md-sys-typescale-body-medium-weight);
 }
 
 .step-rule:not(:empty) {

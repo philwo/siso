@@ -75,42 +75,42 @@ found in the LICENSE file. */}}
 {{$prefix:=.prefix}}
 {{$buildDuration:=.buildDuration}}
 <div class="data-table-container">
-  <cds-table>
-    <cds-table-head>
-      <cds-table-header-row>
-        <cds-table-header-cell>
+  <table>
+    <thead>
+      <tr>
+        <th scope="col">
           Output
-          <cds-table-cell-content>Action</cds-table-cell-content>
-        </cds-table-header-cell>
-        <cds-table-header-cell>Ready</cds-table-header-cell>
-        <cds-table-header-cell>Duration</cds-table-header-cell>
-        <cds-table-header-cell>Completion</cds-table-header-cell>
-        <cds-table-header-cell>Timeline</cds-table-header-cell>
-      </cds-table-header-row>
-    </cds-table-head>
-    <cds-table-body id="data-table-body">
+          <div class="subrow">Action</div>
+        </th>
+        <th scope="col">Ready</th>
+        <th scope="col">Duration</th>
+        <th scope="col">Completion</th>
+        <th scope="col">Timeline</th>
+      </tr>
+    </thead>
+    <tbody id="data-table-body">
       {{range .subset}}
-      <cds-table-row>
-        <cds-table-cell>
+      <tr>
+        <th scope="row">
           <a href="{{$prefix}}/steps/{{.StepID}}/">{{.Output}}</a>
-          <cds-table-cell-content>
+          <div class="subrow">
             <span class="step-rule">{{.Rule}}</span>
             <span class="step-action">{{.Action}}</span>
-          </cds-table-cell-content>
-        </cds-table-cell>
-        <cds-table-cell>{{formatIntervalMetric .Ready}}</cds-table-cell>
-        <cds-table-cell>{{formatIntervalMetric .Duration}}</cds-table-cell>
-        <cds-table-cell>{{formatIntervalMetric (addIntervals .Ready .Duration)}}</cds-table-cell>
-        <cds-table-cell>
+          </div>
+        </th>
+        <td>{{formatIntervalMetric .Ready}}</td>
+        <td>{{formatIntervalMetric .Duration}}</td>
+        <td>{{formatIntervalMetric (addIntervals .Ready .Duration)}}</td>
+        <td>
           <svg height="20" class="step-timeline-bar">
             <rect x="{{divIntervalsScaled .Ready $buildDuration 100}}%" y="0"
                 width="{{divIntervalsScaled .Duration $buildDuration 100}}%" height="20"
                 class="duration-interval" />
           </svg>
-        </cds-table-cell>
-      </cds-table-row>
+        </td>
+      </tr>
       {{end}}
-    </cds-table-body>
-  </cds-table>
+    </tbody>
+  </table>
 </div>
 {{end}}
