@@ -85,6 +85,9 @@ func (fs *OSFS) Chmod(ctx context.Context, name string, mode fs.FileMode) error 
 // Chtimes changes the access and modification times of the named file.
 func (fs *OSFS) Chtimes(ctx context.Context, name string, atime, mtime time.Time) error {
 	started := time.Now()
+	// workaround for cog utimes bug. b/356987531
+	_, _ = os.Stat(name)
+
 	err := os.Chtimes(name, atime, mtime)
 	fs.OpsDone(err)
 	if dur := time.Since(started); dur > 1*time.Minute {
