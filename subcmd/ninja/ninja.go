@@ -1025,10 +1025,12 @@ func (c *ninjaCmdRun) initCloudLogging(ctx context.Context, projectID, execRoot 
 	}
 	logger, err := clog.New(ctx, client, "siso.log", "siso.step", &mrpb.MonitoredResource{
 		Type: "generic_task",
+		// should set labels for generic_task.
+		// see https://cloud.google.com/logging/docs/api/v2/resource-list
 		Labels: map[string]string{
 			"project_id": projectID,
-			"job_id":     c.jobID,
-			"build_id":   c.buildID,
+			"job":        c.jobID,
+			"task_id":    c.buildID,
 			"location":   hostname,
 			"namespace":  execRoot,
 		},
