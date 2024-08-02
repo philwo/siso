@@ -609,7 +609,7 @@ func (hfs *HashFS) Mkdir(ctx context.Context, root, dirname string, cmdhash []by
 	fi, err := hfs.OS.Lstat(ctx, dirname)
 	mtime := time.Now()
 	if err == nil && fi.IsDir() {
-		err := hfs.OS.Chtimes(ctx, dirname, time.Now(), mtime)
+		err := hfs.OS.Chtimes(ctx, dirname, time.Time{}, mtime)
 		if err != nil {
 			clog.Warningf(ctx, "failed to set dir mtime %s: %v: %v", dirname, mtime, err)
 		}
@@ -1075,7 +1075,7 @@ func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []Update
 			}
 			hfs.journalEntry(ctx, fname, e)
 			if ent.IsLocal && e.isChanged {
-				err = hfs.OS.Chtimes(ctx, fname, time.Now(), e.getMtime())
+				err = hfs.OS.Chtimes(ctx, fname, time.Time{}, e.getMtime())
 				if errors.Is(err, fs.ErrNotExist) {
 					clog.Warningf(ctx, "failed to update mtime of %s: %v", fname, err)
 					continue
@@ -1134,7 +1134,7 @@ func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []Update
 				return err
 			}
 			hfs.journalEntry(ctx, fname, e)
-			err = hfs.OS.Chtimes(ctx, fname, time.Now(), ent.ModTime)
+			err = hfs.OS.Chtimes(ctx, fname, time.Time{}, ent.ModTime)
 			if err != nil {
 				clog.Warningf(ctx, "failed to update dir mtime %s: %v", fname, err)
 			}
@@ -1559,7 +1559,7 @@ func (e *entry) flush(ctx context.Context, fname string, osfs *osfs.OSFS) error 
 		if err != nil {
 			clog.Infof(ctx, "flush dir %s: %v", fname, err)
 		} else {
-			err = osfs.Chtimes(ctx, fname, time.Now(), mtime)
+			err = osfs.Chtimes(ctx, fname, time.Time{}, mtime)
 			clog.Infof(ctx, "flush dir chtime %s %v: %v", fname, mtime, err)
 		}
 		return err
@@ -1618,7 +1618,7 @@ func (e *entry) flush(ctx context.Context, fname string, osfs *osfs.OSFS) error 
 				if fileDigest == d {
 					clog.Infof(ctx, "flush %s: already exist - hash match", fname)
 					if !fi.ModTime().Equal(mtime) {
-						err = osfs.Chtimes(ctx, fname, time.Now(), mtime)
+						err = osfs.Chtimes(ctx, fname, time.Time{}, mtime)
 					}
 					return err
 				}
@@ -1646,7 +1646,7 @@ func (e *entry) flush(ctx context.Context, fname string, osfs *osfs.OSFS) error 
 		if err != nil {
 			return err
 		}
-		err = osfs.Chtimes(ctx, fname, time.Now(), mtime)
+		err = osfs.Chtimes(ctx, fname, time.Time{}, mtime)
 		if err != nil {
 			return err
 		}
@@ -1715,7 +1715,7 @@ func (e *entry) flush(ctx context.Context, fname string, osfs *osfs.OSFS) error 
 	if err != nil {
 		return err
 	}
-	err = osfs.Chtimes(ctx, fname, time.Now(), mtime)
+	err = osfs.Chtimes(ctx, fname, time.Time{}, mtime)
 	if err != nil {
 		return err
 	}
