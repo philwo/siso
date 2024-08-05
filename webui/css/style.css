@@ -88,15 +88,6 @@ html, body {
 }
 
 #page-container {
-    display: grid;
-    grid-template-columns:
-        300px
-        /* Prevent elements like <pre> horizontally overflowing
-        * https://css-tricks.com/preventing-a-grid-blowout/ */
-        minmax(0, 1fr);
-    grid-template-areas:
-        "nav nav"
-        "sidebar content";
     background: var(--md-sys-color-surface);
     border-radius: var(--md-sys-shape-corner-large);
 }
@@ -107,12 +98,22 @@ html, body {
     display: contents;
 }
 #page-content {
-    grid-area: content;
     padding: 16px;
+}
+#page-content:has(#page-sidebar) {
+    gap: 16px;
+    display: grid;
+    grid-template-columns:
+        300px
+        /* Prevent elements like <pre> horizontally overflowing
+        * https://css-tricks.com/preventing-a-grid-blowout/ */
+        minmax(0, 1fr);
+    grid-template-areas:
+        "sidebar content";
 }
 #page-sidebar {
     grid-area: sidebar;
-    padding: 24px 16px;
+    padding-top: 8px;
     /* Even though this is part of the grid, it needs to be explicitly set for
      * some reason, otherwise child elements won't wrap. TODO: why? */
     width: 300px;

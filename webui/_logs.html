@@ -2,9 +2,10 @@
 Use of this source code is governed by a BSD-style license that can be
 found in the LICENSE file. */}}
 
-{{define "sidebar"}}
+{{define "content"}}
 {{$prefix:=.prefix}}
 {{$currentURL:=.currentURL}}
+<aside id="page-sidebar">
 <md-list>
   {{range $allowedFile := .allowedFiles}}
     {{$logURL := printf "%s/logs/%s" $prefix $allowedFile}}
@@ -13,8 +14,6 @@ found in the LICENSE file. */}}
     </md-list-item>
   {{end}}
 </md-list>
-{{end}}
-
-{{define "content"}}
+</aside>
 <pre><code>{{.fileContents}}</code></pre>
 {{end}}
