@@ -109,7 +109,7 @@ func TestBuild_MultiOut_Remote(t *testing.T) {
 	if stats.Done != stats.Total {
 		t.Errorf("stats.Done=%d Total=%d", stats.Done, stats.Total)
 	}
-	st, err := hashfs.Load(ctx, filepath.Join(dir, "out/siso/.siso_fs_state"))
+	st, err := hashfs.Load(ctx, hashfs.Option{StateFile: filepath.Join(dir, "out/siso/.siso_fs_state")})
 	if err != nil {
 		t.Errorf("hashfs.Load=%v; want nil err", err)
 	}

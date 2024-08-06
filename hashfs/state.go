@@ -45,17 +45,22 @@ type IgnoreFunc func(context.Context, string) bool
 
 // Option is an option for HashFS.
 type Option struct {
-	StateFile   string
+	StateFile     string // filename that HashFS saves its state to
+	CompressZstd  bool   // compress fs state using zstd instead of gzip
+	CompressLevel int    // compression level (0 = uncompressed, 1 = fastest, 10 = best)
+	OSFSOption    osfs.Option
+
 	DataSource  DataSource
 	OutputLocal OutputLocalFunc
 	Ignore      IgnoreFunc
-	OSFSOption  osfs.Option
 	CogFS       *cogutil.Client
 }
 
 // RegisterFlags registers flags for the option.
 func (o *Option) RegisterFlags(flagSet *flag.FlagSet) {
 	flagSet.StringVar(&o.StateFile, "fs_state", defaultStateFile, "fs state filename")
+	flagSet.BoolVar(&o.CompressZstd, "fs_state_use_zstd", false, "compress fs state using zstd instead of gzip")
+	flagSet.IntVar(&o.CompressLevel, "fs_state_compression_level", 3, "fs state compression level (0 = uncompressed, 1 = fastest, 10 = best)")
 	o.OSFSOption.RegisterFlags(flagSet)
 }
 
@@ -74,14 +79,14 @@ func isZstd(b []byte) bool {
 	return len(b) >= 4 && b[0] == 0x28 && b[1] == 0xb5 && b[2] == 0x2f && b[3] == 0xfd
 }
 
-func loadFile(ctx context.Context, fname string) ([]byte, error) {
-	f, err := os.Open(fname)
+func loadFile(ctx context.Context, opts Option) ([]byte, error) {
+	f, err := os.Open(opts.StateFile)
 	if err != nil {
 		return nil, err
 	}
 	defer func() {
 		if err := f.Close(); err != nil {
-			clog.Warningf(ctx, "Failed to close %s: %v", fname, err)
+			clog.Warningf(ctx, "Failed to close %s: %v", opts.StateFile, err)
 		}
 	}()
 
@@ -137,9 +142,9 @@ func loadFile(ctx context.Context, fname string) ([]byte, error) {
 }
 
 // Load loads a HashFS's state.
-func Load(ctx context.Context, fname string) (*pb.State, error) {
+func Load(ctx context.Context, opts Option) (*pb.State, error) {
 	start := time.Now()
-	b, err := loadFile(ctx, fname)
+	b, err := loadFile(ctx, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -153,7 +158,7 @@ func Load(ctx context.Context, fname string) (*pb.State, error) {
 	}
 	durUnmarshal := time.Since(start)
 
-	clog.Infof(ctx, "Load fs state from %s: read/uncompress %s + unmarshal %s = total %s", fname, durUncompress, durUnmarshal, durUncompress+durUnmarshal)
+	clog.Infof(ctx, "Load fs state from %s: read/uncompress %s + unmarshal %s = total %s", opts.StateFile, durUncompress, durUnmarshal, durUncompress+durUnmarshal)
 
 	return state, nil
 }
@@ -433,8 +438,8 @@ func newStateEntry(ent *pb.Entry, ftime time.Time, dataSource DataSource, osfs *
 	return e, entType
 }
 
-func saveFile(ctx context.Context, fname string, data []byte) (retErr error) {
-	f, err := os.CreateTemp(filepath.Dir(fname), filepath.Base(fname)+".*")
+func saveFile(ctx context.Context, data []byte, opts Option) (retErr error) {
+	f, err := os.CreateTemp(filepath.Dir(opts.StateFile), filepath.Base(opts.StateFile)+".*")
 	if err != nil {
 		return err
 	}
@@ -444,7 +449,19 @@ func saveFile(ctx context.Context, fname string, data []byte) (retErr error) {
 		}
 	}()
 	clog.Infof(ctx, "save fs_state in temp %s", f.Name())
-	w, err := zstd.NewWriter(f, zstd.WithEncoderCRC(true), zstd.WithZeroFrames(true))
+	var w io.WriteCloser
+	if opts.CompressZstd {
+		clog.Infof(ctx, "using zstd compression (level %d)", opts.CompressLevel)
+		opts := []zstd.EOption{
+			zstd.WithEncoderCRC(true),
+			zstd.WithEncoderLevel(zstd.EncoderLevelFromZstd(opts.CompressLevel)),
+			zstd.WithZeroFrames(true),
+		}
+		w, err = zstd.NewWriter(f, opts...)
+	} else {
+		clog.Infof(ctx, "using gzip compression (level %d)", opts.CompressLevel)
+		w, err = gzip.NewWriterLevel(f, opts.CompressLevel)
+	}
 	if err != nil {
 		f.Close()
 		return err
@@ -463,20 +480,20 @@ func saveFile(ctx context.Context, fname string, data []byte) (retErr error) {
 		return err
 	}
 	// save old state in *.0
-	ofname := fname + ".0"
+	ofname := opts.StateFile + ".0"
 	if err := os.Remove(ofname); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
-	if err := os.Rename(fname, ofname); err != nil && !errors.Is(err, fs.ErrNotExist) {
+	if err := os.Rename(opts.StateFile, ofname); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
-	err = os.Rename(f.Name(), fname)
-	clog.Infof(ctx, "replace %s: %v", fname, err)
+	err = os.Rename(f.Name(), opts.StateFile)
+	clog.Infof(ctx, "replace %s: %v", opts.StateFile, err)
 	return err
 }
 
 // Save persists state in fname.
-func Save(ctx context.Context, fname string, state *pb.State) error {
+func Save(ctx context.Context, state *pb.State, opts Option) error {
 	defer func() {
 		r := recover()
 		if r == nil {
@@ -511,17 +528,17 @@ func Save(ctx context.Context, fname string, state *pb.State) error {
 	durMarshal := time.Since(start)
 
 	start = time.Now()
-	err = saveFile(ctx, fname, b)
+	err = saveFile(ctx, b, opts)
 	if err != nil {
 		return err
 	}
 	durSave := time.Since(start)
 
-	clog.Infof(ctx, "Save fs state to %s: marshal %s + compress/save %s = total %s", fname, durMarshal, durSave, durMarshal+durSave)
+	clog.Infof(ctx, "Save fs state to %s: marshal %s + compress/save %s = total %s", opts.StateFile, durMarshal, durSave, durMarshal+durSave)
 
 	// Journal data are already included in state.
 	// Remove journal file as it is not needed to reconcile in next build.
-	err = os.Remove(fname + ".journal")
+	err = os.Remove(opts.StateFile + ".journal")
 	if !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}

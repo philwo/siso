@@ -108,7 +108,7 @@ func TestBuild_Copy(t *testing.T) {
 			if stats.NoExec != 2 {
 				t.Errorf("stats.NoExec=%d want=2\n%#v", stats.NoExec, stats)
 			}
-			st, err := hashfs.Load(ctx, filepath.Join(dir, "out/siso/.siso_fs_state"))
+			st, err := hashfs.Load(ctx, hashfs.Option{StateFile: filepath.Join(dir, "out/siso/.siso_fs_state")})
 			if err != nil {
 				t.Errorf("hashfs.Load=%v; want nil err", err)
 			}
@@ -147,7 +147,7 @@ func TestBuild_Copy(t *testing.T) {
 			if stats.NoExec != 1 {
 				t.Errorf("stats.NoExec=%d want=1\n%#v", stats.NoExec, stats)
 			}
-			st, err = hashfs.Load(ctx, filepath.Join(dir, "out/siso/.siso_fs_state"))
+			st, err = hashfs.Load(ctx, hashfs.Option{StateFile: filepath.Join(dir, "out/siso/.siso_fs_state")})
 			if err != nil {
 				t.Errorf("hashfs.Load=%v; want nil err", err)
 			}

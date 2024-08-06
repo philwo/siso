@@ -62,7 +62,7 @@ func (c *diffRun) Run(a subcommands.Application, args []string, env subcommands.
 		return 1
 	}
 
-	st, err := hashfs.Load(ctx, c.stateFile)
+	st, err := hashfs.Load(ctx, hashfs.Option{StateFile: c.stateFile})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to load %s: %v\n", c.stateFile, err)
 		return 1
@@ -75,7 +75,7 @@ func (c *diffRun) Run(a subcommands.Application, args []string, env subcommands.
 		return st.Entries[i].Id.GetModTime() < st.Entries[j].Id.GetModTime()
 	})
 	stm := hashfs.StateMap(st)
-	stBase, err := hashfs.Load(ctx, c.stateFileBase)
+	stBase, err := hashfs.Load(ctx, hashfs.Option{StateFile: c.stateFileBase})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to load %s: %v\n", c.stateFileBase, err)
 		return 1

@@ -52,7 +52,7 @@ func (c *exportRun) Run(a subcommands.Application, args []string, env subcommand
 		return 1
 	}
 
-	st, err := hashfs.Load(ctx, c.stateFile)
+	st, err := hashfs.Load(ctx, hashfs.Option{StateFile: c.stateFile})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to load %s: %v\n", c.stateFile, err)
 		return 1

@@ -35,31 +35,89 @@ func TestLoadSave(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	fname := filepath.Join(dir, ".siso_fs_state")
-
-	t.Logf("initial load")
-	state, err := hashfs.Load(ctx, fname)
-	if !errors.Is(err, fs.ErrNotExist) {
-		t.Errorf("Load(...)=%v, %v; want %v", state, err, fs.ErrNotExist)
+	opts := hashfs.Option{
+		StateFile:     filepath.Join(dir, ".siso_fs_state"),
+		CompressZstd:  false,
+		CompressLevel: 3,
 	}
 
-	t.Logf("initial save")
-	state = &pb.State{}
-	err = hashfs.Save(ctx, fname, state)
-	if err != nil {
+	t.Logf("initial load (fs state doesn't exist)")
+	loadedState, err := hashfs.Load(ctx, opts)
+	if !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("Load(...)=%v, %v; want %v", loadedState, err, fs.ErrNotExist)
+	}
+
+	t.Logf("initial save (with gzip)")
+	savedState := &pb.State{
+		Entries: []*pb.Entry{
+			{
+				Id: &pb.FileID{
+					ModTime: 1623655597,
+				},
+				Name: "foobar",
+			},
+		},
+	}
+	if err := hashfs.Save(ctx, savedState, opts); err != nil {
 		t.Errorf("Save(...)=%v; want nil", err)
 	}
 
-	t.Logf("second load")
-	state, err = hashfs.Load(ctx, fname)
+	// Check if the file starts with the gzip magic bytes.
+	b, err := os.ReadFile(opts.StateFile)
 	if err != nil {
-		t.Errorf("Load(...)=%v, %v; want nil err", state, err)
+		t.Fatalf("Could not read %q: %v", opts.StateFile, err)
 	}
-	want := &pb.State{}
-	if diff := cmp.Diff(want, state, protocmp.Transform()); diff != "" {
+	if diff := cmp.Diff(b[:2], []byte{0x1f, 0x8b}); diff != "" {
+		t.Errorf("Save(...) missing gzip header, diff -want +got:\n%s", diff)
+	}
+
+	t.Logf("second load (from gzip, zstd is disabled)")
+	loadedState, err = hashfs.Load(ctx, opts)
+	if err != nil {
+		t.Errorf("Load(...)=%v, %v; want nil err", loadedState, err)
+	}
+	if diff := cmp.Diff(savedState, loadedState, protocmp.Transform()); diff != "" {
 		t.Errorf("Load(...) diff -want +got:\n%s", diff)
 	}
 
+	t.Logf("second load (from gzip, zstd is enabled)")
+	opts.CompressZstd = true
+	loadedState, err = hashfs.Load(ctx, opts)
+	if err != nil {
+		t.Errorf("Load(...)=%v, %v; want nil err", loadedState, err)
+	}
+	if diff := cmp.Diff(savedState, loadedState, protocmp.Transform()); diff != "" {
+		t.Errorf("Load(...) diff -want +got:\n%s", diff)
+	}
+
+	t.Logf("second save (with zstd)")
+	savedState.Entries = append(savedState.Entries, &pb.Entry{
+		Id: &pb.FileID{
+			ModTime: 1674543565,
+		},
+		Name: "baz",
+	})
+	if err = hashfs.Save(ctx, savedState, opts); err != nil {
+		t.Errorf("Save(...)=%v; want nil", err)
+	}
+
+	// Check if the file starts with the zstd magic bytes.
+	b, err = os.ReadFile(opts.StateFile)
+	if err != nil {
+		t.Fatalf("Could not read %q: %v", opts.StateFile, err)
+	}
+	if diff := cmp.Diff(b[:4], []byte{0x28, 0xb5, 0x2f, 0xfd}); diff != "" {
+		t.Errorf("Save(...) missing zstd header, diff -want +got:\n%s", diff)
+	}
+
+	t.Logf("third load (from zstd)")
+	loadedState, err = hashfs.Load(ctx, opts)
+	if err != nil {
+		t.Errorf("Load(...)=%v, %v; want nil err", loadedState, err)
+	}
+	if diff := cmp.Diff(savedState, loadedState, protocmp.Transform()); diff != "" {
+		t.Errorf("Load(...) diff -want +got:\n%s", diff)
+	}
 }
 
 func TestState(t *testing.T) {
@@ -193,8 +251,12 @@ func BenchmarkLoadState(b *testing.B) {
 	ctx := context.Background()
 	st := createBenchmarkState(b, dir)
 
-	fname := filepath.Join(dir, ".siso_fs_state")
-	err := hashfs.Save(ctx, fname, st)
+	opts := hashfs.Option{
+		StateFile:     filepath.Join(dir, ".siso_fs_state"),
+		CompressZstd:  false,
+		CompressLevel: 3,
+	}
+	err := hashfs.Save(ctx, st, opts)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -202,7 +264,7 @@ func BenchmarkLoadState(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		st, err := hashfs.Load(ctx, fname)
+		st, err := hashfs.Load(ctx, opts)
 		if err != nil {
 			b.Fatal(err)
 		}

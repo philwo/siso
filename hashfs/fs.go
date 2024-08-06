@@ -110,7 +110,7 @@ func New(ctx context.Context, opt Option) (*HashFS, error) {
 		start := time.Now()
 		journalFile := opt.StateFile + ".journal"
 
-		fstate, err := Load(ctx, opt.StateFile)
+		fstate, err := Load(ctx, opt)
 		if err != nil {
 			clog.Warningf(ctx, "Failed to load fs state from %s: %v", opt.StateFile, err)
 			fstate = &pb.State{}
@@ -125,7 +125,7 @@ func New(ctx context.Context, opt Option) (*HashFS, error) {
 		}
 		if reconciled {
 			// save fstate to make it base state for next journaling.
-			err := Save(ctx, opt.StateFile, fstate)
+			err := Save(ctx, fstate, opt)
 			if err != nil {
 				clog.Errorf(ctx, "Failed to save reconciled fs state in %s: %v", opt.StateFile, err)
 			}
@@ -199,7 +199,7 @@ func (hfs *HashFS) Close(ctx context.Context) error {
 	if hfs.clean.Load() {
 		return nil
 	}
-	err := Save(ctx, hfs.opt.StateFile, hfs.State(ctx))
+	err := Save(ctx, hfs.State(ctx), hfs.opt)
 	if err != nil {
 		clog.Errorf(ctx, "Failed to save fs state in %s: %v", hfs.opt.StateFile, err)
 		if rerr := os.Remove(hfs.opt.StateFile); rerr != nil && !errors.Is(rerr, fs.ErrNotExist) {

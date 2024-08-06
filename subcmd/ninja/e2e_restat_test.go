@@ -227,7 +227,7 @@ func TestBuild_RestatMultiout(t *testing.T) {
 		}
 	}()
 
-	st, err := hashfs.Load(ctx, filepath.Join(dir, "out/siso/.siso_fs_state"))
+	st, err := hashfs.Load(ctx, hashfs.Option{StateFile: filepath.Join(dir, "out/siso/.siso_fs_state")})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -260,7 +260,7 @@ func TestBuild_RestatMultiout(t *testing.T) {
 		}
 	}()
 
-	nst, err := hashfs.Load(ctx, filepath.Join(dir, "out/siso/.siso_fs_state"))
+	nst, err := hashfs.Load(ctx, hashfs.Option{StateFile: filepath.Join(dir, "out/siso/.siso_fs_state")})
 	if err != nil {
 		t.Fatal(err)
 	}

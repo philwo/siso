@@ -168,7 +168,7 @@ func (c *ideAnalysisRun) analyze(ctx context.Context, args []string) (*pb.IdeAna
 		defer func() {
 			clog.Infof(gctx, "hashfs in %s: %v", time.Since(started), finalErr)
 		}()
-		fsstate, err := hashfs.Load(gctx, c.fsopt.StateFile)
+		fsstate, err := hashfs.Load(gctx, hashfs.Option{StateFile: c.fsopt.StateFile})
 		if err != nil {
 			return err
 		}

@@ -349,7 +349,12 @@ func setupFileState(t *testing.T, topdir, fname string, files map[string]fileSta
 	sort.Slice(state.Entries, func(i, j int) bool {
 		return state.Entries[i].Name < state.Entries[j].Name
 	})
-	err := hashfs.Save(ctx, fname, state)
+	opts := hashfs.Option{
+		StateFile:     fname,
+		CompressZstd:  false,
+		CompressLevel: 3,
+	}
+	err := hashfs.Save(ctx, state, opts)
 	if err != nil {
 		t.Fatal(err)
 	}

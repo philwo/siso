@@ -338,7 +338,7 @@ func TestBuild_DepsMSVC_InstallerRC(t *testing.T) {
 	}
 	checkFSState := func(t *testing.T, fname string) bool {
 		t.Helper()
-		st, err := hashfs.Load(ctx, filepath.Join(dir, "out/siso/.siso_fs_state"))
+		st, err := hashfs.Load(ctx, hashfs.Option{StateFile: filepath.Join(dir, "out/siso/.siso_fs_state")})
 		if err != nil {
 			t.Fatal(err)
 		}
