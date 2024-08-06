@@ -648,7 +648,13 @@ loop:
 					const size = 64 << 10
 					buf := make([]byte, size)
 					buf = buf[:runtime.Stack(buf, false)]
-					clog.Errorf(ctx, "runStep panic: %v\nstep.cmd: %p\n%s", r, step.cmd, buf)
+					var out string
+					if outs := step.def.Outputs(ctx); len(outs) > 0 {
+						out = outs[0]
+					} else {
+						out = fmt.Sprintf("%p", step)
+					}
+					clog.Errorf(ctx, "runStep panic: %v\nstep: %s\n%s", r, out, buf)
 					err = fmt.Errorf("panic: %v: %s", r, buf)
 				}
 			}()

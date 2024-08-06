@@ -424,6 +424,11 @@ func (p *plan) done(ctx context.Context, step *Step) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
+	if p.closed {
+		clog.Infof(ctx, "build already finished. nothing triggers")
+		return
+	}
+
 	// Before processing the completed step,
 	// send ready steps from p.ready to p.q and resize p.ready.
 	i := 0
@@ -455,7 +460,7 @@ func (p *plan) done(ctx context.Context, step *Step) {
 				p.npendings--
 				nready++
 				if log.V(1) {
-					clog.Infof(ctx, "step state: %s ready to run", s.String())
+					clog.Infof(ctx, "step state: %s ready to run %q", s.String(), s.def.Outputs(ctx)[0])
 				}
 				select {
 				case p.q <- s:
