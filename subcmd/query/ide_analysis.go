@@ -360,8 +360,9 @@ func (a *ideAnalyzer) analyzeCPP(ctx context.Context, edge *ninjautil.Edge, resu
 				Contents: buf,
 			})
 		}
-		//   add buildable unit for the inEdge
-		deps[incTarget] = a.buildableUnit(ctx, inEdge, pb.Language_LANGUAGE_UNSPECIFIED, generatedFiles, nil)
+		// add buildable unit for the inEdge
+		bu := a.buildableUnit(ctx, inEdge, pb.Language_LANGUAGE_UNSPECIFIED, generatedFiles, nil)
+		deps[bu.Id] = bu
 	}
 	buildableUnit := a.buildableUnit(ctx, edge, pb.Language_LANGUAGE_CPP, nil, deps)
 	result.UnitId = buildableUnit.Id
