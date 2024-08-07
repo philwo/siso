@@ -121,6 +121,46 @@ html, body {
 
 /* Steps page. */
 
+.step-views {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    /* Temporary hack to show unimplemented views */
+    --md-outlined-button-container-height: 32px;
+    --md-outlined-button-leading-space: 20px;
+    --md-outlined-button-trailing-space: 20px;
+}
+.step-views h3 {
+    margin: 0;
+    font-size: var(--md-sys-typescale-title-medium-size);
+    font-weight: var(--md-sys-typescale-title-medium-weight);
+}
+.step-views label {
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
+    position: relative;
+    height: 32px;
+    padding: 0 20px;
+    border: 1px solid var(--md-sys-color-outline);
+    border-radius: 999px;
+    font-size: var(--md-sys-typescale-label-large-size);
+    font-weight: var(--md-sys-typescale-label-large-weight);
+    cursor: pointer;
+}
+.step-views input[type="radio"] {
+    display: none;
+}
+.step-views input[type="radio"]:checked + label {
+    background: var(--md-sys-color-secondary-container);
+    color: var(--md-sys-color-primary);
+}
+
+.step-paginator {
+    margin: 16px 0;
+}
+
 .data-table-container {
     width: 100%;
 }
