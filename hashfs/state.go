@@ -23,6 +23,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/biogo/hts/bgzf"
 	log "github.com/golang/glog"
 	"github.com/klauspost/compress/zstd"
 	"golang.org/x/sync/errgroup"
@@ -37,6 +38,11 @@ import (
 
 const defaultStateFile = ".siso_fs_state"
 
+// defaultCompressThreads is the default number of threads to use for data
+// compression. Using more than 8 threads is unlikely to provide any benefit
+// due to coordination overhead and contention
+var defaultCompressThreads = min(8, runtime.GOMAXPROCS(0))
+
 // OutputLocalFunc returns true if given fname needs to be on local disk.
 type OutputLocalFunc func(context.Context, string) bool
 
@@ -45,10 +51,12 @@ type IgnoreFunc func(context.Context, string) bool
 
 // Option is an option for HashFS.
 type Option struct {
-	StateFile     string // filename that HashFS saves its state to
-	CompressZstd  bool   // compress fs state using zstd instead of gzip
-	CompressLevel int    // compression level (0 = uncompressed, 1 = fastest, 10 = best)
-	OSFSOption    osfs.Option
+	StateFile       string // filename that HashFS saves its state to
+	GzipUsesBgzf    bool   // use bgzf for gzip compression
+	CompressZstd    bool   // compress fs state using zstd instead of gzip
+	CompressLevel   int    // compression level (0 = uncompressed, 1 = fastest, 10 = best)
+	CompressThreads int    // number of threads to use for data compression
+	OSFSOption      osfs.Option
 
 	DataSource  DataSource
 	OutputLocal OutputLocalFunc
@@ -59,8 +67,10 @@ type Option struct {
 // RegisterFlags registers flags for the option.
 func (o *Option) RegisterFlags(flagSet *flag.FlagSet) {
 	flagSet.StringVar(&o.StateFile, "fs_state", defaultStateFile, "fs state filename")
+	flagSet.BoolVar(&o.GzipUsesBgzf, "fs_state_use_bgzf", true, "use bgzf for gzip compression")
 	flagSet.BoolVar(&o.CompressZstd, "fs_state_use_zstd", false, "compress fs state using zstd instead of gzip")
 	flagSet.IntVar(&o.CompressLevel, "fs_state_compression_level", 3, "fs state compression level (0 = uncompressed, 1 = fastest, 10 = best)")
+	flagSet.IntVar(&o.CompressThreads, "fs_state_compression_threads", defaultCompressThreads, "number of threads to use for data compression")
 	o.OSFSOption.RegisterFlags(flagSet)
 }
 
@@ -115,7 +125,22 @@ func loadFile(ctx context.Context, opts Option) ([]byte, error) {
 		r = zd.IOReadCloser()
 	} else if isGzip(magicBytes) {
 		clog.Infof(ctx, "fs_state is gzip compressed")
-		r, err = gzip.NewReader(f)
+		if opts.GzipUsesBgzf {
+			r, err = bgzf.NewReader(f, 0)
+			if err == nil {
+				clog.Infof(ctx, "using bgzf for faster gzip decompression")
+			} else if errors.Is(err, bgzf.ErrNoBlockSize) {
+				// bgzf refuses to decompress regular gzip files, so we need to
+				// check for this case and retry with a regular gzip reader.
+				clog.Infof(ctx, "not bgzf, retrying as regular gzip")
+				if _, err := f.Seek(0, io.SeekStart); err != nil {
+					return nil, err
+				}
+				r, err = gzip.NewReader(f)
+			}
+		} else {
+			r, err = gzip.NewReader(f)
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -439,6 +464,11 @@ func newStateEntry(ent *pb.Entry, ftime time.Time, dataSource DataSource, osfs *
 }
 
 func saveFile(ctx context.Context, data []byte, opts Option) (retErr error) {
+	compressThreads := opts.CompressThreads
+	if compressThreads == 0 {
+		compressThreads = defaultCompressThreads
+	}
+
 	f, err := os.CreateTemp(filepath.Dir(opts.StateFile), filepath.Base(opts.StateFile)+".*")
 	if err != nil {
 		return err
@@ -454,13 +484,19 @@ func saveFile(ctx context.Context, data []byte, opts Option) (retErr error) {
 		clog.Infof(ctx, "using zstd compression (level %d)", opts.CompressLevel)
 		opts := []zstd.EOption{
 			zstd.WithEncoderCRC(true),
+			zstd.WithEncoderConcurrency(compressThreads),
 			zstd.WithEncoderLevel(zstd.EncoderLevelFromZstd(opts.CompressLevel)),
 			zstd.WithZeroFrames(true),
 		}
 		w, err = zstd.NewWriter(f, opts...)
 	} else {
 		clog.Infof(ctx, "using gzip compression (level %d)", opts.CompressLevel)
-		w, err = gzip.NewWriterLevel(f, opts.CompressLevel)
+		if opts.GzipUsesBgzf {
+			clog.Infof(ctx, "using bgzf for faster gzip compression (threads=%d)", compressThreads)
+			w, err = bgzf.NewWriterLevel(f, opts.CompressLevel, compressThreads)
+		} else {
+			w, err = gzip.NewWriterLevel(f, opts.CompressLevel)
+		}
 	}
 	if err != nil {
 		f.Close()

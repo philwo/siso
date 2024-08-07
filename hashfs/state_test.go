@@ -7,6 +7,7 @@ package hashfs_test
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"errors"
@@ -19,6 +20,7 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/testing/protocmp"
 
 	"infra/build/siso/hashfs"
@@ -31,14 +33,30 @@ import (
 func mockState(t *testing.T) *pb.State {
 	t.Helper()
 
+	// Add enough entries to make sure that the state file is > 100kB, so that we exercise
+	// enough of any block-based compression code.
 	state := &pb.State{}
+	randomBytes := make([]byte, 1024)
+	if _, err := rand.Read(randomBytes); err != nil {
+		t.Fatalf("rand.Read(...)=%v; want nil error", err)
+	}
 	for i := 0; i < 100; i++ {
 		state.Entries = append(state.Entries, &pb.Entry{
 			Id: &pb.FileID{
 				ModTime: int64(i),
 			},
-			Name: fmt.Sprintf("file%d", i),
+			Name:    fmt.Sprintf("file%d", i),
+			CmdHash: randomBytes,
 		})
+	}
+
+	// Ensure that the state file when serialized is > 500kB.
+	b, err := proto.Marshal(state)
+	if err != nil {
+		t.Fatalf("proto.Marshal(%v)=%v; want nil error", state, err)
+	}
+	if len(b) < 100*1024 {
+		t.Fatalf("len(b)=%d; want >100kB", len(b))
 	}
 
 	return state
@@ -171,6 +189,56 @@ func TestLoadSave(t *testing.T) {
 			opts.CompressZstd = !opts.CompressZstd
 			t.Logf("load with useZstd=%v", opts.CompressZstd)
 			loadedState, err = hashfs.Load(ctx, opts)
+			if err != nil {
+				t.Errorf("Load(...)=%v, %v; want nil err", loadedState, err)
+			}
+
+			// Compare the loaded state with the saved state.
+			if diff := cmp.Diff(savedState, loadedState, protocmp.Transform()); diff != "" {
+				t.Errorf("Load(...) diff -want +got:\n%s", diff)
+			}
+		})
+	}
+}
+
+// TestBgzfCompatibility tests that a state file saved with plain gzip compression can be
+// loaded with bgzf compression enabled, and vice versa.
+func TestBgzfCompatibility(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	savedState := mockState(t)
+
+	tests := map[string]bool{
+		"save_bgzf_load_gzip": true,
+		"save_gzip_load_bgzf": false,
+	}
+	for name, saveWithBgzf := range tests {
+		saveWithBgzf := saveWithBgzf
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			dir := t.TempDir()
+			dir, err := filepath.EvalSymlinks(dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			opts := hashfs.Option{
+				StateFile:     filepath.Join(dir, ".siso_fs_state"),
+				GzipUsesBgzf:  saveWithBgzf,
+				CompressZstd:  false,
+				CompressLevel: 3,
+			}
+
+			// Save a mock state.
+			if err := hashfs.Save(ctx, savedState, opts); err != nil {
+				t.Errorf("Save(...)=%v; want nil", err)
+			}
+
+			// Load it using the opposite bgzf setting.
+			opts.GzipUsesBgzf = !opts.GzipUsesBgzf
+			loadedState, err := hashfs.Load(ctx, opts)
 			if err != nil {
 				t.Errorf("Load(...)=%v, %v; want nil err", loadedState, err)
 			}
