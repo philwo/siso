@@ -8,7 +8,9 @@ found in the LICENSE file. */}}
 {{$buildDuration:=.buildDuration}}
 <aside id="page-sidebar">
 <form class="data-table-filter"
-    action="{{$prefix}}/steps/" method="GET"
+    {{/* Need to add ?sort= to the URL manually if set because sort is handled outside of this form. */}}
+    action="{{$prefix}}/steps/{{if urlParamIsSet $currentURL "sort"}}?sort={{urlParamGet $currentURL "sort"}}{{end}}"
+    method="GET"
     hx-trigger="change,submit"
     hx-ext-md-filter-chip-as-checkbox>
   <div>
@@ -75,14 +77,44 @@ found in the LICENSE file. */}}
 <div class="data-table-container">
   <table>
     <thead>
-      <tr>
+      <tr hx-push-url="true">
         <th scope="col">
           Output
           <div class="subrow">Action</div>
         </th>
-        <th scope="col">Ready</th>
-        <th scope="col">Duration</th>
-        <th scope="col">Completion</th>
+        {{if .sortSupported}}
+          {{$sortReadyAsc := or (urlParamEq $currentURL "sort" "readyAsc") (not (urlParamIsSet $currentURL "sort"))}}
+          {{$sortReadyDsc := urlParamEq $currentURL "sort" "readyDsc"}}
+          {{$sortDurationAsc := urlParamEq $currentURL "sort" "durationAsc"}}
+          {{$sortDurationDsc := urlParamEq $currentURL "sort" "durationDsc"}}
+          {{$sortCompletionAsc := urlParamEq $currentURL "sort" "completionAsc"}}
+          {{$sortCompletionDsc := urlParamEq $currentURL "sort" "completionDsc"}}
+          <th scope="col">
+            <md-text-button class="sort-header" trailing-icon
+                hx-get="{{if $sortReadyAsc}}{{urlParamReplace $currentURL "sort" "readyDsc"}}{{else}}{{urlParamReplace $currentURL "sort" "readyAsc"}}{{end}}">
+              Ready
+              {{if $sortReadyAsc}}<md-icon slot="icon">arrow_upward</md-icon>{{else if $sortReadyDsc}}<md-icon slot="icon">arrow_downward</md-icon>{{end}}
+            </md-text-button>
+          </th>
+          <th scope="col">
+            <md-text-button class="sort-header" trailing-icon
+                hx-get="{{if $sortDurationAsc}}{{urlParamReplace $currentURL "sort" "durationDsc"}}{{else}}{{urlParamReplace $currentURL "sort" "durationAsc"}}{{end}}">
+              Duration
+              {{if $sortDurationAsc}}<md-icon slot="icon">arrow_upward</md-icon>{{else if $sortDurationDsc}}<md-icon slot="icon">arrow_downward</md-icon>{{end}}
+            </md-text-button>
+          </th>
+          <th scope="col">
+            <md-text-button class="sort-header" trailing-icon
+                hx-get="{{if $sortCompletionAsc}}{{urlParamReplace $currentURL "sort" "completionDsc"}}{{else}}{{urlParamReplace $currentURL "sort" "completionAsc"}}{{end}}">
+              Completion
+              {{if $sortCompletionAsc}}<md-icon slot="icon">arrow_upward</md-icon>{{else if $sortCompletionDsc}}<md-icon slot="icon">arrow_downward</md-icon>{{end}}
+            </md-text-button>
+          </th>
+        {{else}}
+          <th scope="col">Ready</th>
+          <th scope="col">Duration</th>
+          <th scope="col">Completion</th>
+        {{end}}
         <th scope="col">Timeline</th>
       </tr>
     </thead>

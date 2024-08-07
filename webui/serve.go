@@ -46,8 +46,23 @@ var (
 		"urlPathHasPrefix": func(url *url.URL, prefix string) bool {
 			return strings.HasPrefix(url.Path, prefix)
 		},
+		"urlParamGet": func(url *url.URL, key string) string {
+			return url.Query().Get(key)
+		},
+		"urlParamEq": func(url *url.URL, key, value string) bool {
+			return url.Query().Get(key) == value
+		},
 		"urlHasParam": func(url *url.URL, key, value string) bool {
 			return slices.Contains(url.Query()[key], value)
+		},
+		"urlParamIsSet": func(url *url.URL, key string) bool {
+			return len(url.Query()[key]) > 0
+		},
+		"urlParamReplace": func(url *url.URL, key, value string) *url.URL {
+			query := url.Query()
+			query.Set(key, value)
+			url.RawQuery = query.Encode()
+			return url
 		},
 		"divIntervalsScaled": func(a, b build.IntervalMetric, scale float64) float64 {
 			return float64(a) / float64(b) * scale
@@ -65,6 +80,7 @@ var (
 		},
 	}
 	sisoMetricsRe = regexp.MustCompile(`siso_metrics.(\d+).json`)
+	sortParamRe   = regexp.MustCompile(`^(?P<sortBy>[a-z]+?)(?P<order>Asc|Dsc)$`)
 )
 
 type outdirInfos struct {
@@ -628,9 +644,25 @@ func Serve(version string, localDevelopment bool, port int, defaultOutdir, confi
 		view := r.URL.Query().Get("view")
 		outputSearch := r.URL.Query().Get("q")
 
+		sortBy := "ready"
+		sortDescending := false
+		sortSupported := true
+		sortParam := r.URL.Query().Get("sort")
+		if sortParamRe.MatchString(sortParam) {
+			matches := sortParamRe.FindStringSubmatch(sortParam)
+			sortBy = string(matches[sortParamRe.SubexpIndex("sortBy")])
+			if string(matches[sortParamRe.SubexpIndex("order")]) == "Dsc" {
+				sortDescending = true
+			}
+		} else if len(sortParam) > 0 {
+			renderBuildViewError(http.StatusBadRequest, fmt.Sprintf("invalid sort param: %s", sortParam), w, r, outdirInfo)
+			return
+		}
+
 		var filteredSteps []build.StepMetric
 		switch view {
 		case "criticalPath":
+			sortSupported = false
 			// We assume the last step is on the critical path.
 			// Build the critical path backwards then reverse it.
 			critStepID := metrics.lastStepID
@@ -657,9 +689,26 @@ func Serve(version string, localDevelopment bool, port int, defaultOutdir, confi
 				}
 				filteredSteps = append(filteredSteps, m)
 			}
-			slices.SortFunc(filteredSteps, func(a, b build.StepMetric) int {
-				return cmp.Compare(a.Ready, b.Ready)
-			})
+			switch sortBy {
+			case "ready":
+				slices.SortFunc(filteredSteps, func(a, b build.StepMetric) int {
+					return cmp.Compare(a.Ready, b.Ready)
+				})
+			case "duration":
+				slices.SortFunc(filteredSteps, func(a, b build.StepMetric) int {
+					return cmp.Compare(a.Duration, b.Duration)
+				})
+			case "completion":
+				slices.SortFunc(filteredSteps, func(a, b build.StepMetric) int {
+					return cmp.Compare(a.Ready+a.Duration, b.Ready+b.Duration)
+				})
+			default:
+				renderBuildViewError(http.StatusBadRequest, fmt.Sprintf("unknown sort column: %s", sortBy), w, r, outdirInfo)
+				return
+			}
+			if sortDescending {
+				slices.Reverse(filteredSteps)
+			}
 		}
 
 		itemsPerPage, err := strconv.Atoi(r.URL.Query().Get("items_per_page"))
@@ -700,6 +749,7 @@ func Serve(version string, localDevelopment bool, port int, defaultOutdir, confi
 			"actionCounts":     metrics.actionCounts,
 			"ruleCounts":       metrics.ruleCounts,
 			"buildDuration":    metrics.buildDuration,
+			"sortSupported":    sortSupported,
 		}
 		err = renderBuildView(w, r, tmpl, outdirInfo, data)
 		if err != nil {

@@ -171,10 +171,21 @@ html, body {
     top: 0;
     background: var(--md-sys-color-surface);
 }
-
-.data-table-container th {
+.data-table-container thead th {
     font-size: var(--md-sys-typescale-body-medium-size);
     font-weight: var(--md-ref-typeface-weight-medium);
+}
+.data-table-container thead th:has(md-text-button) {
+    /* Give padding responsibility to the button. */
+    padding-left: 0;
+    padding-right: 0;
+}
+.data-table-container thead md-text-button {
+    padding-left: 16px;
+    padding-right: 16px;
+}
+
+.data-table-container th {
     text-align: start;
 }
 
