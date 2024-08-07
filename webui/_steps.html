@@ -20,6 +20,8 @@ found in the LICENSE file. */}}
       <label for="view-all">All<md-ripple></md-ripple></label>
       <md-outlined-button disabled>Running</md-outlined-button>
       <md-outlined-button disabled>Failed</md-outlined-button>
+      <input type="radio" id="view-local-only" name="view" value="localOnly"{{if urlHasParam $currentURL "view" "localOnly"}} checked{{end}}>
+      <label for="view-local-only">Local<md-ripple></md-ripple></label>
       <input type="radio" id="view-critical-path" name="view" value="criticalPath"{{if urlHasParam $currentURL "view" "criticalPath"}} checked{{end}}>
       <label for="view-critical-path">Critical Path<md-ripple></md-ripple></label>
     </div>
@@ -86,6 +88,7 @@ found in the LICENSE file. */}}
           Output
           <div class="subrow">Action</div>
         </th>
+        <th scope="col"></th>
         {{if .sortSupported}}
           {{$sortReadyAsc := or (urlParamEq $currentURL "sort" "readyAsc") (not (urlParamIsSet $currentURL "sort"))}}
           {{$sortReadyDsc := urlParamEq $currentURL "sort" "readyDsc"}}
@@ -132,6 +135,9 @@ found in the LICENSE file. */}}
             <span class="step-action">{{.Action}}</span>
           </div>
         </th>
+        <td>
+          {{if .IsLocal}}<md-icon aria-label="Ran Locally">cloud_off</md-icon>{{end}}
+        </td>
         <td>{{formatIntervalMetric .Ready}}</td>
         <td>{{formatIntervalMetric .Duration}}</td>
         <td>{{formatIntervalMetric (addIntervals .Ready .Duration)}}</td>

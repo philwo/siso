@@ -687,6 +687,9 @@ func Serve(version string, localDevelopment bool, port int, defaultOutdir, confi
 				if outputSearch != "" && !strings.Contains(m.Output, outputSearch) {
 					continue
 				}
+				if view == "localOnly" && !m.IsLocal {
+					continue
+				}
 				filteredSteps = append(filteredSteps, m)
 			}
 			switch sortBy {
