@@ -27,7 +27,26 @@ import (
 	"infra/build/siso/reapi/merkletree"
 )
 
-func TestLoadSave(t *testing.T) {
+// mockState returns a mock hashfs state with two entries for testing.
+func mockState(t *testing.T) *pb.State {
+	t.Helper()
+
+	state := &pb.State{}
+	for i := 0; i < 100; i++ {
+		state.Entries = append(state.Entries, &pb.Entry{
+			Id: &pb.FileID{
+				ModTime: int64(i),
+			},
+			Name: fmt.Sprintf("file%d", i),
+		})
+	}
+
+	return state
+}
+
+func TestLoadMissingStateFile(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	dir := t.TempDir()
 	dir, err := filepath.EvalSymlinks(dir)
@@ -41,99 +60,149 @@ func TestLoadSave(t *testing.T) {
 		CompressLevel: 3,
 	}
 
+	// Handle the case where the state file doesn't exist.
 	t.Logf("initial load (fs state doesn't exist)")
 	loadedState, err := hashfs.Load(ctx, opts)
 	if !errors.Is(err, fs.ErrNotExist) {
 		t.Errorf("Load(...)=%v, %v; want %v", loadedState, err, fs.ErrNotExist)
 	}
+}
 
-	t.Logf("initial save (with gzip)")
-	savedState := &pb.State{
-		Entries: []*pb.Entry{
-			{
-				Id: &pb.FileID{
-					ModTime: 1623655597,
-				},
-				Name: "foobar",
-			},
-		},
+func TestLoadSaveEmptyState(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	dir := t.TempDir()
+	dir, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		t.Fatal(err)
 	}
+
+	opts := hashfs.Option{
+		StateFile:     filepath.Join(dir, ".siso_fs_state"),
+		CompressZstd:  false,
+		CompressLevel: 3,
+	}
+
+	// Saving an empty state works.
+	t.Logf("initial save (empty state)")
+	savedState := &pb.State{}
 	if err := hashfs.Save(ctx, savedState, opts); err != nil {
 		t.Errorf("Save(...)=%v; want nil", err)
 	}
 
-	// Check if the file starts with the gzip magic bytes.
-	b, err := os.ReadFile(opts.StateFile)
-	if err != nil {
-		t.Fatalf("Could not read %q: %v", opts.StateFile, err)
-	}
-	if diff := cmp.Diff(b[:2], []byte{0x1f, 0x8b}); diff != "" {
-		t.Errorf("Save(...) missing gzip header, diff -want +got:\n%s", diff)
-	}
-
-	t.Logf("second load (from gzip, zstd is disabled)")
-	loadedState, err = hashfs.Load(ctx, opts)
+	// Loading the saved empty state file works.
+	t.Logf("second load (empty state)")
+	loadedState, err := hashfs.Load(ctx, opts)
 	if err != nil {
 		t.Errorf("Load(...)=%v, %v; want nil err", loadedState, err)
 	}
+
+	// Loaded state should be equal to the saved state.
 	if diff := cmp.Diff(savedState, loadedState, protocmp.Transform()); diff != "" {
 		t.Errorf("Load(...) diff -want +got:\n%s", diff)
 	}
+}
 
-	t.Logf("second load (from gzip, zstd is enabled)")
-	opts.CompressZstd = true
-	loadedState, err = hashfs.Load(ctx, opts)
-	if err != nil {
-		t.Errorf("Load(...)=%v, %v; want nil err", loadedState, err)
-	}
-	if diff := cmp.Diff(savedState, loadedState, protocmp.Transform()); diff != "" {
-		t.Errorf("Load(...) diff -want +got:\n%s", diff)
-	}
+func TestLoadSave(t *testing.T) {
+	t.Parallel()
 
-	t.Logf("second save (with zstd)")
-	savedState.Entries = append(savedState.Entries, &pb.Entry{
-		Id: &pb.FileID{
-			ModTime: 1674543565,
-		},
-		Name: "baz",
-	})
-	if err = hashfs.Save(ctx, savedState, opts); err != nil {
-		t.Errorf("Save(...)=%v; want nil", err)
-	}
+	ctx := context.Background()
+	savedState := mockState(t)
 
-	// Check if the file starts with the zstd magic bytes.
-	b, err = os.ReadFile(opts.StateFile)
-	if err != nil {
-		t.Fatalf("Could not read %q: %v", opts.StateFile, err)
+	// Test with both gzip and zstd compression.
+	tests := map[string]bool{
+		"gzip": false,
+		"zstd": true,
 	}
-	if diff := cmp.Diff(b[:4], []byte{0x28, 0xb5, 0x2f, 0xfd}); diff != "" {
-		t.Errorf("Save(...) missing zstd header, diff -want +got:\n%s", diff)
-	}
+	for name, useZstd := range tests {
+		useZstd := useZstd
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 
-	t.Logf("third load (from zstd)")
-	loadedState, err = hashfs.Load(ctx, opts)
-	if err != nil {
-		t.Errorf("Load(...)=%v, %v; want nil err", loadedState, err)
-	}
-	if diff := cmp.Diff(savedState, loadedState, protocmp.Transform()); diff != "" {
-		t.Errorf("Load(...) diff -want +got:\n%s", diff)
+			dir := t.TempDir()
+			dir, err := filepath.EvalSymlinks(dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			opts := hashfs.Option{
+				StateFile:     filepath.Join(dir, ".siso_fs_state"),
+				CompressZstd:  useZstd,
+				CompressLevel: 3,
+			}
+
+			// Save a mock state.
+			t.Logf("save with useZstd=%v", opts.CompressZstd)
+			if err := hashfs.Save(ctx, savedState, opts); err != nil {
+				t.Errorf("Save(...)=%v; want nil", err)
+			}
+
+			// Check if the file was really saved with the chosen compression method by checking
+			// whether the first bytes are the correct magic bytes.
+			b, err := os.ReadFile(opts.StateFile)
+			if err != nil {
+				t.Fatalf("Could not read %q: %v", opts.StateFile, err)
+			}
+			if useZstd {
+				if diff := cmp.Diff([]byte{0x28, 0xb5, 0x2f, 0xfd}, b[:4]); diff != "" {
+					t.Errorf("Save(...) missing zstd header, diff -want +got:\n%s", diff)
+				}
+			} else {
+				if diff := cmp.Diff([]byte{0x1f, 0x8b}, b[:2]); diff != "" {
+					t.Errorf("Save(...) missing gzip header, diff -want +got:\n%s", diff)
+				}
+			}
+
+			// Load the saved state.
+			t.Logf("load with useZstd=%v", opts.CompressZstd)
+			loadedState, err := hashfs.Load(ctx, opts)
+			if err != nil {
+				t.Errorf("Load(...)=%v, %v; want nil err", loadedState, err)
+			}
+
+			// Compare the loaded state with the saved state.
+			if diff := cmp.Diff(savedState, loadedState, protocmp.Transform()); diff != "" {
+				t.Errorf("Load(...) diff -want +got:\n%s", diff)
+			}
+
+			// Simulate the user flipping the -fs_state_use_zstd flag and verify that we can
+			// still load the state file.
+			opts.CompressZstd = !opts.CompressZstd
+			t.Logf("load with useZstd=%v", opts.CompressZstd)
+			loadedState, err = hashfs.Load(ctx, opts)
+			if err != nil {
+				t.Errorf("Load(...)=%v, %v; want nil err", loadedState, err)
+			}
+
+			// Compare the loaded state with the saved state.
+			if diff := cmp.Diff(savedState, loadedState, protocmp.Transform()); diff != "" {
+				t.Errorf("Load(...) diff -want +got:\n%s", diff)
+			}
+		})
 	}
 }
 
 func TestState(t *testing.T) {
 	ctx := context.Background()
 
-	hashFS, err := hashfs.New(ctx, hashfs.Option{})
+	dir := t.TempDir()
+	dir, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	opts := hashfs.Option{
+		StateFile:     filepath.Join(dir, ".siso_fs_state"),
+		CompressZstd:  false,
+		CompressLevel: 3,
+	}
+
+	hashFS, err := hashfs.New(ctx, opts)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer hashFS.Close(ctx)
-
-	dir := t.TempDir()
-	dir, err = filepath.EvalSymlinks(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	err = hashFS.WriteFile(ctx, dir, "stamp", nil, false, time.Now(), []byte("dummy-cmdhash"))
 	if err != nil {
@@ -156,17 +225,23 @@ func TestState(t *testing.T) {
 func TestState_Dir(t *testing.T) {
 	ctx := context.Background()
 
-	hashFS, err := hashfs.New(ctx, hashfs.Option{})
+	dir := t.TempDir()
+	dir, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	opts := hashfs.Option{
+		StateFile:     filepath.Join(dir, ".siso_fs_state"),
+		CompressZstd:  false,
+		CompressLevel: 3,
+	}
+
+	hashFS, err := hashfs.New(ctx, opts)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer hashFS.Close(ctx)
-
-	dir := t.TempDir()
-	dir, err = filepath.EvalSymlinks(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	mtime := time.Now()
 	h := sha256.New()
@@ -256,6 +331,7 @@ func BenchmarkLoadState(b *testing.B) {
 		CompressZstd:  false,
 		CompressLevel: 3,
 	}
+
 	err := hashfs.Save(ctx, st, opts)
 	if err != nil {
 		b.Fatal(err)
