@@ -78,6 +78,17 @@ obj/ios/chrome/browser/shared/ui/util/util_swift/UIView+WindowObserving.o : ../.
 				`c:\src\foo\bar.c`,
 			},
 		},
+		{
+			name: "tailing-backslash",
+			depsfile: []byte(`gen/inputs.h: \
+	/path/to/a.wsgl \
+	/path/to/b.wsgl \
+`),
+			want: []string{
+				"/path/to/a.wsgl",
+				"/path/to/b.wsgl",
+			},
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got, err := ParseDeps(tc.depsfile)

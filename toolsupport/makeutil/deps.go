@@ -79,8 +79,9 @@ depLines:
 func nextToken(s []byte) (string, []byte) {
 	var sb strings.Builder
 	// skip spaces
+	var i int
 skipSpaces:
-	for i := 0; i < len(s); i++ {
+	for i = 0; i < len(s); i++ {
 		if s[i] == '\\' && i+1 < len(s) && s[i+1] == '\n' {
 			i++
 			continue
@@ -95,10 +96,10 @@ skipSpaces:
 		case ' ', '\t', '\r':
 			continue
 		default:
-			s = s[i:]
 			break skipSpaces
 		}
 	}
+	s = s[i:]
 	// extract next space not escaped
 	for i := 0; i < len(s); i++ {
 		if s[i] == '\\' && i+1 < len(s) {
