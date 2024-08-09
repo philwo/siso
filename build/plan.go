@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -85,9 +86,17 @@ func (e MissingSourceError) Error() string {
 	return fmt.Sprintf("%q missing and no known rule to make it", e.Target)
 }
 
+type scanState int
+
+const (
+	scanStateNotVisited = iota
+	scanStateVisiting
+	scanStateDone
+)
+
 type targetInfo struct {
-	// true once scheduler scanned the target.
-	scanned bool
+	// scanState of the target.
+	scan scanState
 	// true if the target is source (no step generates the target).
 	source bool
 	// true if the target is generated output.
@@ -157,9 +166,14 @@ func schedule(ctx context.Context, sched *scheduler, graph Graph, args ...string
 		return err
 	}
 	for _, t := range targets {
-		if sched.plan.targets[t].scanned {
+		switch sched.plan.targets[t].scan {
+		case scanStateNotVisited:
+		case scanStateVisiting:
+			return fmt.Errorf("scan state %q: visiting", targetPath(ctx, graph, t))
+		case scanStateDone:
 			continue
 		}
+
 		err := scheduleTarget(ctx, sched, graph, t, nil, sched.prepare)
 		if err != nil {
 			return fmt.Errorf("failed in schedule %s: %w", targetPath(ctx, graph, t), err)
@@ -169,10 +183,32 @@ func schedule(ctx context.Context, sched *scheduler, graph Graph, args ...string
 	return nil
 }
 
+// DependencyCycleError is error type for dependency cycle.
+type DependencyCycleError struct {
+	Targets []string
+}
+
+func (d DependencyCycleError) Error() string {
+	return fmt.Sprintf("dependency cycle: %s", strings.Join(d.Targets, " -> "))
+}
+
 // scheduleTarget schedules a build plan for target, which is required to next StepDef, from graph into sched.
 func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target Target, next StepDef, ignore bool) error {
 	targets := sched.plan.targets
-	targets[target].scanned = true
+	switch targets[target].scan {
+	case scanStateNotVisited:
+		targets[target].scan = scanStateVisiting
+		defer func() {
+			targets[target].scan = scanStateDone
+		}()
+	case scanStateVisiting:
+		return DependencyCycleError{
+			Targets: []string{targetPath(ctx, graph, target)},
+		}
+
+	case scanStateDone:
+		return nil
+	}
 	if targets[target].source {
 		if log.V(1) {
 			clog.Infof(ctx, "sched target already marked: %v", targetPath(ctx, graph, target))
@@ -237,7 +273,7 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 		state: &stepState{},
 	}
 	for _, in := range inputs {
-		if !targets[in].scanned {
+		if targets[in].scan != scanStateDone {
 			// if this target is ignored, but "in" is header,
 			// then it will not ignore steps to generate "in"
 			// and "in"'s inputs recursively.
@@ -256,6 +292,14 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 			}
 			err := scheduleTarget(ctx, sched, graph, in, next, inIgnore)
 			if err != nil {
+				var cycleErr DependencyCycleError
+				if errors.As(err, &cycleErr) {
+					if len(cycleErr.Targets) <= 1 || cycleErr.Targets[0] != cycleErr.Targets[len(cycleErr.Targets)-1] {
+						cur := targetPath(ctx, graph, in)
+						cycleErr.Targets = append(cycleErr.Targets, cur)
+					}
+					return cycleErr
+				}
 				return fmt.Errorf("schedule %s: %w", targetPath(ctx, graph, in), err)
 			}
 		}

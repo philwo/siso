@@ -1426,6 +1426,15 @@ func doBuild(ctx context.Context, graph *ninjabuild.Graph, bopts build.Options, 
 	err = b.Build(ctx, "build", args...)
 	// prof.stop(ctx)
 
+	if err != nil {
+		if errors.As(err, &build.MissingSourceError{}) {
+			return stats, err
+		}
+		if errors.As(err, &build.DependencyCycleError{}) {
+			return stats, err
+		}
+	}
+
 	semaTraces := make(map[string]semaTrace)
 	tstats := b.TraceStats()
 	var rbeWorker, rbeExec *build.TraceStat
