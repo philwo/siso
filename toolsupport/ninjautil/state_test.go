@@ -49,6 +49,14 @@ func TestState_Targets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	err = os.WriteFile(filepath.Join(dir, "../../foo/foo.h"), nil, 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = os.WriteFile(filepath.Join(dir, "../../foo/foo_util.h"), nil, 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	inputNoDefault := `
 rule cxx

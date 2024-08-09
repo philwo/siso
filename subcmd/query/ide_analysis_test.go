@@ -67,6 +67,9 @@ func TestIDEAnalysis(t *testing.T) {
 		filepath.Join(topDir, "foo/foo.h"): {
 			content: "// foo.h",
 		},
+		filepath.Join(topDir, "foo/baz.h"): {
+			content: "// baz.h",
+		},
 		filepath.Join(topDir, "out/siso/build.ninja.d"): {
 			content: `build.ninja.stamp: ../../.gn ../../BUILD.gn ../../foo/BUILD.gn ../../foo/foo.gni ../../chrome/VERSION gen/foo/foo.build_metadata
 `,
@@ -114,122 +117,428 @@ func TestIDEAnalysis(t *testing.T) {
 		},
 	})
 
-	// This c.analysis call is equivalent with invocation of
-	//  ./build/util/ide_query --out-dir out/siso --source foo/foo.cc
+	t.Run("foo.cc", func(t *testing.T) {
+		// This c.analysis call is equivalent with invocation of
+		//  ./build/util/ide_query --out-dir out/siso --source foo/foo.cc
 
-	c := &ideAnalysisRun{}
-	c.init()
-	c.dir = "out/siso"
+		c := &ideAnalysisRun{}
+		c.init()
+		c.dir = "out/siso"
 
-	got, err := c.analyze(ctx, []string{"../../foo/foo.cc^"})
-	if err != nil {
-		t.Errorf(`analyze(ctx, "../../foo/foo.cc^")=%v, %v; want nil er`, got, err)
-	}
-	t.Logf("got=%s", got)
+		defer func() {
+			err = os.Chdir("../..")
+			if err != nil {
+				t.Error(err)
+			}
+		}()
 
-	want := &pb.IdeAnalysis{
-		BuildOutDir: "out/siso",
-		WorkingDir:  "out/siso",
-		Results: []*pb.AnalysisResult{
-			{
-				SourceFilePath: "../../foo/foo.cc",
-				Status: &pb.AnalysisResult_Status{
-					Code: pb.AnalysisResult_Status_CODE_OK,
-				},
-				UnitId: "obj/foo.o",
-				Invalidation: &pb.Invalidation{
-					FilePaths: []string{
-						"chrome/VERSION",
+		got, err := c.analyze(ctx, []string{"../../foo/foo.cc^"})
+		if err != nil {
+			t.Errorf(`analyze(ctx, "../../foo/foo.cc^")=%v, %v; want nil err`, got, err)
+		}
+		t.Logf("got=%s", got)
+
+		want := &pb.IdeAnalysis{
+			BuildOutDir: "out/siso",
+			WorkingDir:  "out/siso",
+			Results: []*pb.AnalysisResult{
+				{
+					SourceFilePath: "../../foo/foo.cc",
+					Status: &pb.AnalysisResult_Status{
+						Code: pb.AnalysisResult_Status_CODE_OK,
 					},
-					Wildcards: []*pb.Invalidation_Wildcard{
+					UnitId: "obj/foo.o",
+					Invalidation: &pb.Invalidation{
+						FilePaths: []string{
+							"chrome/VERSION",
+						},
+						Wildcards: []*pb.Invalidation_Wildcard{
+							{
+								Suffix:         proto.String(".gn"),
+								CanCrossFolder: proto.Bool(true),
+							},
+							{
+								Suffix:         proto.String(".gni"),
+								CanCrossFolder: proto.Bool(true),
+							},
+						},
+					},
+				},
+			},
+			Units: []*pb.BuildableUnit{
+				{
+					Id: "gen/bar/bar-summary.h",
+					SourceFilePaths: []string{
+						"../../bar/bar.in",
+					},
+					CompilerArguments: []string{
+						"python3",
+						"gen.py",
+						"../../bar/bar.in",
+						"gen/bar/bar-summary.h",
+						"gen/bar/bar.h",
+					},
+					GeneratedFiles: []*pb.GeneratedFile{
 						{
-							Suffix:         proto.String(".gn"),
-							CanCrossFolder: proto.Bool(true),
+							Path:     "gen/bar/bar-summary.h",
+							Contents: []byte(barSummaryH),
 						},
 						{
-							Suffix:         proto.String(".gni"),
-							CanCrossFolder: proto.Bool(true),
+							Path:     "gen/bar/bar.h",
+							Contents: []byte(barH),
+						},
+					},
+				},
+				{
+					Id: "gen/base/test/test.pb.h",
+					SourceFilePaths: []string{
+						"../../tools/protoc_wrapper/protoc_wrapper.py",
+						"../../base/test/test.proto",
+					},
+					CompilerArguments: []string{
+						"python3",
+						"../../tools/protoc_wrapper/protoc_wrapper.py",
+						"test.proto",
+						"--protoc",
+						"./protoc",
+						"--proto-in-dir",
+						"../../base/test",
+						"--cc-out-dir",
+						"gen/base/test",
+					},
+					GeneratedFiles: []*pb.GeneratedFile{
+						{
+							Path:     "gen/base/test/test.pb.h",
+							Contents: []byte(testPBH),
+						},
+					},
+				},
+				{
+					Id:       "obj/foo.o",
+					Language: pb.Language_LANGUAGE_CPP,
+					SourceFilePaths: []string{
+						"../../foo/foo.cc",
+					},
+					CompilerArguments: []string{
+						"../../toolchain/clang++",
+						"-MMD",
+						"-MF",
+						"obj/foo.o.d",
+						"-Igen",
+						"--sysroot=../../sysroot",
+						"-c",
+						"../../foo/foo.cc",
+						"-o",
+						"obj/foo.o",
+					},
+					DependencyIds: []string{
+						"gen/bar/bar-summary.h",
+						"gen/base/test/test.pb.h",
+					},
+				},
+			},
+		}
+		if diff := cmp.Diff(want, got, protocmp.Transform()); diff != "" {
+			t.Errorf(`analysis(ctx, "../../foo/foo.cc^") diff -want +got:\n%s`, diff)
+		}
+	})
+
+	t.Run("foo.h", func(t *testing.T) {
+		// This c.analysis call is equivalent with invocation of
+		//  ./build/util/ide_query --out-dir out/siso --source foo/foo.h
+
+		// pick foo.cc that includes foo.h
+
+		c := &ideAnalysisRun{}
+		c.init()
+		c.dir = "out/siso"
+
+		defer func() {
+			err = os.Chdir("../..")
+			if err != nil {
+				t.Error(err)
+			}
+		}()
+
+		got, err := c.analyze(ctx, []string{"../../foo/foo.h^"})
+		if err != nil {
+			t.Errorf(`analyze(ctx, "../../foo/foo.h^")=%v, %v; want nil err`, got, err)
+		}
+		t.Logf("got=%s", got)
+
+		want := &pb.IdeAnalysis{
+			BuildOutDir: "out/siso",
+			WorkingDir:  "out/siso",
+			Results: []*pb.AnalysisResult{
+				{
+					SourceFilePath: "../../foo/foo.h",
+					Status: &pb.AnalysisResult_Status{
+						Code: pb.AnalysisResult_Status_CODE_OK,
+					},
+					UnitId: "obj/foo.o",
+					Invalidation: &pb.Invalidation{
+						FilePaths: []string{
+							"chrome/VERSION",
+						},
+						Wildcards: []*pb.Invalidation_Wildcard{
+							{
+								Suffix:         proto.String(".gn"),
+								CanCrossFolder: proto.Bool(true),
+							},
+							{
+								Suffix:         proto.String(".gni"),
+								CanCrossFolder: proto.Bool(true),
+							},
 						},
 					},
 				},
 			},
-		},
-		Units: []*pb.BuildableUnit{
-			{
-				Id: "gen/bar/bar-summary.h",
-				SourceFilePaths: []string{
-					"../../bar/bar.in",
-				},
-				CompilerArguments: []string{
-					"python3",
-					"gen.py",
-					"../../bar/bar.in",
-					"gen/bar/bar-summary.h",
-					"gen/bar/bar.h",
-				},
-				GeneratedFiles: []*pb.GeneratedFile{
-					{
-						Path:     "gen/bar/bar-summary.h",
-						Contents: []byte(barSummaryH),
+			Units: []*pb.BuildableUnit{
+				{
+					Id: "gen/bar/bar-summary.h",
+					SourceFilePaths: []string{
+						"../../bar/bar.in",
 					},
-					{
-						Path:     "gen/bar/bar.h",
-						Contents: []byte(barH),
+					CompilerArguments: []string{
+						"python3",
+						"gen.py",
+						"../../bar/bar.in",
+						"gen/bar/bar-summary.h",
+						"gen/bar/bar.h",
+					},
+					GeneratedFiles: []*pb.GeneratedFile{
+						{
+							Path:     "gen/bar/bar-summary.h",
+							Contents: []byte(barSummaryH),
+						},
+						{
+							Path:     "gen/bar/bar.h",
+							Contents: []byte(barH),
+						},
+					},
+				},
+				{
+					Id: "gen/base/test/test.pb.h",
+					SourceFilePaths: []string{
+						"../../tools/protoc_wrapper/protoc_wrapper.py",
+						"../../base/test/test.proto",
+					},
+					CompilerArguments: []string{
+						"python3",
+						"../../tools/protoc_wrapper/protoc_wrapper.py",
+						"test.proto",
+						"--protoc",
+						"./protoc",
+						"--proto-in-dir",
+						"../../base/test",
+						"--cc-out-dir",
+						"gen/base/test",
+					},
+					GeneratedFiles: []*pb.GeneratedFile{
+						{
+							Path:     "gen/base/test/test.pb.h",
+							Contents: []byte(testPBH),
+						},
+					},
+				},
+				{
+					Id:       "obj/foo.o",
+					Language: pb.Language_LANGUAGE_CPP,
+					SourceFilePaths: []string{
+						"../../foo/foo.cc",
+					},
+					CompilerArguments: []string{
+						"../../toolchain/clang++",
+						"-MMD",
+						"-MF",
+						"obj/foo.o.d",
+						"-Igen",
+						"--sysroot=../../sysroot",
+						"-c",
+						"../../foo/foo.cc",
+						"-o",
+						"obj/foo.o",
+					},
+					DependencyIds: []string{
+						"gen/bar/bar-summary.h",
+						"gen/base/test/test.pb.h",
 					},
 				},
 			},
-			{
-				Id: "gen/base/test/test.pb.h",
-				SourceFilePaths: []string{
-					"../../tools/protoc_wrapper/protoc_wrapper.py",
-					"../../base/test/test.proto",
-				},
-				CompilerArguments: []string{
-					"python3",
-					"../../tools/protoc_wrapper/protoc_wrapper.py",
-					"test.proto",
-					"--protoc",
-					"./protoc",
-					"--proto-in-dir",
-					"../../base/test",
-					"--cc-out-dir",
-					"gen/base/test",
-				},
-				GeneratedFiles: []*pb.GeneratedFile{
-					{
-						Path:     "gen/base/test/test.pb.h",
-						Contents: []byte(testPBH),
+		}
+		if diff := cmp.Diff(want, got, protocmp.Transform()); diff != "" {
+			t.Errorf(`analysis(ctx, "../../foo/foo.h^") diff -want +got:\n%s`, diff)
+		}
+	})
+
+	t.Run("baz.h", func(t *testing.T) {
+		// This c.analysis call is equivalent with invocation of
+		//  ./build/util/ide_query --out-dir out/siso --source foo/baz.h
+
+		// pick foo.cc as fallback for baz.h
+
+		c := &ideAnalysisRun{}
+		c.init()
+		c.dir = "out/siso"
+
+		defer func() {
+			err = os.Chdir("../..")
+			if err != nil {
+				t.Error(err)
+			}
+		}()
+
+		got, err := c.analyze(ctx, []string{"../../foo/baz.h^"})
+		if err != nil {
+			t.Errorf(`analyze(ctx, "../../foo/baz.h^")=%v, %v; want nil err`, got, err)
+		}
+		t.Logf("got=%s", got)
+
+		want := &pb.IdeAnalysis{
+			BuildOutDir: "out/siso",
+			WorkingDir:  "out/siso",
+			Results: []*pb.AnalysisResult{
+				{
+					SourceFilePath: "../../foo/baz.h",
+					Status: &pb.AnalysisResult_Status{
+						Code: pb.AnalysisResult_Status_CODE_OK,
+					},
+					UnitId: "obj/foo.o",
+					Invalidation: &pb.Invalidation{
+						FilePaths: []string{
+							"chrome/VERSION",
+						},
+						Wildcards: []*pb.Invalidation_Wildcard{
+							{
+								Suffix:         proto.String(".gn"),
+								CanCrossFolder: proto.Bool(true),
+							},
+							{
+								Suffix:         proto.String(".gni"),
+								CanCrossFolder: proto.Bool(true),
+							},
+						},
 					},
 				},
 			},
-			{
-				Id:       "obj/foo.o",
-				Language: pb.Language_LANGUAGE_CPP,
-				SourceFilePaths: []string{
-					"../../foo/foo.cc",
+			Units: []*pb.BuildableUnit{
+				{
+					Id: "gen/bar/bar-summary.h",
+					SourceFilePaths: []string{
+						"../../bar/bar.in",
+					},
+					CompilerArguments: []string{
+						"python3",
+						"gen.py",
+						"../../bar/bar.in",
+						"gen/bar/bar-summary.h",
+						"gen/bar/bar.h",
+					},
+					GeneratedFiles: []*pb.GeneratedFile{
+						{
+							Path:     "gen/bar/bar-summary.h",
+							Contents: []byte(barSummaryH),
+						},
+						{
+							Path:     "gen/bar/bar.h",
+							Contents: []byte(barH),
+						},
+					},
 				},
-				CompilerArguments: []string{
-					"../../toolchain/clang++",
-					"-MMD",
-					"-MF",
-					"obj/foo.o.d",
-					"-Igen",
-					"--sysroot=../../sysroot",
-					"-c",
-					"../../foo/foo.cc",
-					"-o",
-					"obj/foo.o",
+				{
+					Id: "gen/base/test/test.pb.h",
+					SourceFilePaths: []string{
+						"../../tools/protoc_wrapper/protoc_wrapper.py",
+						"../../base/test/test.proto",
+					},
+					CompilerArguments: []string{
+						"python3",
+						"../../tools/protoc_wrapper/protoc_wrapper.py",
+						"test.proto",
+						"--protoc",
+						"./protoc",
+						"--proto-in-dir",
+						"../../base/test",
+						"--cc-out-dir",
+						"gen/base/test",
+					},
+					GeneratedFiles: []*pb.GeneratedFile{
+						{
+							Path:     "gen/base/test/test.pb.h",
+							Contents: []byte(testPBH),
+						},
+					},
 				},
-				DependencyIds: []string{
-					"gen/bar/bar-summary.h",
-					"gen/base/test/test.pb.h",
+				{
+					Id:       "obj/foo.o",
+					Language: pb.Language_LANGUAGE_CPP,
+					SourceFilePaths: []string{
+						"../../foo/foo.cc",
+					},
+					CompilerArguments: []string{
+						"../../toolchain/clang++",
+						"-MMD",
+						"-MF",
+						"obj/foo.o.d",
+						"-Igen",
+						"--sysroot=../../sysroot",
+						"-c",
+						"../../foo/foo.cc",
+						"-o",
+						"obj/foo.o",
+					},
+					DependencyIds: []string{
+						"gen/bar/bar-summary.h",
+						"gen/base/test/test.pb.h",
+					},
 				},
 			},
-		},
-	}
-	if diff := cmp.Diff(want, got, protocmp.Transform()); diff != "" {
-		t.Errorf(`analysis(ctx, "../../foo/foo.cc^") diff -want +got:\n%s`, diff)
-	}
+		}
+		if diff := cmp.Diff(want, got, protocmp.Transform()); diff != "" {
+			t.Errorf(`analysis(ctx, "../../foo/baz.h^") diff -want +got:\n%s`, diff)
+		}
+	})
+
+	t.Run("bar.h", func(t *testing.T) {
+		// This c.analysis call is equivalent with invocation of
+		//  ./build/util/ide_query --out-dir out/siso --source foo/bar.h
+
+		// fail since foo/bar.h doesn't exist
+
+		c := &ideAnalysisRun{}
+		c.init()
+		c.dir = "out/siso"
+
+		defer func() {
+			err = os.Chdir("../..")
+			if err != nil {
+				t.Error(err)
+			}
+		}()
+
+		got, err := c.analyze(ctx, []string{"../../foo/bar.h^"})
+		if err != nil {
+			t.Errorf(`analyze(ctx, "../../foo/bar.h^")=%v, %v; want nil err`, got, err)
+		}
+		t.Logf("got=%s", got)
+
+		want := &pb.IdeAnalysis{
+			BuildOutDir: "out/siso",
+			WorkingDir:  "out/siso",
+			Results: []*pb.AnalysisResult{
+				{
+					SourceFilePath: "../../foo/bar.h",
+					Status: &pb.AnalysisResult_Status{
+						Code:          pb.AnalysisResult_Status_CODE_NOT_FOUND,
+						StatusMessage: proto.String(`unknown target "../../foo/bar.h^"`),
+					},
+				},
+			},
+		}
+		if diff := cmp.Diff(want, got, protocmp.Transform()); diff != "" {
+			t.Errorf(`analysis(ctx, "../../foo/bar.h^") diff -want +got:\n%s`, diff)
+		}
+	})
 }
 
 func setupBuildNinja(t *testing.T, fname string) {

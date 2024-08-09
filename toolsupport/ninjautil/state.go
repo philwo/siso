@@ -243,6 +243,11 @@ func (s *State) hatTarget(t string) (*Node, bool) {
 		return nil, false
 	}
 	// special handling for header file.
+	_, err := os.Stat(t)
+	if err != nil {
+		// file not exist
+		return nil, false
+	}
 	incname := filepath.Base(t)
 	dirname := filepath.Dir(t)
 	// check the file include the header file.

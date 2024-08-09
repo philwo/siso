@@ -232,7 +232,7 @@ func (a *ideAnalyzer) analyzeTarget(ctx context.Context, target string) (*pb.Ana
 	if strings.HasSuffix(target, "^") {
 		result.SourceFilePath = strings.TrimSuffix(target, "^")
 	}
-	nodes, err := a.state.Targets([]string{target})
+	nodes, err := a.targetForCPP(ctx, target)
 	if err != nil {
 		result.Status = &pb.AnalysisResult_Status{
 			Code:          pb.AnalysisResult_Status_CODE_NOT_FOUND,
@@ -277,6 +277,60 @@ func (a *ideAnalyzer) analyzeTarget(ctx context.Context, target string) (*pb.Ana
 	}
 	// TODO: what should we return?
 	return result, nil
+}
+
+func (a *ideAnalyzer) targetForCPP(ctx context.Context, target string) ([]*ninjautil.Node, error) {
+	nodes, err := a.state.Targets([]string{target})
+	if err == nil {
+		return nodes, nil
+	}
+
+	// err != nil
+	switch filepath.Ext(target) {
+	case ".h^", ".hxx^", ".hpp^", ".inc^":
+		hname := strings.TrimSuffix(target, "^")
+		_, serr := os.Stat(hname)
+		if serr != nil {
+			clog.Warningf(ctx, "file not exist: %v", serr)
+			return nil, err
+		}
+		// fallback to any *.cc file in the directory.
+		// language service need to know include directories and
+		// flags that affects compiler's behavior, but doesn't care
+		// *.cc includes given header.
+		clog.Infof(ctx, "fallback. target not found: %v", err)
+		dirname := filepath.Dir(target)
+		dirents, derr := os.ReadDir(dirname)
+		if derr != nil {
+			clog.Warningf(ctx, "readdir %q: %v", dirname, derr)
+			return nil, err
+		}
+		files := make(map[string]*ninjautil.Node)
+		for _, dirent := range dirents {
+			fname := dirent.Name()
+			switch filepath.Ext(fname) {
+			case ".c", ".cc", "cxx", ".cpp", ".m", ".mm", ".S":
+				fpath := filepath.ToSlash(filepath.Join(dirname, fname))
+				nodes, err := a.state.Targets([]string{fpath + "^"})
+				if err != nil {
+					continue
+				}
+				files[fpath] = nodes[0]
+				clog.Infof(ctx, "candidate: %s", fpath)
+			}
+		}
+		if len(files) == 0 {
+			return nil, fmt.Errorf("no candidate in %s: %w", dirname, err)
+		}
+		var filenames []string
+		for fname := range files {
+			filenames = append(filenames, fname)
+		}
+		sort.Strings(filenames)
+		fmt.Fprintf(os.Stderr, "target %q not found: fallback to %q\n", target, filenames[0]+"^")
+		return []*ninjautil.Node{files[filenames[0]]}, nil
+	}
+	return nil, err
 }
 
 func (a *ideAnalyzer) analyzeCPP(ctx context.Context, edge *ninjautil.Edge, result *pb.AnalysisResult) (*pb.AnalysisResult, map[string]*pb.BuildableUnit) {
