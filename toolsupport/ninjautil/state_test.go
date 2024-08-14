@@ -104,6 +104,18 @@ default all
 			want:  []string{"foo"},
 		},
 		{
+			name:  "dotslash",
+			input: input,
+			args:  []string{"./foo"},
+			want:  []string{"foo"},
+		},
+		{
+			name:  "dotslash_extra",
+			input: input,
+			args:  []string{".////obj////foo.o"},
+			want:  []string{"obj/foo.o"},
+		},
+		{
 			name:    "wrong_target",
 			input:   input,
 			args:    []string{"bar"},
@@ -125,6 +137,18 @@ default all
 			name:  "header^",
 			input: input,
 			args:  []string{"../../foo/foo.h^"},
+			want:  []string{"obj/foo.o"},
+		},
+		{
+			name:  "dotslash^",
+			input: input,
+			args:  []string{"./../../foo/foo.h^"},
+			want:  []string{"obj/foo.o"},
+		},
+		{
+			name:  "dotslash_extra^",
+			input: input,
+			args:  []string{"./////..///////../foo/foo.h^"},
 			want:  []string{"obj/foo.o"},
 		},
 		{

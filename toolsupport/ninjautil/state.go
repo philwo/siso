@@ -195,7 +195,7 @@ func (s *State) Targets(args []string) ([]*Node, error) {
 	}
 	nodes := make([]*Node, 0, len(args))
 	for _, t := range args {
-		t := filepath.ToSlash(t)
+		t := filepath.ToSlash(filepath.Clean(t))
 		var node *Node
 		if strings.HasSuffix(t, "^") {
 			n, ok := s.hatTarget(t)
