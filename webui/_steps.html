@@ -88,7 +88,7 @@ found in the LICENSE file. */}}
           Output
           <div class="subrow">Action</div>
         </th>
-        <th scope="col"></th>
+        <th scope="col" class="remote-indicator">Remote</th>
         {{if .sortSupported}}
           {{$sortReadyAsc := or (urlParamEq $currentURL "sort" "readyAsc") (not (urlParamIsSet $currentURL "sort"))}}
           {{$sortReadyDsc := urlParamEq $currentURL "sort" "readyDsc"}}
@@ -135,8 +135,14 @@ found in the LICENSE file. */}}
             <span class="step-action">{{.Action}}</span>
           </div>
         </th>
-        <td>
-          {{if .IsLocal}}<md-icon aria-label="Ran Locally">cloud_off</md-icon>{{end}}
+        <td class="remote-indicator">
+          {{if .IsLocal}}
+            {{/* Keep this empty branch. It's easier to read than multiple AND conditions. */}}
+          {{else if and (not .Cached) (not .NoExec)}}
+            <md-icon class="icon-cache-miss" title="Remote Execution">cloud</md-icon>
+          {{else if .Cached}}
+            <md-icon class="icon-cache-hit" title="Cache Hit">cloud_done</md-icon>
+          {{end}}
         </td>
         <td>{{formatIntervalMetric .Ready}}</td>
         <td>{{formatIntervalMetric .Duration}}</td>

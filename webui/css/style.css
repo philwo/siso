@@ -121,6 +121,10 @@ html, body {
 
 /* Steps page. */
 
+.data-table-filter {
+    position: sticky;
+    top: 12px;
+}
 .step-views {
     display: flex;
     align-items: center;
@@ -200,6 +204,7 @@ html, body {
 }
 
 .data-table-container table {
+    position: relative;
     border-collapse: collapse;
     width: max(65rem, 100%);
     line-height: var(--md-sys-typescale-body-small-line-height);
@@ -209,7 +214,19 @@ html, body {
 .data-table-container thead {
     position: sticky;
     top: 0;
-    background: var(--md-sys-color-surface);
+    /* Blur the background when scrolling past the top. */
+    background:
+        color-mix(in srgb, var(--md-sys-color-surface), transparent 33%);
+    backdrop-filter: blur(10px);
+}
+.data-table-container table::before {
+    /* We don't want the blur when scrolled at the top.
+     * This is a hack that stops the blur only at the top. */
+    position: absolute;
+    left: 0; right: 0; bottom: 0; top: 0;
+    display: block;
+    content: ' ';
+    z-index: -1;
 }
 .data-table-container thead th {
     font-size: var(--md-sys-typescale-body-medium-size);
@@ -231,7 +248,11 @@ html, body {
 
 .data-table-container th,
 .data-table-container td {
-    padding: 8px 16px;
+    padding: 6px 16px;
+}
+.data-table-container tbody tr {
+    border-top: 1px solid var(--md-sys-color-outline-variant);
+    border-bottom: 1px solid var(--md-sys-color-outline-variant);
 }
 
 .data-table-container .subrow {
@@ -248,6 +269,21 @@ html, body {
 .data-table-container tbody td {
     font-size: var(--md-sys-typescale-body-medium-size);
     font-weight: var(--md-sys-typescale-body-medium-weight);
+}
+
+th.remote-indicator {
+    text-align: right;
+}
+td.remote-indicator {
+    text-align: center;
+}
+.light .remote-indicator md-icon.icon-cache-hit {
+    color: rgb(0, 124, 0);
+    font-variation-settings: 'FILL' 1;
+}
+.dark .remote-indicator md-icon.icon-cache-hit {
+    color: rgb(171, 255, 171);
+    font-variation-settings: 'FILL' 1;
 }
 
 .step-rule:not(:empty) {
