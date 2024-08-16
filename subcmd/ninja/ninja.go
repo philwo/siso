@@ -98,6 +98,7 @@ type ninjaCmdRun struct {
 	offline         bool
 	batch           bool
 	verbose         bool
+	verboseFailures bool
 	dryRun          bool
 	clobber         bool
 	prepare         bool
@@ -894,6 +895,7 @@ func (c *ninjaCmdRun) init() {
 	c.Flags.BoolVar(&c.batch, "batch", !ui.IsTerminal(), "batch mode. prefer thoughput over low latency for build failures.")
 	c.Flags.BoolVar(&c.verbose, "verbose", false, "show all command lines while building")
 	c.Flags.BoolVar(&c.verbose, "v", false, "show all command lines while building (alias of --verbose)")
+	c.Flags.BoolVar(&c.verboseFailures, "verbose_failures", true, "show failed command lines")
 	c.Flags.BoolVar(&c.dryRun, "n", false, "dry run")
 	c.Flags.BoolVar(&c.clobber, "clobber", false, "clobber build")
 	c.Flags.BoolVar(&c.prepare, "prepare", false, "build inputs of targets, but not build target itself.")
@@ -1285,6 +1287,7 @@ func (c *ninjaCmdRun) initBuildOpts(ctx context.Context, projectID string, build
 		Clobber:              c.clobber,
 		Prepare:              c.prepare,
 		Verbose:              c.verbose,
+		VerboseFailures:      c.verboseFailures,
 		DryRun:               c.dryRun,
 		FailuresAllowed:      c.failuresAllowed,
 		KeepRSP:              c.debugMode.Keeprsp,

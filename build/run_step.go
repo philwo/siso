@@ -336,12 +336,17 @@ func (b *Builder) logOutput(ctx context.Context, msgs []string, console bool) {
 		default:
 			fmt.Fprint(&sb, msgs[0])
 		}
-		for _, msg := range msgs {
+		for _, msg := range msgs[1:] {
 			switch {
 			case strings.HasPrefix(msg, "err:"):
 				fmt.Fprint(&sb, msg)
 			case strings.HasPrefix(msg, "stdout:"), strings.HasPrefix(msg, "stderr:"):
 				if !console {
+					fmt.Fprint(&sb, msg)
+				}
+			default:
+				// Print other messages such as command line, siso_rule only when verboseFailures=true.
+				if b.verboseFailures {
 					fmt.Fprint(&sb, msg)
 				}
 			}

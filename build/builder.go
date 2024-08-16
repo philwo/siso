@@ -102,6 +102,9 @@ type Options struct {
 	// Verbose shows all command lines while building rather than step description.
 	Verbose bool
 
+	// VerboseFailures shows failed command lines.
+	VerboseFailures bool
+
 	// DryRun just prints the command to build, but does nothing.
 	DryRun bool
 
@@ -197,10 +200,11 @@ type Builder struct {
 	pprofUploader        *pprof.Uploader
 	resultstoreUploader  *resultstore.Uploader
 
-	clobber bool
-	prepare bool
-	verbose bool
-	dryRun  bool
+	clobber         bool
+	prepare         bool
+	verbose         bool
+	verboseFailures bool
+	dryRun          bool
 
 	failuresAllowed int
 
@@ -321,6 +325,7 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 		clobber:              opts.Clobber,
 		prepare:              opts.Prepare,
 		verbose:              opts.Verbose,
+		verboseFailures:      opts.VerboseFailures,
 		dryRun:               opts.DryRun,
 		failuresAllowed:      opts.FailuresAllowed,
 		keepRSP:              opts.KeepRSP,
