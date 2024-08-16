@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"syscall"
+	"time"
 )
 
 // https://fuchsia.googlesource.com/fuchsia/+/ba3ebe3223ab95245f974d11f1f0c960dbabbf50/build/bazel/templates/template.bazelrc#73
@@ -19,10 +20,25 @@ const googleCredHelper = "/google/src/head/depot/google3/devtools/blaze/bazel/cr
 
 // DefaultCredentialHelper returns default credential helper's path.
 func DefaultCredentialHelper() string {
-	if fi, err := os.Stat(googleCredHelper); (err == nil && fi.Mode()&0111 != 0) || errors.Is(err, syscall.ENOKEY) {
-		return googleCredHelper
+	ch := make(chan string, 1)
+	go func() {
+		if fi, err := os.Stat(googleCredHelper); (err == nil && fi.Mode()&0111 != 0) || errors.Is(err, syscall.ENOKEY) {
+			ch <- googleCredHelper
+			return
+		}
+		ch <- ""
+	}()
+	select {
+	case helper := <-ch:
+		return helper
+	case <-time.After(5 * time.Second):
+		// workaround for b/360055934
+		fmt.Fprintf(os.Stderr, `WARNING: failed to access /google/src.
+probably need RPC access: http://go/request-rpc
+`)
+		return ""
+
 	}
-	return ""
 }
 
 func credHelperErr(fname string, err error) error {
