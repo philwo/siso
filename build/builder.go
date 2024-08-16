@@ -671,11 +671,15 @@ loop:
 	clog.Infof(ctx, "all pendings becomes ready")
 	errdone := make(chan error)
 	go func() {
+		var firstErr error
 		for e := range errch {
 			if nerrs >= b.failuresAllowed {
 				continue
 			}
 			if e != nil && !errors.Is(e, context.Canceled) {
+				if firstErr == nil {
+					firstErr = e
+				}
 				nerrs++
 			}
 		}
@@ -690,7 +694,7 @@ loop:
 			errdone <- fmt.Errorf("cannot make progress due to previous %d errors", nerrs)
 			return
 		}
-		errdone <- fmt.Errorf("%d steps failed", nerrs)
+		errdone <- fmt.Errorf("%d steps failed: %w", nerrs, firstErr)
 	}()
 	wg.Wait()
 	close(errch)
