@@ -771,7 +771,15 @@ func (b *Builder) recordNinjaLogs(ctx context.Context, s *Step) {
 	// TODO: b/298594790 - Use the same mtime with hashFS.
 	start := time.Duration(s.startTime.Sub(b.start)).Milliseconds()
 	end := time.Duration(s.metrics.ActionEndTime).Milliseconds()
-	ninjautil.WriteNinjaLogEntries(ctx, b.ninjaLogWriter, start, end, s.endTime, s.cmd.Outputs, s.cmd.Args)
+
+	// Remove prefixed working directory path from Outputs.
+	outputs := make([]string, 0, len(s.cmd.Outputs))
+	buildDir := s.cmd.Dir + "/"
+	for _, output := range s.cmd.Outputs {
+		outputs = append(outputs, strings.TrimPrefix(output, buildDir))
+	}
+
+	ninjautil.WriteNinjaLogEntries(ctx, b.ninjaLogWriter, start, end, s.endTime, outputs, s.cmd.Args)
 }
 
 // stepLogEntry logs step in parent access log of the step.
