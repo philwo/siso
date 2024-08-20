@@ -255,6 +255,25 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 	default:
 	}
 
+	if ignore && sched.prepareHeaderOnly {
+		// If this step generates header (even if build dependency
+		// doesn't explicitly depend on the header), don't ignore this.
+		// b/358693473
+	outCheck:
+		for _, out := range outputs {
+			fname, err := graph.TargetPath(ctx, out)
+			if err != nil {
+				return fmt.Errorf("schedule bad target %s: %w", targetPath(ctx, graph, out), err)
+			}
+			switch filepath.Ext(fname) {
+			case ".h", ".hxx", ".hpp", ".inc":
+				clog.Infof(ctx, "need to schedule for %s", fname)
+				ignore = false
+				break outCheck
+			}
+		}
+	}
+
 	// we might not need to use depfile's dependencies to construct
 	// build graph.
 	// - if depfile's dependency is source file, the file already exists
@@ -286,7 +305,7 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 				switch filepath.Ext(fname) {
 				case ".h", ".hxx", ".hpp", ".inc":
 				default:
-					clog.Infof(ctx, "ignore schedule for %s", fname)
+					clog.Infof(ctx, "may ignore schedule for %s", fname)
 					inIgnore = true
 				}
 			}
