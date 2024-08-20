@@ -582,6 +582,7 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 
 	var wg sync.WaitGroup
 	var nerrs int
+	var firstErr error
 	var stuck bool
 	errch := make(chan error, 1000)
 
@@ -613,6 +614,9 @@ loop:
 			if err != nil {
 				clog.Infof(ctx, "err from errch: %v", err)
 				if !errors.Is(err, context.Canceled) {
+					if firstErr == nil {
+						firstErr = err
+					}
 					nerrs++
 				}
 			}
@@ -677,7 +681,6 @@ loop:
 	clog.Infof(ctx, "all pendings becomes ready")
 	errdone := make(chan error)
 	go func() {
-		var firstErr error
 		for e := range errch {
 			if nerrs >= b.failuresAllowed {
 				continue
@@ -697,7 +700,7 @@ loop:
 			return
 		}
 		if stuck {
-			errdone <- fmt.Errorf("cannot make progress due to previous %d errors", nerrs)
+			errdone <- fmt.Errorf("cannot make progress due to previous %d errors: %w", nerrs, firstErr)
 			return
 		}
 		errdone <- fmt.Errorf("%d steps failed: %w", nerrs, firstErr)
