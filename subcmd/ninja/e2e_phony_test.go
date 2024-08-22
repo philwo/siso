@@ -7,12 +7,16 @@ package ninja
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
 
+	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
+
 	"infra/build/siso/build"
 	"infra/build/siso/hashfs"
+	"infra/build/siso/reapi/reapitest"
 )
 
 func TestBuild_PhonyDir(t *testing.T) {
@@ -283,5 +287,88 @@ func TestBuild_PhonyStamp(t *testing.T) {
 	}
 	if stats.Done != 5 || stats.Local != 0 || stats.NoExec != 0 {
 		t.Errorf("done=%d local=%d no_exec=%d; want done=5 local=0 no_exec=0", stats.Done, stats.Local, stats.NoExec)
+	}
+}
+
+func TestBuild_PhonyReplace(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+
+	ninja := func(t *testing.T, refake *reapitest.Fake) (build.Stats, error) {
+		t.Helper()
+		var ds dataSource
+		defer func() {
+			err := ds.Close(ctx)
+			if err != nil {
+				t.Error(err)
+			}
+		}()
+		ds.client = reapitest.New(ctx, t, refake)
+		ds.cache = ds.client.CacheStore()
+
+		opt, graph, cleanup := setupBuild(ctx, t, dir, hashfs.Option{
+			StateFile:  ".siso_fs_state",
+			DataSource: ds,
+		})
+		defer cleanup()
+		opt.REAPIClient = ds.client
+		return runNinja(ctx, "build.ninja", graph, opt, nil, runNinjaOpts{})
+	}
+	setupFiles(t, dir, t.Name(), nil)
+
+	refake := &reapitest.Fake{
+		ExecuteFunc: func(fakere *reapitest.Fake, action *rpb.Action) (*rpb.ActionResult, error) {
+			tree := reapitest.InputTree{CAS: fakere.CAS, Root: action.InputRootDigest}
+			_, err := tree.LookupFileNode(ctx, "cp.py")
+			if err != nil {
+				t.Logf("missing cp.py: %v", err)
+				return &rpb.ActionResult{
+					ExitCode:  1,
+					StderrRaw: []byte(fmt.Sprintf("../../cp.py: File not found: %v", err)),
+				}, nil
+			}
+			fn, err := tree.LookupFileNode(ctx, "foo.in")
+			if err != nil {
+				t.Logf("missing foo.in: %v", err)
+				return &rpb.ActionResult{
+					ExitCode:  1,
+					StderrRaw: []byte(fmt.Sprintf("../../foo.in: File not found: %v", err)),
+				}, nil
+			}
+			_, err = tree.LookupFileNode(ctx, "foo2.in")
+			if err != nil {
+				t.Logf("missing foo2.in: %v", err)
+				return &rpb.ActionResult{
+					ExitCode:  1,
+					StderrRaw: []byte(fmt.Sprintf("../../foo2.in: File not found: %v", err)),
+				}, nil
+			}
+			return &rpb.ActionResult{
+				ExitCode: 0,
+				OutputFiles: []*rpb.OutputFile{
+					{
+						Path:   "foo.out",
+						Digest: fn.Digest,
+					},
+				},
+			}, nil
+		},
+	}
+
+	stats, err := ninja(t, refake)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.Total != 4 || stats.Done != stats.Total || stats.Remote != 1 || stats.Skipped != 3 || stats.LocalFallback != 0 {
+		t.Errorf("stats total=%d done=%d remote=%d skipped=%d local_fallback=%d; want total=4 done=4 remote=1 skipped=3 local_fallback=0 (%#v)", stats.Total, stats.Done, stats.Remote, stats.Skipped, stats.LocalFallback, stats)
+	}
+
+	t.Logf("-- second build. no-op")
+	stats, err = ninja(t, refake)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.Total != 4 || stats.Done != stats.Total || stats.Remote != 0 || stats.Skipped != stats.Total {
+		t.Errorf("stats total=%d done=%d remote=%d skipped=%d; want total=4 done=4 remote=0 skipped=4 (%#v)", stats.Total, stats.Done, stats.Remote, stats.Skipped, stats)
 	}
 }

@@ -647,6 +647,12 @@ func (s *StepDef) ExpandedInputs(ctx context.Context) []string {
 			continue
 		}
 		seen[p] = true
+		if inEdge, ok := in.InEdge(); ok && inEdge.IsPhony() {
+			// replace phony inputs here before ExpandInput,
+			// since ExpandInputs removes non-exist inputs.
+			inputs = append(inputs, replacePhony(ctx, globals, seen, p, inEdge, s.rule.Debug)...)
+			continue
+		}
 		if s.rule.Debug {
 			clog.Infof(ctx, "input from ninja: %s", p)
 		}
@@ -722,7 +728,7 @@ func (s *StepDef) ExpandedInputs(ctx context.Context) []string {
 			seen[p] = true
 			ins = append(ins, p)
 		}
-		if er.edge.IsPhony() || er.replace {
+		if er.replace {
 			if s.rule.Debug {
 				clog.Infof(ctx, "replace %q -> %q", inputs[i], ins)
 			}
@@ -785,6 +791,26 @@ func (s *StepDef) ExpandedInputs(ctx context.Context) []string {
 	}
 	if s.rule.Debug {
 		clog.Infof(ctx, "expanded inputs -> %d", len(inputs))
+	}
+	return inputs
+}
+
+func replacePhony(ctx context.Context, globals *globals, seen map[string]bool, target string, edge *ninjautil.Edge, debug bool) []string {
+	var inputs []string
+	for _, in := range edge.Inputs() {
+		p := globals.targetPath(ctx, in)
+		if seen[p] {
+			continue
+		}
+		seen[p] = true
+		if debug {
+			clog.Infof(ctx, "input from ninja(phony): %s -> %s", target, p)
+		}
+		if inEdge, ok := in.InEdge(); ok && inEdge.IsPhony() {
+			inputs = append(inputs, replacePhony(ctx, globals, seen, p, inEdge, debug)...)
+			continue
+		}
+		inputs = append(inputs, p)
 	}
 	return inputs
 }
