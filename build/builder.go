@@ -124,8 +124,6 @@ type Options struct {
 	Limits Limits
 }
 
-var experiments Experiments
-
 // Builder is a builder.
 type Builder struct {
 	jobID string // correlated invocations id.
@@ -630,6 +628,7 @@ loop:
 				clog.Infof(ctx, "errs=%d numServs=%d hasReady=%t stuck=%t", nerrs, numServs, hasReady, stuck)
 			}
 			if nerrs >= b.failuresAllowed || stuck {
+				clog.Infof(ctx, "unable to proceed nerrs=%d numServs=%d hasReady=%t stuck=%t", nerrs, numServs, hasReady, stuck)
 				cancel()
 				break loop
 			}

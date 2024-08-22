@@ -89,10 +89,26 @@ func (e MissingSourceError) Error() string {
 type scanState int
 
 const (
-	scanStateNotVisited = iota
+	scanStateNotVisited scanState = iota
 	scanStateVisiting
+	scanStateIgnored
 	scanStateDone
 )
+
+func (s scanState) String() string {
+	switch s {
+	case scanStateNotVisited:
+		return "not-visited"
+	case scanStateVisiting:
+		return "visiting"
+	case scanStateIgnored:
+		return "ignored"
+	case scanStateDone:
+		return "done"
+	default:
+		return fmt.Sprintf("unknown=%d", int(s))
+	}
+}
 
 type targetInfo struct {
 	// scanState of the target.
@@ -170,7 +186,7 @@ func schedule(ctx context.Context, sched *scheduler, graph Graph, args ...string
 		case scanStateNotVisited:
 		case scanStateVisiting:
 			return fmt.Errorf("scan state %q: visiting", targetPath(ctx, graph, t))
-		case scanStateDone:
+		case scanStateDone, scanStateIgnored:
 			continue
 		}
 
@@ -195,16 +211,34 @@ func (d DependencyCycleError) Error() string {
 // scheduleTarget schedules a build plan for target, which is required to next StepDef, from graph into sched.
 func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target Target, next StepDef, ignore bool) error {
 	targets := sched.plan.targets
-	switch targets[target].scan {
+	scanState := targets[target].scan
+	switch scanState {
 	case scanStateNotVisited:
 		targets[target].scan = scanStateVisiting
 		defer func() {
+			if ignore {
+				targets[target].scan = scanStateIgnored
+				clog.Infof(ctx, "scan state ignore target %s", targetPath(ctx, graph, target))
+				return
+			}
+			if log.V(1) {
+				clog.Infof(ctx, "scan state done target %s", targetPath(ctx, graph, target))
+			}
 			targets[target].scan = scanStateDone
 		}()
 	case scanStateVisiting:
 		return DependencyCycleError{
 			Targets: []string{targetPath(ctx, graph, target)},
 		}
+	case scanStateIgnored:
+		if ignore {
+			return nil
+		}
+		clog.Infof(ctx, "need to scan ignored target %s", targetPath(ctx, graph, target))
+		targets[target].scan = scanStateVisiting
+		defer func() {
+			targets[target].scan = scanStateDone
+		}()
 
 	case scanStateDone:
 		return nil
@@ -216,7 +250,7 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 		return nil
 	}
 	if log.V(1) {
-		clog.Infof(ctx, "schedule target %v", targetPath(ctx, graph, target))
+		clog.Infof(ctx, "schedule target %v state=%v ignore:%t", targetPath(ctx, graph, target), scanState, ignore)
 	}
 	newStep, inputs, outputs, err := graph.StepDef(ctx, target, next)
 	switch {
@@ -233,6 +267,12 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 		}
 		return sched.mark(ctx, graph, target, next)
 	case errors.Is(err, ErrDuplicateStep):
+		if scanState == scanStateIgnored {
+			// need to check again.
+			// It was ignored, but now required to generate *.h
+			clog.Infof(ctx, "need to sched dupliate step for %s", targetPath(ctx, graph, target))
+			break
+		}
 		// this step is already processed.
 		if log.V(1) {
 			clog.Infof(ctx, "sched duplicate step for %v", targetPath(ctx, graph, target))
@@ -244,8 +284,22 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 		}
 		return err
 	}
+	// mark all other outputs are done, or ignored.
+	defer func() {
+		nextState := scanStateDone
+		if ignore {
+			nextState = scanStateIgnored
+		}
+		for _, out := range outputs {
+			switch targets[out].scan {
+			case scanStateNotVisited:
+				targets[out].scan = nextState
+				clog.Infof(ctx, "scan state %v other target %s", nextState, targetPath(ctx, graph, out))
+			}
+		}
+	}()
 	if log.V(1) {
-		clog.Infof(ctx, "schedule %v inputs:%d", newStep, len(inputs))
+		clog.Infof(ctx, "schedule %v inputs:%d outputs:%d", newStep, len(inputs), len(outputs))
 	}
 	sched.visited++
 	next = newStep
@@ -256,6 +310,7 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 	}
 
 	if ignore && sched.prepareHeaderOnly {
+		clog.Infof(ctx, "check outputs=%d for %s", len(outputs), targetPath(ctx, graph, target))
 		// If this step generates header (even if build dependency
 		// doesn't explicitly depend on the header), don't ignore this.
 		// b/358693473
@@ -271,7 +326,14 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 				ignore = false
 				break outCheck
 			}
+			if log.V(1) {
+				clog.Infof(ctx, "schedule %s ignore output=%s", targetPath(ctx, graph, target), fname)
+			}
+
 		}
+	}
+	if log.V(1) {
+		clog.Infof(ctx, "target=%s ignore=%t prepareHeaderOnly=%t", targetPath(ctx, graph, target), ignore, sched.prepareHeaderOnly)
 	}
 
 	// we might not need to use depfile's dependencies to construct
@@ -322,10 +384,17 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 				return fmt.Errorf("schedule %s: %w", targetPath(ctx, graph, in), err)
 			}
 		}
-		if !targets[in].source {
+		if !targets[in].source && !ignore {
 			// If in is not marked (i.e. source), some step
 			// will generate it, so need to wait for it
 			// before running this step.
+			//
+			// If this step is ignored, no need to add the step
+			// to in's wait.  Otherwise, ignored step may be
+			// needed in other dependency chain, and add step
+			// for that case, so step appeared several times
+			// in targets[in].waits, which would run the same
+			// step multiple time, and would fail with race.
 			targets[in].waits = append(targets[in].waits, step)
 			step.nwaits++
 		}
@@ -333,6 +402,9 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 	if ignore {
 		clog.Infof(ctx, "sched: ignore target %s", targetPath(ctx, graph, target))
 		return nil
+	}
+	if log.V(1) {
+		clog.Infof(ctx, "sched: add target %s: %s", targetPath(ctx, graph, target), newStep)
 	}
 	step.outputs = outputs
 	sched.add(ctx, graph, step)

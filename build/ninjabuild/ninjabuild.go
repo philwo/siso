@@ -27,9 +27,15 @@ import (
 type Graph struct {
 	fname string
 
-	visited map[*ninjautil.Edge]bool
+	visited map[*ninjautil.Edge]*edgeStepDef
 
 	globals *globals
+}
+
+type edgeStepDef struct {
+	def     *StepDef
+	inputs  []build.Target
+	outputs []build.Target
 }
 
 type globals struct {
@@ -194,7 +200,7 @@ func NewGraph(ctx context.Context, fname string, nstate *ninjautil.State, config
 	graph := &Graph{
 		fname: fname,
 
-		visited: make(map[*ninjautil.Edge]bool),
+		visited: make(map[*ninjautil.Edge]*edgeStepDef),
 
 		globals: &globals{
 			nstate:         nstate,
@@ -243,7 +249,7 @@ func (g *Graph) Reload(ctx context.Context) error {
 
 // Reset resets graph status.
 func (g *Graph) Reset(ctx context.Context) {
-	g.visited = make(map[*ninjautil.Edge]bool)
+	g.visited = make(map[*ninjautil.Edge]*edgeStepDef)
 	g.globals.targetPaths = make([]string, g.globals.nstate.NumNodes())
 	g.globals.edgeRules = make([]*edgeRule, g.globals.nstate.NumNodes())
 	g.globals.phony = make(map[string]bool)
@@ -421,10 +427,10 @@ func (g *Graph) StepDef(ctx context.Context, target build.Target, next build.Ste
 	if !ok {
 		return nil, nil, nil, build.ErrTargetIsSource
 	}
-	if g.visited[edge] {
-		return nil, nil, nil, build.ErrDuplicateStep
+	v := g.visited[edge]
+	if v != nil {
+		return v.def, v.inputs, v.outputs, build.ErrDuplicateStep
 	}
-	g.visited[edge] = true
 	if edge.IsPhony() {
 		g.globals.phony[g.globals.targetPath(ctx, n)] = true
 	}
@@ -438,6 +444,11 @@ func (g *Graph) StepDef(ctx context.Context, target build.Target, next build.Ste
 	outputs := make([]build.Target, 0, len(edgeOutputs))
 	for _, out := range edgeOutputs {
 		outputs = append(outputs, build.Target(out.ID()))
+	}
+	g.visited[edge] = &edgeStepDef{
+		def:     stepDef,
+		inputs:  inputs,
+		outputs: outputs,
 	}
 	return stepDef, inputs, outputs, nil
 }

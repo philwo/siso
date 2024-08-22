@@ -46,6 +46,13 @@ type Experiments struct {
 	m    map[string]*experimentFeature
 }
 
+var experiments Experiments
+
+// SetExperimentForTest sets experiments for testing.
+func SetExperimentForTest(v string) {
+	experiments.set(v)
+}
+
 const experimentEnv = "SISO_EXPERIMENTS"
 
 func (e *Experiments) init() {
@@ -56,6 +63,10 @@ func (e *Experiments) init() {
 	if env == "" {
 		return
 	}
+	e.set(env)
+}
+
+func (e *Experiments) set(env string) {
 	e.m = make(map[string]*experimentFeature)
 	for _, v := range strings.Split(env, ",") {
 		if _, ok := knownExperiments[v]; !ok {
