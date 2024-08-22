@@ -9,6 +9,9 @@ import (
 	"errors"
 	"fmt"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	"infra/build/siso/o11y/clog"
 	"infra/build/siso/o11y/trace"
 	"infra/build/siso/reapi"
@@ -86,6 +89,9 @@ func (b *Builder) runRemote(ctx context.Context, step *Step) error {
 			return err
 		}
 		if errors.Is(err, reapi.ErrBadPlatformContainerImage) {
+			return err
+		}
+		if status.Code(err) == codes.PermissionDenied {
 			return err
 		}
 		if errors.Is(err, errNotRelocatable) {
