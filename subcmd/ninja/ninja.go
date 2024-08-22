@@ -334,6 +334,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		return stats, flagError{
 			err: errors.New(`ninja subtools:
   commands   Use "siso query commands" instead
+  deps       Use "siso query deps" instead
   inputs     Use "siso query inputs" instead
   targets    Use "siso query targets" instead
   cleandead  clean built files that are no longer produced by the manifest`),
@@ -341,6 +342,10 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	case "commands":
 		return stats, flagError{
 			err: errors.New("use `siso query commands` instead"),
+		}
+	case "deps":
+		return stats, flagError{
+			err: errors.New("use `siso query deps` instead"),
 		}
 	case "inputs":
 		return stats, flagError{

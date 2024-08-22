@@ -394,6 +394,8 @@ func (d *DepsLog) update(ctx context.Context, outID int32, deps *depsRecord) boo
 	return existed
 }
 
+var ErrNoDepsLog = errors.New("deps not found")
+
 // Get returns deps log for the output.
 func (d *DepsLog) Get(ctx context.Context, output string) ([]string, time.Time, error) {
 	var mtime time.Time
@@ -403,18 +405,18 @@ func (d *DepsLog) Get(ctx context.Context, output string) ([]string, time.Time, 
 	output = filepath.ToSlash(output)
 	i, found := d.rPathIdx[output]
 	if !found {
-		return nil, mtime, errors.New("not found")
+		return nil, mtime, ErrNoDepsLog
 	}
 	if d.rPaths[i] != output {
 		clog.Errorf(ctx, "inconsistent paths %s -> %d -> %s", output, i, d.rPaths[i])
 		return nil, mtime, errors.New("inconsistent path in deps log")
 	}
 	if i >= len(d.rDeps) {
-		return nil, mtime, errors.New("no deps log entry")
+		return nil, mtime, fmt.Errorf("no deps log entry: %w", ErrNoDepsLog)
 	}
 	deps := d.rDeps[i]
 	if deps == nil {
-		return nil, mtime, errors.New("no deps log entry")
+		return nil, mtime, fmt.Errorf("no deps log entry: %w", ErrNoDepsLog)
 	}
 	return deps.inputs, time.Unix(0, deps.mtime), nil
 }
@@ -481,8 +483,9 @@ func (d *DepsLog) Record(ctx context.Context, output string, mtime time.Time, de
 			willUpdateDeps = true
 		} else {
 			// Verify the stored record.
-			// ignore mtime check?
 			if len(depIDs) != len(dr.inputs) {
+				willUpdateDeps = true
+			} else if mtime.UnixNano() != dr.mtime {
 				willUpdateDeps = true
 			} else {
 				for i, di := range dr.inputs {

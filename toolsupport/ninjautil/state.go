@@ -159,6 +159,18 @@ func (s *State) addOut(edge *Edge, path []byte) bool {
 	return true
 }
 
+// AllNodes returns all nodes.
+func (s *State) AllNodes() []*Node {
+	var nodes []*Node
+	for _, node := range s.nodes {
+		if node == nil {
+			continue
+		}
+		nodes = append(nodes, node)
+	}
+	return nodes
+}
+
 // RootNodes returns root nodes, that are nodes without output actions.
 // (Hence can be considered final artifacts, i.e. other nodes will not use root nodes as inputs.)
 func (s *State) RootNodes() ([]*Node, error) {

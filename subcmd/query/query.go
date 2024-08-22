@@ -23,6 +23,7 @@ func Cmd() *subcommands.Command {
 					Title: "tool to access ninja build graph",
 					Commands: []*subcommands.Command{
 						cmdCommands(),
+						cmdDeps(),
 						cmdDigraph(),
 						cmdIDEAnalysis(),
 						cmdInputs(),

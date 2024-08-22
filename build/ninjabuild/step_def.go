@@ -975,6 +975,10 @@ func (s *StepDef) Platform() map[string]string {
 
 // RecordDeps records deps of the step.
 func (s *StepDef) RecordDeps(ctx context.Context, output string, t time.Time, deps []string) (bool, error) {
+	if s.edge.Binding("deps") == "" {
+		// no need to record deps
+		return false, nil
+	}
 	return s.globals.depsLog.Record(ctx, output, t, deps)
 }
 
