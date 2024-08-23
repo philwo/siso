@@ -6,6 +6,9 @@
 package webui
 
 import (
+	"fmt"
+	"os"
+
 	"github.com/maruel/subcommands"
 
 	"infra/build/siso/webui"
@@ -44,5 +47,10 @@ func (c *webuiRun) init() {
 }
 
 func (c *webuiRun) Run(a subcommands.Application, args []string, env subcommands.Env) int {
-	return webui.Serve(c.version, c.localDevelopment, c.port, c.outdir, c.configRepoDir)
+	s, err := webui.NewServer(c.version, c.localDevelopment, c.port, c.outdir, c.configRepoDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to init server: %v\n", err)
+		return 1
+	}
+	return s.Serve()
 }
