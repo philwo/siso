@@ -979,6 +979,14 @@ func (c *ninjaCmdRun) initWorkdirs(ctx context.Context) (string, error) {
 	}
 	c.startDir = execRoot
 	clog.Infof(ctx, "wd: %s", execRoot)
+	// The formatting of this string, complete with funny quotes, is
+	// so Emacs can properly identify that the cwd has changed for
+	// subsequent commands.
+	// Don't print this if a tool is being used, so that tool output
+	// can be piped into a file without this string showing up.
+	if c.subtool == "" && c.dir != "." {
+		ui.Default.PrintLines(fmt.Sprintf("ninja: Entering directory `%s'\n", c.dir))
+	}
 	err = os.Chdir(c.dir)
 	if err != nil {
 		return "", err
