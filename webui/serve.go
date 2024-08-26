@@ -7,6 +7,7 @@ package webui
 
 import (
 	"cmp"
+	"context"
 	"embed"
 	"encoding/json"
 	"errors"
@@ -32,7 +33,13 @@ import (
 //go:embed *.html css/*.css
 var content embed.FS
 
-const DefaultItemsPerPage = 100
+type webuiContextKey string
+
+const (
+	OutrootContextKey   = webuiContextKey("outroot")
+	OutsubContextKey    = webuiContextKey("outsub")
+	DefaultItemsPerPage = 100
+)
 
 var (
 	templates     = make(map[string]*template.Template)
@@ -84,15 +91,15 @@ var (
 )
 
 type WebuiServer struct {
-	sisoVersion         string
-	localDevelopment    bool
-	port                int
-	templatesFS         fs.FS
-	execRoot            string
-	defaultOutdir       string
-	defaultOutdirParent string
-	defaultOutdirBase   string
-	outsubs             []string
+	sisoVersion       string
+	localDevelopment  bool
+	port              int
+	templatesFS       fs.FS
+	execRoot          string
+	defaultOutdir     string
+	defaultOutdirRoot string
+	defaultOutdirSub  string
+	outsubs           []string
 
 	mu      sync.Mutex
 	outdirs map[string]*outdirInfo
@@ -100,6 +107,8 @@ type WebuiServer struct {
 
 type outdirInfo struct {
 	path    string
+	outroot string
+	outsub  string
 	metrics []*buildMetrics
 }
 
@@ -180,22 +189,37 @@ func loadBuildMetrics(metricsPath string) (*buildMetrics, error) {
 }
 
 // loadOutdirInfo attempts to load all metrics found in the outdir.
-func loadOutdirInfo(outdirPath string) (*outdirInfo, error) {
+func loadOutdirInfo(execRoot, outdirPath string) (*outdirInfo, error) {
 	start := time.Now()
 	fmt.Fprintf(os.Stderr, "load data at %s...", outdirPath)
 	defer func() {
 		fmt.Fprintf(os.Stderr, " returned in %v\n", time.Since(start))
 	}()
 
+	// Get path relative to execroot.
+	// TODO: support paths non-relative to execroot?
+	defaultOutdirExecRel, err := filepath.Rel(execRoot, outdirPath)
+	if err != nil {
+		return nil, fmt.Errorf("couldn't get outdir relative to execdir: %w", err)
+	}
+	// TODO(b/361703735): make sure this works on windows? https://chromium-review.googlesource.com/c/infra/infra/+/5803123/comment/502308d3_ac05bf91/
+	outroot, outsub := filepath.Split(defaultOutdirExecRel)
+	if outroot == "" || strings.Contains(outsub, "/") {
+		return nil, fmt.Errorf("outdir must match pattern `execroot/outroot/outsub`, others are not supported yet")
+	}
+	outroot = filepath.Clean(outroot)
+
 	outdirInfo := &outdirInfo{
-		path: outdirPath,
+		path:    outdirPath,
+		outroot: outroot,
+		outsub:  outsub,
 	}
 
 	// Attempt to load latest metrics first.
 	// Only silently ignore if it doesn't exist, otherwise always return error.
 	// TODO(b/349287453): consider tolerate fail, so frontend can show error?
 	latestMetricsPath := filepath.Join(outdirPath, "siso_metrics.json")
-	_, err := os.Stat(latestMetricsPath)
+	_, err = os.Stat(latestMetricsPath)
 	if err == nil {
 		latestMetrics, err := loadBuildMetrics(latestMetricsPath)
 		if err != nil {
@@ -235,13 +259,13 @@ func loadOutdirInfo(outdirPath string) (*outdirInfo, error) {
 
 // ensureOutdirForRequest lazy-loads outdir for the request, returning cached result if possible.
 func (s *WebuiServer) ensureOutdirForRequest(r *http.Request) (*outdirInfo, error) {
-	abs := filepath.Join(s.execRoot, r.PathValue("outroot"), r.PathValue("outsub"))
+	abs := filepath.Join(s.execRoot, r.Context().Value(OutrootContextKey).(string), r.Context().Value(OutsubContextKey).(string))
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	outdirInfo, ok := s.outdirs[abs]
 	if !ok {
 		var err error
-		outdirInfo, err = loadOutdirInfo(abs)
+		outdirInfo, err = loadOutdirInfo(s.execRoot, abs)
 		if err != nil {
 			return nil, fmt.Errorf("couldn't load outdir %s: %w", abs, err)
 		}
@@ -268,27 +292,31 @@ func (s *WebuiServer) loadView(view string) (*template.Template, error) {
 // renderBuildView renders a build-related view.
 // TODO(b/361703735): return data instead of write to response writer? https://chromium-review.googlesource.com/c/infra/infra/+/5803123/comment/4ce69ada_31730349/
 func (s *WebuiServer) renderBuildView(wr http.ResponseWriter, r *http.Request, tmpl *template.Template, outdirInfo *outdirInfo, data map[string]any) error {
-	outdirShort := outdirInfo.path
-	if home, err := os.UserHomeDir(); err == nil {
-		outdirShort = strings.Replace(outdirShort, home, "~", 1)
-	}
 	rev := r.PathValue("rev")
-	data["prefix"] = fmt.Sprintf("/%s/%s/builds/%s", url.PathEscape(r.PathValue("outroot")), url.PathEscape(r.PathValue("outsub")), rev)
-	data["outroot"] = r.PathValue("outroot")
-	data["outsub"] = r.PathValue("outsub")
 	data["outsubs"] = s.outsubs
-	data["outdirShort"] = outdirShort
 	data["versionID"] = s.sisoVersion
 	data["currentURL"] = r.URL
 	data["currentRev"] = rev
-	var knownRevs []string
-	for _, m := range outdirInfo.metrics {
-		if rev == m.rev {
-			data["currentRevMtime"] = m.mtime.Format(time.RFC3339)
+	if outdirInfo != nil {
+		data["prefix"] = fmt.Sprintf("/%s/%s/builds/%s", url.PathEscape(outdirInfo.outroot), url.PathEscape(outdirInfo.outsub), rev)
+		data["outroot"] = outdirInfo.outroot
+		data["outsub"] = outdirInfo.outsub
+		outdirShort := outdirInfo.path
+		// Showing the full path is too long in the webui so abbreviate home dir to ~.
+		// TODO(b/361703735): refactor https://chromium-review.googlesource.com/c/infra/infra/+/5804478/comment/dcfb372d_f21e4cc5/
+		if home, err := os.UserHomeDir(); err == nil {
+			outdirShort = strings.Replace(outdirShort, home, "~", 1)
 		}
-		knownRevs = append(knownRevs, m.rev)
+		data["outdirShort"] = outdirShort
+		var knownRevs []string
+		for _, m := range outdirInfo.metrics {
+			if rev == m.rev {
+				data["currentRevMtime"] = m.mtime.Format(time.RFC3339)
+			}
+			knownRevs = append(knownRevs, m.rev)
+		}
+		data["revs"] = knownRevs
 	}
-	data["revs"] = knownRevs
 	err := tmpl.ExecuteTemplate(wr, "base", data)
 	if err != nil {
 		return fmt.Errorf("failed to execute template: %w", err)
@@ -334,20 +362,8 @@ func NewServer(version string, localDevelopment bool, port int, defaultOutdir, c
 		return nil, fmt.Errorf("failed to find execroot: %w", err)
 	}
 
-	// Get path relative to execroot.
-	// TODO: support paths non-relative to execroot?
-	defaultOutdirExecRel, err := filepath.Rel(s.execRoot, defaultOutdir)
-	if err != nil {
-		return nil, fmt.Errorf("couldn't get outdir relative to execdir: %w", err)
-	}
-	// TODO(b/361703735): handle base case /? windows? https://chromium-review.googlesource.com/c/infra/infra/+/5803123/comment/502308d3_ac05bf91/
-	s.defaultOutdirParent, s.defaultOutdirBase = filepath.Split(defaultOutdirExecRel)
-	if len(s.defaultOutdirParent) == 0 || strings.Contains(s.defaultOutdirBase, "/") {
-		return nil, fmt.Errorf("outdir must match pattern `execroot/outroot/outsub`, others are not supported yet")
-	}
-
 	// Preload default outdir.
-	defaultOutdirInfo, err := loadOutdirInfo(defaultOutdir)
+	defaultOutdirInfo, err := loadOutdirInfo(s.execRoot, defaultOutdir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to preload outdir: %w", err)
 	}
@@ -366,7 +382,7 @@ func NewServer(version string, localDevelopment bool, port int, defaultOutdir, c
 			return nil, fmt.Errorf("failed to stat outdir %s: %w", match, err)
 		}
 		if m.IsDir() {
-			outsub, err := filepath.Rel(filepath.Join(s.execRoot, s.defaultOutdirParent), match)
+			outsub, err := filepath.Rel(filepath.Join(s.execRoot, defaultOutdirInfo.outroot), match)
 			if err != nil {
 				return nil, fmt.Errorf("failed to make %s execroot relative: %w", match, err)
 			}
@@ -378,11 +394,61 @@ func NewServer(version string, localDevelopment bool, port int, defaultOutdir, c
 }
 
 func (s *WebuiServer) Serve() int {
-	// Group together outdir related handlers.
-	outdirHandlers := http.NewServeMux()
+	outdirRouter := s.outdirRouter()
 
-	outdirHandlers.HandleFunc("/{outroot}/{outsub}/reload", func(w http.ResponseWriter, r *http.Request) {
-		// Don't try to reload non-existing outdir.
+	// Handler for all outdir related URLs that loads the outdir and delegates to the outdir sub-router.
+	// This is set up on a separate mux because it's too generic and would otherwise cause panic:
+	//     /css/ and /{outroot}/{outsub}/ both match some paths, like "/css/outsub/".
+	//     But neither is more specific than the other.
+	//     /css/ matches "/css/", but /{outroot}/{outsub}/ doesn't.
+	//     /{outroot}/{outsub}/ matches "/outroot/outsub/", but /css/ doesn't.
+	outdirParser := http.NewServeMux()
+	outdirParser.HandleFunc("/{outroot}/{outsub}/", func(w http.ResponseWriter, r *http.Request) {
+		outroot := r.PathValue("outroot")
+		outsub := r.PathValue("outsub")
+		ctx := r.Context()
+		ctx = context.WithValue(ctx, OutrootContextKey, outroot)
+		ctx = context.WithValue(ctx, OutsubContextKey, outsub)
+		// Manually strip prefix.
+		// (Can't strip patterns with net/http see https://github.com/golang/go/issues/64909)
+		http.StripPrefix(fmt.Sprintf("/%s/%s", outroot, outsub), outdirRouter).ServeHTTP(w, r.WithContext(ctx))
+	})
+
+	// Default catch-all handler.
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		// Redirect root to default outdir.
+		if r.URL.Path == "/" {
+			http.Redirect(w, r, fmt.Sprintf("/%s/%s/builds/latest/steps/", s.defaultOutdirRoot, s.defaultOutdirSub), http.StatusTemporaryRedirect)
+			return
+		}
+
+		// Delegate all other requests to the outdir handler.
+		outdirParser.ServeHTTP(w, r)
+	})
+
+	http.Handle("/css/", http.FileServerFS(s.templatesFS))
+
+	// Serve third party JS. No other third party libraries right now, so just serve Material Design node_modules root.
+	http.Handle("/third_party/", http.StripPrefix("/third_party/", http.FileServerFS(mwc.NodeModulesFS)))
+
+	fmt.Printf("listening on http://localhost:%d/...\n", s.port)
+	err := http.ListenAndServe(fmt.Sprintf(":%d", s.port), nil)
+	if errors.Is(err, http.ErrServerClosed) {
+		fmt.Printf("server closed\n")
+	} else if err != nil {
+		fmt.Printf("error starting server: %s\n", err)
+		return 1
+	}
+	return 0
+}
+
+// outdirRouter returns *http.ServeMux with handlers related to an outdir.
+// All handlers assume request's context.Context contains outdirInfo.
+// TODO(b/361703735): Move this function into a separate file e.g. outdir_handlers.go.
+func (s *WebuiServer) outdirRouter() *http.ServeMux {
+	outdirRouter := http.NewServeMux()
+
+	outdirRouter.HandleFunc("/reload", func(w http.ResponseWriter, r *http.Request) {
 		outdirInfo, err := s.ensureOutdirForRequest(r)
 		if err != nil {
 			s.renderBuildViewError(http.StatusNotFound, fmt.Sprintf("outdir failed to load for request %s: %v", r.URL, err), w, r, outdirInfo)
@@ -390,7 +456,7 @@ func (s *WebuiServer) Serve() int {
 		}
 
 		// loadOutdirInfo will always override existing cached data.
-		newOutdirInfo, err := loadOutdirInfo(outdirInfo.path)
+		newOutdirInfo, err := loadOutdirInfo(s.execRoot, outdirInfo.path)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "failed to reload outdir: %v", err)
 			w.WriteHeader(http.StatusInternalServerError)
@@ -408,7 +474,7 @@ func (s *WebuiServer) Serve() int {
 		http.Redirect(w, r, dest, http.StatusTemporaryRedirect)
 	})
 
-	outdirHandlers.HandleFunc("/{outroot}/{outsub}/builds/{rev}/logs/", func(w http.ResponseWriter, r *http.Request) {
+	outdirRouter.HandleFunc("/builds/{rev}/logs/", func(w http.ResponseWriter, r *http.Request) {
 		dest := fmt.Sprintf(
 			"/%s/%s/builds/%s/logs/.siso_config",
 			url.PathEscape(r.PathValue("outroot")),
@@ -417,7 +483,7 @@ func (s *WebuiServer) Serve() int {
 		http.Redirect(w, r, dest, http.StatusTemporaryRedirect)
 	})
 
-	outdirHandlers.HandleFunc("/{outroot}/{outsub}/builds/{rev}/logs/{file}", func(w http.ResponseWriter, r *http.Request) {
+	outdirRouter.HandleFunc("/builds/{rev}/logs/{file}", func(w http.ResponseWriter, r *http.Request) {
 		outdirInfo, err := s.ensureOutdirForRequest(r)
 		if err != nil {
 			s.renderBuildViewError(http.StatusNotFound, fmt.Sprintf("outdir failed to load for request %s: %v", r.URL, err), w, r, outdirInfo)
@@ -481,12 +547,13 @@ func (s *WebuiServer) Serve() int {
 		}
 	})
 
-	outdirHandlers.HandleFunc("/{outroot}/{outsub}/builds/{rev}/aggregates/", func(w http.ResponseWriter, r *http.Request) {
+	outdirRouter.HandleFunc("/builds/{rev}/aggregates/", func(w http.ResponseWriter, r *http.Request) {
 		outdirInfo, err := s.ensureOutdirForRequest(r)
 		if err != nil {
 			s.renderBuildViewError(http.StatusNotFound, fmt.Sprintf("outdir failed to load for request %s: %v", r.URL, err), w, r, outdirInfo)
 			return
 		}
+
 		var metrics *buildMetrics
 		for _, m := range outdirInfo.metrics {
 			if m.rev == r.PathValue("rev") {
@@ -541,12 +608,13 @@ func (s *WebuiServer) Serve() int {
 		}
 	})
 
-	outdirHandlers.HandleFunc("POST /{outroot}/{outsub}/builds/{rev}/steps/{id}/recall/", func(w http.ResponseWriter, r *http.Request) {
+	outdirRouter.HandleFunc("POST /builds/{rev}/steps/{id}/recall/", func(w http.ResponseWriter, r *http.Request) {
 		outdirInfo, err := s.ensureOutdirForRequest(r)
 		if err != nil {
 			s.renderBuildViewError(http.StatusNotFound, fmt.Sprintf("outdir failed to load for request %s: %v", r.URL, err), w, r, outdirInfo)
 			return
 		}
+
 		var metrics *buildMetrics
 		for _, m := range outdirInfo.metrics {
 			if m.rev == r.PathValue("rev") {
@@ -582,12 +650,13 @@ func (s *WebuiServer) Serve() int {
 		}
 	})
 
-	outdirHandlers.HandleFunc("/{outroot}/{outsub}/builds/{rev}/steps/{id}/", func(w http.ResponseWriter, r *http.Request) {
+	outdirRouter.HandleFunc("/builds/{rev}/steps/{id}/", func(w http.ResponseWriter, r *http.Request) {
 		outdirInfo, err := s.ensureOutdirForRequest(r)
 		if err != nil {
 			s.renderBuildViewError(http.StatusNotFound, fmt.Sprintf("outdir failed to load for request %s: %v", r.URL, err), w, r, outdirInfo)
 			return
 		}
+
 		var metrics *buildMetrics
 		for _, m := range outdirInfo.metrics {
 			if m.rev == r.PathValue("rev") {
@@ -630,12 +699,13 @@ func (s *WebuiServer) Serve() int {
 		}
 	})
 
-	outdirHandlers.HandleFunc("/{outroot}/{outsub}/builds/{rev}/steps/", func(w http.ResponseWriter, r *http.Request) {
+	outdirRouter.HandleFunc("/builds/{rev}/steps/", func(w http.ResponseWriter, r *http.Request) {
 		outdirInfo, err := s.ensureOutdirForRequest(r)
 		if err != nil {
 			s.renderBuildViewError(http.StatusNotFound, fmt.Sprintf("outdir failed to load for request %s: %v", r.URL, err), w, r, outdirInfo)
 			return
 		}
+
 		var metrics *buildMetrics
 		for _, m := range outdirInfo.metrics {
 			if m.rev == r.PathValue("rev") {
@@ -775,32 +845,5 @@ func (s *WebuiServer) Serve() int {
 		}
 	})
 
-	// Default catch-all handler.
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		// Redirect root to default outdir.
-		if r.URL.Path == "/" {
-			http.Redirect(w, r, fmt.Sprintf("/%s/%s/builds/latest/steps/", s.defaultOutdirParent, s.defaultOutdirBase), http.StatusTemporaryRedirect)
-			return
-		}
-
-		// Delegate all other requests to outdir handlers.
-		// This is because outdir handlers start with a generic wildcard pattern "/{outroot}/...".
-		// We should give outdir handlers fallback for all paths that aren't matched by any other handler.
-		outdirHandlers.ServeHTTP(w, r)
-	})
-
-	http.Handle("/css/", http.FileServerFS(s.templatesFS))
-
-	// Serve third party JS. No other third party libraries right now, so just serve Material Design node_modules root.
-	http.Handle("/third_party/", http.StripPrefix("/third_party/", http.FileServerFS(mwc.NodeModulesFS)))
-
-	fmt.Printf("listening on http://localhost:%d/...\n", s.port)
-	err := http.ListenAndServe(fmt.Sprintf(":%d", s.port), nil)
-	if errors.Is(err, http.ErrServerClosed) {
-		fmt.Printf("server closed\n")
-	} else if err != nil {
-		fmt.Printf("error starting server: %s\n", err)
-		return 1
-	}
-	return 0
+	return outdirRouter
 }
