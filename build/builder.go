@@ -18,7 +18,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
-	"runtime/pprof"
 	"sort"
 	"strconv"
 	"strings"
@@ -38,7 +37,7 @@ import (
 	"infra/build/siso/hashfs"
 	"infra/build/siso/o11y/clog"
 	"infra/build/siso/o11y/iometrics"
-	sisopprof "infra/build/siso/o11y/pprof"
+	"infra/build/siso/o11y/pprof"
 	"infra/build/siso/o11y/resultstore"
 	"infra/build/siso/o11y/trace"
 	"infra/build/siso/reapi"
@@ -91,7 +90,7 @@ type Options struct {
 	TraceJSON            string
 	Pprof                string
 	TraceExporter        *trace.Exporter
-	PprofUploader        *sisopprof.Uploader
+	PprofUploader        *pprof.Uploader
 	ResultstoreUploader  *resultstore.Uploader
 
 	// Clobber forces to rebuild ignoring existing generated files.
@@ -196,7 +195,7 @@ type Builder struct {
 	traceEvents          *traceEvents
 	traceStats           *traceStats
 	tracePprof           *tracePprof
-	pprofUploader        *sisopprof.Uploader
+	pprofUploader        *pprof.Uploader
 	resultstoreUploader  *resultstore.Uploader
 
 	clobber         bool
@@ -722,19 +721,6 @@ loop:
 	metrics.Err = err != nil
 	b.recordMetrics(ctx, metrics)
 	clog.Infof(ctx, "%s finished: %v", name, err)
-	if b.rebuildManifest == "" {
-		finished := time.Now()
-		go func() {
-			time.Sleep(1 * time.Minute)
-			// expect siso process finishes before it runs
-			fmt.Fprintf(os.Stderr, "\nBUG: http://b/360963856 - siso didn't finish in %s after build finished \ndump all goroutines:\n", time.Since(finished))
-			err := pprof.Lookup("goroutine").WriteTo(os.Stderr, 1)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "failed to WriteTo: %v\n", err)
-			}
-			os.Exit(1)
-		}()
-	}
 	return err
 }
 
