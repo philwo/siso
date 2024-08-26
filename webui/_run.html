@@ -1,0 +1,24 @@
+{{/* Copyright 2024 The Chromium Authors
+Use of this source code is governed by a BSD-style license that can be
+found in the LICENSE file. */}}
+
+{{define "content"}}
+<div hx-ext="sse" sse-connect="/events/" style="display: grid; grid-template-columns: 300px auto;">
+    <div>
+        <p>EXTREMELY PROTOTYPE.</p>
+        <p>Run a build?!</p>
+        <div>
+            <button hx-post="." hx-target="#build-exec-result">Push button, receive build</button>
+            <div id="build-exec-result"></div>
+        </div>
+        <h3>Build status</h3>
+        <div sse-swap="buildstatus" hx-target="this" hx-swap="innerHTML"></div>
+        <h3>Log</h3>
+        <div sse-swap="buildlog" hx-target="this" hx-swap="beforeend"></div>
+    </div>
+    <div>
+        <h3>Active steps</h3>
+        <div sse-swap="activesteps" hx-target="this" hx-swap="innerHTML"></div>
+    </div>
+</div>
+{{end}}

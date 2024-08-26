@@ -11,6 +11,7 @@ found in the LICENSE file. */}}
   <meta charset="utf-8">
   <title>sisod</title>
   <script src="https://unpkg.com/htmx.org@2.0.0" integrity="sha512-Cpedvic0/Mgc3uRJ5apQ/ZYroPCZpatYEXGJayRaRNjKLaFualFxfxn97LJymznV+nC7y0/Hp/apHNwGpMimuw==" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/htmx-ext-sse@2.2.2/sse.js" integrity="sha384-fw+eTlCc7suMV/1w/7fr2/PmwElUIt5i82bi+qTiLXvjRXZ2/FkiTNA/w0MhXnGI" crossorigin="anonymous"></script>
   <script type="module" src="https://unpkg.com/@github/clipboard-copy-element@1.3.0/dist/bundle.js" integrity="sha512-CA8FL6M22IbBkRz2ISw1hUCXYP2BcJl/Blepvhc0DgBD9iftu4K0mqrTxdzRf346jmxqKKQvsE1NHUIjT/S7lw==" crossorigin="anonymous"></script>
   <script type="module" src="https://unpkg.com/@github/relative-time-element@4.4.2/dist/bundle.js" integrity="sha512-ifMrdUvZ6TAfn25Mphz2etXTxuuZYjy+1BDcEO6u2XVM2GBrdnsCexdIfn1FOQVmO7lQYQeotN0xU3WGSuT14A==" crossorigin="anonymous"></script>
   <script type="module" src="/third_party/@material/web/all.js"></script>
@@ -171,6 +172,7 @@ found in the LICENSE file. */}}
     </header>
     <div id="page-container">
       <md-tabs id="page-tabs" hx-push-url="true">
+        <md-primary-tab hx-get="{{.prefix}}/run/" {{if urlPathHasPrefix .currentURL (printf "%s/run/" .prefix)}}selected{{end}}>Run Build</md-primary-tab>
         <md-primary-tab hx-get="{{.prefix}}/steps/" {{if urlPathHasPrefix .currentURL (printf "%s/steps/" .prefix)}}selected{{end}}>Build Steps</md-primary-tab>
         <md-primary-tab hx-get="{{.prefix}}/aggregates/" {{if urlPathHasPrefix .currentURL (printf "%s/aggregates/" .prefix)}}selected{{end}}>Aggregates</md-primary-tab>
         <md-primary-tab hx-get="{{.prefix}}/logs/" {{if urlPathHasPrefix .currentURL (printf "%s/logs/" .prefix)}}selected{{end}}>Raw Logs</md-primary-tab>

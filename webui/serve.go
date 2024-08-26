@@ -6,6 +6,8 @@
 package webui
 
 import (
+	"bufio"
+	"bytes"
 	"cmp"
 	"context"
 	"embed"
@@ -17,6 +19,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -27,6 +30,7 @@ import (
 	"time"
 
 	"infra/build/siso/build"
+	"infra/build/siso/ui"
 	mwc "infra/third_party/material_web_components"
 )
 
@@ -87,6 +91,7 @@ var (
 		},
 	}
 	sisoMetricsRe = regexp.MustCompile(`siso_metrics.(\d+).json`)
+	ninjaStepRe   = regexp.MustCompile(`\[(?P<stepNum>[0-9]+?)/(?P<totalSteps>[0-9]+?)\] (?P<time>[^\s]+?) (?P<status>[SF]) (?P<type>[^\s]+?) (?P<out>.+)`)
 	sortParamRe   = regexp.MustCompile(`^(?P<sortBy>[a-z]+?)(?P<order>Asc|Dsc)$`)
 )
 
@@ -103,6 +108,12 @@ type WebuiServer struct {
 
 	mu      sync.Mutex
 	outdirs map[string]*outdirInfo
+}
+
+type runningStepInfo struct {
+	stepOut  string
+	stepType string
+	started  time.Time
 }
 
 type outdirInfo struct {
@@ -394,7 +405,148 @@ func NewServer(version string, localDevelopment bool, port int, defaultOutdir, c
 }
 
 func (s *WebuiServer) Serve() int {
+	sse := newSseServer()
+	sse.Start()
+	http.Handle("/events/", sse)
+
 	outdirRouter := s.outdirRouter()
+
+	// TODO: elevate this url to /builds/run/
+	outdirRouter.HandleFunc("GET /builds/{rev}/run/", func(w http.ResponseWriter, r *http.Request) {
+		outdirInfo, err := s.ensureOutdirForRequest(r)
+		if err != nil {
+			s.renderBuildViewError(http.StatusNotFound, fmt.Sprintf("outdir failed to load for request %s: %v", r.URL, err), w, r, outdirInfo)
+			return
+		}
+
+		tmpl, err := s.loadView("_run.html")
+		if err != nil {
+			s.renderBuildViewError(http.StatusInternalServerError, fmt.Sprintf("failed to load view: %s", err), w, r, outdirInfo)
+			return
+		}
+
+		err = s.renderBuildView(w, r, tmpl, outdirInfo, map[string]any{})
+		if err != nil {
+			s.renderBuildViewError(http.StatusInternalServerError, fmt.Sprintf("failed to render view: %v", err), w, r, outdirInfo)
+		}
+	})
+
+	outdirRouter.HandleFunc("POST /builds/{rev}/run/", func(w http.ResponseWriter, r *http.Request) {
+		outdirInfo, err := s.ensureOutdirForRequest(r)
+		if err != nil {
+			s.renderBuildViewError(http.StatusNotFound, fmt.Sprintf("outdir failed to load for request %s: %v", r.URL, err), w, r, outdirInfo)
+			return
+		}
+
+		exe, err := os.Executable()
+		if err != nil {
+			s.renderBuildViewError(http.StatusInternalServerError, fmt.Sprintf("failed to detect siso path: %v", err), w, r, outdirInfo)
+		}
+
+		tmpl, err := s.loadView("_error.html")
+		if err != nil {
+			s.renderBuildViewError(http.StatusInternalServerError, fmt.Sprintf("failed to load view: %s", err), w, r, outdirInfo)
+			return
+		}
+
+		cmd := exec.Command(exe, "ninja", "-C", "out/Default", "base") // outdirInfo.path
+		cmd.Dir = s.execRoot
+		pipe, _ := cmd.StdoutPipe()
+		cmd.Stderr = cmd.Stdout
+		if err := cmd.Start(); err != nil {
+			s.renderBuildViewError(http.StatusInternalServerError, fmt.Sprintf("failed to launch process: %s", err), w, r, outdirInfo)
+			return
+		}
+		done := make(chan error)
+		go func() {
+			done <- cmd.Wait()
+		}()
+
+		activeSteps := make(map[string]runningStepInfo)
+		activeStepsLock := &sync.RWMutex{}
+		var maxStep int64
+
+		go func(p io.ReadCloser) {
+			reader := bufio.NewReader(pipe)
+			line, err := reader.ReadString('\n')
+			for err == nil {
+				if ninjaStepRe.MatchString(line) {
+					matches := ninjaStepRe.FindStringSubmatch(line)
+					stepNum := string(matches[ninjaStepRe.SubexpIndex("stepNum")])
+					totalSteps := string(matches[ninjaStepRe.SubexpIndex("totalSteps")])
+					// stepTime := string(matches[ninjaStepRe.SubexpIndex("time")])
+					status := string(matches[ninjaStepRe.SubexpIndex("status")])
+					stepType := string(matches[ninjaStepRe.SubexpIndex("type")])
+					stepOut := string(matches[ninjaStepRe.SubexpIndex("out")])
+
+					stepNumParsed, err := strconv.ParseInt(stepNum, 0, 64)
+					if err == nil && stepNumParsed > maxStep {
+						maxStep = stepNumParsed
+					}
+
+					activeStepsLock.Lock()
+					if status == "S" {
+						activeSteps[stepOut] = runningStepInfo{
+							stepOut:  stepOut,
+							stepType: stepType,
+							started:  time.Now(),
+						}
+					} else if status == "F" {
+						delete(activeSteps, stepOut)
+					}
+					activeStepsLock.Unlock()
+
+					sse.messages <- sseMessage{"buildstatus", fmt.Sprintf("<li>%d active steps<li>%d/%s steps done", len(activeSteps), maxStep, totalSteps)}
+				} else {
+					sse.messages <- sseMessage{"buildlog", fmt.Sprintf("<div>%s</div>", line)}
+				}
+				line, err = reader.ReadString('\n')
+			}
+			fmt.Fprintf(os.Stderr, "A build was finished\n")
+		}(pipe)
+		go func() {
+			for {
+				select {
+				case <-done:
+					sse.messages <- sseMessage{"activesteps", "Finished"}
+					return
+				case <-time.After(100 * time.Millisecond):
+					activeStepsLock.RLock()
+					// TODO: use golang 1.23 maps.Values
+					activeByStarted := make([]runningStepInfo, 0, len(activeSteps))
+					for _, value := range activeSteps {
+						activeByStarted = append(activeByStarted, value)
+					}
+					activeStepsLock.RUnlock()
+
+					slices.SortFunc(activeByStarted, func(a, b runningStepInfo) int {
+						return a.started.Compare(b.started)
+					})
+
+					b := new(bytes.Buffer)
+					fmt.Fprintf(b, "<table>")
+					for _, stepInfo := range activeByStarted {
+						fmt.Fprintf(
+							b, "<tr><td>%s</td><td>%s</td><td>%s</td></tr>",
+							stepInfo.stepType,
+							ui.FormatDuration(time.Since(stepInfo.started)),
+							stepInfo.stepOut,
+						)
+					}
+					fmt.Fprintf(b, "</table>")
+					sse.messages <- sseMessage{"activesteps", b.String()}
+				}
+			}
+		}()
+
+		err = s.renderBuildView(w, r, tmpl, outdirInfo, map[string]any{
+			"errorTitle":   "Success",
+			"errorMessage": "Launched build",
+		})
+		if err != nil {
+			s.renderBuildViewError(http.StatusInternalServerError, fmt.Sprintf("failed to render view: %v", err), w, r, outdirInfo)
+		}
+	})
 
 	// Handler for all outdir related URLs that loads the outdir and delegates to the outdir sub-router.
 	// This is set up on a separate mux because it's too generic and would otherwise cause panic:
