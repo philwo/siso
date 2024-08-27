@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
@@ -370,5 +371,123 @@ func TestBuild_PhonyReplace(t *testing.T) {
 	}
 	if stats.Total != 4 || stats.Done != stats.Total || stats.Remote != 0 || stats.Skipped != stats.Total {
 		t.Errorf("stats total=%d done=%d remote=%d skipped=%d; want total=4 done=4 remote=0 skipped=4 (%#v)", stats.Total, stats.Done, stats.Remote, stats.Skipped, stats)
+	}
+}
+
+func TestBuild_PhonyIndirectInputs(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+
+	ninja := func(t *testing.T, refake *reapitest.Fake) (build.Stats, error) {
+		t.Helper()
+		var ds dataSource
+		defer func() {
+			err := ds.Close(ctx)
+			if err != nil {
+				t.Error(err)
+			}
+		}()
+		ds.client = reapitest.New(ctx, t, refake)
+		ds.cache = ds.client.CacheStore()
+
+		opt, graph, cleanup := setupBuild(ctx, t, dir, hashfs.Option{
+			StateFile:  ".siso_fs_state",
+			DataSource: ds,
+		})
+		defer cleanup()
+		opt.REAPIClient = ds.client
+		return runNinja(ctx, "build.ninja", graph, opt, nil, runNinjaOpts{})
+	}
+	setupFiles(t, dir, t.Name(), nil)
+
+	refake := &reapitest.Fake{
+		ExecuteFunc: func(fakere *reapitest.Fake, action *rpb.Action) (*rpb.ActionResult, error) {
+			cmd := &rpb.Command{}
+			err := fakere.FetchProto(ctx, action.CommandDigest, cmd)
+			if err != nil {
+				return nil, err
+			}
+			if len(cmd.Arguments) < 3 {
+				t.Logf("wrong arguments %q", cmd.Arguments)
+				return &rpb.ActionResult{
+					ExitCode:  1,
+					StderrRaw: []byte(fmt.Sprintf("wrong arguments %q", cmd.Arguments)),
+				}, nil
+			}
+			if !slices.Equal(cmd.Arguments[:2], []string{"python3", "../../mojom_parser.py"}) {
+				t.Logf("wrong command %q", cmd.Arguments)
+				return &rpb.ActionResult{
+					ExitCode:  1,
+					StderrRaw: []byte(fmt.Sprintf("wrong command %q", cmd.Arguments)),
+				}, nil
+			}
+			var outputFiles []*rpb.OutputFile
+			switch cmd.Arguments[2] {
+			case "foo":
+				d, err := fakere.Put(ctx, []byte("foo.mojom-module"))
+				if err != nil {
+					return nil, err
+				}
+				outputFiles = append(outputFiles, &rpb.OutputFile{
+					Path:   "foo.mojom-module",
+					Digest: d,
+				})
+			case "absl_status":
+				d, err := fakere.Put(ctx, []byte("absl_status.mojom-module"))
+				if err != nil {
+					return nil, err
+				}
+				outputFiles = append(outputFiles, &rpb.OutputFile{
+					Path:   "gen/absl_status.mojom-module",
+					Digest: d,
+				})
+			default:
+				t.Logf("wrong command %q", cmd.Arguments)
+				return &rpb.ActionResult{
+					ExitCode:  1,
+					StderrRaw: []byte(fmt.Sprintf("wrong option %q", cmd.Arguments)),
+				}, nil
+
+			}
+
+			tree := reapitest.InputTree{CAS: fakere.CAS, Root: action.InputRootDigest}
+			_, err = tree.LookupFileNode(ctx, "mojom_parser.py")
+			if err != nil {
+				t.Logf("missing mojom_parser.py: %v", err)
+				return &rpb.ActionResult{
+					ExitCode:  1,
+					StderrRaw: []byte(fmt.Sprintf("../../mojom_parser.py: File not found: %v", err)),
+				}, nil
+			}
+			_, err = tree.LookupFileNode(ctx, "out/siso/gen/base.build_metadata")
+			if err != nil {
+				t.Logf("missing out/siso/gen/build_metadata.py: %v", err)
+				return &rpb.ActionResult{
+					ExitCode:  1,
+					StderrRaw: []byte(fmt.Sprintf("gen/build_metadata.py: File not found: %v", err)),
+				}, nil
+			}
+			return &rpb.ActionResult{
+				ExitCode:    0,
+				OutputFiles: outputFiles,
+			}, nil
+		},
+	}
+
+	stats, err := ninja(t, refake)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.Total != 6 || stats.Done != stats.Total || stats.Remote != 2 || stats.Skipped != 3 || stats.LocalFallback != 0 {
+		t.Errorf("stats total=%d done=%d remote=%d skipped=%d local_fallback=%d; want total=6 done=6 remote=2 skipped=3 local_fallback=0 (%#v)", stats.Total, stats.Done, stats.Remote, stats.Skipped, stats.LocalFallback, stats)
+	}
+
+	t.Logf("-- second build. no-op")
+	stats, err = ninja(t, refake)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.Total != 6 || stats.Done != stats.Total || stats.Remote != 0 || stats.Skipped != stats.Total {
+		t.Errorf("stats total=%d done=%d remote=%d skipped=%d; want total=6 done=6 remote=0 skipped=6 (%#v)", stats.Total, stats.Done, stats.Remote, stats.Skipped, stats)
 	}
 }

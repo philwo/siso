@@ -639,6 +639,7 @@ func (s *StepDef) ExpandedInputs(ctx context.Context) []string {
 	// it takes too much memory in later build stages.
 	// keep Inputs as is, and expand them when calculating digest ?
 	seen := make(map[string]bool)
+	var phonyEdges []*ninjautil.Edge
 	var inputs []string
 	globals := s.globals
 	for _, in := range s.edge.Inputs() {
@@ -648,9 +649,11 @@ func (s *StepDef) ExpandedInputs(ctx context.Context) []string {
 		}
 		seen[p] = true
 		if inEdge, ok := in.InEdge(); ok && inEdge.IsPhony() {
-			// replace phony inputs here before ExpandInput,
-			// since ExpandInputs removes non-exist inputs.
-			inputs = append(inputs, replacePhony(ctx, globals, seen, p, inEdge, s.rule.Debug)...)
+			// replace later after indirect_inputs
+			if s.rule.Debug {
+				clog.Infof(ctx, "input from ninja(phony deferred): %s", p)
+			}
+			phonyEdges = append(phonyEdges, inEdge)
 			continue
 		}
 		if s.rule.Debug {
@@ -697,6 +700,12 @@ func (s *StepDef) ExpandedInputs(ctx context.Context) []string {
 			inputs = s.appendIndirectInputs(ctx, filter, edge, inputs, iseen)
 		}
 		// and need to expand inputs for toolchain input etc.
+	}
+	for _, inEdge := range phonyEdges {
+		// replace phony inputs here before ExpandInput,
+		// since ExpandInputs removes non-exist inputs.
+		p := globals.targetPath(ctx, inEdge.Outputs()[0])
+		inputs = append(inputs, replacePhony(ctx, globals, seen, p, inEdge, s.rule.Debug)...)
 	}
 
 	inputs = globals.stepConfig.ExpandInputs(ctx, globals.path, globals.hashFS, inputs)
@@ -820,23 +829,25 @@ func (s *StepDef) appendIndirectInputs(ctx context.Context, filter func(context.
 
 	edgeName := edge.RuleName()
 	globals := s.globals
-	// allow to use outputs of the edge.
-	for _, out := range edge.Outputs() {
-		p := globals.targetPath(ctx, out)
-		if seen[p] {
-			continue
-		}
-		seen[p] = true
-		if !filter(ctx, filepath.ToSlash(p), s.rule.Debug) {
-			if s.rule.Debug {
-				clog.Infof(ctx, "input from ninja indirect[output] ignored: %s: %s", edgeName, p)
+	if !edge.IsPhony() {
+		// allow to use outputs of the edge.
+		for _, out := range edge.Outputs() {
+			p := globals.targetPath(ctx, out)
+			if seen[p] {
+				continue
 			}
-			continue
+			seen[p] = true
+			if !filter(ctx, filepath.ToSlash(p), s.rule.Debug) {
+				if s.rule.Debug {
+					clog.Infof(ctx, "input from ninja indirect[output] ignored: %s: %s", edgeName, p)
+				}
+				continue
+			}
+			if s.rule.Debug {
+				clog.Infof(ctx, "input from ninja indirect[output] %s: %s", edgeName, p)
+			}
+			inputs = append(inputs, p)
 		}
-		if s.rule.Debug {
-			clog.Infof(ctx, "input from ninja indirect[output] %s: %s", edgeName, p)
-		}
-		inputs = append(inputs, p)
 	}
 	var nextEdges []*ninjautil.Edge
 	for _, in := range edge.Inputs() {
