@@ -82,7 +82,7 @@ func (c *Client) Info() string {
 		return "cog disabled"
 	}
 	if c.conn == nil {
-		return "cog enabled: buildfs disabled"
+		return "cog enabled"
 	}
 	return "cog enabled: buildfs enabled"
 }
