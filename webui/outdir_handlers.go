@@ -198,8 +198,9 @@ func (s *WebuiServer) ensureOutdirForRequest(r *http.Request) (*outdirInfo, erro
 }
 
 // outdirRouter returns *http.ServeMux with handlers related to an outdir.
-// All handlers assume request's context.Context contains outdirInfo.
-func (s *WebuiServer) outdirRouter() *http.ServeMux {
+// The consumer of this function is responsible for nesting this *http.ServeMux appropriately.
+// All handlers assume request's context.Context contains outroot, outsub.
+func (s *WebuiServer) outdirRouter(sseServer *sseServer) *http.ServeMux {
 	outdirRouter := http.NewServeMux()
 
 	outdirRouter.HandleFunc("/reload", func(w http.ResponseWriter, r *http.Request) {
@@ -227,6 +228,8 @@ func (s *WebuiServer) outdirRouter() *http.ServeMux {
 			url.PathEscape(r.PathValue("outsub")))
 		http.Redirect(w, r, dest, http.StatusTemporaryRedirect)
 	})
+
+	outdirRouter.Handle("/runbuild/", s.runBuildRouter(sseServer))
 
 	outdirRouter.HandleFunc("/builds/{rev}/logs/", func(w http.ResponseWriter, r *http.Request) {
 		dest := fmt.Sprintf(

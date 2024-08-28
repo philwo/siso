@@ -172,7 +172,8 @@ found in the LICENSE file. */}}
     </header>
     <div id="page-container">
       <md-tabs id="page-tabs" hx-push-url="true">
-        <md-primary-tab hx-get="{{.prefix}}/run/" {{if urlPathHasPrefix .currentURL (printf "%s/run/" .prefix)}}selected{{end}}>Run Build</md-primary-tab>
+        {{/* TODO: maybe we need some sort of "route generator" functions, because this is brittle. */}}
+        <md-primary-tab hx-get="/{{.outroot}}/{{.outsub}}/runbuild/" {{if urlPathHasPrefix .currentURL (printf "%s/%s/runbuild/" .outroot .outsub)}}selected{{end}}>Run Build</md-primary-tab>
         <md-primary-tab hx-get="{{.prefix}}/steps/" {{if urlPathHasPrefix .currentURL (printf "%s/steps/" .prefix)}}selected{{end}}>Build Steps</md-primary-tab>
         <md-primary-tab hx-get="{{.prefix}}/aggregates/" {{if urlPathHasPrefix .currentURL (printf "%s/aggregates/" .prefix)}}selected{{end}}>Aggregates</md-primary-tab>
         <md-primary-tab hx-get="{{.prefix}}/logs/" {{if urlPathHasPrefix .currentURL (printf "%s/logs/" .prefix)}}selected{{end}}>Raw Logs</md-primary-tab>
