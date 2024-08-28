@@ -116,7 +116,9 @@ found in the LICENSE file. */}}
   {{/* Tell HTMX by default to use this element as a progress indicator. (It will attach the class "htmx-request" when active.) */}}
   hx-indicator="#progress-indicator"
   {{/* Always swap the #page-view section by default, i.e. don't swap the header and navbar by default. */}}
-  hx-select="#page-view" hx-target="#page-view">
+  hx-select="#page-view" hx-target="#page-view"
+  {{/* The #page-view section is underneath the header but don't scroll away the header on page navigations. */}}
+  hx-swap="show:unset">
   <md-linear-progress id="progress-indicator" indeterminate></md-linear-progress>
   <div id="page">
     <header class="header">
@@ -170,17 +172,27 @@ found in the LICENSE file. */}}
         </md-icon-button>
       </div>
     </header>
-    <div id="page-container">
-      <md-tabs id="page-tabs" hx-push-url="true">
-        {{/* TODO: maybe we need some sort of "route generator" functions, because this is brittle. */}}
-        <md-primary-tab hx-get="/{{.outroot}}/{{.outsub}}/runbuild/" {{if urlPathHasPrefix .currentURL (printf "%s/%s/runbuild/" .outroot .outsub)}}selected{{end}}>Run Build</md-primary-tab>
-        <md-primary-tab hx-get="{{.prefix}}/steps/" {{if urlPathHasPrefix .currentURL (printf "%s/steps/" .prefix)}}selected{{end}}>Build Steps</md-primary-tab>
-        <md-primary-tab hx-get="{{.prefix}}/aggregates/" {{if urlPathHasPrefix .currentURL (printf "%s/aggregates/" .prefix)}}selected{{end}}>Aggregates</md-primary-tab>
-        <md-primary-tab hx-get="{{.prefix}}/logs/" {{if urlPathHasPrefix .currentURL (printf "%s/logs/" .prefix)}}selected{{end}}>Raw Logs</md-primary-tab>
-      </md-tabs>
-      <div id="page-view">
-        <div id="page-content" class="content">{{template "content" .}}</div>
-      </div>
+    <nav id="page-tabs" hx-push-url="true" hx-swap-oob="true">
+      {{/* TODO: maybe we need some sort of "route generator" functions, because this is brittle. */}}
+      <a href="/{{.outroot}}/{{.outsub}}/runbuild/" class="page-tab {{if urlPathHasPrefix .currentURL (printf "%s/%s/runbuild/" .outroot .outsub)}}selected{{end}}">
+        <md-icon>build</md-icon><md-ripple></md-ripple>
+        <span>Run Build</span>
+      </a>
+      <a href="{{.prefix}}/steps/" class="page-tab {{if urlPathHasPrefix .currentURL (printf "%s/steps/" .prefix)}}selected{{end}}">
+        <md-icon>footprint</md-icon><md-ripple></md-ripple>
+        <span>Build Steps</span>
+      </a>
+      <a href="{{.prefix}}/aggregates/" class="page-tab {{if urlPathHasPrefix .currentURL (printf "%s/aggregates/" .prefix)}}selected{{end}}">
+        <md-icon>calculate</md-icon><md-ripple></md-ripple>
+        <span>Aggregates</span>
+      </a>
+      <a href="{{.prefix}}/logs/" class="page-tab {{if urlPathHasPrefix .currentURL (printf "%s/logs/" .prefix)}}selected{{end}}">
+        <md-icon>description</md-icon><md-ripple></md-ripple>
+        <span>Raw Logs</span>
+      </a>
+    </nav>
+    <div id="page-view">
+      <div id="page-content" class="content">{{template "content" .}}</div>
     </div>
   </div>
 </body>

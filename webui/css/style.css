@@ -9,7 +9,18 @@ html, body {
     padding: 0;
 }
 
+#page {
+    display: grid;
+    grid-template-columns: 80px auto;
+    grid-template-rows: auto 1fr;
+    grid-template-areas:
+        "header header"
+        "navrail content";
+    min-height: 100vh;
+}
+
 #page .header {
+    grid-area: header;
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -87,15 +98,15 @@ html, body {
     content: 'brightness_7';
 }
 
-#page-container {
-    background: var(--md-sys-color-surface);
-    border-radius: var(--md-sys-shape-corner-large);
-}
 #page-tabs {
-    grid-area: nav;
+    grid-area: navrail;
+    align-self: start;
+    position: sticky;
+    top: 0;
 }
 #page-view {
-    display: contents;
+    background: var(--md-sys-color-surface);
+    border-radius: var(--md-sys-shape-corner-large);
 }
 #page-content {
     padding: 16px;
@@ -108,8 +119,7 @@ html, body {
         /* Prevent elements like <pre> horizontally overflowing
         * https://css-tricks.com/preventing-a-grid-blowout/ */
         minmax(0, 1fr);
-    grid-template-areas:
-        "sidebar content";
+    grid-template-areas: "sidebar inner-content";
 }
 #page-sidebar {
     grid-area: sidebar;
@@ -117,6 +127,45 @@ html, body {
     /* Even though this is part of the grid, it needs to be explicitly set for
      * some reason, otherwise child elements won't wrap. TODO: why? */
     width: 300px;
+}
+
+/* Simulated implementation of https://m3.material.io/components/navigation-rail/overview
+ * since Material Web is in maintenance mode and this component is missing at
+ * time of writing. */
+.page-tab {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+    text-align: center;
+    --page-tab-width: 80px;
+    --page-tab-icon-width: 56px;
+    --page-tab-icon-height: 32px;
+    width: var(--page-tab-width);
+    margin-bottom: 8px;
+    font-size: var(--md-sys-typescale-label-medium-size);
+    font-weight: var(--md-sys-typescale-label-medium-weight);
+    color: var(--md-sys-color-on-surface);
+}
+.page-tab:hover {
+    text-decoration: none;
+}
+.page-tab md-icon {
+    height: var(--page-tab-icon-height);
+    width: var(--page-tab-icon-width);
+    margin: 0 auto;
+}
+.page-tab.selected md-icon {
+    background: var(--md-sys-color-secondary-container);
+    border-radius: 999px;
+    font-variation-settings: 'FILL' 1;
+}
+.page-tab md-ripple {
+    position: absolute;
+    height: var(--page-tab-icon-height);
+    width: var(--page-tab-icon-width);
+    margin: 0 auto;
+    border-radius: 999px;
 }
 
 /* Steps page. */
