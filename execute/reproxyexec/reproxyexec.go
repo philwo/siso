@@ -415,12 +415,21 @@ func resultErr(response *ppb.RunResponse) error {
 	if response.GetResult() == nil {
 		return errors.New("no result")
 	}
-	if response.GetResult().ExitCode == 0 {
-		return nil
+	st := response.GetResult().GetStatus()
+	exitCode := response.GetResult().GetExitCode()
+	switch st {
+	case cpb.CommandResultStatus_SUCCESS, cpb.CommandResultStatus_CACHE_HIT:
+		if exitCode == 0 {
+			return nil
+		}
+	case cpb.CommandResultStatus_NON_ZERO_EXIT:
+		if exitCode != 0 {
+			return execute.ExitError{
+				ExitCode: int(exitCode),
+			}
+		}
 	}
-	return execute.ExitError{
-		ExitCode: int(response.GetResult().GetExitCode()),
-	}
+	return fmt.Errorf("reproxy error %v: exit=%d: %s", st, exitCode, response.GetResult().GetMsg())
 }
 
 // reproxyOutputsDataSource implements fs.DataStore for Reproxy's outputs.
