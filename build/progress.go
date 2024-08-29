@@ -111,7 +111,13 @@ func (p *progress) update(ctx context.Context, b *Builder) {
 			}
 			lastStepUpdate = time.Now()
 			dur := time.Since(si.step.startTime).Round(d)
-			p.step(ctx, b, si.step, fmt.Sprintf("%s[%s]: %s", ui.FormatDuration(dur), si.step.phase(), si.desc))
+			phase := si.step.phase()
+			msg := fmt.Sprintf("%s[%s]: %s", ui.FormatDuration(dur), phase, si.desc)
+			switch phase {
+			case stepFallbackRun, stepRetryRun:
+				msg = ui.SGR(ui.Red, msg)
+			}
+			p.step(ctx, b, si.step, msg)
 		}
 	}
 }

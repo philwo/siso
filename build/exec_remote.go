@@ -32,6 +32,7 @@ func (b *Builder) execRemote(ctx context.Context, step *Step) error {
 		timeout = step.cmd.Timeout * 4
 	}
 	clog.Infof(ctx, "exec remote %s", step.cmd.Desc)
+	phase := stepRemoteRun
 	var reExecDur time.Duration
 	var reCount int
 	err := retry.Do(ctx, func() error {
@@ -46,8 +47,9 @@ func (b *Builder) execRemote(ctx context.Context, step *Step) error {
 				ActionMnemonic:          step.def.ActionName(),
 				TargetId:                step.cmd.Outputs[0],
 			})
-			clog.Infof(ctx, "step state: remote exec")
-			step.setPhase(stepRemoteRun)
+			clog.Infof(ctx, "step state: remote exec [%s]", phase)
+			step.setPhase(phase)
+			phase = stepRetryRun
 			err := b.remoteExec.Run(ctx, step.cmd)
 			step.setPhase(stepOutput)
 			step.metrics.IsRemote = true
@@ -56,7 +58,7 @@ func (b *Builder) execRemote(ctx context.Context, step *Step) error {
 				clog.Errorf(ctx, "no outputs in action result. retry without cache lookup. b/350360391")
 				reCount++
 				step.cmd.SkipCacheLookup = true
-				step.setPhase(stepRemoteRun)
+				step.setPhase(phase)
 				err = b.remoteExec.Run(ctx, step.cmd)
 				step.setPhase(stepOutput)
 				step.metrics.IsRemote = true

@@ -68,6 +68,10 @@ func (b *Builder) execLocal(ctx context.Context, step *Step) error {
 	case enableTrace:
 		clog.Warningf(ctx, "unable to use file-access-trace")
 	}
+	if phase == stepLocalRun && step.metrics.Fallback {
+		phase = stepFallbackRun
+		stateMessage = "local exec [fallback]"
+	}
 
 	queueTime := time.Now()
 	var dur time.Duration

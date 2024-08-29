@@ -189,6 +189,8 @@ const (
 	stepLocalRun
 	stepREWrapperRun
 	stepRemoteRun
+	stepFallbackRun
+	stepRetryRun
 	stepOutput
 	stepDone
 )
@@ -211,6 +213,10 @@ func (s stepPhase) String() string {
 		return "rewrap"
 	case stepRemoteRun:
 		return "remote"
+	case stepFallbackRun:
+		return "fallback"
+	case stepRetryRun:
+		return "retry"
 	case stepOutput:
 		return "output"
 	case stepDone:
