@@ -107,6 +107,11 @@ func (c *run) collect(ctx context.Context) (map[string]digest.Data, error) {
 			return nil, fmt.Errorf("no siso files in %s: did you specify correct `-C <dir>` ?", wd)
 		}
 		for _, fname := range matches {
+			_, err := os.Stat(fname)
+			if errors.Is(err, fs.ErrNotExist) {
+				// dangling symlink or so?
+				continue
+			}
 			ui.Default.PrintLines(fmt.Sprintf("reading %s", fname))
 			localFname := fname
 			if strings.HasSuffix(fname, ".redirected") {
