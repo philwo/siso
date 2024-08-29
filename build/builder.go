@@ -507,8 +507,8 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 		}
 		if !b.reproxyExec.Used() {
 			// this stats will be shown by reproxy shutdown.
-			msg := fmt.Sprintf("\nlocal:%d remote:%d cache:%d fallback:%d skip:%d\n",
-				stat.Local+stat.NoExec, stat.Remote, stat.CacheHit, stat.LocalFallback, stat.Skipped) +
+			msg := fmt.Sprintf("\nlocal:%d remote:%d cache:%d fallback:%d retry:%d skip:%d\n",
+				stat.Local+stat.NoExec, stat.Remote, stat.CacheHit, stat.LocalFallback, stat.RemoteRetry, stat.Skipped) +
 				depsStatLine +
 				restatLine +
 				fsstatLine

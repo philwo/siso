@@ -54,6 +54,7 @@ func (s *stats) update(ctx context.Context, m *StepMetric, pure bool) {
 	if m.Err {
 		s.s.Fail++
 	}
+	s.s.RemoteRetry += m.RemoteRetry
 
 	if m.DepsLog {
 		if !m.DepsLogErr {
@@ -84,6 +85,7 @@ type Stats struct {
 	Local           int // locally executed actions
 	Remote          int // remote executed actions
 	LocalFallback   int // actions for which remote execution failed, and we did a local fallback
+	RemoteRetry     int // accumulated remote retry counts
 	Total           int // total actions that ran during this build
 }
 

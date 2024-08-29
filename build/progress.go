@@ -234,17 +234,21 @@ func (p *progress) step(ctx context.Context, b *Builder, step *Step, s string) {
 		}
 		var fallback string
 		if stat.LocalFallback > 0 {
-			fallback = ui.SGR(ui.BackgroundRed, fmt.Sprintf("%d", stat.LocalFallback))
-		} else {
-			fallback = "0"
+			fallback = "fallback:" + ui.SGR(ui.BackgroundRed, fmt.Sprintf("%d", stat.LocalFallback)) + " "
 		}
-		lines = append(lines, fmt.Sprintf("pre:%s local:%s remote:%s %s%sfallback:%s",
+		var retry string
+		if stat.RemoteRetry > 0 {
+			retry = "retry:" + ui.SGR(ui.BackgroundRed, fmt.Sprintf("%d", stat.RemoteRetry)) + " "
+		}
+		lines = append(lines, fmt.Sprintf("pre:%s local:%s remote:%s %s%s%s%s",
 			preprocProgress,
 			localProgress,
 			remoteProgress,
 			stepsPerSec,
 			cacheHitRatio,
-			fallback))
+			fallback,
+			retry,
+		))
 		fallthrough
 	default:
 		if step != nil {
