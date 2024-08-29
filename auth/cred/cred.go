@@ -8,6 +8,9 @@ package cred
 import (
 	"context"
 	"crypto/tls"
+	"errors"
+	"fmt"
+	"os/exec"
 
 	"golang.org/x/oauth2"
 	"google.golang.org/api/option"
@@ -67,6 +70,9 @@ func New(ctx context.Context, opts Options) (Cred, error) {
 		}
 		tok, err := opts.TokenSource.Token()
 		if err != nil {
+			if errors.Is(err, exec.ErrNotFound) {
+				return Cred{}, fmt.Errorf("need to run `siso login`, or install `gcloud` and `gcloud auth login --update-adc`: %w", err)
+			}
 			return Cred{}, err
 		}
 		t, _ := tok.Extra("x-token-source").(string)
