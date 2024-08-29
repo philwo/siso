@@ -119,7 +119,11 @@ func (s *WebuiServer) loadView(view string) (*template.Template, error) {
 // renderBuildView renders a build-related view.
 // TODO(b/361703735): return data instead of write to response writer? https://chromium-review.googlesource.com/c/infra/infra/+/5803123/comment/4ce69ada_31730349/
 func (s *WebuiServer) renderBuildView(wr http.ResponseWriter, r *http.Request, tmpl *template.Template, outdirInfo *outdirInfo, data map[string]any) error {
+	// TODO(b/361461051): refactor rev so that it's not required as part of rendering pages in general.
 	rev := r.PathValue("rev")
+	if rev == "" {
+		rev = "latest"
+	}
 	data["outsubs"] = s.outsubs
 	data["versionID"] = s.sisoVersion
 	data["currentURL"] = r.URL
