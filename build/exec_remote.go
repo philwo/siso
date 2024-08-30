@@ -33,11 +33,15 @@ func (b *Builder) execRemote(ctx context.Context, step *Step) error {
 	}
 	clog.Infof(ctx, "exec remote %s", step.cmd.Desc)
 	phase := stepRemoteRun
+	if step.metrics.DepsLogErr {
+		phase = stepRetryRun
+	}
 	var reExecDur time.Duration
-	var reCount int
 	err := retry.Do(ctx, func() error {
 		err := b.remoteSema.Do(ctx, func(ctx context.Context) error {
-			reCount++
+			if phase == stepRetryRun {
+				step.metrics.RemoteRetry++
+			}
 			reExecStarted := time.Now()
 			step.metrics.ActionStartTime = IntervalMetric(reExecStarted.Sub(b.start))
 			ctx = reapi.NewContext(ctx, &rpb.RequestMetadata{
@@ -58,7 +62,7 @@ func (b *Builder) execRemote(ctx context.Context, step *Step) error {
 				clog.Errorf(ctx, "no outputs in action result. retry without cache lookup. b/350360391")
 				msgs := cmdOutput(ctx, "RETRY", step.cmd, step.def.Binding("command"), step.def.RuleName(), err)
 				b.logOutput(ctx, msgs, false)
-				reCount++
+				step.metrics.RemoteRetry++
 				step.cmd.SkipCacheLookup = true
 				step.setPhase(phase)
 				err = b.remoteExec.Run(ctx, step.cmd)
@@ -83,7 +87,6 @@ func (b *Builder) execRemote(ctx context.Context, step *Step) error {
 		}
 		return err
 	})
-	step.metrics.RemoteRetry = max(0, reCount-1)
 	if err != nil {
 		return err
 	}
