@@ -3,7 +3,7 @@ Use of this source code is governed by a BSD-style license that can be
 found in the LICENSE file. */}}
 
 {{define "content"}}
-{{$prefix:=.prefix}}
+{{$outdirRevBaseURL:=.outdirRevBaseURL}}
 {{$step_id:=.step.step_id}}
 <div class="step-header">
   <md-icon-button>
@@ -31,7 +31,7 @@ found in the LICENSE file. */}}
     <h2>Tools</h2>
     <h3>Recall</h3>
     <form id="recall-form"
-          action="{{$prefix}}/steps/{{$step_id}}/recall/" method="POST" hx-push-url="false"
+          action="{{$outdirRevBaseURL}}/steps/{{$step_id}}/recall/" method="POST" hx-push-url="false"
           hx-select="#page-content" hx-target="#recall-dialog-form" hx-swap="innerHTML"
           hx-on:htmx:before-request="document.getElementById('recall-dialog').show()">
       <md-outlined-text-field name="project" label="Cloud project ID" type="text" value="rbe-chrome-untrusted"></md-outlined-text-field>

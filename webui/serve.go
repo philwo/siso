@@ -116,9 +116,26 @@ func (s *WebuiServer) loadView(view string) (*template.Template, error) {
 	return template, nil
 }
 
+// baseURLFromContext gets the base URL from context.
+// This is a HARDCODED assumption that siso webui only has routes that start with outdir.
+func baseURLFromContext(ctx context.Context) (string, error) {
+	outroot, ok := ctx.Value(OutrootContextKey).(string)
+	if !ok {
+		return "", fmt.Errorf("failed to get outroot from context")
+	}
+	outsub, ok := ctx.Value(OutsubContextKey).(string)
+	if !ok {
+		return "", fmt.Errorf("failed to get outsub from context")
+	}
+	return fmt.Sprintf("/%s/%s", outroot, outsub), nil
+}
+
 // renderBuildView renders a build-related view.
 // TODO(b/361703735): return data instead of write to response writer? https://chromium-review.googlesource.com/c/infra/infra/+/5803123/comment/4ce69ada_31730349/
 func (s *WebuiServer) renderBuildView(wr http.ResponseWriter, r *http.Request, tmpl *template.Template, outdirInfo *outdirInfo, data map[string]any) error {
+	if currentBaseURL, err := baseURLFromContext(r.Context()); err == nil {
+		data["currentBaseURL"] = currentBaseURL
+	}
 	// TODO(b/361461051): refactor rev so that it's not required as part of rendering pages in general.
 	rev := r.PathValue("rev")
 	if rev == "" {
@@ -128,8 +145,12 @@ func (s *WebuiServer) renderBuildView(wr http.ResponseWriter, r *http.Request, t
 	data["versionID"] = s.sisoVersion
 	data["currentURL"] = r.URL
 	data["currentRev"] = rev
+	// TODO(b/361461051): refactor so outdirInfo is not required as part of rendering pages in general.
+	// the current outroot and outsub should be available from the context.
 	if outdirInfo != nil {
-		data["prefix"] = fmt.Sprintf("/%s/%s/builds/%s", url.PathEscape(outdirInfo.outroot), url.PathEscape(outdirInfo.outsub), rev)
+		outdirBaseURL := fmt.Sprintf("/%s/%s", url.PathEscape(outdirInfo.outroot), url.PathEscape(outdirInfo.outsub))
+		data["outdirBaseURL"] = outdirBaseURL
+		data["outdirRevBaseURL"] = fmt.Sprintf("%s/builds/%s", outdirBaseURL, rev)
 		data["outroot"] = outdirInfo.outroot
 		data["outsub"] = outdirInfo.outsub
 		outdirShort := outdirInfo.path
@@ -241,12 +262,13 @@ func (s *WebuiServer) Serve() int {
 	outdirParser.HandleFunc("/{outroot}/{outsub}/", func(w http.ResponseWriter, r *http.Request) {
 		outroot := r.PathValue("outroot")
 		outsub := r.PathValue("outsub")
+		baseURL := fmt.Sprintf("/%s/%s", outroot, outsub)
 		ctx := r.Context()
 		ctx = context.WithValue(ctx, OutrootContextKey, outroot)
 		ctx = context.WithValue(ctx, OutsubContextKey, outsub)
 		// Manually strip prefix.
 		// (Can't strip patterns with net/http see https://github.com/golang/go/issues/64909)
-		http.StripPrefix(fmt.Sprintf("/%s/%s", outroot, outsub), outdirRouter).ServeHTTP(w, r.WithContext(ctx))
+		http.StripPrefix(baseURL, outdirRouter).ServeHTTP(w, r.WithContext(ctx))
 	})
 
 	// Default catch-all handler.

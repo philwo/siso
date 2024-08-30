@@ -222,22 +222,26 @@ func (s *WebuiServer) outdirRouter(sseServer *sseServer) *http.ServeMux {
 		s.mu.Unlock()
 
 		// Then redirect to steps page.
-		dest := fmt.Sprintf(
-			"/%s/%s/builds/latest/steps/",
-			url.PathEscape(r.PathValue("outroot")),
-			url.PathEscape(r.PathValue("outsub")))
-		http.Redirect(w, r, dest, http.StatusTemporaryRedirect)
+		if currentBaseURL, err := baseURLFromContext(r.Context()); err == nil {
+			http.Redirect(w, r, fmt.Sprintf("%s/builds/latest/steps/", currentBaseURL), http.StatusTemporaryRedirect)
+		} else {
+			fmt.Fprintf(os.Stderr, "missing base url")
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
 	})
 
 	outdirRouter.Handle("/runbuild/", s.runBuildRouter(sseServer))
 
 	outdirRouter.HandleFunc("/builds/{rev}/logs/", func(w http.ResponseWriter, r *http.Request) {
-		dest := fmt.Sprintf(
-			"/%s/%s/builds/%s/logs/.siso_config",
-			url.PathEscape(r.PathValue("outroot")),
-			url.PathEscape(r.PathValue("outsub")),
-			url.PathEscape(r.PathValue("rev")))
-		http.Redirect(w, r, dest, http.StatusTemporaryRedirect)
+		if currentBaseURL, err := baseURLFromContext(r.Context()); err == nil {
+			dest := fmt.Sprintf("%s/builds/%s/logs/.siso_config", currentBaseURL, url.PathEscape(r.PathValue("rev")))
+			http.Redirect(w, r, dest, http.StatusTemporaryRedirect)
+		} else {
+			fmt.Fprintf(os.Stderr, "missing base url")
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
 	})
 
 	outdirRouter.HandleFunc("/builds/{rev}/logs/{file}", func(w http.ResponseWriter, r *http.Request) {

@@ -4,7 +4,7 @@ found in the LICENSE file. */}}
 
 {{define "base"}}
 {{$outroot:=.outroot}}
-{{$prefix:=.prefix}}
+{{$outdirRevBaseURL:=.outdirRevBaseURL}}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -72,7 +72,7 @@ found in the LICENSE file. */}}
     };
     // Open in Perfetto.
     const PERFETTO_ORIGIN = 'https://ui.perfetto.dev';
-    const TRACE_URL = new URL('{{.prefix}}/logs/siso_trace.json?raw=true', document.baseURI).href;
+    const TRACE_URL = new URL('{{.outdirRevBaseURL}}/logs/siso_trace.json?raw=true', document.baseURI).href;
     window.openInPerfetto = async () => {
       // TODO: check for and present errors.
       const resp = await fetch(TRACE_URL);
@@ -148,7 +148,7 @@ found in the LICENSE file. */}}
             </md-text-button>
             <md-menu id="revision-menu" anchor="revision-menu-button" positioning="popover">
               {{range $rev := .revs}}
-              <md-menu-item href="{{$prefix}}/../{{$rev}}/steps/">
+              <md-menu-item href="{{$outdirRevBaseURL}}/../{{$rev}}/steps/">
                 <div slot="headline">{{if eq $rev "latest"}}latest{{else}}{{$rev}}{{end}}</div>
               </md-menu-item>
               {{end}}
@@ -157,7 +157,7 @@ found in the LICENSE file. */}}
           <div class="mtime-status">
             <relative-time datetime="{{.currentRevMtime}}"></relative-time>
           </div>
-          <md-icon-button href="/{{.outroot}}/{{.outsub}}/reload">
+          <md-icon-button href="{{.outdirBaseURL}}/reload">
             <md-icon>refresh</md-icon>
           </md-icon-button>
         </div>
@@ -174,19 +174,19 @@ found in the LICENSE file. */}}
     </header>
     <nav id="page-tabs" hx-push-url="true" hx-swap-oob="true">
       {{/* TODO: maybe we need some sort of "route generator" functions, because this is brittle. */}}
-      <a href="/{{.outroot}}/{{.outsub}}/runbuild/" class="page-tab {{if urlPathHasPrefix .currentURL (printf "%s/%s/runbuild/" .outroot .outsub)}}selected{{end}}">
+      <a href="{{.outdirBaseURL}}/runbuild/" class="page-tab {{if and (eq .currentBaseURL .outdirBaseURL) (urlPathHasPrefix .currentURL "/runbuild/")}}selected{{end}}">
         <md-icon>build</md-icon><md-ripple></md-ripple>
         <span>Run Build</span>
       </a>
-      <a href="{{.prefix}}/steps/" class="page-tab {{if urlPathHasPrefix .currentURL (printf "%s/steps/" .prefix)}}selected{{end}}">
+      <a href="{{.outdirRevBaseURL}}/steps/" class="page-tab {{if and (eq .currentBaseURL .outdirBaseURL) (urlPathHasPrefix .currentURL (printf "/builds/%s/steps/" .currentRev))}}selected{{end}}">
         <md-icon>footprint</md-icon><md-ripple></md-ripple>
         <span>Build Steps</span>
       </a>
-      <a href="{{.prefix}}/aggregates/" class="page-tab {{if urlPathHasPrefix .currentURL (printf "%s/aggregates/" .prefix)}}selected{{end}}">
+      <a href="{{.outdirRevBaseURL}}/aggregates/" class="page-tab {{if and (eq .currentBaseURL .outdirBaseURL) (urlPathHasPrefix .currentURL (printf "/builds/%s/aggregates/" .currentRev))}}selected{{end}}">
         <md-icon>calculate</md-icon><md-ripple></md-ripple>
         <span>Aggregates</span>
       </a>
-      <a href="{{.prefix}}/logs/" class="page-tab {{if urlPathHasPrefix .currentURL (printf "%s/logs/" .prefix)}}selected{{end}}">
+      <a href="{{.outdirRevBaseURL}}/logs/" class="page-tab {{if and (eq .currentBaseURL .outdirBaseURL) (urlPathHasPrefix .currentURL (printf "/builds/%s/logs/" .currentRev))}}selected{{end}}">
         <md-icon>description</md-icon><md-ripple></md-ripple>
         <span>Raw Logs</span>
       </a>

@@ -3,12 +3,12 @@ Use of this source code is governed by a BSD-style license that can be
 found in the LICENSE file. */}}
 
 {{define "content"}}
-{{$prefix:=.prefix}}
+{{$outdirRevBaseURL:=.outdirRevBaseURL}}
 {{$currentURL:=.currentURL}}
 <aside id="page-sidebar">
 <md-list>
   {{range $allowedFile := .allowedFiles}}
-    {{$logURL := printf "%s/logs/%s" $prefix $allowedFile}}
+    {{$logURL := printf "%s/logs/%s" $outdirRevBaseURL $allowedFile}}
     <md-list-item {{if not (urlPathEq $currentURL $logURL)}}type="button" href="{{$logURL}}"{{end}}>
       {{$allowedFile}}
     </md-list-item>
