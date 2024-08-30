@@ -38,7 +38,9 @@ func (b *Builder) execRemote(ctx context.Context, step *Step) error {
 	}
 	var reExecDur time.Duration
 	err := retry.Do(ctx, func() error {
+		step.setPhase(phase.wait())
 		err := b.remoteSema.Do(ctx, func(ctx context.Context) error {
+			step.setPhase(phase)
 			if phase == stepRetryRun {
 				step.metrics.RemoteRetry++
 			}
@@ -52,7 +54,6 @@ func (b *Builder) execRemote(ctx context.Context, step *Step) error {
 				TargetId:                step.cmd.Outputs[0],
 			})
 			clog.Infof(ctx, "step state: remote exec [%s]", phase)
-			step.setPhase(phase)
 			phase = stepRetryRun
 			err := b.remoteExec.Run(ctx, step.cmd)
 			step.setPhase(stepOutput)

@@ -186,10 +186,15 @@ const (
 	stepHandler
 	stepPreproc
 	stepInput
+	stepLocalWait
 	stepLocalRun
+	stepREWrapperWait
 	stepREWrapperRun
+	stepRemoteWait
 	stepRemoteRun
+	stepFallbackWait
 	stepFallbackRun
+	stepRetryWait
 	stepRetryRun
 	stepOutput
 	stepDone
@@ -207,14 +212,24 @@ func (s stepPhase) String() string {
 		return "prep"
 	case stepInput:
 		return "input"
+	case stepLocalWait:
+		return "wait-local"
 	case stepLocalRun:
 		return "local"
+	case stepREWrapperWait:
+		return "wait-rewrap"
 	case stepREWrapperRun:
 		return "rewrap"
+	case stepRemoteWait:
+		return "wait-remote"
 	case stepRemoteRun:
 		return "remote"
+	case stepFallbackWait:
+		return "wait-fallback"
 	case stepFallbackRun:
 		return "fallback"
+	case stepRetryWait:
+		return "wait-retry"
 	case stepRetryRun:
 		return "retry"
 	case stepOutput:
@@ -223,6 +238,23 @@ func (s stepPhase) String() string {
 		return "done"
 	default:
 		return "unknown"
+	}
+}
+
+func (s stepPhase) wait() stepPhase {
+	switch s {
+	case stepLocalRun:
+		return stepLocalWait
+	case stepREWrapperRun:
+		return stepREWrapperWait
+	case stepRemoteRun:
+		return stepRemoteWait
+	case stepFallbackRun:
+		return stepFallbackWait
+	case stepRetryRun:
+		return stepRetryWait
+	default:
+		return s
 	}
 }
 

@@ -114,7 +114,7 @@ func (p *progress) update(ctx context.Context, b *Builder) {
 			phase := si.step.phase()
 			msg := fmt.Sprintf("%s[%s]: %s", ui.FormatDuration(dur), phase, si.desc)
 			switch phase {
-			case stepFallbackRun, stepRetryRun:
+			case stepFallbackWait, stepFallbackRun, stepRetryWait, stepRetryRun:
 				msg = ui.SGR(ui.Red, msg)
 			}
 			p.step(ctx, b, si.step, msg)

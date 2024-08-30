@@ -42,8 +42,11 @@ func (b *Builder) execReproxy(ctx context.Context, step *Step) error {
 		return err
 	}
 	step.cmd.RecordPreOutputs(ctx)
+	phase := stepRemoteRun
+	step.setPhase(phase.wait())
 	err = b.reproxySema.Do(ctx, func(ctx context.Context) error {
 		started := time.Now()
+		step.setPhase(phase)
 		step.metrics.ActionStartTime = IntervalMetric(started.Sub(b.start))
 		ctx = reapi.NewContext(ctx, &rpb.RequestMetadata{
 			ActionId:                step.cmd.ID,
@@ -55,7 +58,6 @@ func (b *Builder) execReproxy(ctx context.Context, step *Step) error {
 		clog.Infof(ctx, "step state: remote exec (via reproxy)")
 		maybeDisableLocalFallback(ctx, step)
 
-		step.setPhase(stepRemoteRun)
 		err := b.reproxyExec.Run(ctx, step.cmd)
 		step.setPhase(stepOutput)
 		ar, cached := step.cmd.ActionResult()
