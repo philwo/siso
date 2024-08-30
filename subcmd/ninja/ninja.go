@@ -1364,7 +1364,12 @@ func defaultCacheDir() string {
 	return filepath.Join(d, "siso")
 }
 
-func doBuild(ctx context.Context, graph *ninjabuild.Graph, bopts build.Options, nopts runNinjaOpts, args ...string) (stats build.Stats, err error) {
+func rebuildManifest(ctx context.Context, graph *ninjabuild.Graph, bopts build.Options) error {
+	_, err := graph.Targets(ctx, graph.Filename())
+	if err != nil {
+		clog.Warningf(ctx, "don't rebuild manifest: no target for %s: %v", graph.Filename(), err)
+		return nil
+	}
 	clog.Infof(ctx, "rebuild manifest")
 	mfbopts := bopts
 	mfbopts.Clobber = false
@@ -1372,18 +1377,22 @@ func doBuild(ctx context.Context, graph *ninjabuild.Graph, bopts build.Options, 
 	mfbopts.RebuildManifest = graph.Filename()
 	mfb, err := build.New(ctx, graph, mfbopts)
 	if err != nil {
-		return stats, err
+		return err
 	}
 
 	err = mfb.Build(ctx, "rebuild manifest", graph.Filename())
 	cerr := mfb.Close()
 	if cerr != nil {
-		return stats, fmt.Errorf("failed to close builder: %w", cerr)
+		return fmt.Errorf("failed to close builder: %w", cerr)
 	}
+	return err
+}
+
+func doBuild(ctx context.Context, graph *ninjabuild.Graph, bopts build.Options, nopts runNinjaOpts, args ...string) (stats build.Stats, err error) {
+	err = rebuildManifest(ctx, graph, bopts)
 	if err != nil {
 		return stats, err
 	}
-
 	if bopts.ResultstoreUploader != nil {
 		err := bopts.ResultstoreUploader.NewConfiguration(ctx, "default", graph.ConfigProperties())
 		if err != nil {
