@@ -757,7 +757,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	}
 	// TODO(b/286501388): init concurrently for .siso_config/.siso_filegroups, build.ninja.
 	spin.Start("load siso config")
-	stepConfig, err := ninjabuild.NewStepConfig(ctx, config, buildPath, hashFS, "build.ninja")
+	stepConfig, err := ninjabuild.NewStepConfig(ctx, config, buildPath, hashFS, c.fname)
 	if err != nil {
 		spin.Stop(err)
 		return stats, err
