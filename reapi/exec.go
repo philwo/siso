@@ -178,7 +178,7 @@ func erespErr(ctx context.Context, eresp *rpb.ExecuteResponse) error {
 	}
 	switch codes.Code(st.GetCode()) {
 	case codes.OK:
-	case codes.ResourceExhausted, codes.FailedPrecondition:
+	case codes.ResourceExhausted, codes.FailedPrecondition, codes.DeadlineExceeded:
 		clog.Warningf(ctx, "execute response: status=%s", st)
 		return status.FromProto(st).Err()
 
