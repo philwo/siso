@@ -17,9 +17,11 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"infra/build/siso/build"
+	"infra/build/siso/toolsupport/ninjautil"
 )
 
 const (
@@ -33,6 +35,10 @@ type outdirInfo struct {
 	outroot string
 	outsub  string
 	metrics []*buildMetrics
+
+	mu            sync.Mutex
+	manifestMtime time.Time
+	ninjaState    *ninjautil.State
 }
 
 type buildMetrics struct {
@@ -136,6 +142,7 @@ func loadOutdirInfo(execRoot, outdirPath string) (*outdirInfo, error) {
 		path:    outdirPath,
 		outroot: outroot,
 		outsub:  outsub,
+		mu:      sync.Mutex{},
 	}
 
 	// Attempt to load latest metrics first.
@@ -601,6 +608,111 @@ func (s *WebuiServer) outdirRouter(sseServer *sseServer) *http.ServeMux {
 			"sortSupported":    sortSupported,
 		}
 		err = s.renderBuildView(w, r, tmpl, outdirInfo, data)
+		if err != nil {
+			s.renderBuildViewError(http.StatusInternalServerError, fmt.Sprintf("failed to render view: %v", err), w, r, outdirInfo)
+		}
+	})
+
+	outdirRouter.HandleFunc("/targets/", func(w http.ResponseWriter, r *http.Request) {
+		if currentBaseURL, err := baseURLFromContext(r.Context()); err == nil {
+			http.Redirect(w, r, fmt.Sprintf("%s/targets/all/", currentBaseURL), http.StatusTemporaryRedirect)
+		} else {
+			http.Error(w, "no base URL", http.StatusInternalServerError)
+		}
+	})
+
+	outdirRouter.HandleFunc("/targets/{target}/", func(w http.ResponseWriter, r *http.Request) {
+		outdirInfo, err := s.ensureOutdirForRequest(r)
+		if err != nil {
+			s.renderBuildViewError(http.StatusNotFound, fmt.Sprintf("outdir failed to load for request %s: %v", r.URL, err), w, r, outdirInfo)
+			return
+		}
+
+		target := r.PathValue("target")
+		if target == "" {
+			s.renderBuildViewError(http.StatusNotFound, "missing target", w, r, outdirInfo)
+			return
+		}
+
+		// Check build.ninja or build.ninja.stamp is newer to reload.
+		// Don't continue if failed to stat build.ninja, but ignore if build.ninja.stamp failed to stat.
+		stat, err := os.Stat(filepath.Join(outdirInfo.path, "build.ninja"))
+		if err != nil {
+			s.renderBuildViewError(http.StatusInternalServerError, fmt.Sprintf("failed to stat build.ninja: %v", err), w, r, outdirInfo)
+			return
+		}
+		buildNinjaMtime := stat.ModTime()
+		stat, err = os.Stat(filepath.Join(outdirInfo.path, "build.ninja.stamp"))
+		if err != nil && stat.ModTime().After(buildNinjaMtime) {
+			buildNinjaMtime = stat.ModTime()
+		}
+		outdirInfo.mu.Lock()
+		defer outdirInfo.mu.Unlock()
+		if buildNinjaMtime.After(outdirInfo.manifestMtime) {
+			state := ninjautil.NewState()
+			p := ninjautil.NewManifestParser(state)
+			p.SetWd(outdirInfo.path)
+			err = p.Load(r.Context(), "build.ninja")
+			if err != nil {
+				s.renderBuildViewError(http.StatusInternalServerError, fmt.Sprintf("failed to load manifest: %v", err), w, r, outdirInfo)
+				return
+			}
+			outdirInfo.ninjaState = state
+			outdirInfo.manifestMtime = stat.ModTime()
+		}
+
+		// Use cached *ninjautil.State to read info.
+		nodes, err := outdirInfo.ninjaState.Targets([]string{target})
+		if err != nil {
+			s.renderBuildViewError(http.StatusInternalServerError, fmt.Sprintf("failed to get node for target %s: %v", target, err), w, r, outdirInfo)
+			return
+		}
+		if len(nodes) != 1 {
+			s.renderBuildViewError(http.StatusInternalServerError, fmt.Sprintf("unexpectedly got %d nodes querying target %s: %v", len(nodes), target, err), w, r, outdirInfo)
+			return
+		}
+		targetNode := nodes[0]
+		var rule string
+		var inputs []string
+		var outputs []string
+		inputType := make(map[string]string)
+		if edge, ok := targetNode.InEdge(); ok {
+			rule = edge.RuleName()
+			for _, input := range edge.Inputs() {
+				inputs = append(inputs, input.Path())
+				// n = len(inputs), this is 2*O(n*2) check. but seems acceptable speed even for target="all"?
+				if !slices.Contains(edge.Ins(), input) {
+					if slices.Contains(edge.TriggerInputs(), input) {
+						inputType[input.Path()] = "implicit"
+					} else {
+						inputType[input.Path()] = "order-only"
+					}
+				}
+			}
+		}
+		for _, edge := range targetNode.OutEdges() {
+			outs := edge.Outputs()
+			if len(outs) == 0 {
+				continue
+			}
+			outputs = append(outputs, outs[0].Path())
+		}
+		slices.Sort(inputs)
+		slices.Sort(outputs)
+
+		tmpl, err := s.loadView("_targets.html")
+		if err != nil {
+			s.renderBuildViewError(http.StatusInternalServerError, fmt.Sprintf("failed to load view: %s", err), w, r, outdirInfo)
+			return
+		}
+
+		err = s.renderBuildView(w, r, tmpl, outdirInfo, map[string]any{
+			"target":    target,
+			"rule":      rule,
+			"inputs":    inputs,
+			"inputType": inputType,
+			"outputs":   outputs,
+		})
 		if err != nil {
 			s.renderBuildViewError(http.StatusInternalServerError, fmt.Sprintf("failed to render view: %v", err), w, r, outdirInfo)
 		}

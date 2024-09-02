@@ -190,6 +190,10 @@ found in the LICENSE file. */}}
         <md-icon>description</md-icon><md-ripple></md-ripple>
         <span>Raw Logs</span>
       </a>
+      <a href="{{.outdirBaseURL}}/targets/" class="page-tab {{if and (eq .currentBaseURL .outdirBaseURL) (urlPathHasPrefix .currentURL "/targets/")}}selected{{end}}">
+        <md-icon>target</md-icon><md-ripple></md-ripple>
+        <span>Targets</span>
+      </a>
     </nav>
     <div id="page-view">
       <div id="page-content" class="content">{{template "content" .}}</div>

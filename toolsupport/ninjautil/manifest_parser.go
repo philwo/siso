@@ -35,6 +35,7 @@ type ManifestParser struct {
 
 	eg   *errgroup.Group
 	sema chan struct{}
+	wd   string
 }
 
 type fileState struct {
@@ -70,6 +71,11 @@ func NewManifestParser(state *State) *ManifestParser {
 
 var loaderConcurrency = runtime.NumCPU()
 
+// SetWd sets working directory to use for loading files.
+func (p *ManifestParser) SetWd(wd string) {
+	p.wd = wd
+}
+
 // Load loads the Ninja manifest given an fname.
 func (p *ManifestParser) Load(ctx context.Context, fname string) error {
 	if p.eg == nil {
@@ -88,7 +94,7 @@ func (p *ManifestParser) Load(ctx context.Context, fname string) error {
 }
 
 func (p *ManifestParser) loadFile(ctx context.Context, fname string) error {
-	buf, err := os.ReadFile(fname)
+	buf, err := os.ReadFile(filepath.Join(p.wd, fname))
 	if err != nil {
 		return err
 	}
@@ -110,6 +116,7 @@ func (p *ManifestParser) loadFile(ctx context.Context, fname string) error {
 				rules: newRuleBinding(p.rules),
 				eg:    p.eg,
 				sema:  p.sema,
+				wd:    p.wd,
 			}
 			return subparser.loadFile(ctx, fname)
 		})
