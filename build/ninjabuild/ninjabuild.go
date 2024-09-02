@@ -445,6 +445,9 @@ func (g *Graph) StepDef(ctx context.Context, target build.Target, next build.Ste
 	for _, out := range edgeOutputs {
 		outputs = append(outputs, build.Target(out.ID()))
 	}
+	if len(edge.Validations()) > 0 {
+		return nil, nil, nil, fmt.Errorf("validation support is not implemented yet. http://b/363092710")
+	}
 	g.visited[edge] = &edgeStepDef{
 		def:     stepDef,
 		inputs:  inputs,

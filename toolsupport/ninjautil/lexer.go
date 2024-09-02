@@ -37,6 +37,7 @@ type tokenDefault struct{ tokenString }
 type tokenEq struct{ tokenString }
 type tokenColon struct{ tokenString }
 type tokenPipe2 struct{ tokenString }
+type tokenPipeAt struct{ tokenString }
 type tokenPipe struct{ tokenString }
 type tokenInclude struct{ tokenString }
 type tokenSubninja struct{ tokenString }
@@ -250,6 +251,11 @@ loop:
 		if bytes.HasPrefix(cur, []byte("||")) {
 			t = tokenPipe2{tokenString(cur[:len("||")])}
 			l.pos += len("||")
+			break loop
+		}
+		if bytes.HasPrefix(cur, []byte("|@")) {
+			t = tokenPipeAt{tokenString(cur[:len("|@")])}
+			l.pos += len("|@")
 			break loop
 		}
 		if bytes.HasPrefix(cur, []byte("|")) {

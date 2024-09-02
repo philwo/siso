@@ -159,6 +159,12 @@ func (s *State) addOut(edge *Edge, path []byte) bool {
 	return true
 }
 
+func (s *State) addValidation(edge *Edge, path []byte) {
+	n := s.node(path)
+	edge.validations = append(edge.validations, n)
+	n.addValidationOutEdge(edge)
+}
+
 // AllNodes returns all nodes.
 func (s *State) AllNodes() []*Node {
 	var nodes []*Node

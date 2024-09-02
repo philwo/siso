@@ -16,11 +16,12 @@ import (
 type Node struct {
 	next *Node // used for bigMap
 
-	id     int
-	path   string
-	mu     sync.Mutex
-	inEdge *Edge // the edge that generates the file for this node.
-	outs   []*Edge
+	id          int
+	path        string
+	mu          sync.Mutex
+	inEdge      *Edge // the edge that generates the file for this node.
+	outs        []*Edge
+	validations []*Edge
 }
 
 func (n *Node) ID() int { return n.id }
@@ -36,9 +37,20 @@ func (n *Node) addOutEdge(e *Edge) {
 	n.outs = append(n.outs, e)
 }
 
+func (n *Node) addValidationOutEdge(e *Edge) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.validations = append(n.validations, e)
+}
+
 // OutEdges returns out-edges of the node.
 func (n *Node) OutEdges() []*Edge {
 	return n.outs
+}
+
+// ValidationEdges returns validation-edges of the node.
+func (n *Node) ValidationEdges() []*Edge {
+	return n.validations
 }
 
 func (n *Node) hasInEdge() bool {
@@ -66,10 +78,12 @@ func (n *Node) InEdge() (*Edge, bool) {
 type Edge struct {
 	rule *rule
 
-	pool    *Pool
-	env     *BindingEnv
-	inputs  []*Node
-	outputs []*Node
+	pool *Pool
+	env  *BindingEnv
+
+	inputs      []*Node
+	outputs     []*Node
+	validations []*Node
 
 	// https://ninja-build.org/manual.html#ref_dependencies
 	implicitDeps  int
@@ -203,6 +217,11 @@ func (e *Edge) Outputs() []*Node {
 	return e.outputs
 }
 
+// Validations returns validations node of the edge.
+func (e *Edge) Validations() []*Node {
+	return e.validations
+}
+
 // IsPhony returns true iff phony edge.
 func (e *Edge) IsPhony() bool {
 	return e.rule == phonyRule
@@ -262,6 +281,17 @@ func (e *Edge) Print(w io.Writer) {
 			fmt.Fprintf(w, " $\n")
 		} else {
 			fmt.Fprintf(w, "\n")
+		}
+	}
+	if len(e.validations) > 0 {
+		fmt.Fprintf(w, "  |@ $\n")
+		for i, n := range e.validations {
+			fmt.Fprintf(w, "  %s", escapeNinjaToken(n.Path()))
+			if i < len(e.validations)-1 {
+				fmt.Fprintf(w, " $\n")
+			} else {
+				fmt.Fprintf(w, "\n")
+			}
 		}
 	}
 	bindings = nil

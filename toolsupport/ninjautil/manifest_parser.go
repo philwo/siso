@@ -353,6 +353,20 @@ func (p *ManifestParser) parseEdge(fstate *fileState) error {
 		}
 	}
 
+	var validations []EvalString
+	if p.lexer.Peek(tokenPipeAt{}) {
+		for {
+			v, err := p.lexer.Path()
+			if err != nil {
+				return err
+			}
+			if v.empty() {
+				break
+			}
+			validations = append(validations, v)
+		}
+	}
+
 	err = p.expectToken(tokenNewline{})
 	if err != nil {
 		return err
@@ -398,6 +412,11 @@ func (p *ManifestParser) parseEdge(fstate *fileState) error {
 	}
 	edge.implicitDeps = implicit
 	edge.orderOnlyDeps = orderOnly
+
+	for _, v := range validations {
+		path := bytes.TrimPrefix(v.Evaluate(env), []byte("./"))
+		p.state.addValidation(edge, path)
+	}
 	return nil
 }
 

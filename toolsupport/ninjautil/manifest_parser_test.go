@@ -10,6 +10,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/google/go-cmp/cmp"
 )
 
 func TestParser_Empty(t *testing.T) {
@@ -156,5 +158,42 @@ subninja %[1]s/i/build.ninja
 	err = p.Load(ctx, "build.ninja")
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestParser_Validation(t *testing.T) {
+	ctx := context.Background()
+	state := NewState()
+	p := NewManifestParser(state)
+	_, err := p.parse(ctx,
+		&lexer{
+			fname: "input",
+			buf: []byte(`
+rule cat
+   command = cat $in > $out
+build foo: cat bar |@ baz baz2
+`),
+		})
+	if err != nil {
+		t.Errorf("parse %v", err)
+	}
+	p.state.nodes, p.state.paths = p.state.nodeMap.freeze(ctx)
+
+	node, ok := state.LookupNodeByPath("foo")
+	if !ok {
+		t.Fatalf("foo not found")
+	}
+	edge, ok := node.InEdge()
+	if !ok {
+		t.Fatalf("no inEdge of foo")
+	}
+	validations := edge.Validations()
+	var got []string
+	for _, v := range validations {
+		got = append(got, v.Path())
+	}
+	want := []string{"baz", "baz2"}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("validations for foo: -want +got:\n%s", diff)
 	}
 }
