@@ -252,6 +252,12 @@ func (c *Cmd) RemoteArgs() ([]string, error) {
 	// Cross-compile Windows builds on Linux workers.
 	if runtime.GOOS == "windows" && c.Platform["OSFamily"] != "Windows" {
 		args[0] = filepath.ToSlash(args[0])
+		args[0] = strings.TrimPrefix(args[0], filepath.VolumeName(args[0]))
+		if rootPath, ok := c.Platform["InputRootAbsolutePath"]; ok {
+			rootPath = filepath.ToSlash(rootPath)
+			rootPath = strings.TrimPrefix(rootPath, filepath.VolumeName(rootPath))
+			c.Platform["InputRootAbsolutePath"] = rootPath
+		}
 	}
 	if c.RemoteWrapper != "" {
 		args = append([]string{c.RemoteWrapper}, args...)
