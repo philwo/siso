@@ -29,6 +29,8 @@ type Graph struct {
 
 	visited map[*ninjautil.Edge]*edgeStepDef
 
+	validations []build.Target
+
 	globals *globals
 }
 
@@ -250,6 +252,7 @@ func (g *Graph) Reload(ctx context.Context) error {
 // Reset resets graph status.
 func (g *Graph) Reset(ctx context.Context) {
 	g.visited = make(map[*ninjautil.Edge]*edgeStepDef)
+	g.validations = nil
 	g.globals.targetPaths = make([]string, g.globals.nstate.NumNodes())
 	g.globals.edgeRules = make([]*edgeRule, g.globals.nstate.NumNodes())
 	g.globals.phony = make(map[string]bool)
@@ -393,6 +396,11 @@ func (g *Graph) Targets(ctx context.Context, args ...string) ([]build.Target, er
 	return targets, nil
 }
 
+// Validations returns validation targets detected by past StepDef calls.
+func (g *Graph) Validations() []build.Target {
+	return g.validations
+}
+
 // TargetPath returns exec-root relative path of the target.
 func (g *Graph) TargetPath(ctx context.Context, target build.Target) (string, error) {
 	node, ok := g.globals.nstate.LookupNode(int(target))
@@ -445,8 +453,8 @@ func (g *Graph) StepDef(ctx context.Context, target build.Target, next build.Ste
 	for _, out := range edgeOutputs {
 		outputs = append(outputs, build.Target(out.ID()))
 	}
-	if len(edge.Validations()) > 0 {
-		return nil, nil, nil, fmt.Errorf("validation support is not implemented yet. http://b/363092710")
+	for _, v := range edge.Validations() {
+		g.validations = append(g.validations, build.Target(v.ID()))
 	}
 	g.visited[edge] = &edgeStepDef{
 		def:     stepDef,

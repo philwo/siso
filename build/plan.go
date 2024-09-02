@@ -48,6 +48,9 @@ type Graph interface {
 	// Targets returns target paths for given args.
 	Targets(context.Context, ...string) ([]Target, error)
 
+	// Validations returns validation targets detected by past StepDef calls.
+	Validations() []Target
+
 	// TargetPath returns exec-root relative path of target.
 	TargetPath(context.Context, Target) (string, error)
 
@@ -193,6 +196,21 @@ func schedule(ctx context.Context, sched *scheduler, graph Graph, args ...string
 		err := scheduleTarget(ctx, sched, graph, t, nil, sched.prepare)
 		if err != nil {
 			return fmt.Errorf("failed in schedule %s: %w", targetPath(ctx, graph, t), err)
+		}
+	}
+	if !sched.prepare {
+		for _, t := range graph.Validations() {
+			switch sched.plan.targets[t].scan {
+			case scanStateNotVisited:
+			case scanStateVisiting:
+				return fmt.Errorf("scan state %q: visiting", targetPath(ctx, graph, t))
+			case scanStateDone, scanStateIgnored:
+				continue
+			}
+			err := scheduleTarget(ctx, sched, graph, t, nil, false)
+			if err != nil {
+				return fmt.Errorf("failed in schedule %s: %w", targetPath(ctx, graph, t), err)
+			}
 		}
 	}
 	sched.finish(ctx, time.Since(started))
