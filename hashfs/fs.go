@@ -71,6 +71,9 @@ type HashFS struct {
 	// clean if loaded state is matched with local disk's state.
 	clean atomic.Bool
 
+	// loaded if state is loaded.
+	loaded atomic.Bool
+
 	// holds generated files (full path) in previous builds.
 	previouslyGeneratedFiles []string
 
@@ -196,7 +199,8 @@ func (hfs *HashFS) Close(ctx context.Context) error {
 		hfs.journal = nil
 	}
 	hfs.journalMu.Unlock()
-	if hfs.clean.Load() {
+	if hfs.clean.Load() || !hfs.loaded.Load() {
+		clog.Warningf(ctx, "not save state clean=%t loaded=%t", hfs.clean.Load(), hfs.loaded.Load())
 		return nil
 	}
 	err := Save(ctx, hfs.State(ctx), hfs.opt)

@@ -402,6 +402,7 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 	}()
 	hfs.clean.Store(nnew.Load() == 0 && nnotexist.Load() == 0 && nfail.Load() == 0 && ninvalidate.Load() == 0)
 	clog.Infof(ctx, "set state done: clean:%t eq:%d new:%d not-exist:%d fail:%d invalidate:%d: %s", hfs.clean.Load(), neq.Load(), nnew.Load(), nnotexist.Load(), nfail.Load(), ninvalidate.Load(), time.Since(start))
+	hfs.loaded.Store(true)
 	return nil
 }
 
