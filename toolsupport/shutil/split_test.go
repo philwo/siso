@@ -83,6 +83,30 @@ func TestSplit(t *testing.T) {
 				"clang_arm64_v8_x64/obj/third_party/xnnpack/amalgam_arch=armv8.2-a+i8mm+fp16/neoni8mm.o",
 			},
 		},
+		{
+			cmdline: `/bin/bash -c ""`,
+			want: []string{
+				"/bin/bash",
+				"-c",
+				"",
+			},
+		},
+		{
+			cmdline: ` /bin/bash  -c  ""  `,
+			want: []string{
+				"/bin/bash",
+				"-c",
+				"",
+			},
+		},
+		{
+			cmdline: `/bin/bash -c "(rm -f out/fname ) && (cp \"frameworks/fname\" \"out/fname\" )"`,
+			want: []string{
+				"/bin/bash",
+				"-c",
+				`(rm -f out/fname ) && (cp "frameworks/fname" "out/fname" )`,
+			},
+		},
 	} {
 		args, err := Split(tc.cmdline)
 		if err != nil {
@@ -95,9 +119,15 @@ func TestSplit(t *testing.T) {
 }
 
 func TestSplit_Error(t *testing.T) {
-	cmdline := `ln -f ../../client/report_env.sh report_env.sh 2>/dev/null || (rm -rf report_env.sh && cp -af ../../client/report_env.sh report_env.sh)`
-	args, err := Split(cmdline)
-	if err == nil {
-		t.Errorf("Split(%q)=%q, %v; want err", cmdline, args, err)
+	for _, cmdline := range []string{
+		`ln -f ../../client/report_env.sh report_env.sh 2>/dev/null || (rm -rf report_env.sh && cp -af ../../client/report_env.sh report_env.sh)`,
+		`/bin/bash -c "`,
+		`/bin/bash -c "(rm -out/fname ) && (cp \`,
+		`cp foo bar\`,
+	} {
+		args, err := Split(cmdline)
+		if err == nil {
+			t.Errorf("Split(%q)=%q, %v; want err", cmdline, args, err)
+		}
 	}
 }

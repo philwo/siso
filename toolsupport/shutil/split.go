@@ -14,11 +14,13 @@ import (
 // It would return error for complicated pipe line.
 func Split(cmdline string) ([]string, error) {
 	var args []string
-	sb := bytes.NewBuffer(make([]byte, 0, len(cmdline)))
+	buf := bytes.NewBuffer(make([]byte, 0, len(cmdline)))
+	sb := buf
 	escaped := false
 	var qch rune // 0, '"', '\''
 	inspace := false
 	si := 0
+	cmdline = strings.TrimSpace(cmdline)
 	for i, ch := range cmdline {
 		if escaped {
 			sb.WriteRune(ch)
@@ -27,6 +29,10 @@ func Split(cmdline string) ([]string, error) {
 			continue
 		}
 		if qch != 0 {
+			if ch == '\\' {
+				escaped = true
+				continue
+			}
 			if qch == ch {
 				qch = 0
 			} else {
@@ -37,6 +43,10 @@ func Split(cmdline string) ([]string, error) {
 		}
 		switch ch {
 		case '\\':
+			if sb == nil {
+				buf.Reset()
+				sb = buf
+			}
 			if si < i {
 				sb.WriteString(cmdline[si:i])
 			}
@@ -45,6 +55,10 @@ func Split(cmdline string) ([]string, error) {
 			si = i + 1
 			continue
 		case '"', '\'':
+			if sb == nil {
+				buf.Reset()
+				sb = buf
+			}
 			if si < i {
 				sb.WriteString(cmdline[si:i])
 			}
@@ -59,9 +73,9 @@ func Split(cmdline string) ([]string, error) {
 			}
 			inspace = true
 			var arg string
-			if sb.Len() > 0 {
+			if sb != nil {
 				arg = sb.String()
-				sb.Reset()
+				sb = nil
 			} else if si < i {
 				arg = cmdline[si:i]
 			}
@@ -71,14 +85,20 @@ func Split(cmdline string) ([]string, error) {
 		case ';', '&', '|', '<', '>', '$', '#', '`':
 			return nil, fmt.Errorf("failed to split: cmdline contains shell metachar %c", ch)
 		default:
-			if !inspace && sb.Len() > 0 {
+			if !inspace && sb != nil {
 				sb.WriteRune(ch)
 				si = i + 1
 			}
 			inspace = false
 		}
 	}
-	if sb.Len() > 0 {
+	if escaped {
+		return nil, fmt.Errorf(`failed to split: end with \-escape`)
+	}
+	if qch != 0 {
+		return nil, fmt.Errorf("failed to split: unclosed quote")
+	}
+	if sb != nil {
 		args = append(args, sb.String())
 	} else if si < len(cmdline) {
 		args = append(args, cmdline[si:])
