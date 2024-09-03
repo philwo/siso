@@ -917,7 +917,13 @@ func dedupInputs(ctx context.Context, cmd *execute.Cmd) {
 func (b *Builder) outputs(ctx context.Context, step *Step) error {
 	ctx, span := trace.NewSpan(ctx, "outputs")
 	defer span.Close(nil)
+
 	outputs := step.cmd.Outputs
+	if step.def.Binding("phony_outputs") != "" {
+		clog.Infof(ctx, "phony_outputs. no check output files %q", outputs)
+		return nil
+	}
+
 	span.SetAttr("outputs", len(outputs))
 	if step.cmd.Depfile != "" {
 		switch step.cmd.Deps {

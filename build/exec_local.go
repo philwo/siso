@@ -168,6 +168,11 @@ func (b *Builder) checkLocalOutputs(ctx context.Context, step *Step) error {
 	if result.GetExitCode() != 0 {
 		return nil
 	}
+	if step.def.Binding("phony_output") != "" {
+		clog.Infof(ctx, "phony_output. no check output files %q", step.cmd.Outputs)
+		return nil
+	}
+
 	defOutputs := step.def.Outputs(ctx)
 
 	for _, out := range step.cmd.Outputs {

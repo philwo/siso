@@ -316,6 +316,7 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 			}
 		}
 	}()
+	// TODO(b/363902411): error if non-phony_output step depends on phony_output step.
 	if log.V(1) {
 		clog.Infof(ctx, "schedule %v inputs:%d outputs:%d", newStep, len(inputs), len(outputs))
 	}
