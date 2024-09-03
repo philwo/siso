@@ -27,6 +27,11 @@ var ninjaStepRe = regexp.MustCompile(`\[(?P<stepNum>[0-9]+?)/(?P<totalSteps>[0-9
 // The consumer of this function is responsible for nesting this *http.ServeMux appropriately.
 // All handlers assume request's context.Context contains outroot, outsub.
 func (s *WebuiServer) runBuildRouter(sseServer *sseServer) *http.ServeMux {
+	activeBuildMu := sync.Mutex{}
+	activeBuildRunning := false
+	activeBuildOutdir := ""
+	activeBuildTarget := ""
+
 	runBuildRouter := http.NewServeMux()
 
 	runBuildRouter.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
@@ -42,7 +47,13 @@ func (s *WebuiServer) runBuildRouter(sseServer *sseServer) *http.ServeMux {
 			return
 		}
 
-		err = s.renderBuildView(w, r, tmpl, outdirInfo, map[string]any{})
+		activeBuildMu.Lock()
+		defer activeBuildMu.Unlock()
+		err = s.renderBuildView(w, r, tmpl, outdirInfo, map[string]any{
+			"activeBuildRunning": activeBuildRunning,
+			"activeBuildOutdir":  activeBuildOutdir,
+			"activeBuildTarget":  activeBuildTarget,
+		})
 		if err != nil {
 			s.renderBuildViewError(http.StatusInternalServerError, fmt.Sprintf("failed to render view: %v", err), w, r, outdirInfo)
 		}
@@ -60,13 +71,24 @@ func (s *WebuiServer) runBuildRouter(sseServer *sseServer) *http.ServeMux {
 			s.renderBuildViewError(http.StatusInternalServerError, fmt.Sprintf("failed to detect siso path: %v", err), w, r, outdirInfo)
 		}
 
-		tmpl, err := s.loadView("_error.html")
+		// We'll render the same view again, but in a "building" state.
+		tmpl, err := s.loadView("_run.html")
 		if err != nil {
 			s.renderBuildViewError(http.StatusInternalServerError, fmt.Sprintf("failed to load view: %s", err), w, r, outdirInfo)
 			return
 		}
 
-		cmd := exec.Command(exe, "ninja", "-C", "out/Default", "base") // outdirInfo.path
+		activeBuildMu.Lock()
+		defer activeBuildMu.Unlock()
+		if activeBuildRunning {
+			s.renderBuildViewError(http.StatusServiceUnavailable, "Existing build already running", w, r, outdirInfo)
+			return
+		}
+
+		activeBuildRunning = true
+		activeBuildOutdir = r.FormValue("outdir")
+		activeBuildTarget = r.FormValue("target")
+		cmd := exec.Command(exe, "ninja", "-C", activeBuildOutdir, activeBuildTarget)
 		cmd.Dir = s.execRoot
 		pipe, _ := cmd.StdoutPipe()
 		cmd.Stderr = cmd.Stdout
@@ -74,10 +96,6 @@ func (s *WebuiServer) runBuildRouter(sseServer *sseServer) *http.ServeMux {
 			s.renderBuildViewError(http.StatusInternalServerError, fmt.Sprintf("failed to launch process: %s", err), w, r, outdirInfo)
 			return
 		}
-		done := make(chan error)
-		go func() {
-			done <- cmd.Wait()
-		}()
 
 		activeSteps := make(map[string]runningStepInfo)
 		activeStepsLock := &sync.RWMutex{}
@@ -121,11 +139,19 @@ func (s *WebuiServer) runBuildRouter(sseServer *sseServer) *http.ServeMux {
 			}
 			fmt.Fprintf(os.Stderr, "A build was finished\n")
 		}(pipe)
+
+		done := make(chan error)
+		go func() {
+			done <- cmd.Wait()
+		}()
 		go func() {
 			for {
 				select {
 				case <-done:
+					activeBuildMu.Lock()
 					sseServer.messages <- sseMessage{"activesteps", "Finished"}
+					activeBuildRunning = false
+					activeBuildMu.Unlock()
 					return
 				case <-time.After(100 * time.Millisecond):
 					activeStepsLock.RLock()
@@ -157,8 +183,9 @@ func (s *WebuiServer) runBuildRouter(sseServer *sseServer) *http.ServeMux {
 		}()
 
 		err = s.renderBuildView(w, r, tmpl, outdirInfo, map[string]any{
-			"errorTitle":   "Success",
-			"errorMessage": "Launched build",
+			"activeBuildRunning": activeBuildRunning,
+			"activeBuildOutdir":  activeBuildOutdir,
+			"activeBuildTarget":  activeBuildTarget,
 		})
 		if err != nil {
 			s.renderBuildViewError(http.StatusInternalServerError, fmt.Sprintf("failed to render view: %v", err), w, r, outdirInfo)
