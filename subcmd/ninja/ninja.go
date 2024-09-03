@@ -1020,7 +1020,11 @@ func (c *ninjaCmdRun) initWorkdirs(ctx context.Context) (string, error) {
 	if c.startDir != execRoot {
 		ui.Default.PrintLines(fmt.Sprintf("exec_root=%s dir=%s\n", execRoot, c.dir))
 	}
-	return execRoot, nil
+	_, err = os.Stat(c.fname)
+	if errors.Is(err, fs.ErrNotExist) {
+		return "", fmt.Errorf("%s not found in %s. need `-C <dir>`?", c.fname, cwd)
+	}
+	return execRoot, err
 }
 
 func (c *ninjaCmdRun) initCloudLogging(ctx context.Context, projectID, execRoot string, credential cred.Cred) (context.Context, string, func(), error) {
