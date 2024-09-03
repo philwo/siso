@@ -63,8 +63,26 @@ func AuthOpts(credHelper string) Options {
 // New creates a Cred using LUCI auth's default options.
 // It ensures that the user is logged in and returns an error otherwise.
 func New(ctx context.Context, opts Options) (Cred, error) {
+	t := "luci-auth"
 	authenticator := auth.NewAuthenticator(ctx, auth.SilentLogin, opts.LUCIAuth)
-	if err := authenticator.CheckLoginRequired(); err != nil {
+	err := authenticator.CheckLoginRequired()
+	if err != nil {
+		// Check if the user is already logged in via `luci-auth login --scopes-context`.
+		// If yes, we can use that token and avoid having to prompt for another login.
+		authOpts := chromeinfra.DefaultAuthOptions()
+		// same scope as `--scopes-context`
+		// https://crrev.com/bdbc1802265493619ac518d392776af6593fd1e0/auth/client/authcli/authcli.go#22
+		authOpts.Scopes = []string{
+			"https://www.googleapis.com/auth/cloud-platform",
+			"https://www.googleapis.com/auth/firebase",
+			"https://www.googleapis.com/auth/gerritcodereview",
+			"https://www.googleapis.com/auth/userinfo.email",
+		}
+		t = "luci-auth-context"
+		authenticator = auth.NewAuthenticator(ctx, auth.SilentLogin, authOpts)
+		err = authenticator.CheckLoginRequired()
+	}
+	if err != nil {
 		if opts.TokenSource == nil {
 			return Cred{}, err
 		}
@@ -89,7 +107,6 @@ func New(ctx context.Context, opts Options) (Cred, error) {
 		}, nil
 	}
 
-	t := "luci-auth"
 	email, err := authenticator.GetEmail()
 	if err != nil {
 		return Cred{}, err
