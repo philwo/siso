@@ -24,13 +24,13 @@ func Cmd(authOpts cred.Options) *subcommands.Command {
 		Advanced:  true,
 		CommandRun: func() subcommands.CommandRun {
 			c := &fsRun{
-				authOpts: authOpts,
 				app: &subcommands.DefaultApplication{
 					Name:  "siso fs",
 					Title: "tool to access siso hashfs data",
 					Commands: []*subcommands.Command{
 						cmdFSDiff(),
 						cmdFSExport(),
+						cmdFSFlush(authOpts),
 						cmdFSImport(),
 						subcommands.CmdHelp,
 					},
@@ -47,8 +47,7 @@ func Cmd(authOpts cred.Options) *subcommands.Command {
 
 type fsRun struct {
 	subcommands.CommandRunBase
-	authOpts cred.Options
-	app      *subcommands.DefaultApplication
+	app *subcommands.DefaultApplication
 }
 
 func (c *fsRun) Run(a subcommands.Application, args []string, env subcommands.Env) int {
