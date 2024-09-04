@@ -101,6 +101,29 @@ type runningStepInfo struct {
 	started  time.Time
 }
 
+// ErrExecrootNotExist represents error when exec root was not found.
+type ErrExecrootNotExist struct {
+	err error
+}
+
+func (f ErrExecrootNotExist) Unwrap() error {
+	return f.err
+}
+
+func (f ErrExecrootNotExist) Error() string {
+	return fmt.Sprintf("failed to find execroot: %v", f.err)
+}
+
+// ErrManifestNotExist represents error when build manifest was not found.
+type ErrManifestNotExist struct {
+	outdirPath   string
+	manifestPath string
+}
+
+func (f ErrManifestNotExist) Error() string {
+	return fmt.Sprintf("%s not found in %s", f.manifestPath, f.outdirPath)
+}
+
 // loadView lazy-parses a view once, or parses every time if in local development mode.
 func (s *WebuiServer) loadView(view string) (*template.Template, error) {
 	if template, ok := templates[view]; ok {
@@ -194,7 +217,7 @@ func (s *WebuiServer) renderBuildViewError(status int, message string, w http.Re
 }
 
 // NewServer inits a webui server.
-func NewServer(version string, localDevelopment bool, port int, defaultOutdir, configRepoDir string) (*WebuiServer, error) {
+func NewServer(version string, localDevelopment bool, port int, defaultOutdir, configRepoDir, manifestPath string) (*WebuiServer, error) {
 	s := WebuiServer{
 		sisoVersion:      version,
 		localDevelopment: localDevelopment,
@@ -211,11 +234,11 @@ func NewServer(version string, localDevelopment bool, port int, defaultOutdir, c
 	var err error
 	s.execRoot, err = build.DetectExecRoot(defaultOutdir, configRepoDir)
 	if err != nil {
-		return nil, fmt.Errorf("failed to find execroot: %w", err)
+		return nil, &ErrExecrootNotExist{err}
 	}
 
 	// Preload default outdir.
-	defaultOutdirInfo, err := loadOutdirInfo(s.execRoot, defaultOutdir)
+	defaultOutdirInfo, err := loadOutdirInfo(s.execRoot, defaultOutdir, manifestPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to preload outdir: %w", err)
 	}

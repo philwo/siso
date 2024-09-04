@@ -909,7 +909,7 @@ func (c *ninjaCmdRun) init() {
 
 	c.Flags.IntVar(&c.ninjaJobs, "j", -1, "run N jobs in parallel (0 means infinity). not supported b/288829511")
 	c.Flags.IntVar(&c.remoteJobs, "remote_jobs", 0, "run N remote jobs in parallel. when the value is no positive, the default will be computed based on # of CPUs.")
-	c.Flags.StringVar(&c.fname, "f", "build.ninja", "input build manifet filename (relative to -C)")
+	c.Flags.StringVar(&c.fname, "f", "build.ninja", "input build manifest filename (relative to -C)")
 
 	c.Flags.StringVar(&c.cacheDir, "cache_dir", defaultCacheDir(), "cache directory")
 	c.Flags.BoolVar(&c.localCacheEnable, "local_cache_enable", false, "local cache enable")

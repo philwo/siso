@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"net/url"
 	"os"
@@ -31,10 +32,11 @@ const (
 )
 
 type outdirInfo struct {
-	path    string
-	outroot string
-	outsub  string
-	metrics []*buildMetrics
+	path         string
+	manifestPath string
+	outroot      string
+	outsub       string
+	metrics      []*buildMetrics
 
 	mu            sync.Mutex
 	manifestMtime time.Time
@@ -118,7 +120,7 @@ func loadBuildMetrics(metricsPath string) (*buildMetrics, error) {
 }
 
 // loadOutdirInfo attempts to load all metrics found in the outdir.
-func loadOutdirInfo(execRoot, outdirPath string) (*outdirInfo, error) {
+func loadOutdirInfo(execRoot, outdirPath, manifestPath string) (*outdirInfo, error) {
 	start := time.Now()
 	fmt.Fprintf(os.Stderr, "load data at %s...", outdirPath)
 	defer func() {
@@ -131,6 +133,13 @@ func loadOutdirInfo(execRoot, outdirPath string) (*outdirInfo, error) {
 	if err != nil {
 		return nil, fmt.Errorf("couldn't get outdir relative to execdir: %w", err)
 	}
+
+	// Validate manifest path.
+	_, err = os.Stat(filepath.Join(outdirPath, manifestPath))
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, &ErrManifestNotExist{outdirPath, manifestPath}
+	}
+
 	// TODO(b/361703735): make sure this works on windows? https://chromium-review.googlesource.com/c/infra/infra/+/5803123/comment/502308d3_ac05bf91/
 	outroot, outsub := filepath.Split(defaultOutdirExecRel)
 	if outroot == "" || strings.Contains(outsub, "/") {
@@ -139,10 +148,11 @@ func loadOutdirInfo(execRoot, outdirPath string) (*outdirInfo, error) {
 	outroot = filepath.Clean(outroot)
 
 	outdirInfo := &outdirInfo{
-		path:    outdirPath,
-		outroot: outroot,
-		outsub:  outsub,
-		mu:      sync.Mutex{},
+		path:         outdirPath,
+		manifestPath: manifestPath,
+		outroot:      outroot,
+		outsub:       outsub,
+		mu:           sync.Mutex{},
 	}
 
 	// Attempt to load latest metrics first.
@@ -195,7 +205,8 @@ func (s *WebuiServer) ensureOutdirForRequest(r *http.Request) (*outdirInfo, erro
 	outdirInfo, ok := s.outdirs[abs]
 	if !ok {
 		var err error
-		outdirInfo, err = loadOutdirInfo(s.execRoot, abs)
+		// TODO: support override manifest path
+		outdirInfo, err = loadOutdirInfo(s.execRoot, abs, "build.ninja")
 		if err != nil {
 			return nil, fmt.Errorf("couldn't load outdir %s: %w", abs, err)
 		}
@@ -218,7 +229,7 @@ func (s *WebuiServer) outdirRouter(sseServer *sseServer) *http.ServeMux {
 		}
 
 		// loadOutdirInfo will always override existing cached data.
-		newOutdirInfo, err := loadOutdirInfo(s.execRoot, outdirInfo.path)
+		newOutdirInfo, err := loadOutdirInfo(s.execRoot, outdirInfo.path, outdirInfo.manifestPath)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "failed to reload outdir: %v", err)
 			w.WriteHeader(http.StatusInternalServerError)
@@ -634,16 +645,16 @@ func (s *WebuiServer) outdirRouter(sseServer *sseServer) *http.ServeMux {
 			return
 		}
 
-		// Check build.ninja or build.ninja.stamp is newer to reload.
-		// Don't continue if failed to stat build.ninja, but ignore if build.ninja.stamp failed to stat.
-		stat, err := os.Stat(filepath.Join(outdirInfo.path, "build.ninja"))
+		// Check manifest or manifest.stamp is newer to reload.
+		// Don't continue if failed to stat manifest, but ignore if manifest.stamp failed to stat.
+		stat, err := os.Stat(filepath.Join(outdirInfo.path, outdirInfo.manifestPath))
 		if err != nil {
-			s.renderBuildViewError(http.StatusInternalServerError, fmt.Sprintf("failed to stat build.ninja: %v", err), w, r, outdirInfo)
+			s.renderBuildViewError(http.StatusInternalServerError, fmt.Sprintf("failed to stat %s: %v", outdirInfo.manifestPath, err), w, r, outdirInfo)
 			return
 		}
 		buildNinjaMtime := stat.ModTime()
-		stat, err = os.Stat(filepath.Join(outdirInfo.path, "build.ninja.stamp"))
-		if err != nil && stat.ModTime().After(buildNinjaMtime) {
+		stat, err = os.Stat(filepath.Join(outdirInfo.path, fmt.Sprintf("%s.stamp", outdirInfo.manifestPath)))
+		if err == nil && stat.ModTime().After(buildNinjaMtime) {
 			buildNinjaMtime = stat.ModTime()
 		}
 		outdirInfo.mu.Lock()
@@ -652,7 +663,7 @@ func (s *WebuiServer) outdirRouter(sseServer *sseServer) *http.ServeMux {
 			state := ninjautil.NewState()
 			p := ninjautil.NewManifestParser(state)
 			p.SetWd(outdirInfo.path)
-			err = p.Load(r.Context(), "build.ninja")
+			err = p.Load(r.Context(), outdirInfo.manifestPath)
 			if err != nil {
 				s.renderBuildViewError(http.StatusInternalServerError, fmt.Sprintf("failed to load manifest: %v", err), w, r, outdirInfo)
 				return
