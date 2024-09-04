@@ -417,6 +417,9 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 	sched := newScheduler(ctx, schedOpts)
 	err = schedule(ctx, sched, b.graph, args...)
 	if err != nil {
+		if b.failureSummaryWriter != nil {
+			fmt.Fprintf(b.failureSummaryWriter, "%v\n", err)
+		}
 		return err
 	}
 	b.plan = sched.plan
