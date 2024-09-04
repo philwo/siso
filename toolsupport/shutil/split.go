@@ -66,7 +66,7 @@ func Split(cmdline string) ([]string, error) {
 			qch = ch
 			si = i + 1
 			continue
-		case ' ':
+		case ' ', '\t':
 			if inspace {
 				si = i + 1
 				continue

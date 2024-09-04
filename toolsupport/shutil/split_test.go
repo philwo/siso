@@ -107,6 +107,15 @@ func TestSplit(t *testing.T) {
 				`(rm -f out/fname ) && (cp "frameworks/fname" "out/fname" )`,
 			},
 		},
+		{
+			cmdline: "out/host/linux-x86/bin/mojom_types_downgrader\texternal/libchrome/mojo/public/mojom/base/time.mojom\t\t--out-dir out/soong/.intermediates/external/libchrome/libmojo_mojom_downgraded_files/gen/ipc",
+			want: []string{
+				"out/host/linux-x86/bin/mojom_types_downgrader",
+				"external/libchrome/mojo/public/mojom/base/time.mojom",
+				"--out-dir",
+				"out/soong/.intermediates/external/libchrome/libmojo_mojom_downgraded_files/gen/ipc",
+			},
+		},
 	} {
 		args, err := Split(tc.cmdline)
 		if err != nil {
