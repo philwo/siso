@@ -116,12 +116,14 @@ func (s scanState) String() string {
 type targetInfo struct {
 	// scanState of the target.
 	scan scanState
+	// list of steps that wait the target becomes ready.
+	waits []*Step
 	// true if the target is source (no step generates the target).
 	source bool
 	// true if the target is generated output.
 	output bool
-	// list of steps that wait the target becomes ready.
-	waits []*Step
+	// true if the target is phony_output.
+	phonyOutput bool
 }
 
 // plan maintains which step to execute next.
@@ -316,7 +318,7 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 			}
 		}
 	}()
-	// TODO(b/363902411): error if non-phony_output step depends on phony_output step.
+	targets[target].phonyOutput = newStep.Binding("phony_output") != ""
 	if log.V(1) {
 		clog.Infof(ctx, "schedule %v inputs:%d outputs:%d", newStep, len(inputs), len(outputs))
 	}
@@ -416,6 +418,13 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 			// step multiple time, and would fail with race.
 			targets[in].waits = append(targets[in].waits, step)
 			step.nwaits++
+		}
+		if targets[in].phonyOutput && !targets[target].phonyOutput {
+			// non-phony_output rule can't depend on phony_output.
+			// i.e. step's outputs should be phony outputs
+			// phony_output is always dirty,
+			// so such non-phony output rule always rebuild.
+			return fmt.Errorf("schedule: non phony_output %q depends on phony_output %q", targetPath(ctx, graph, target), targetPath(ctx, graph, in))
 		}
 	}
 	if ignore {

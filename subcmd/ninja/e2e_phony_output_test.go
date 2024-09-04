@@ -44,3 +44,24 @@ func TestBuild_PhonyOutput(t *testing.T) {
 		t.Errorf("done=%d total=%d local=%d; want done=1 total=1 local=1; %#v", stats.Done, stats.Total, stats.Local, stats)
 	}
 }
+
+func TestBuild_PhonyOutputDepError(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+
+	ninja := func(t *testing.T) (build.Stats, error) {
+		t.Helper()
+		opt, graph, cleanup := setupBuild(ctx, t, dir, hashfs.Option{
+			StateFile: ".siso_fs_state",
+		})
+		defer cleanup()
+		return runNinja(ctx, "build.ninja", graph, opt, []string{"bar"}, runNinjaOpts{})
+	}
+
+	setupFiles(t, dir, t.Name(), nil)
+	_, err := ninja(t)
+	if err == nil {
+		t.Fatalf("ninja %v; should error", err)
+	}
+	t.Logf("ninja %v", err)
+}
