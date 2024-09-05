@@ -221,6 +221,16 @@ func (s *WebuiServer) ensureOutdirForRequest(r *http.Request) (*outdirInfo, erro
 func (s *WebuiServer) outdirRouter(sseServer *sseServer) *http.ServeMux {
 	outdirRouter := http.NewServeMux()
 
+	outdirRouter.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if currentBaseURL, err := baseURLFromContext(r.Context()); err == nil {
+			http.Redirect(w, r, fmt.Sprintf("%s/builds/latest/steps/", currentBaseURL), http.StatusTemporaryRedirect)
+		} else {
+			fmt.Fprintf(os.Stderr, "missing base url")
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+	})
+
 	outdirRouter.HandleFunc("/reload", func(w http.ResponseWriter, r *http.Request) {
 		outdirInfo, err := s.ensureOutdirForRequest(r)
 		if err != nil {

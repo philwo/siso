@@ -243,6 +243,8 @@ func NewServer(version string, localDevelopment bool, port int, defaultOutdir, c
 		return nil, fmt.Errorf("failed to preload outdir: %w", err)
 	}
 	s.outdirs[defaultOutdir] = defaultOutdirInfo
+	s.defaultOutdirRoot = defaultOutdirInfo.outroot
+	s.defaultOutdirSub = defaultOutdirInfo.outsub
 
 	// Find other outdirs.
 	// TODO: support out*/*
@@ -298,7 +300,7 @@ func (s *WebuiServer) Serve() int {
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		// Redirect root to default outdir.
 		if r.URL.Path == "/" {
-			http.Redirect(w, r, fmt.Sprintf("/%s/%s/builds/latest/steps/", s.defaultOutdirRoot, s.defaultOutdirSub), http.StatusTemporaryRedirect)
+			http.Redirect(w, r, fmt.Sprintf("/%s/%s/", s.defaultOutdirRoot, s.defaultOutdirSub), http.StatusTemporaryRedirect)
 			return
 		}
 
