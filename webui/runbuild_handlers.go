@@ -15,6 +15,7 @@ import (
 	"regexp"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -28,6 +29,7 @@ var ninjaStepRe = regexp.MustCompile(`\[(?P<stepNum>[0-9]+?)/(?P<totalSteps>[0-9
 // All handlers assume request's context.Context contains outroot, outsub.
 func (s *WebuiServer) runBuildRouter(sseServer *sseServer) *http.ServeMux {
 	activeBuildMu := sync.Mutex{}
+	activeBuildLog := strings.Builder{}
 	activeBuildRunning := false
 	activeBuildOutdir := ""
 	activeBuildTarget := ""
@@ -50,6 +52,7 @@ func (s *WebuiServer) runBuildRouter(sseServer *sseServer) *http.ServeMux {
 		activeBuildMu.Lock()
 		defer activeBuildMu.Unlock()
 		err = s.renderBuildView(w, r, tmpl, outdirInfo, map[string]any{
+			"activeBuildLog":     activeBuildLog.String(),
 			"activeBuildRunning": activeBuildRunning,
 			"activeBuildOutdir":  activeBuildOutdir,
 			"activeBuildTarget":  activeBuildTarget,
@@ -86,6 +89,7 @@ func (s *WebuiServer) runBuildRouter(sseServer *sseServer) *http.ServeMux {
 		}
 
 		activeBuildRunning = true
+		activeBuildLog.Reset()
 		activeBuildOutdir = r.FormValue("outdir")
 		activeBuildTarget = r.FormValue("target")
 		cmd := exec.Command(exe, "ninja", "-C", activeBuildOutdir, activeBuildTarget)
@@ -133,7 +137,9 @@ func (s *WebuiServer) runBuildRouter(sseServer *sseServer) *http.ServeMux {
 
 					sseServer.messages <- sseMessage{"buildstatus", fmt.Sprintf("<li>%d active steps<li>%d/%s steps done", len(activeSteps), maxStep, totalSteps)}
 				} else {
-					sseServer.messages <- sseMessage{"buildlog", fmt.Sprintf("<div>%s</div>", line)}
+					newLine := fmt.Sprintf("<div>%s</div>", line)
+					activeBuildLog.WriteString(newLine)
+					sseServer.messages <- sseMessage{"buildlog", newLine}
 				}
 				line, err = reader.ReadString('\n')
 			}

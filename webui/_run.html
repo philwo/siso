@@ -24,7 +24,9 @@ found in the LICENSE file. */}}
             <h3>Build status</h3>
             <div sse-swap="buildstatus" hx-target="this" hx-swap="innerHTML"></div>
             <h3>Log</h3>
-            <div sse-swap="buildlog" hx-target="this" hx-swap="beforeend"></div>
+            <div sse-swap="buildlog" hx-target="this" hx-swap="beforeend">
+                {{if .activeBuildRunning}}{{.activeBuildLog}}{{end}}
+            </div>
         </div>
         <div>
             <h3>Active steps</h3>
