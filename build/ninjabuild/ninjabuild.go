@@ -35,9 +35,10 @@ type Graph struct {
 }
 
 type edgeStepDef struct {
-	def     *StepDef
-	inputs  []build.Target
-	outputs []build.Target
+	def       *StepDef
+	inputs    []build.Target
+	orderOnly []build.Target
+	outputs   []build.Target
 }
 
 type globals struct {
@@ -425,28 +426,33 @@ func (g *globals) targetPath(ctx context.Context, node *ninjautil.Node) string {
 
 // StepDef creates new StepDef to build target (exec-root relative), needed for next.
 // top-level target will use nil for next.
-// It returns a StepDef for the target and inputs/outputs targets.
-func (g *Graph) StepDef(ctx context.Context, target build.Target, next build.StepDef) (build.StepDef, []build.Target, []build.Target, error) {
+// It returns a StepDef for the target and inputs/orderOnly/outputs targets.
+func (g *Graph) StepDef(ctx context.Context, target build.Target, next build.StepDef) (build.StepDef, []build.Target, []build.Target, []build.Target, error) {
 	n, ok := g.globals.nstate.LookupNode(int(target))
 	if !ok {
-		return nil, nil, nil, build.ErrNoTarget
+		return nil, nil, nil, nil, build.ErrNoTarget
 	}
 	edge, ok := n.InEdge()
 	if !ok {
-		return nil, nil, nil, build.ErrTargetIsSource
+		return nil, nil, nil, nil, build.ErrTargetIsSource
 	}
 	v := g.visited[edge]
 	if v != nil {
-		return v.def, v.inputs, v.outputs, build.ErrDuplicateStep
+		return v.def, v.inputs, v.orderOnly, v.outputs, build.ErrDuplicateStep
 	}
 	if edge.IsPhony() {
 		g.globals.phony[g.globals.targetPath(ctx, n)] = true
 	}
 	stepDef := g.newStepDef(ctx, edge, next)
-	edgeInputs := edge.Inputs()
+	edgeInputs := edge.TriggerInputs()
 	inputs := make([]build.Target, 0, len(edgeInputs))
 	for _, in := range edgeInputs {
 		inputs = append(inputs, build.Target(in.ID()))
+	}
+	edgeOrderOnly := edge.Inputs()[len(edgeInputs):]
+	orderOnly := make([]build.Target, 0, len(edgeOrderOnly))
+	for _, in := range edgeOrderOnly {
+		orderOnly = append(orderOnly, build.Target(in.ID()))
 	}
 	edgeOutputs := edge.Outputs()
 	outputs := make([]build.Target, 0, len(edgeOutputs))
@@ -457,11 +463,12 @@ func (g *Graph) StepDef(ctx context.Context, target build.Target, next build.Ste
 		g.validations = append(g.validations, build.Target(v.ID()))
 	}
 	g.visited[edge] = &edgeStepDef{
-		def:     stepDef,
-		inputs:  inputs,
-		outputs: outputs,
+		def:       stepDef,
+		inputs:    inputs,
+		orderOnly: orderOnly,
+		outputs:   outputs,
 	}
-	return stepDef, inputs, outputs, nil
+	return stepDef, inputs, orderOnly, outputs, nil
 }
 
 // InputDeps returns input deps.

@@ -54,12 +54,12 @@ type Graph interface {
 	// TargetPath returns exec-root relative path of target.
 	TargetPath(context.Context, Target) (string, error)
 
-	// StepDef creates new StepDef for the target and its inputs/outputs targets.
+	// StepDef creates new StepDef for the target and its inputs/orderOnly/outputs targets.
 	// if err is ErrTargetIsSource, target is source and no step to
 	// generate the target.
 	// if err is ErrDuplicateStep, a step that geneartes the target
 	// is already processed.
-	StepDef(context.Context, Target, StepDef) (StepDef, []Target, []Target, error)
+	StepDef(context.Context, Target, StepDef) (StepDef, []Target, []Target, []Target, error)
 
 	// InputDeps returns input dependencies.
 	// input dependencies is a map from input path or label to
@@ -272,7 +272,7 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 	if log.V(1) {
 		clog.Infof(ctx, "schedule target %v state=%v ignore:%t", targetPath(ctx, graph, target), scanState, ignore)
 	}
-	newStep, inputs, outputs, err := graph.StepDef(ctx, target, next)
+	newStep, inputs, orderOnly, outputs, err := graph.StepDef(ctx, target, next)
 	switch {
 	case err == nil:
 		// need to schedule.
@@ -318,7 +318,8 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 			}
 		}
 	}()
-	targets[target].phonyOutput = newStep.Binding("phony_output") != ""
+	isPhonyOutput := newStep.Binding("phony_output") != ""
+	targets[target].phonyOutput = isPhonyOutput
 	if log.V(1) {
 		clog.Infof(ctx, "schedule %v inputs:%d outputs:%d", newStep, len(inputs), len(outputs))
 	}
@@ -374,7 +375,8 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 		def:   newStep,
 		state: &stepState{},
 	}
-	for _, in := range inputs {
+	orderOnlyIndex := len(inputs)
+	for i, in := range append(inputs, orderOnly...) {
 		if targets[in].scan != scanStateDone {
 			// if this target is ignored, but "in" is header,
 			// then it will not ignore steps to generate "in"
@@ -419,7 +421,7 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 			targets[in].waits = append(targets[in].waits, step)
 			step.nwaits++
 		}
-		if targets[in].phonyOutput && !targets[target].phonyOutput {
+		if i < orderOnlyIndex && targets[in].phonyOutput && !isPhonyOutput {
 			// non-phony_output rule can't depend on phony_output.
 			// i.e. step's outputs should be phony outputs
 			// phony_output is always dirty,

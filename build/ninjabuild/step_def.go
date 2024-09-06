@@ -352,7 +352,7 @@ func (s *StepDef) Inputs(ctx context.Context) []string {
 }
 
 // TriggerInputs returns inputs of the step that would trigger the step's action.
-func (s *StepDef) TriggerInputs(ctx context.Context) ([]string, error) {
+func (s *StepDef) TriggerInputs(ctx context.Context) []string {
 	seen := make(map[string]bool)
 	var targets []string
 	globals := s.globals
@@ -364,18 +364,7 @@ func (s *StepDef) TriggerInputs(ctx context.Context) ([]string, error) {
 		seen[p] = true
 		targets = append(targets, p)
 	}
-	deps, err := s.DepInputs(ctx)
-	if err != nil {
-		return targets, err
-	}
-	for _, in := range deps {
-		if seen[in] {
-			continue
-		}
-		seen[in] = true
-		targets = append(targets, in)
-	}
-	return targets, nil
+	return targets
 }
 
 // DepInputs returns inputs stored in depfile / depslog.

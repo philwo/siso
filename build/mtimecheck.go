@@ -216,11 +216,17 @@ var errDirty = errors.New("dirty")
 func inputMtime(ctx context.Context, b *Builder, stepDef StepDef) (string, time.Time, error) {
 	var inmtime time.Time
 	lastIn := ""
-	ins, err := stepDef.TriggerInputs(ctx)
+	ins := stepDef.TriggerInputs(ctx)
+	deps, err := stepDef.DepInputs(ctx)
 	if err != nil {
 		return "", inmtime, fmt.Errorf("failed to load deps: %w", err)
 	}
-	for _, in := range ins {
+	seen := make(map[string]bool)
+	for _, in := range append(ins, deps...) {
+		if seen[in] {
+			continue
+		}
+		seen[in] = true
 		v, ok := b.phony.Load(in)
 		if ok {
 			// phony target
