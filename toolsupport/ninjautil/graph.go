@@ -263,10 +263,10 @@ func (e *Edge) Print(w io.Writer) {
 	}
 	fmt.Fprintf(w, " : %s $\n", e.rule.Name())
 	for i, n := range e.inputs {
-		switch i {
-		case len(e.inputs) - e.orderOnlyDeps - e.implicitDeps:
+		if i == len(e.inputs)-e.orderOnlyDeps-e.implicitDeps && e.implicitDeps > 0 {
 			fmt.Fprintf(w, "  | $\n")
-		case len(e.inputs) - e.orderOnlyDeps:
+		}
+		if i == len(e.inputs)-e.orderOnlyDeps {
 			fmt.Fprintf(w, "  || $\n")
 		}
 		switch {
