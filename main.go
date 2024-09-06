@@ -29,6 +29,7 @@ import (
 	"infra/build/siso/subcmd/fetch"
 	"infra/build/siso/subcmd/fscmd"
 	"infra/build/siso/subcmd/help"
+	"infra/build/siso/subcmd/isolate"
 	"infra/build/siso/subcmd/metricscmd"
 	"infra/build/siso/subcmd/ninja"
 	"infra/build/siso/subcmd/ps"
@@ -62,6 +63,7 @@ func getApplication(authOpts cred.Options) *cli.Application {
 			ninja.Cmd(authOpts, versionID),
 			query.Cmd(),
 			fscmd.Cmd(authOpts),
+			isolate.Cmd(authOpts),
 			osfs.HelperCmd(),
 			recall.Cmd(authOpts),
 			report.Cmd(),
