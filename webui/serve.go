@@ -270,6 +270,16 @@ func NewServer(version string, localDevelopment bool, port int, defaultOutdir, c
 	return &s, nil
 }
 
+func (s *WebuiServer) staticFileHandler(h http.Handler) http.Handler {
+	if s.localDevelopment {
+		return h
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("Cache-Control", "max-age=86400, private")
+		h.ServeHTTP(w, r)
+	})
+}
+
 func (s *WebuiServer) Serve() int {
 	sseServer := newSseServer()
 	sseServer.Start()
@@ -308,10 +318,10 @@ func (s *WebuiServer) Serve() int {
 		outdirParser.ServeHTTP(w, r)
 	})
 
-	http.Handle("/css/", http.FileServerFS(s.templatesFS))
+	http.Handle("/css/", s.staticFileHandler(http.FileServerFS(s.templatesFS)))
 
 	// Serve third party JS. No other third party libraries right now, so just serve Material Design node_modules root.
-	http.Handle("/third_party/", http.StripPrefix("/third_party/", http.FileServerFS(mwc.NodeModulesFS)))
+	http.Handle("/third_party/", http.StripPrefix("/third_party/", s.staticFileHandler(http.FileServerFS(mwc.NodeModulesFS))))
 
 	fmt.Printf("listening on http://localhost:%d/...\n", s.port)
 	err := http.ListenAndServe(fmt.Sprintf(":%d", s.port), nil)
