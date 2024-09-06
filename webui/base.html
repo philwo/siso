@@ -174,23 +174,23 @@ found in the LICENSE file. */}}
     </header>
     <nav id="page-tabs" hx-push-url="true" hx-swap-oob="true">
       {{/* TODO: maybe we need some sort of "route generator" functions, because this is brittle. */}}
-      <a href="{{.outdirBaseURL}}/runbuild/" class="page-tab {{if and (eq .currentBaseURL .outdirBaseURL) (urlPathHasPrefix .currentURL "/runbuild/")}}selected{{end}}">
+      <a href="{{.outdirBaseURL}}/runbuild/" class="page-tab {{if urlPathHasPrefix .currentURL (printf "%s/runbuild/" .outdirBaseURL)}}selected{{end}}">
         <md-icon>build</md-icon><md-ripple></md-ripple>
         <span>Run Build</span>
       </a>
-      <a href="{{.outdirRevBaseURL}}/steps/" class="page-tab {{if and (eq .currentBaseURL .outdirBaseURL) (urlPathHasPrefix .currentURL (printf "/builds/%s/steps/" .currentRev))}}selected{{end}}">
+      <a href="{{.outdirRevBaseURL}}/steps/" class="page-tab {{if urlPathHasPrefix .currentURL (printf "%s/builds/%s/steps/" .outdirBaseURL .currentRev)}}selected{{end}}">
         <md-icon>footprint</md-icon><md-ripple></md-ripple>
         <span>Build Steps</span>
       </a>
-      <a href="{{.outdirRevBaseURL}}/aggregates/" class="page-tab {{if and (eq .currentBaseURL .outdirBaseURL) (urlPathHasPrefix .currentURL (printf "/builds/%s/aggregates/" .currentRev))}}selected{{end}}">
+      <a href="{{.outdirRevBaseURL}}/aggregates/" class="page-tab {{if urlPathHasPrefix .currentURL (printf "%s/builds/%s/aggregates/" .outdirBaseURL .currentRev)}}selected{{end}}">
         <md-icon>calculate</md-icon><md-ripple></md-ripple>
         <span>Aggregates</span>
       </a>
-      <a href="{{.outdirRevBaseURL}}/logs/" class="page-tab {{if and (eq .currentBaseURL .outdirBaseURL) (urlPathHasPrefix .currentURL (printf "/builds/%s/logs/" .currentRev))}}selected{{end}}">
+      <a href="{{.outdirRevBaseURL}}/logs/" class="page-tab {{if urlPathHasPrefix .currentURL (printf "%s/builds/%s/logs/" .outdirBaseURL .currentRev)}}selected{{end}}">
         <md-icon>description</md-icon><md-ripple></md-ripple>
         <span>Raw Logs</span>
       </a>
-      <a href="{{.outdirBaseURL}}/targets/" class="page-tab {{if and (eq .currentBaseURL .outdirBaseURL) (urlPathHasPrefix .currentURL "/targets/")}}selected{{end}}">
+      <a href="{{.outdirBaseURL}}/targets/" class="page-tab {{if urlPathHasPrefix .currentURL (printf "%s/targets/" .outdirBaseURL)}}selected{{end}}">
         <md-icon>target</md-icon><md-ripple></md-ripple>
         <span>Targets</span>
       </a>

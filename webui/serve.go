@@ -6,7 +6,6 @@
 package webui
 
 import (
-	"context"
 	"embed"
 	"errors"
 	"fmt"
@@ -28,8 +27,6 @@ import (
 
 //go:embed *.html css/*.css
 var content embed.FS
-
-type webuiContextKey string
 
 var (
 	templates     = make(map[string]*template.Template)
@@ -85,11 +82,13 @@ type WebuiServer struct {
 	localDevelopment  bool
 	port              int
 	templatesFS       fs.FS
+	sseServer         *sseServer
 	execRoot          string
 	defaultOutdir     string
 	defaultOutdirRoot string
 	defaultOutdirSub  string
 	outsubs           []string
+	runbuildState
 
 	mu      sync.Mutex
 	outdirs map[string]*outdirInfo
@@ -139,26 +138,17 @@ func (s *WebuiServer) loadView(view string) (*template.Template, error) {
 	return template, nil
 }
 
-// baseURLFromContext gets the base URL from context.
+// baseURLFromRequest gets the base URL from context.
 // This is a HARDCODED assumption that siso webui only has routes that start with outdir.
-func baseURLFromContext(ctx context.Context) (string, error) {
-	outroot, ok := ctx.Value(OutrootContextKey).(string)
-	if !ok {
-		return "", fmt.Errorf("failed to get outroot from context")
-	}
-	outsub, ok := ctx.Value(OutsubContextKey).(string)
-	if !ok {
-		return "", fmt.Errorf("failed to get outsub from context")
-	}
-	return fmt.Sprintf("/%s/%s", outroot, outsub), nil
+func outdirBaseURL(r *http.Request) string {
+	return fmt.Sprintf("/%s/%s", url.PathEscape(r.PathValue("outroot")), url.PathEscape(r.PathValue("outsub")))
 }
 
 // renderBuildView renders a build-related view.
 // TODO(b/361703735): return data instead of write to response writer? https://chromium-review.googlesource.com/c/infra/infra/+/5803123/comment/4ce69ada_31730349/
 func (s *WebuiServer) renderBuildView(wr http.ResponseWriter, r *http.Request, tmpl *template.Template, outdirInfo *outdirInfo, data map[string]any) error {
-	if currentBaseURL, err := baseURLFromContext(r.Context()); err == nil {
-		data["currentBaseURL"] = currentBaseURL
-	}
+	// TODO: change this hardcoded assumption
+	data["currentBaseURL"] = outdirBaseURL(r)
 	// TODO(b/361461051): refactor rev so that it's not required as part of rendering pages in general.
 	rev := r.PathValue("rev")
 	if rev == "" {
@@ -222,6 +212,7 @@ func NewServer(version string, localDevelopment bool, port int, defaultOutdir, c
 		sisoVersion:      version,
 		localDevelopment: localDevelopment,
 		templatesFS:      fs.FS(content),
+		sseServer:        newSseServer(),
 		defaultOutdir:    defaultOutdir,
 		outdirs:          make(map[string]*outdirInfo),
 		port:             port,
@@ -281,30 +272,34 @@ func (s *WebuiServer) staticFileHandler(h http.Handler) http.Handler {
 }
 
 func (s *WebuiServer) Serve() int {
-	sseServer := newSseServer()
-	sseServer.Start()
-	http.Handle("/events/", sseServer)
+	s.sseServer.Start()
+	http.Handle("/events/", s.sseServer)
 
-	outdirRouter := s.outdirRouter(sseServer)
-
-	// Handler for all outdir related URLs that loads the outdir and delegates to the outdir sub-router.
+	// Subrouter for all outdir related URLs.
 	// This is set up on a separate mux because it's too generic and would otherwise cause panic:
 	//     /css/ and /{outroot}/{outsub}/ both match some paths, like "/css/outsub/".
 	//     But neither is more specific than the other.
 	//     /css/ matches "/css/", but /{outroot}/{outsub}/ doesn't.
 	//     /{outroot}/{outsub}/ matches "/outroot/outsub/", but /css/ doesn't.
-	outdirParser := http.NewServeMux()
-	outdirParser.HandleFunc("/{outroot}/{outsub}/", func(w http.ResponseWriter, r *http.Request) {
-		outroot := r.PathValue("outroot")
-		outsub := r.PathValue("outsub")
-		baseURL := fmt.Sprintf("/%s/%s", outroot, outsub)
-		ctx := r.Context()
-		ctx = context.WithValue(ctx, OutrootContextKey, outroot)
-		ctx = context.WithValue(ctx, OutsubContextKey, outsub)
-		// Manually strip prefix.
-		// (Can't strip patterns with net/http see https://github.com/golang/go/issues/64909)
-		http.StripPrefix(baseURL, outdirRouter).ServeHTTP(w, r.WithContext(ctx))
+	outdirRouter := http.NewServeMux()
+	outdirRouter.HandleFunc("/{outroot}/{outsub}/", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, fmt.Sprintf("%s/builds/latest/steps/", outdirBaseURL(r)), http.StatusTemporaryRedirect)
 	})
+	outdirRouter.HandleFunc("/{outroot}/{outsub}/builds/{rev}/logs/", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, fmt.Sprintf("%s/builds/%s/logs/.siso_config", outdirBaseURL(r), url.PathEscape(r.PathValue("rev"))), http.StatusTemporaryRedirect)
+	})
+	outdirRouter.HandleFunc("/{outroot}/{outsub}/targets/", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, fmt.Sprintf("%s/targets/all/", outdirBaseURL(r)), http.StatusTemporaryRedirect)
+	})
+	outdirRouter.HandleFunc("/{outroot}/{outsub}/runbuild/", s.handleRunbuildGet)
+	outdirRouter.HandleFunc("POST /{outroot}/{outsub}/runbuild/", s.handleRunbuildPost)
+	outdirRouter.HandleFunc("/{outroot}/{outsub}/reload", s.handleOutdirReload)
+	outdirRouter.HandleFunc("/{outroot}/{outsub}/builds/{rev}/logs/{file}", s.handleOutdirViewLog)
+	outdirRouter.HandleFunc("/{outroot}/{outsub}/builds/{rev}/aggregates/", s.handleOutdirAggregates)
+	outdirRouter.HandleFunc("POST /{outroot}/{outsub}/builds/{rev}/steps/{id}/recall/", s.handleOutdirDoRecall)
+	outdirRouter.HandleFunc("/{outroot}/{outsub}/builds/{rev}/steps/{id}/", s.handleOutdirViewStep)
+	outdirRouter.HandleFunc("/{outroot}/{outsub}/builds/{rev}/steps/", s.handleOutdirListSteps)
+	outdirRouter.HandleFunc("/{outroot}/{outsub}/targets/{target}/", s.handleOutdirListTargets)
 
 	// Default catch-all handler.
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -314,8 +309,8 @@ func (s *WebuiServer) Serve() int {
 			return
 		}
 
-		// Delegate all other requests to the outdir handler.
-		outdirParser.ServeHTTP(w, r)
+		// Delegate all other requests to the outdir subrouter.
+		outdirRouter.ServeHTTP(w, r)
 	})
 
 	http.Handle("/css/", s.staticFileHandler(http.FileServerFS(s.templatesFS)))
