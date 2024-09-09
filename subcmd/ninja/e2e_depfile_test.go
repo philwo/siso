@@ -109,3 +109,26 @@ func TestBuild_Depfile_OutputLocalMinimum(t *testing.T) {
 		t.Errorf("skipped=%d done=%d total=%d; want skipped=done=total; %#v", stats.Skipped, stats.Done, stats.Total, stats)
 	}
 }
+
+func TestBuild_Depfile_AsOutput(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+
+	ninja := func(t *testing.T) (build.Stats, error) {
+		t.Helper()
+		opt, graph, cleanup := setupBuild(ctx, t, dir, hashfs.Option{
+			StateFile: ".siso_fs_state",
+		})
+		defer cleanup()
+		return runNinja(ctx, "build.ninja", graph, opt, nil, runNinjaOpts{})
+	}
+
+	setupFiles(t, dir, t.Name(), nil)
+	stats, err := ninja(t)
+	if err != nil {
+		t.Errorf("ninja %v; want nil err", err)
+	}
+	if stats.Done != stats.Total || stats.Local != 1 || stats.Total != 1 {
+		t.Errorf("done=%d total=%d local=%d; want done=1 total=1 local=1 %#v", stats.Done, stats.Total, stats.Local, stats)
+	}
+}

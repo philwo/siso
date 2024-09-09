@@ -115,6 +115,12 @@ func (depsGCC) DepsAfterRun(ctx context.Context, b *Builder, step *Step) ([]stri
 		return nil, fmt.Errorf("gcc-deps; unexpected deps=%q %s", step.cmd.Deps, step)
 	}
 	defer func() {
+		// don't remove depfile if it is used as output.
+		for _, out := range step.cmd.Outputs {
+			if out == step.cmd.Depfile {
+				return
+			}
+		}
 		b.hashFS.Remove(ctx, step.cmd.ExecRoot, step.cmd.Depfile)
 		b.hashFS.Flush(ctx, step.cmd.ExecRoot, []string{step.cmd.Depfile})
 	}()
