@@ -170,6 +170,76 @@ html, body {
 
 /* Steps page. */
 
+.revs-timeline {
+    list-style: none;
+    padding: 0;
+    --timeline-vertical-padding: 4px;
+    --timeline-horizontal-padding: 16px;
+    --timeline-vertical-spacing: 12px;
+    --timeline-dot-size: 10px;
+    --timeline-dot-indent: 4px;
+}
+.revs-timeline li {
+    position: relative;
+}
+.revs-timeline li a {
+    position: relative;
+    padding:
+        var(--timeline-vertical-padding)
+        var(--timeline-horizontal-padding)
+        var(--timeline-vertical-padding)
+        calc(var(--timeline-horizontal-padding) + var(--timeline-dot-indent));
+    border-radius: 999px;
+    text-decoration: none;
+    font-weight: var(--md-sys-typescale-label-medium-weight);
+}
+.revs-timeline li .rev-info {
+    padding:
+        var(--timeline-vertical-padding)
+        var(--timeline-horizontal-padding)
+        var(--timeline-vertical-spacing)
+        calc(var(--timeline-horizontal-padding) + var(--timeline-dot-indent));
+    color: var(--md-sys-color-on-surface-variant);
+    font-weight: var(--md-sys-typescale-body-medium-weight);
+    font-size: var(--md-sys-typescale-body-medium-size);
+}
+
+.revs-timeline li:before {
+    /* Render the timeline dot. */
+    content: '';
+    width: var(--timeline-dot-size);
+    height: var(--timeline-dot-size);
+    border-radius: 50%;
+    background: var(--md-sys-color-outline);
+    position: absolute;
+    top: calc(var(--timeline-dot-size)/2);
+    left: var(--timeline-dot-indent);
+}
+.revs-timeline li:after {
+    /* Render the timeline line. */
+    content: '';
+    width: 2px;
+    height: 100%;
+    background: var(--md-sys-color-outline);
+    position: absolute;
+    left: calc(var(--timeline-dot-indent) + var(--timeline-dot-size)/2 - 1px);
+    top: calc(var(--timeline-dot-size)/2);
+}
+.revs-timeline li:last-child:after {
+    /* The end of the timeline should fade into blank. */
+    background: linear-gradient(var(--md-sys-color-outline), transparent);
+}
+
+.revs-timeline li.selected a {
+    background: var(--md-sys-color-primary);
+    color: var(--md-sys-color-on-primary);
+    z-index: 998;
+}
+.revs-timeline li.selected:before {
+    background: var(--md-sys-color-on-primary);
+    z-index: 999;
+}
+
 .data-table-filter {
     position: sticky;
     top: 12px;

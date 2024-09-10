@@ -72,6 +72,9 @@ var (
 			milli := d.Milliseconds() % 1000
 			return fmt.Sprintf("%02d:%02d:%02d.%03d", hour, minute, second, milli)
 		},
+		"timeRFC3339": func(t time.Time) string {
+			return t.Format(time.RFC3339)
+		},
 	}
 	sisoMetricsRe = regexp.MustCompile(`siso_metrics.(\d+).json`)
 	sortParamRe   = regexp.MustCompile(`^(?P<sortBy>[a-z]+?)(?P<order>Asc|Dsc)$`)
@@ -173,14 +176,7 @@ func (s *WebuiServer) renderBuildView(wr http.ResponseWriter, r *http.Request, t
 			outdirShort = strings.Replace(outdirShort, home, "~", 1)
 		}
 		data["outdirShort"] = outdirShort
-		var knownRevs []string
-		for _, m := range outdirInfo.metrics {
-			if rev == m.rev {
-				data["currentRevMtime"] = m.mtime.Format(time.RFC3339)
-			}
-			knownRevs = append(knownRevs, m.rev)
-		}
-		data["revs"] = knownRevs
+		data["revs"] = outdirInfo.metrics
 	}
 	err := tmpl.ExecuteTemplate(wr, "base", data)
 	if err != nil {

@@ -5,6 +5,7 @@ found in the LICENSE file. */}}
 {{define "content"}}
 {{$outdirRevBaseURL:=.outdirRevBaseURL}}
 {{$currentURL:=.currentURL}}
+{{$currentRev:=.currentRev}}
 {{$buildDuration:=.buildDuration}}
 <aside id="page-sidebar">
 <form class="data-table-filter"
@@ -14,6 +15,19 @@ found in the LICENSE file. */}}
     hx-trigger="change,submit"
     hx-ext-md-filter-chip-as-checkbox>
   <div>
+    <ul class="revs-timeline">
+      {{range $r := .revs}}
+      <li{{if eq $r.Rev $currentRev}} class="selected"{{end}}>
+        <a href="{{$outdirRevBaseURL}}/../{{.Rev}}/steps/">
+          {{if eq .Rev "latest"}}latest build{{else}}revision {{.Rev}}{{end}}
+          <md-ripple></md-ripple>
+        </a>
+        <div class="rev-info">
+          <relative-time datetime="{{timeRFC3339 .Mtime}}"></relative-time>
+        </div>
+      </li>
+      {{end}}
+    </ul>
     <div class="step-views">
       <h3 id="view-label">View</h3>
       <input type="radio" id="view-all" name="view" value=""{{if urlHasParam $currentURL "view" ""}} checked{{end}}>

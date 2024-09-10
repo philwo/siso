@@ -40,9 +40,11 @@ type outdirInfo struct {
 	ninjaState    *ninjautil.State
 }
 
+// buildMetrics represents data for a single build revision.
+// (Exported fields are accessible from Go templates.)
 type buildMetrics struct {
-	mtime         time.Time
-	rev           string
+	Mtime         time.Time
+	Rev           string
 	buildMetrics  []build.StepMetric
 	buildDuration build.IntervalMetric
 	stepMetrics   map[string]build.StepMetric
@@ -51,8 +53,9 @@ type buildMetrics struct {
 	actionCounts  map[string]int
 }
 
+// aggregateMetric represents data for the aggregates page.
+// (All fields are exported to be usable in Go templates.)
 type aggregateMetric struct {
-	// All fields must be exported to be usable in a Go template.
 	AggregateBy           string
 	Count                 int
 	TotalUtime            build.IntervalMetric
@@ -73,7 +76,7 @@ func loadBuildMetrics(metricsPath string) (*buildMetrics, error) {
 	}
 
 	metricsData := &buildMetrics{
-		mtime:        stat.ModTime(),
+		Mtime:        stat.ModTime(),
 		buildMetrics: []build.StepMetric{},
 		stepMetrics:  make(map[string]build.StepMetric),
 		ruleCounts:   make(map[string]int),
@@ -162,7 +165,7 @@ func loadOutdirInfo(execRoot, outdirPath, manifestPath string) (*outdirInfo, err
 		if err != nil {
 			return nil, fmt.Errorf("failed to load latest metrics: %w", err)
 		}
-		latestMetrics.rev = "latest"
+		latestMetrics.Rev = "latest"
 		outdirInfo.metrics = append(outdirInfo.metrics, latestMetrics)
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return nil, fmt.Errorf("failed to stat latest metrics: %w", err)
@@ -188,7 +191,7 @@ func loadOutdirInfo(execRoot, outdirPath, manifestPath string) (*outdirInfo, err
 		if err != nil {
 			return nil, fmt.Errorf("failed to load %s: %w", revPath, err)
 		}
-		revMetrics.rev = rev
+		revMetrics.Rev = rev
 		outdirInfo.metrics = append(outdirInfo.metrics, revMetrics)
 	}
 	return outdirInfo, nil
@@ -307,7 +310,7 @@ func (s *WebuiServer) handleOutdirAggregates(w http.ResponseWriter, r *http.Requ
 
 	var metrics *buildMetrics
 	for _, m := range outdirInfo.metrics {
-		if m.rev == r.PathValue("rev") {
+		if m.Rev == r.PathValue("rev") {
 			metrics = m
 			break
 		}
@@ -368,7 +371,7 @@ func (s *WebuiServer) handleOutdirDoRecall(w http.ResponseWriter, r *http.Reques
 
 	var metrics *buildMetrics
 	for _, m := range outdirInfo.metrics {
-		if m.rev == r.PathValue("rev") {
+		if m.Rev == r.PathValue("rev") {
 			metrics = m
 			break
 		}
@@ -410,7 +413,7 @@ func (s *WebuiServer) handleOutdirViewStep(w http.ResponseWriter, r *http.Reques
 
 	var metrics *buildMetrics
 	for _, m := range outdirInfo.metrics {
-		if m.rev == r.PathValue("rev") {
+		if m.Rev == r.PathValue("rev") {
 			metrics = m
 			break
 		}
@@ -459,7 +462,7 @@ func (s *WebuiServer) handleOutdirListSteps(w http.ResponseWriter, r *http.Reque
 
 	var metrics *buildMetrics
 	for _, m := range outdirInfo.metrics {
-		if m.rev == r.PathValue("rev") {
+		if m.Rev == r.PathValue("rev") {
 			metrics = m
 			break
 		}
