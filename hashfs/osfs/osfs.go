@@ -72,10 +72,10 @@ func logSlow(ctx context.Context, name string, dur time.Duration, err error) {
 }
 
 // Chmod changes the mode of the named file to mode.
-func (fs *OSFS) Chmod(ctx context.Context, name string, mode fs.FileMode) error {
+func (ofs *OSFS) Chmod(ctx context.Context, name string, mode fs.FileMode) error {
 	started := time.Now()
 	err := os.Chmod(name, mode)
-	fs.OpsDone(err)
+	ofs.OpsDone(err)
 	if dur := time.Since(started); dur > 1*time.Minute {
 		logSlow(ctx, name, dur, err)
 	}
@@ -83,13 +83,13 @@ func (fs *OSFS) Chmod(ctx context.Context, name string, mode fs.FileMode) error 
 }
 
 // Chtimes changes the access and modification times of the named file.
-func (fs *OSFS) Chtimes(ctx context.Context, name string, atime, mtime time.Time) error {
+func (ofs *OSFS) Chtimes(ctx context.Context, name string, atime, mtime time.Time) error {
 	started := time.Now()
 	// workaround for cog utimes bug. b/356987531
 	_, _ = os.Stat(name)
 
 	err := os.Chtimes(name, atime, mtime)
-	fs.OpsDone(err)
+	ofs.OpsDone(err)
 	if dur := time.Since(started); dur > 1*time.Minute {
 		logSlow(ctx, name, dur, err)
 	}
@@ -106,15 +106,15 @@ func (*OSFS) AsFileSource(ds digest.Source) (FileSource, bool) {
 // FileSource creates new FileSource for name.
 // For FileDigestFromXattr, if size is non-negative, it will be used.
 // If size is negative, it will check file info.
-func (fs *OSFS) FileSource(name string, size int64) FileSource {
-	return FileSource{Fname: name, size: size, fs: fs}
+func (ofs *OSFS) FileSource(name string, size int64) FileSource {
+	return FileSource{Fname: name, size: size, fs: ofs}
 }
 
 // Lstat returns a FileInfo describing the named file.
-func (fs *OSFS) Lstat(ctx context.Context, fname string) (fs.FileInfo, error) {
+func (ofs *OSFS) Lstat(ctx context.Context, fname string) (fs.FileInfo, error) {
 	started := time.Now()
 	fi, err := os.Lstat(fname)
-	fs.OpsDone(err)
+	ofs.OpsDone(err)
 	if dur := time.Since(started); dur > 1*time.Minute {
 		logSlow(ctx, fname, dur, err)
 	}
@@ -122,10 +122,10 @@ func (fs *OSFS) Lstat(ctx context.Context, fname string) (fs.FileInfo, error) {
 }
 
 // MkdirAll creates a directory named path, along with any necessary parents.
-func (fs *OSFS) MkdirAll(ctx context.Context, dirname string, perm fs.FileMode) error {
+func (ofs *OSFS) MkdirAll(ctx context.Context, dirname string, perm fs.FileMode) error {
 	started := time.Now()
 	err := os.MkdirAll(dirname, perm)
-	fs.OpsDone(err)
+	ofs.OpsDone(err)
 	if dur := time.Since(started); dur > 1*time.Minute {
 		logSlow(ctx, dirname, dur, err)
 	}
@@ -133,10 +133,10 @@ func (fs *OSFS) MkdirAll(ctx context.Context, dirname string, perm fs.FileMode) 
 }
 
 // Readlink returns the destination of the named symbolic link.
-func (fs *OSFS) Readlink(ctx context.Context, name string) (string, error) {
+func (ofs *OSFS) Readlink(ctx context.Context, name string) (string, error) {
 	started := time.Now()
 	target, err := os.Readlink(name)
-	fs.OpsDone(err)
+	ofs.OpsDone(err)
 	if dur := time.Since(started); dur > 1*time.Minute {
 		logSlow(ctx, name, dur, err)
 	}
@@ -144,10 +144,10 @@ func (fs *OSFS) Readlink(ctx context.Context, name string) (string, error) {
 }
 
 // Remove removes the named file or directory.
-func (fs *OSFS) Remove(ctx context.Context, name string) error {
+func (ofs *OSFS) Remove(ctx context.Context, name string) error {
 	started := time.Now()
 	err := os.Remove(name)
-	fs.OpsDone(err)
+	ofs.OpsDone(err)
 	if dur := time.Since(started); dur > 1*time.Minute {
 		logSlow(ctx, name, dur, err)
 	}
@@ -155,10 +155,10 @@ func (fs *OSFS) Remove(ctx context.Context, name string) error {
 }
 
 // Rename renames oldpath to newpath.
-func (fs *OSFS) Rename(ctx context.Context, oldpath, newpath string) error {
+func (ofs *OSFS) Rename(ctx context.Context, oldpath, newpath string) error {
 	started := time.Now()
 	err := os.Rename(oldpath, newpath)
-	fs.OpsDone(err)
+	ofs.OpsDone(err)
 	if dur := time.Since(started); dur > 1*time.Minute {
 		logSlow(ctx, newpath, dur, err)
 	}
@@ -166,10 +166,10 @@ func (fs *OSFS) Rename(ctx context.Context, oldpath, newpath string) error {
 }
 
 // Symlink creates newname as a symbolic link to oldname.
-func (fs *OSFS) Symlink(ctx context.Context, oldname, newname string) error {
+func (ofs *OSFS) Symlink(ctx context.Context, oldname, newname string) error {
 	started := time.Now()
 	err := os.Symlink(oldname, newname)
-	fs.OpsDone(err)
+	ofs.OpsDone(err)
 	if dur := time.Since(started); dur > 1*time.Minute {
 		logSlow(ctx, newname, dur, err)
 	}
@@ -177,10 +177,10 @@ func (fs *OSFS) Symlink(ctx context.Context, oldname, newname string) error {
 }
 
 // WriteFile writes data to the named file, creating it if necessary.
-func (fs *OSFS) WriteFile(ctx context.Context, name string, data []byte, perm fs.FileMode) error {
+func (ofs *OSFS) WriteFile(ctx context.Context, name string, data []byte, perm fs.FileMode) error {
 	started := time.Now()
 	err := writeFile(name, data, perm)
-	fs.WriteDone(len(data), err)
+	ofs.WriteDone(len(data), err)
 	if dur := time.Since(started); dur > 1*time.Minute {
 		logSlow(ctx, name, dur, err)
 	}
@@ -188,7 +188,7 @@ func (fs *OSFS) WriteFile(ctx context.Context, name string, data []byte, perm fs
 }
 
 // WriteDigestData writes digest source into the named file.
-func (fs *OSFS) WriteDigestData(ctx context.Context, name string, src digest.Source, perm fs.FileMode) error {
+func (ofs *OSFS) WriteDigestData(ctx context.Context, name string, src digest.Source, perm fs.FileMode) error {
 	started := time.Now()
 	var n int64
 	err := retry.Do(ctx, func() error {
@@ -208,7 +208,7 @@ func (fs *OSFS) WriteDigestData(ctx context.Context, name string, src digest.Sou
 		}
 		return err
 	})
-	fs.WriteDone(int(n), err)
+	ofs.WriteDone(int(n), err)
 	if dur := time.Since(started); dur > 1*time.Minute {
 		logSlow(ctx, name, dur, err)
 	}
@@ -216,18 +216,18 @@ func (fs *OSFS) WriteDigestData(ctx context.Context, name string, src digest.Sou
 }
 
 // FileDigestFromXattr returns file's digest via xattr if possible.
-func (fs *OSFS) FileDigestFromXattr(ctx context.Context, name string, size int64) (digest.Digest, error) {
-	if fs.digestXattrName == "" {
+func (ofs *OSFS) FileDigestFromXattr(ctx context.Context, name string, size int64) (digest.Digest, error) {
+	if ofs.digestXattrName == "" {
 		return digest.Digest{}, errors.ErrUnsupported
 	}
-	d, err := xattr.LGet(name, fs.digestXattrName)
-	fs.OpsDone(err)
+	d, err := xattr.LGet(name, ofs.digestXattrName)
+	ofs.OpsDone(err)
 	if err != nil {
 		return digest.Digest{}, err
 	}
 	if size < 0 {
 		fi, err := os.Lstat(name)
-		fs.OpsDone(err)
+		ofs.OpsDone(err)
 		size = fi.Size()
 	}
 	return digest.Digest{
@@ -247,18 +247,18 @@ type FileSource struct {
 func (FileSource) IsLocal() {}
 
 // Open opens the named file for reading.
-func (fs FileSource) Open(ctx context.Context) (io.ReadCloser, error) {
-	r, err := os.Open(fs.Fname)
-	return &file{ctx: ctx, file: r, started: time.Now(), fs: fs.fs}, err
+func (fsc FileSource) Open(ctx context.Context) (io.ReadCloser, error) {
+	r, err := os.Open(fsc.Fname)
+	return &file{ctx: ctx, file: r, started: time.Now(), fs: fsc.fs}, err
 }
 
-func (fs FileSource) String() string {
-	return fmt.Sprintf("file://%s", fs.Fname)
+func (fsc FileSource) String() string {
+	return fmt.Sprintf("file://%s", fsc.Fname)
 }
 
 // FileDigestFromXattr returns file's digest via xattr if possible.
-func (fs FileSource) FileDigestFromXattr(ctx context.Context) (digest.Digest, error) {
-	return fs.fs.FileDigestFromXattr(ctx, fs.Fname, fs.size)
+func (fsc FileSource) FileDigestFromXattr(ctx context.Context) (digest.Digest, error) {
+	return fsc.fs.FileDigestFromXattr(ctx, fsc.Fname, fsc.size)
 }
 
 type file struct {
