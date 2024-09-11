@@ -22,7 +22,12 @@ import (
 	"infra/build/siso/o11y/iometrics"
 	"infra/build/siso/reapi/digest"
 	"infra/build/siso/reapi/retry"
+	"infra/build/siso/sync/semaphore"
 )
+
+// LstatSemaphore is a semaphore to control concurrent lstat,
+// to protect from thread exhaustion. b/365856347
+var LstatSemaphore = semaphore.New("osfs-lstat", runtime.NumCPU()*2)
 
 // defaultDigestXattr is default xattr for digest. http://shortn/_8GHggPD2vw
 const defaultDigestXattr = "google.digest.sha256"
@@ -113,7 +118,12 @@ func (ofs *OSFS) FileSource(name string, size int64) FileSource {
 // Lstat returns a FileInfo describing the named file.
 func (ofs *OSFS) Lstat(ctx context.Context, fname string) (fs.FileInfo, error) {
 	started := time.Now()
-	fi, err := os.Lstat(fname)
+	var fi fs.FileInfo
+	err := LstatSemaphore.Do(ctx, func(ctx context.Context) error {
+		var err error
+		fi, err = os.Lstat(fname)
+		return err
+	})
 	ofs.OpsDone(err)
 	if dur := time.Since(started); dur > 1*time.Minute {
 		logSlow(ctx, fname, dur, err)

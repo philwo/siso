@@ -36,6 +36,7 @@ import (
 	"infra/build/siso/execute/remoteexec"
 	"infra/build/siso/execute/reproxyexec"
 	"infra/build/siso/hashfs"
+	"infra/build/siso/hashfs/osfs"
 	"infra/build/siso/o11y/clog"
 	"infra/build/siso/o11y/iometrics"
 	sisopprof "infra/build/siso/o11y/pprof"
@@ -533,6 +534,7 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 		b.stepSema,
 		hashfs.FlushSemaphore,
 		hashfs.ForgetMissingsSemaphore,
+		osfs.LstatSemaphore,
 		reapi.FileSemaphore,
 		remoteexec.Semaphore,
 	}
