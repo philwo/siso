@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"math"
 	"net/http"
 	"net/url"
 	"os"
@@ -64,13 +65,37 @@ var (
 		"addIntervals": func(a, b build.IntervalMetric) build.IntervalMetric {
 			return a + b
 		},
-		"formatIntervalMetric": func(i build.IntervalMetric) string {
+		"formatIntervalMetricTimestamp": func(i build.IntervalMetric) string {
 			d := time.Duration(i)
 			hour := int(d.Hours())
 			minute := int(d.Minutes()) % 60
 			second := int(d.Seconds()) % 60
 			milli := d.Milliseconds() % 1000
 			return fmt.Sprintf("%02d:%02d:%02d.%03d", hour, minute, second, milli)
+		},
+		"formatIntervalMetricHuman": func(i build.IntervalMetric) string {
+			var sb strings.Builder
+			d := time.Duration(i)
+			ms := d.Milliseconds() % 1000
+			if ms > 10 {
+				d = d.Round(10 * time.Millisecond)
+				mins := d.Truncate(1 * time.Minute)
+				d = d - mins
+				if mins > 0 {
+					fmt.Fprintf(&sb, "%s", strings.TrimSuffix(mins.String(), "0s"))
+					if d < 10*time.Second {
+						fmt.Fprint(&sb, "0")
+					}
+				}
+				fmt.Fprintf(&sb, "%2.02fs", d.Seconds())
+			} else {
+				d = d.Round(10 * time.Microsecond)
+				us := d.Microseconds() % 1000
+				// Reduce precision to 2 digits
+				us = int64(math.Round(float64(us) / 10))
+				fmt.Fprintf(&sb, "%d.%02dms", ms, us)
+			}
+			return sb.String()
 		},
 		"timeRFC3339": func(t time.Time) string {
 			return t.Format(time.RFC3339)

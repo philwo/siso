@@ -51,8 +51,8 @@ type buildMetrics struct {
 	actionCounts  map[string]int
 	// buildMetrics contains build.StepMetric related to overall build e.g. regenerate ninja files.
 	buildMetrics []build.StepMetric
-	// stepMetrics contains build.StepMetric related to ninja executions.
-	stepMetrics []build.StepMetric
+	// StepMetrics contains build.StepMetric related to ninja executions.
+	StepMetrics []build.StepMetric
 	// stepByStepID keys step ID to *build.StepMetric for faster lookup.
 	stepByStepID map[string]*build.StepMetric
 	// stepByOutput keys output to *build.StepMetric for faster lookup.
@@ -84,7 +84,7 @@ func loadBuildMetrics(metricsPath string) (*buildMetrics, error) {
 	metricsData := &buildMetrics{
 		Mtime:        stat.ModTime(),
 		buildMetrics: []build.StepMetric{},
-		stepMetrics:  []build.StepMetric{},
+		StepMetrics:  []build.StepMetric{},
 		stepByStepID: make(map[string]*build.StepMetric),
 		stepByOutput: make(map[string]*build.StepMetric),
 		ruleCounts:   make(map[string]int),
@@ -106,21 +106,21 @@ func loadBuildMetrics(metricsPath string) (*buildMetrics, error) {
 			// The last build metric found has the actual build duration.
 			metricsData.buildDuration = m.Duration
 		} else if m.StepID != "" {
-			metricsData.stepMetrics = append(metricsData.stepMetrics, m)
-			metricsData.stepByStepID[m.StepID] = &metricsData.stepMetrics[len(metricsData.stepMetrics)-1]
-			metricsData.stepByOutput[m.Output] = &metricsData.stepMetrics[len(metricsData.stepMetrics)-1]
+			metricsData.StepMetrics = append(metricsData.StepMetrics, m)
+			metricsData.stepByStepID[m.StepID] = &metricsData.StepMetrics[len(metricsData.StepMetrics)-1]
+			metricsData.stepByOutput[m.Output] = &metricsData.StepMetrics[len(metricsData.StepMetrics)-1]
 			metricsData.lastStepID = m.StepID
 		} else {
 			return nil, fmt.Errorf("unexpected metric found %v", m)
 		}
 	}
 
-	for _, metric := range metricsData.stepMetrics {
+	for _, metric := range metricsData.StepMetrics {
 		if metric.Action != "" {
 			metricsData.actionCounts[metric.Action]++
 		}
 	}
-	for _, metric := range metricsData.stepMetrics {
+	for _, metric := range metricsData.StepMetrics {
 		if metric.Rule != "" {
 			metricsData.ruleCounts[metric.Rule]++
 		}
@@ -331,7 +331,7 @@ func (s *WebuiServer) handleOutdirAggregates(w http.ResponseWriter, r *http.Requ
 	}
 
 	aggregates := make(map[string]aggregateMetric)
-	for _, m := range metrics.stepMetrics {
+	for _, m := range metrics.StepMetrics {
 		// Aggregate by rule if exists otherwise action.
 		aggregateBy := m.Action
 		if len(m.Rule) > 0 {
@@ -540,7 +540,7 @@ func (s *WebuiServer) handleOutdirListSteps(w http.ResponseWriter, r *http.Reque
 		}
 		slices.Reverse(filteredSteps)
 	default:
-		for _, m := range metrics.stepMetrics {
+		for _, m := range metrics.StepMetrics {
 			if len(actionsWanted) > 0 && !slices.Contains(actionsWanted, m.Action) {
 				continue
 			}
