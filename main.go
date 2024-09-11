@@ -125,7 +125,7 @@ Use "siso help -advanced" to display all commands.
 	flag.StringVar(&memprofile, "memprofile", "", "write memory profile to this file")
 	flag.IntVar(&blockprofRate, "blockprof_rate", 0, "block profile rate")
 	flag.IntVar(&mutexprofFrac, "mutexprof_frac", 0, "mutex profile fraction")
-	flag.StringVar(&traceFile, "trace", "", "go trace output for `go tool trace`")
+	flag.StringVar(&traceFile, "trace", "", `go trace output for "go tool trace"`)
 
 	credHelper := cred.DefaultCredentialHelper()
 	if h, ok := os.LookupEnv("SISO_CREDENTIAL_HELPER"); ok {
