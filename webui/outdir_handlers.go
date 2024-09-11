@@ -45,12 +45,18 @@ type outdirInfo struct {
 type buildMetrics struct {
 	Mtime         time.Time
 	Rev           string
-	buildMetrics  []build.StepMetric
 	buildDuration build.IntervalMetric
-	stepMetrics   map[string]build.StepMetric
 	lastStepID    string
 	ruleCounts    map[string]int
 	actionCounts  map[string]int
+	// buildMetrics contains build.StepMetric related to overall build e.g. regenerate ninja files.
+	buildMetrics []build.StepMetric
+	// stepMetrics contains build.StepMetric related to ninja executions.
+	stepMetrics []build.StepMetric
+	// stepByStepID keys step ID to *build.StepMetric for faster lookup.
+	stepByStepID map[string]*build.StepMetric
+	// stepByOutput keys output to *build.StepMetric for faster lookup.
+	stepByOutput map[string]*build.StepMetric
 }
 
 // aggregateMetric represents data for the aggregates page.
@@ -78,7 +84,9 @@ func loadBuildMetrics(metricsPath string) (*buildMetrics, error) {
 	metricsData := &buildMetrics{
 		Mtime:        stat.ModTime(),
 		buildMetrics: []build.StepMetric{},
-		stepMetrics:  make(map[string]build.StepMetric),
+		stepMetrics:  []build.StepMetric{},
+		stepByStepID: make(map[string]*build.StepMetric),
+		stepByOutput: make(map[string]*build.StepMetric),
 		ruleCounts:   make(map[string]int),
 		actionCounts: make(map[string]int),
 	}
@@ -98,7 +106,9 @@ func loadBuildMetrics(metricsPath string) (*buildMetrics, error) {
 			// The last build metric found has the actual build duration.
 			metricsData.buildDuration = m.Duration
 		} else if m.StepID != "" {
-			metricsData.stepMetrics[m.StepID] = m
+			metricsData.stepMetrics = append(metricsData.stepMetrics, m)
+			metricsData.stepByStepID[m.StepID] = &metricsData.stepMetrics[len(metricsData.stepMetrics)-1]
+			metricsData.stepByOutput[m.Output] = &metricsData.stepMetrics[len(metricsData.stepMetrics)-1]
 			metricsData.lastStepID = m.StepID
 		} else {
 			return nil, fmt.Errorf("unexpected metric found %v", m)
@@ -387,7 +397,7 @@ func (s *WebuiServer) handleOutdirDoRecall(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	metric, ok := metrics.stepMetrics[r.PathValue("id")]
+	metric, ok := metrics.stepByStepID[r.PathValue("id")]
 	if !ok {
 		s.renderBuildViewError(http.StatusNotFound, fmt.Sprintf("stepID %s not found", r.PathValue("id")), w, r, outdirInfo)
 		return
@@ -429,24 +439,38 @@ func (s *WebuiServer) handleOutdirViewStep(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	metric, ok := metrics.stepMetrics[r.PathValue("id")]
+	// Load the step.
+	stepData, ok := metrics.stepByStepID[r.PathValue("id")]
 	if !ok {
 		s.renderBuildViewError(http.StatusNotFound, fmt.Sprintf("stepID %s not found", r.PathValue("id")), w, r, outdirInfo)
 		return
 	}
 
-	var asMap map[string]any
-	asJSON, err := json.Marshal(metric)
+	// Find steps with the same output in other revs.
+	// (A step could have multiple outputs, and we only log the first output as the output name.
+	// So if it changes across builds it won't work. But it's expected to be stable for most builds.)
+	inOtherRevs := make(map[string]build.StepMetric)
+	for _, m := range outdirInfo.metrics {
+		if step, ok := m.stepByOutput[stepData.Output]; ok {
+			inOtherRevs[m.Rev] = *step
+		}
+	}
+
+	// We will only have special handling for a subset of stats, so provide the raw step for everything else.
+	var stepRaw map[string]any
+	asJSON, err := json.Marshal(stepData)
 	if err != nil {
 		s.renderBuildViewError(http.StatusInternalServerError, fmt.Sprintf("failed to marshal metrics: %v", err), w, r, outdirInfo)
 	}
-	err = json.Unmarshal(asJSON, &asMap)
+	err = json.Unmarshal(asJSON, &stepRaw)
 	if err != nil {
 		s.renderBuildViewError(http.StatusInternalServerError, fmt.Sprintf("failed to unmarshal metrics: %v", err), w, r, outdirInfo)
 	}
 
 	err = s.renderBuildView(w, r, tmpl, outdirInfo, map[string]any{
-		"step": asMap,
+		"step":        stepData,
+		"stepRaw":     stepRaw,
+		"inOtherRevs": inOtherRevs,
 	})
 	if err != nil {
 		s.renderBuildViewError(http.StatusInternalServerError, fmt.Sprintf("failed to render view: %v", err), w, r, outdirInfo)
@@ -509,8 +533,8 @@ func (s *WebuiServer) handleOutdirListSteps(w http.ResponseWriter, r *http.Reque
 			if critStepID == "" {
 				break
 			}
-			step := metrics.stepMetrics[critStepID]
-			filteredSteps = append(filteredSteps, step)
+			step := metrics.stepByStepID[critStepID]
+			filteredSteps = append(filteredSteps, *step)
 			// TODO(b/349287453): add some sort of error to indicate if prev step was not found
 			critStepID = step.PrevStepID
 		}

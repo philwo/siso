@@ -4,52 +4,123 @@ found in the LICENSE file. */}}
 
 {{define "content"}}
 {{$outdirRevBaseURL:=.outdirRevBaseURL}}
-{{$step_id:=.step.step_id}}
-<div class="step-header">
-  <md-icon-button>
-    <md-icon>arrow_back</md-icon>
-  </md-icon-button>
-  <h1>{{$step_id}}</h1>
-</div>
-
+{{$currentRev:=.currentRev}}
+{{$inOtherRevs:=.inOtherRevs}}
+{{$stepID:=.step.StepID}}
 <div class="step-page">
-  <dl class="step-details">
-    {{range $key, $value := .step}}
-    <dt>{{$key}}</dt>
-    <dd>
-      <span id="step-{{$step_id}}-{{$key}}-value">{{$value}}</span>
-      <clipboard-copy for="step-{{$step_id}}-{{$key}}-value">
+  <h2>{{.step.Output}}</h2>
+  <ul class="step-details">
+    <li>
+      <md-icon>category</md-icon>
+      <span>Used ninja action <code>{{.step.Action}}</code></span>
+    </li>
+    <li>
+      <md-icon>description</md-icon>
+      {{if .step.Rule}}
+        <span>Applied siso rule <code>{{.step.Rule}}</code></span>
+      {{else}}
+        <span>No siso rule applied</span>
+      {{end}}
+    </li>
+    <li>
+      <md-icon>target</md-icon>
+      <span>Part of GN target <code id="step-{{$stepID}}-gntarget">{{.step.GNTarget}}</code></span>
+      <clipboard-copy for="step-{{$stepID}}-gntarget">
         <md-icon-button>
           <md-icon>content_copy</md-icon>
         </md-icon-button>
       </clipboard-copy>
-    </dd>
-    {{end}}
-  </dl>
-
-  <div class="step-tools">
-    <h2>Tools</h2>
-    <h3>Recall</h3>
-    <form id="recall-form"
-          action="{{$outdirRevBaseURL}}/steps/{{$step_id}}/recall/" method="POST" hx-push-url="false"
-          hx-select="#page-content" hx-target="#recall-dialog-form" hx-swap="innerHTML"
-          hx-on:htmx:before-request="document.getElementById('recall-dialog').show()">
-      <md-outlined-text-field name="project" label="Cloud project ID" type="text" value="rbe-chrome-untrusted"></md-outlined-text-field>
-      <md-outlined-text-field name="reapi_instance" label="RE API instance name" type="text" value="default_instance"></md-outlined-text-field>
-      <md-filled-button>Recall</md-filled-button>
-    </form>
-    <md-dialog id="recall-dialog">
-      <div slot="headline">
-        Recall step
-      </div>
-      <form slot="content" id="recall-dialog-form" method="dialog" hx-trigger="none">
-        <md-circular-progress four-color indeterminate></md-circular-progress>
-        Loading...
-      </form>
-      <div slot="actions">
-        <md-text-button form="recall-dialog-form">Ok</md-text-button>
-      </div>
-    </md-dialog>
-  </div>
+    </li>
+    <li>
+      <md-icon>timer</md-icon>
+      Ran in {{formatIntervalMetric .step.Duration}}
+    </li>
+    <li class="remote-indicator">
+      {{if .step.IsLocal}}
+        <md-icon>cloud_off</md-icon>
+        Local Execution
+      {{else if and (not .step.Cached) (not .step.NoExec)}}
+        <md-icon class="icon-cache-miss">cloud</md-icon>
+        Remote Execution
+      {{else if .step.Cached}}
+        <md-icon class="icon-cache-hit">cloud_done</md-icon>
+        Cache Hit
+      {{end}}
+    </li>
+    <li>
+      <md-icon>input_circle</md-icon>
+      {{.step.Inputs}} input(s)
+    </li>
+    <li>
+      <md-icon>output_circle</md-icon>
+      {{.step.Outputs}} output(s)
+    </li>
+  </ul>
+  <details>
+    <summary>Raw metrics</summary>
+    <dl class="step-raw">
+      {{range $key, $value := .stepRaw}}
+      <dt>{{$key}}</dt>
+      <dd>
+        <span id="step-{{$stepID}}-{{$key}}-value">{{$value}}</span>
+        <clipboard-copy for="step-{{$stepID}}-{{$key}}-value">
+          <md-icon-button>
+            <md-icon>content_copy</md-icon>
+          </md-icon-button>
+        </clipboard-copy>
+      </dd>
+      {{end}}
+    </dl>
+  </details>
 </div>
+
+<aside id="page-sidebar">
+  {{/* TODO: deduplicate this with timeline on steps page? */}}
+  <ul class="revs-timeline">
+    {{range $r := .revs}}
+    <li{{if eq $r.Rev $currentRev}} class="selected"{{end}}>
+      {{with (index $inOtherRevs $r.Rev)}}
+        {{if .StepID}}
+        <a class="rev-label" href="{{$outdirRevBaseURL}}/../{{$r.Rev}}/steps/{{.StepID}}/">
+          <span class="rev-label-note">Ran in</span>
+          {{if eq $r.Rev "latest"}}latest build{{else}}revision {{$r.Rev}}{{end}}
+          <md-ripple></md-ripple>
+        </a>
+        {{else}}
+          <span class="rev-label disabled">
+            Not found in
+            {{if eq $r.Rev "latest"}}latest build{{else}}revision {{$r.Rev}}{{end}}
+          </span>
+        {{end}}
+      {{end}}
+      <div class="rev-info">
+        <relative-time datetime="{{timeRFC3339 .Mtime}}"></relative-time>
+      </div>
+    </li>
+    {{end}}
+  </ul>
+
+  <h2>Tools</h2>
+  <h3>Recall</h3>
+  <form id="recall-form"
+        action="{{$outdirRevBaseURL}}/steps/{{$stepID}}/recall/" method="POST" hx-push-url="false"
+        hx-select="#page-content" hx-target="#recall-dialog-form" hx-swap="innerHTML"
+        hx-on:htmx:before-request="document.getElementById('recall-dialog').show()">
+    <md-outlined-text-field name="project" label="Cloud project ID" type="text" value="rbe-chrome-untrusted"></md-outlined-text-field>
+    <md-outlined-text-field name="reapi_instance" label="RE API instance name" type="text" value="default_instance"></md-outlined-text-field>
+    <md-filled-button>Recall</md-filled-button>
+  </form>
+  <md-dialog id="recall-dialog">
+    <div slot="headline">
+      Recall step
+    </div>
+    <form slot="content" id="recall-dialog-form" method="dialog" hx-trigger="none">
+      <md-circular-progress four-color indeterminate></md-circular-progress>
+      Loading...
+    </form>
+    <div slot="actions">
+      <md-text-button form="recall-dialog-form">Ok</md-text-button>
+    </div>
+  </md-dialog>
+</aside>
 {{end}}

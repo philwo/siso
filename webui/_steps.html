@@ -15,10 +15,12 @@ found in the LICENSE file. */}}
     hx-trigger="change,submit"
     hx-ext-md-filter-chip-as-checkbox>
   <div>
+    {{/* TODO: deduplicate this with timeline on individual step page? */}}
     <ul class="revs-timeline">
       {{range $r := .revs}}
       <li{{if eq $r.Rev $currentRev}} class="selected"{{end}}>
-        <a href="{{$outdirRevBaseURL}}/../{{.Rev}}/steps/">
+        <a class="rev-label" href="{{$outdirRevBaseURL}}/../{{.Rev}}/steps/">
+          <span class="rev-label-note">Steps in</span>
           {{if eq .Rev "latest"}}latest build{{else}}revision {{.Rev}}{{end}}
           <md-ripple></md-ripple>
         </a>
