@@ -24,6 +24,7 @@ import (
 	"go.chromium.org/luci/auth"
 	"go.chromium.org/luci/common/cli"
 	"go.chromium.org/luci/common/system/signals"
+	"go.chromium.org/luci/hardcoded/chromeinfra"
 
 	"infra/build/siso/auth/cred"
 	"infra/build/siso/hashfs"
@@ -38,7 +39,7 @@ const usage = `isolate uploads and computes tree digest for each targets.
 
  $ siso isolate -project <project> -reapi_instance <instance> \
     -C <dir> \
-    -cas_instance <cas_instance> \
+    -cas_instance projects/<cas project>/instances/<instance> \
     -dump_json <output json path> \
     <target> ...
 
@@ -161,7 +162,12 @@ func (c *run) run(ctx context.Context) error {
 	artifactStore := client.CacheStore()
 
 	ui.Default.PrintLines(fmt.Sprintf("target cas instance: %s\n", c.casopt.Instance))
-	casClient, err := reapi.New(ctx, credential, *c.casopt)
+
+	ccred, err := c.casCred(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get cas credential: %w", err)
+	}
+	casClient, err := reapi.New(ctx, ccred, *c.casopt)
 	if err != nil {
 		return fmt.Errorf("failed to initialize cas client: %w", err)
 	}
@@ -267,6 +273,25 @@ func (c *run) initWorkdirs(ctx context.Context) (string, error) {
 	c.dir = rdir
 	clog.Infof(ctx, "working_directory in exec_root: %s", c.dir)
 	return execRoot, err
+}
+
+func (c *run) casCred(ctx context.Context) (cred.Cred, error) {
+	if c.casopt.Instance == "default_instance" || c.casopt.Instance == "" {
+		return cred.Cred{}, fmt.Errorf("-cas_instance must be set")
+	}
+	if !strings.HasPrefix(c.casopt.Instance, "projects/") {
+		return cred.Cred{}, fmt.Errorf(
+			"-cas_instance must be in projects/<project>/instances/<instance> format. got %q", c.casopt.Instance)
+	}
+	project := strings.Split(c.casopt.Instance, "/")[1]
+	// Use Swarming specific authentication mechanism.
+	authOpts := chromeinfra.DefaultAuthOptions()
+	authOpts.ActAsServiceAccount = fmt.Sprintf("cas-read-write@%s.iam.gserviceaccount.com", project)
+	authOpts.ActViaLUCIRealm = fmt.Sprintf("@internal:%s/cas-read-write", project)
+	authOpts.Scopes = []string{"https://www.googleapis.com/auth/cloud-platform"}
+	return cred.New(ctx, cred.Options{
+		LUCIAuth: authOpts,
+	})
 }
 
 func (c *run) upload(ctx context.Context, execRoot string, hashFS *hashfs.HashFS, casClient *reapi.Client, target string) (digest.Digest, error) {

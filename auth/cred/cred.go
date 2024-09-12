@@ -37,8 +37,9 @@ type Cred struct {
 }
 
 type Options struct {
-	LUCIAuth    auth.Options
-	TokenSource oauth2.TokenSource
+	LUCIAuth         auth.Options
+	FallbackLUCIAuth auth.Options
+	TokenSource      oauth2.TokenSource
 }
 
 // AuthOpts returns the LUCI auth options that Siso uses.
@@ -48,6 +49,17 @@ func AuthOpts(credHelper string) Options {
 		auth.OAuthScopeEmail,
 		"https://www.googleapis.com/auth/cloud-platform",
 	}
+	// If the user is already logged in via `luci-auth login --scopes-context`,
+	// we can use that token and avoid having to prompt for another login.
+	fallbackAuthOpts := chromeinfra.DefaultAuthOptions()
+	// same scope as `--scopes-context`
+	// https://crrev.com/bdbc1802265493619ac518d392776af6593fd1e0/auth/client/authcli/authcli.go#22
+	fallbackAuthOpts.Scopes = []string{
+		"https://www.googleapis.com/auth/cloud-platform",
+		"https://www.googleapis.com/auth/firebase",
+		"https://www.googleapis.com/auth/gerritcodereview",
+		"https://www.googleapis.com/auth/userinfo.email",
+	}
 	var tokenSource oauth2.TokenSource
 	if credHelper != "" {
 		tokenSource = credHelperTokenSource{credHelper}
@@ -55,8 +67,9 @@ func AuthOpts(credHelper string) Options {
 		tokenSource = gcloudTokenSource{}
 	}
 	return Options{
-		LUCIAuth:    authOpts,
-		TokenSource: tokenSource,
+		LUCIAuth:         authOpts,
+		FallbackLUCIAuth: fallbackAuthOpts,
+		TokenSource:      tokenSource,
 	}
 }
 
@@ -66,20 +79,9 @@ func New(ctx context.Context, opts Options) (Cred, error) {
 	t := "luci-auth"
 	authenticator := auth.NewAuthenticator(ctx, auth.SilentLogin, opts.LUCIAuth)
 	err := authenticator.CheckLoginRequired()
-	if err != nil {
-		// Check if the user is already logged in via `luci-auth login --scopes-context`.
-		// If yes, we can use that token and avoid having to prompt for another login.
-		authOpts := chromeinfra.DefaultAuthOptions()
-		// same scope as `--scopes-context`
-		// https://crrev.com/bdbc1802265493619ac518d392776af6593fd1e0/auth/client/authcli/authcli.go#22
-		authOpts.Scopes = []string{
-			"https://www.googleapis.com/auth/cloud-platform",
-			"https://www.googleapis.com/auth/firebase",
-			"https://www.googleapis.com/auth/gerritcodereview",
-			"https://www.googleapis.com/auth/userinfo.email",
-		}
+	if err != nil && len(opts.FallbackLUCIAuth.Scopes) > 0 {
 		t = "luci-auth-context"
-		authenticator = auth.NewAuthenticator(ctx, auth.SilentLogin, authOpts)
+		authenticator = auth.NewAuthenticator(ctx, auth.SilentLogin, opts.FallbackLUCIAuth)
 		err = authenticator.CheckLoginRequired()
 	}
 	if err != nil {
