@@ -20,25 +20,29 @@ const googleCredHelper = "/google/src/head/depot/google3/devtools/blaze/bazel/cr
 
 // DefaultCredentialHelper returns default credential helper's path.
 func DefaultCredentialHelper() string {
-	ch := make(chan string, 1)
-	go func() {
-		if fi, err := os.Stat(googleCredHelper); (err == nil && fi.Mode()&0111 != 0) || errors.Is(err, syscall.ENOKEY) {
-			ch <- googleCredHelper
-			return
+	// workaround for b/360055934
+	ch := make(chan string, 3)
+	for i := 0; i < 3; i++ {
+		go func() {
+			if fi, err := os.Stat(googleCredHelper); (err == nil && fi.Mode()&0111 != 0) || errors.Is(err, syscall.ENOKEY) {
+				ch <- googleCredHelper
+				return
+			}
+			ch <- ""
+		}()
+		select {
+		case helper := <-ch:
+			return helper
+		case <-time.After(5 * time.Second):
+			if i == 0 {
+				fmt.Fprintln(os.Stderr, "WARNING: Accessing /google/src takes longer than expected. Retrying for 10 more seconds...")
+			}
 		}
-		ch <- ""
-	}()
-	select {
-	case helper := <-ch:
-		return helper
-	case <-time.After(5 * time.Second):
-		// workaround for b/360055934
-		fmt.Fprintf(os.Stderr, `WARNING: failed to access /google/src.
-probably need RPC access: http://go/request-rpc
-`)
-		return ""
-
 	}
+	fmt.Fprintf(os.Stderr, `ERROR: Timeout while accessing /google/src.
+Run "diagnose_me" or you would need RPC access: http://go/request-rpc
+`)
+	return ""
 }
 
 func credHelperErr(fname string, err error) error {
