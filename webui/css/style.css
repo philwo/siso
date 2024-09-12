@@ -179,10 +179,10 @@ html, body {
     --timeline-dot-size: 10px;
     --timeline-dot-indent: 4px;
 }
-.revs-timeline li {
+.revs-timeline > li {
     position: relative;
 }
-.revs-timeline li .rev-label {
+.revs-timeline .rev-label {
     position: relative;
     padding:
         var(--timeline-vertical-padding)
@@ -193,14 +193,14 @@ html, body {
     text-decoration: none;
     font-weight: var(--md-sys-typescale-label-medium-weight);
 }
-.revs-timeline li .rev-label.disabled {
+.revs-timeline .rev-label.disabled {
     font-style: italic;
 }
-.revs-timeline li .rev-label.disabled,
-.revs-timeline li .rev-label .rev-label-note {
+.revs-timeline .rev-label.disabled,
+.revs-timeline .rev-label .rev-label-note {
     font-weight: var(--md-sys-typescale-body-medium-weight);
 }
-.revs-timeline li .rev-info {
+.revs-timeline .rev-info {
     padding:
         var(--timeline-vertical-padding)
         var(--timeline-horizontal-padding)
@@ -210,8 +210,19 @@ html, body {
     font-weight: var(--md-sys-typescale-body-medium-weight);
     font-size: var(--md-sys-typescale-body-medium-size);
 }
+.revs-timeline .rev-sublinks {
+    list-style: none;
+    padding: 0;
+}
+.revs-timeline .rev-sublinks li {
+    position: relative;
+    margin: 4px 0;
+}
+.revs-timeline .rev-sublinks li.selected {
+    font-weight: bold;
+}
 
-.revs-timeline li:before {
+.revs-timeline > li:before {
     /* Render the timeline dot. */
     content: '';
     width: var(--timeline-dot-size);
@@ -222,7 +233,7 @@ html, body {
     top: calc(var(--timeline-dot-size)/2);
     left: var(--timeline-dot-indent);
 }
-.revs-timeline li:after {
+.revs-timeline > li:after {
     /* Render the timeline line. */
     content: '';
     width: 2px;
@@ -232,17 +243,17 @@ html, body {
     left: calc(var(--timeline-dot-indent) + var(--timeline-dot-size)/2 - 1px);
     top: calc(var(--timeline-dot-size)/2);
 }
-.revs-timeline li:last-child:after {
+.revs-timeline > li:last-child:after {
     /* The end of the timeline should fade into blank. */
     background: linear-gradient(var(--md-sys-color-outline), transparent);
 }
 
-.revs-timeline li.selected .rev-label {
+.revs-timeline > li.selected .rev-label {
     background: var(--md-sys-color-primary);
     color: var(--md-sys-color-on-primary);
     z-index: 998;
 }
-.revs-timeline li.selected:before {
+.revs-timeline > li.selected:before {
     background: var(--md-sys-color-on-primary);
     z-index: 999;
 }

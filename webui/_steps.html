@@ -15,7 +15,7 @@ found in the LICENSE file. */}}
     hx-trigger="change,submit"
     hx-ext-md-filter-chip-as-checkbox>
   <div>
-    {{/* TODO: deduplicate this with timeline on individual step page? */}}
+    {{/* TODO: deduplicate this with timeline on individual step and raw logs pages? */}}
     <ul class="revs-timeline">
       {{range $r := .revs}}
       <li{{if eq $r.Rev $currentRev}} class="selected"{{end}}>
