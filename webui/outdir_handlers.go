@@ -50,9 +50,9 @@ type buildMetrics struct {
 	ruleCounts    map[string]int
 	actionCounts  map[string]int
 	// buildMetrics contains build.StepMetric related to overall build e.g. regenerate ninja files.
-	buildMetrics []build.StepMetric
+	buildMetrics []*build.StepMetric
 	// StepMetrics contains build.StepMetric related to ninja executions.
-	StepMetrics []build.StepMetric
+	StepMetrics []*build.StepMetric
 	// stepByStepID keys step ID to *build.StepMetric for faster lookup.
 	stepByStepID map[string]*build.StepMetric
 	// stepByOutput keys output to *build.StepMetric for faster lookup.
@@ -83,8 +83,8 @@ func loadBuildMetrics(metricsPath string) (*buildMetrics, error) {
 
 	metricsData := &buildMetrics{
 		Mtime:        stat.ModTime(),
-		buildMetrics: []build.StepMetric{},
-		StepMetrics:  []build.StepMetric{},
+		buildMetrics: []*build.StepMetric{},
+		StepMetrics:  []*build.StepMetric{},
 		stepByStepID: make(map[string]*build.StepMetric),
 		stepByOutput: make(map[string]*build.StepMetric),
 		ruleCounts:   make(map[string]int),
@@ -102,13 +102,13 @@ func loadBuildMetrics(metricsPath string) (*buildMetrics, error) {
 			return nil, fmt.Errorf("parse error in %s:%d: %w", metricsPath, d.InputOffset(), err)
 		}
 		if m.BuildID != "" {
-			metricsData.buildMetrics = append(metricsData.buildMetrics, m)
+			metricsData.buildMetrics = append(metricsData.buildMetrics, &m)
 			// The last build metric found has the actual build duration.
 			metricsData.buildDuration = m.Duration
 		} else if m.StepID != "" {
-			metricsData.StepMetrics = append(metricsData.StepMetrics, m)
-			metricsData.stepByStepID[m.StepID] = &metricsData.StepMetrics[len(metricsData.StepMetrics)-1]
-			metricsData.stepByOutput[m.Output] = &metricsData.StepMetrics[len(metricsData.StepMetrics)-1]
+			metricsData.StepMetrics = append(metricsData.StepMetrics, &m)
+			metricsData.stepByStepID[m.StepID] = &m
+			metricsData.stepByOutput[m.Output] = &m
 			metricsData.lastStepID = m.StepID
 		} else {
 			return nil, fmt.Errorf("unexpected metric found %v", m)
@@ -522,7 +522,7 @@ func (s *WebuiServer) handleOutdirListSteps(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	var filteredSteps []build.StepMetric
+	var filteredSteps []*build.StepMetric
 	switch view {
 	case "criticalPath":
 		sortSupported = false
@@ -534,7 +534,7 @@ func (s *WebuiServer) handleOutdirListSteps(w http.ResponseWriter, r *http.Reque
 				break
 			}
 			step := metrics.stepByStepID[critStepID]
-			filteredSteps = append(filteredSteps, *step)
+			filteredSteps = append(filteredSteps, step)
 			// TODO(b/349287453): add some sort of error to indicate if prev step was not found
 			critStepID = step.PrevStepID
 		}
@@ -557,15 +557,15 @@ func (s *WebuiServer) handleOutdirListSteps(w http.ResponseWriter, r *http.Reque
 		}
 		switch sortBy {
 		case "ready":
-			slices.SortFunc(filteredSteps, func(a, b build.StepMetric) int {
+			slices.SortFunc(filteredSteps, func(a, b *build.StepMetric) int {
 				return cmp.Compare(a.Ready, b.Ready)
 			})
 		case "duration":
-			slices.SortFunc(filteredSteps, func(a, b build.StepMetric) int {
+			slices.SortFunc(filteredSteps, func(a, b *build.StepMetric) int {
 				return cmp.Compare(a.Duration, b.Duration)
 			})
 		case "completion":
-			slices.SortFunc(filteredSteps, func(a, b build.StepMetric) int {
+			slices.SortFunc(filteredSteps, func(a, b *build.StepMetric) int {
 				return cmp.Compare(a.Ready+a.Duration, b.Ready+b.Duration)
 			})
 		default:
