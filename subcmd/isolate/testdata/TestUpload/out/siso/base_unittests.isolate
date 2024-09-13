@@ -1,0 +1,9 @@
+{
+  "variables": {
+    "files": [
+      "../../testing/test_runner.py",
+      "../../testing/data/",
+      "pyproto/proto.py"
+    ]
+  }
+}

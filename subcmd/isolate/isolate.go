@@ -207,7 +207,7 @@ func (c *run) run(ctx context.Context) error {
 	for _, target := range c.Flags.Args() {
 		eg.Go(func() error {
 			targetStarted := time.Now()
-			d, err := c.upload(ectx, execRoot, hashFS, casClient, target)
+			d, err := upload(ectx, execRoot, c.dir, hashFS, casClient, target)
 			if err != nil {
 				return fmt.Errorf("failed for %s: %w", target, err)
 			}
@@ -294,7 +294,7 @@ func (c *run) casCred(ctx context.Context) (cred.Cred, error) {
 	})
 }
 
-func (c *run) upload(ctx context.Context, execRoot string, hashFS *hashfs.HashFS, casClient *reapi.Client, target string) (digest.Digest, error) {
+func upload(ctx context.Context, execRoot, buildDir string, hashFS *hashfs.HashFS, casClient *reapi.Client, target string) (digest.Digest, error) {
 	isolateName := fmt.Sprintf("%s.isolate", target)
 	buf, err := os.ReadFile(isolateName)
 	if err != nil {
@@ -325,8 +325,8 @@ func (c *run) upload(ctx context.Context, execRoot string, hashFS *hashfs.HashFS
 	tree := merkletree.New(ds)
 	for i := 0; i < len(fnames); i++ {
 		fname := fnames[i]
-		pathname := filepath.ToSlash(filepath.Join(c.dir, fname))
-		if strings.HasSuffix(pathname, "/") {
+		pathname := filepath.ToSlash(filepath.Join(buildDir, fname))
+		if strings.HasSuffix(fname, "/") {
 			clog.Infof(ctx, "expand dir %s", pathname)
 			fsys := hashFS.FileSystem(ctx, filepath.Join(execRoot, pathname))
 			err := fs.WalkDir(fsys, ".", func(path string, d fs.DirEntry, err error) error {
