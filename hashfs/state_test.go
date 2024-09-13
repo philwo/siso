@@ -344,6 +344,109 @@ func TestState_Dir(t *testing.T) {
 	}
 }
 
+func TestState_Symlink(t *testing.T) {
+	ctx := context.Background()
+
+	dir := t.TempDir()
+	dir, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	opts := hashfs.Option{
+		StateFile:     filepath.Join(dir, ".siso_fs_state"),
+		CompressZstd:  false,
+		CompressLevel: 3,
+	}
+
+	err = os.WriteFile(filepath.Join(dir, "target.0"), []byte("target.0"), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = os.WriteFile(filepath.Join(dir, "target.1"), []byte("target.1"), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = os.Symlink("target.0", filepath.Join(dir, "symlink"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	func() {
+		hashFS, err := hashfs.New(ctx, opts)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() {
+			err := hashFS.Close(ctx)
+			if err != nil {
+				t.Errorf("close=%v", err)
+			}
+		}()
+
+		fi, err := hashFS.Stat(ctx, dir, "symlink")
+		if err != nil {
+			t.Fatalf("Stat(%q)=%v", "symlink", err)
+		}
+		if fi.Mode()&fs.ModeSymlink != fs.ModeSymlink {
+			t.Errorf("mode=%v; want symlink", fi.Mode())
+		}
+		if fi.Target() != "target.0" {
+			t.Errorf("target=%q; want=%q", fi.Target(), "target.0")
+		}
+		// make dirty to write state file
+		err = hashFS.WriteFile(ctx, dir, "stamp", nil, false, time.Now(), []byte("dummy-cmdhash"))
+		if err != nil {
+			t.Errorf("WriteFile(...)=%v; want nil error", err)
+		}
+	}()
+	st, err := hashfs.Load(ctx, opts)
+	if err != nil {
+		t.Fatalf("load %v", err)
+	}
+	m := hashfs.StateMap(st)
+	e, ok := m[filepath.Join(dir, "symlink")]
+	if !ok {
+		t.Errorf("no symlnk: %v", m)
+	}
+	if e.Target != "target.0" {
+		t.Errorf("symlink target=%q; want=%q", e.Target, "target.0")
+	}
+
+	t.Logf("-- modify symlink")
+	err = os.Remove(filepath.Join(dir, "symlink"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = os.Symlink("target.1", filepath.Join(dir, "symlink"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	func() {
+		hashFS, err := hashfs.New(ctx, opts)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() {
+			err := hashFS.Close(ctx)
+			if err != nil {
+				t.Errorf("close=%v", err)
+			}
+		}()
+
+		fi, err := hashFS.Stat(ctx, dir, "symlink")
+		if err != nil {
+			t.Fatalf("Stat(%q)=%v", "symlink", err)
+		}
+		if fi.Mode()&fs.ModeSymlink != fs.ModeSymlink {
+			t.Errorf("mode=%v; want symlink", fi.Mode())
+		}
+		if fi.Target() != "target.1" {
+			t.Errorf("target=%q; want=%q", fi.Target(), "target.1")
+		}
+	}()
+}
+
 func createBenchmarkState(tb testing.TB, dir string) *pb.State {
 	for i := 0; i < 60000; i++ {
 		err := os.WriteFile(filepath.Join(dir, fmt.Sprintf("%d.txt", i)), nil, 0644)

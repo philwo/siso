@@ -293,6 +293,19 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 				}
 			} else if e.d.IsZero() && e.target != "" {
 				ftype = "symlink"
+				t, err := os.Readlink(ent.Name)
+				if err != nil {
+					clog.Warningf(gctx, "failed to readlink %q: %v", ent.Name, err)
+					nfail.Add(1)
+					dirty.Store(true)
+					return nil
+				}
+				if t != e.target {
+					clog.Warningf(gctx, "invalidate %s %s: target:%q->%q", ftype, ent.Name, e.target, t)
+					ninvalidate.Add(1)
+					dirty.Store(true)
+					return nil
+				}
 			} else if !e.d.IsZero() && len(h) > 0 && et != entryEqLocal && !dirty.Load() {
 				// mtime differ for generated file?
 				// check digest is the same and fix mtime if it matches.
