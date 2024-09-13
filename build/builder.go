@@ -251,12 +251,17 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 	var re *remoteexec.RemoteExec
 	var pe *reproxyexec.REProxyExec
 	if opts.REAPIClient != nil {
-		logger.Infof("enable remote exec")
+		logger.Infof("enable built-in remote exec")
 		re = remoteexec.New(ctx, opts.REAPIClient)
 	} else {
-		logger.Infof("disable remote exec")
+		logger.Infof("disable built-in remote exec")
 	}
 	pe = reproxyexec.New(ctx, opts.ReproxyAddr)
+	if pe.Enabled() {
+		logger.Infof("enable reclient integration: addr=%s", opts.ReproxyAddr)
+	} else {
+		logger.Infof("disable reclient integration")
+	}
 	experiments.ShowOnce()
 	numCPU := runtime.NumCPU()
 	if (opts.Limits == Limits{}) {
