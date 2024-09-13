@@ -18,11 +18,16 @@ import (
 	"infra/build/siso/o11y/trace"
 )
 
+type phonyState struct {
+	dirty bool
+	mtime time.Time
+}
+
 // needToRun checks whether step needs to run or not.
 func (b *Builder) needToRun(ctx context.Context, stepDef StepDef, outputs []Target) bool {
 	if stepDef.IsPhony() {
 		dirty := false
-		_, _, err := inputMtime(ctx, b, stepDef)
+		_, mtime, err := inputMtime(ctx, b, stepDef)
 
 		if errors.Is(err, errDirty) {
 			// if phony's inputs are dirty, mark this phony's output as dirty.
@@ -34,8 +39,11 @@ func (b *Builder) needToRun(ctx context.Context, stepDef StepDef, outputs []Targ
 				clog.Warningf(ctx, "failed to get targetpath for %v: %v", out, err)
 				continue
 			}
-			b.phony.Store(outpath, dirty)
-			clog.Infof(ctx, "phony output %s dirty=%t", outpath, dirty)
+			b.phony.Store(outpath, phonyState{
+				dirty: dirty,
+				mtime: mtime,
+			})
+			clog.Infof(ctx, "phony output %s dirty=%t mtime=%v", outpath, dirty, mtime)
 		}
 		// nothing to run for phony target.
 		return false
@@ -227,28 +235,32 @@ func inputMtime(ctx context.Context, b *Builder, stepDef StepDef) (string, time.
 			continue
 		}
 		seen[in] = true
+		var mtime time.Time
+		var changed bool
 		v, ok := b.phony.Load(in)
 		if ok {
 			// phony target
-			dirty, ok := v.(bool)
+			ps, ok := v.(phonyState)
 			if !ok {
 				return "", inmtime, fmt.Errorf("unexpected value in dirtyPhony for %s: %T", in, v)
 			}
-			if dirty {
+			if ps.dirty {
 				return "", inmtime, fmt.Errorf("input %s (phony): %w", in, errDirty)
 			}
-			// No need to do existence check for phony targets.
-			continue
+			mtime = ps.mtime
+		} else {
+			fi, err := b.hashFS.Stat(ctx, b.path.ExecRoot, in)
+			if err != nil {
+				return "", inmtime, fmt.Errorf("missing input %s: %w", in, err)
+			}
+			mtime = fi.ModTime()
+			changed = fi.IsChanged()
 		}
-		fi, err := b.hashFS.Stat(ctx, b.path.ExecRoot, in)
-		if err != nil {
-			return "", inmtime, fmt.Errorf("missing input %s: %w", in, err)
-		}
-		if inmtime.Before(fi.ModTime()) {
-			inmtime = fi.ModTime()
+		if inmtime.Before(mtime) {
+			inmtime = mtime
 			lastIn = in
 		}
-		if fi.IsChanged() {
+		if changed {
 			return "", inmtime, fmt.Errorf("input %s: %w", in, errDirty)
 		}
 	}

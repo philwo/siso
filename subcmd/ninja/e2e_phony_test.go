@@ -491,3 +491,48 @@ func TestBuild_PhonyIndirectInputs(t *testing.T) {
 		t.Errorf("stats total=%d done=%d remote=%d skipped=%d; want total=6 done=6 remote=0 skipped=6 (%#v)", stats.Total, stats.Done, stats.Remote, stats.Skipped, stats)
 	}
 }
+
+func TestBuild_PhonyDirty(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+
+	ninja := func(t *testing.T) (build.Stats, error) {
+		t.Helper()
+		opt, graph, cleanup := setupBuild(ctx, t, dir, hashfs.Option{
+			StateFile: ".siso_fs_state",
+		})
+		defer cleanup()
+		return runNinja(ctx, "build.ninja", graph, opt, []string{"obj/foo.o"}, runNinjaOpts{})
+	}
+
+	setupFiles(t, dir, t.Name(), nil)
+	t.Logf("-- first build")
+	stats, err := ninja(t)
+	if err != nil {
+		t.Fatalf("ninja %v", err)
+	}
+	if stats.Done != stats.Total || stats.Total != 2 || stats.Local != 1 {
+		t.Errorf("done=%d total=%d local=%d; want done=2 total=2 local=1; %#v", stats.Done, stats.Total, stats.Local, stats)
+	}
+
+	t.Logf("-- confirm no-op")
+	stats, err = ninja(t)
+	if err != nil {
+		t.Fatalf("ninja %v", err)
+	}
+	if stats.Done != stats.Total || stats.Total != 2 || stats.Local != 0 || stats.Skipped != 2 {
+		t.Errorf("done=%d total=%d local=%d skipped=%d; want done=2 total=2 local=0 skipped=2; %#v", stats.Done, stats.Total, stats.Local, stats.Skipped, stats)
+	}
+	modifyFile(t, dir, "afdo.prof", func(b []byte) []byte {
+		return append(b, []byte("\nupdated\n")...)
+	})
+
+	t.Logf("-- second build")
+	stats, err = ninja(t)
+	if err != nil {
+		t.Fatalf("ninja %v", err)
+	}
+	if stats.Done != stats.Total || stats.Total != 2 || stats.Local != 1 {
+		t.Errorf("done=%d total=%d local=%d; want done=2 total=2 local=1; %#v", stats.Done, stats.Total, stats.Local, stats)
+	}
+}

@@ -148,7 +148,7 @@ type Builder struct {
 	plan  *plan
 	stats *stats
 
-	// record phony targets (clean->false, dirty->true).
+	// record phony targets state.
 	phony sync.Map
 
 	stepSema *semaphore.Semaphore
