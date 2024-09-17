@@ -180,7 +180,7 @@ func (s *WebuiServer) renderBuildView(wr http.ResponseWriter, r *http.Request, t
 	// TODO(b/361461051): refactor rev so that it's not required as part of rendering pages in general.
 	rev := r.PathValue("rev")
 	if rev == "" {
-		rev = "latest"
+		rev = outdirInfo.latestRevID
 	}
 	data["outsubs"] = s.outsubs
 	data["versionID"] = s.sisoVersion
@@ -303,9 +303,7 @@ func (s *WebuiServer) Serve() int {
 	//     /css/ matches "/css/", but /{outroot}/{outsub}/ doesn't.
 	//     /{outroot}/{outsub}/ matches "/outroot/outsub/", but /css/ doesn't.
 	outdirRouter := http.NewServeMux()
-	outdirRouter.HandleFunc("/{outroot}/{outsub}/", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, fmt.Sprintf("%s/builds/latest/steps/", outdirBaseURL(r)), http.StatusTemporaryRedirect)
-	})
+	outdirRouter.HandleFunc("/{outroot}/{outsub}/", s.handleOutdirRoot)
 	outdirRouter.HandleFunc("/{outroot}/{outsub}/builds/{rev}/logs/", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, fmt.Sprintf("%s/builds/%s/logs/.siso_config", outdirBaseURL(r), url.PathEscape(r.PathValue("rev"))), http.StatusTemporaryRedirect)
 	})

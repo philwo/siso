@@ -34,6 +34,7 @@ type outdirInfo struct {
 	outroot      string
 	outsub       string
 	metrics      []*buildMetrics
+	latestRevID  string
 
 	mu            sync.Mutex
 	manifestMtime time.Time
@@ -115,6 +116,11 @@ func loadBuildMetrics(metricsPath string) (*buildMetrics, error) {
 		}
 	}
 
+	if len(metricsData.buildMetrics) == 0 || metricsData.buildMetrics[0].BuildID == "" {
+		return nil, fmt.Errorf("need at least one build_id in %s", metricsPath)
+	}
+	metricsData.Rev = metricsData.buildMetrics[0].BuildID
+
 	for _, metric := range metricsData.StepMetrics {
 		if metric.Action != "" {
 			metricsData.actionCounts[metric.Action]++
@@ -175,8 +181,8 @@ func loadOutdirInfo(execRoot, outdirPath, manifestPath string) (*outdirInfo, err
 		if err != nil {
 			return nil, fmt.Errorf("failed to load latest metrics: %w", err)
 		}
-		latestMetrics.Rev = "latest"
 		outdirInfo.metrics = append(outdirInfo.metrics, latestMetrics)
+		outdirInfo.latestRevID = latestMetrics.Rev
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return nil, fmt.Errorf("failed to stat latest metrics: %w", err)
 	}
@@ -195,13 +201,10 @@ func loadOutdirInfo(execRoot, outdirPath, manifestPath string) (*outdirInfo, err
 			fmt.Fprintf(os.Stderr, "ignoring invalid %s\n", revPath)
 			continue
 		}
-		rev := matches[1]
-
 		revMetrics, err := loadBuildMetrics(revPath)
 		if err != nil {
 			return nil, fmt.Errorf("failed to load %s: %w", revPath, err)
 		}
-		revMetrics.Rev = rev
 		outdirInfo.metrics = append(outdirInfo.metrics, revMetrics)
 	}
 	return outdirInfo, nil
@@ -243,8 +246,24 @@ func (s *WebuiServer) handleOutdirReload(w http.ResponseWriter, r *http.Request)
 	s.outdirs[outdirInfo.path] = newOutdirInfo
 	s.mu.Unlock()
 
-	// Then redirect to steps page.
-	http.Redirect(w, r, fmt.Sprintf("%s/builds/latest/steps/", outdirBaseURL(r)), http.StatusTemporaryRedirect)
+	// Then redirect to root page.
+	http.Redirect(w, r, outdirBaseURL(r), http.StatusTemporaryRedirect)
+}
+
+// handleOutdirRoot redirects from outdir root URL to `./builds/{latestRev}/steps/`.
+func (s *WebuiServer) handleOutdirRoot(w http.ResponseWriter, r *http.Request) {
+	outdirInfo, err := s.ensureOutdirForRequest(r)
+	if err != nil {
+		s.renderBuildViewError(http.StatusNotFound, fmt.Sprintf("outdir failed to load for request %s: %v", r.URL, err), w, r, outdirInfo)
+		return
+	}
+
+	if outdirInfo.latestRevID == "" {
+		s.renderBuildViewError(http.StatusNotFound, "outdir has no metrics", w, r, outdirInfo)
+		return
+	}
+
+	http.Redirect(w, r, fmt.Sprintf("%s/builds/%s/steps/", outdirBaseURL(r), outdirInfo.latestRevID), http.StatusTemporaryRedirect)
 }
 
 func (s *WebuiServer) handleOutdirViewLog(w http.ResponseWriter, r *http.Request) {
