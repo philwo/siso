@@ -13,7 +13,7 @@ found in the LICENSE file. */}}
     <li{{if eq $r.Rev $currentRev}} class="selected"{{end}}>
       <a class="rev-label" href="{{$outdirRevBaseURL}}/../{{.Rev}}/logs/">
         <span class="rev-label-note">Logs in</span>
-        {{if eq .Rev "latest"}}latest build{{else}}revision {{.Rev}}{{end}}
+        {{buildTimeHumanReadable $r}}
         <md-ripple></md-ripple>
       </a>
       <div class="rev-info">

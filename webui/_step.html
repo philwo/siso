@@ -83,7 +83,7 @@ found in the LICENSE file. */}}
         {{if .StepID}}
         <a class="rev-label" href="{{$outdirRevBaseURL}}/../{{$r.Rev}}/steps/{{.StepID}}/">
           <span class="rev-label-note">{{formatIntervalMetricHuman .Duration}} in</span>
-          {{if eq $r.Rev "latest"}}latest build{{else}}revision {{$r.Rev}}{{end}}
+          {{buildTimeHumanReadable $r}}
           <md-ripple></md-ripple>
         </a>
         <div class="rev-info">
@@ -92,7 +92,7 @@ found in the LICENSE file. */}}
         {{else}}
         <span class="rev-label disabled">
           Not found in
-          {{if eq $r.Rev "latest"}}latest build{{else}}revision {{$r.Rev}}{{end}}
+          {{buildTimeHumanReadable $r}}
         </span>
         <div class="rev-info">
           <relative-time datetime="{{timeRFC3339 $r.Mtime}}"></relative-time>

@@ -97,6 +97,25 @@ var (
 			}
 			return sb.String()
 		},
+		"buildTimeHumanReadable": func(m *buildMetrics) (string, error) {
+			local, err := time.LoadLocation("Local")
+			if err != nil {
+				return "", fmt.Errorf("couldn't get local time location")
+			}
+			now := time.Now()
+			buildTimeLocal := m.Mtime.In(local)
+			nowY, nowM, nowD := now.Date()
+			buildY, buildM, buildD := buildTimeLocal.Date()
+			if buildY == nowY && buildM == nowM && buildD == nowD {
+				return buildTimeLocal.Format("Today 15:04"), nil
+			} else if buildY == nowY && buildM == nowM && buildD == (nowD-1) {
+				return buildTimeLocal.Format("Yesterday 15:04"), nil
+			} else if buildY == nowY ||
+				(buildY == nowY-1 && buildM > nowM) {
+				return buildTimeLocal.Format("Jan _2 15:04"), nil
+			}
+			return buildTimeLocal.Format("Jan _2 2006 15:04"), nil
+		},
 		"timeRFC3339": func(t time.Time) string {
 			return t.Format(time.RFC3339)
 		},

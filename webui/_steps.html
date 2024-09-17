@@ -20,8 +20,7 @@ found in the LICENSE file. */}}
       {{range $r := .revs}}
       <li{{if eq $r.Rev $currentRev}} class="selected"{{end}}>
         <a class="rev-label" href="{{$outdirRevBaseURL}}/../{{.Rev}}/steps/">
-          <span class="rev-label-note">Steps in</span>
-          {{if eq .Rev "latest"}}latest build{{else}}revision {{.Rev}}{{end}}
+          {{buildTimeHumanReadable $r}}
           <md-ripple></md-ripple>
         </a>
         <div class="rev-info">
