@@ -249,13 +249,13 @@ html, body {
 }
 
 .revs-timeline > li.selected .rev-label {
-    background: var(--md-sys-color-primary);
-    color: var(--md-sys-color-on-primary);
-    z-index: 998;
+    background: var(--md-sys-color-secondary-container);
+    color: var(--md-sys-color-on-secondary-container);
+    z-index: 1;
 }
 .revs-timeline > li.selected:before {
-    background: var(--md-sys-color-on-primary);
-    z-index: 999;
+    background: var(--md-sys-color-on-secondary-container);
+    z-index: 2;
 }
 
 .data-table-filter {
