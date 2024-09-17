@@ -3,12 +3,13 @@ Use of this source code is governed by a BSD-style license that can be
 found in the LICENSE file. */}}
 
 {{define "content"}}
+{{$outdirRel:=.outdirRel}}
 {{$outdirRevBaseURL:=.outdirRevBaseURL}}
 {{$currentRev:=.currentRev}}
 {{$inOtherRevs:=.inOtherRevs}}
 {{$stepID:=.step.StepID}}
 <div class="step-page">
-  <h2>{{.step.Output}}</h2>
+  <h2>{{trimPrefix .step.Output (printf "%s/" $outdirRel)}}</h2>
   <ul class="step-details">
     <li>
       <md-icon>category</md-icon>

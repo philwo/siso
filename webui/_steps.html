@@ -3,6 +3,7 @@ Use of this source code is governed by a BSD-style license that can be
 found in the LICENSE file. */}}
 
 {{define "content"}}
+{{$outdirRel:=.outdirRel}}
 {{$outdirRevBaseURL:=.outdirRevBaseURL}}
 {{$currentURL:=.currentURL}}
 {{$currentRev:=.currentRev}}
@@ -144,7 +145,7 @@ found in the LICENSE file. */}}
       {{range .subset}}
       <tr>
         <th scope="row">
-          <a href="{{$outdirRevBaseURL}}/steps/{{.StepID}}/">{{.Output}}</a>
+          <a href="{{$outdirRevBaseURL}}/steps/{{.StepID}}/">{{trimPrefix .Output (printf "%s/" $outdirRel)}}</a>
           <div class="subrow">
             <span class="step-rule">{{.Rule}}</span>
             <span class="step-action">{{.Action}}</span>

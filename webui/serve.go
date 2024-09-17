@@ -65,6 +65,9 @@ var (
 		"addIntervals": func(a, b build.IntervalMetric) build.IntervalMetric {
 			return a + b
 		},
+		"trimPrefix": func(s, prefix string) string {
+			return strings.TrimPrefix(s, prefix)
+		},
 		"formatIntervalMetricTimestamp": func(i build.IntervalMetric) string {
 			d := time.Duration(i)
 			hour := int(d.Hours())
@@ -213,13 +216,14 @@ func (s *WebuiServer) renderBuildView(wr http.ResponseWriter, r *http.Request, t
 		data["outdirRevBaseURL"] = fmt.Sprintf("%s/builds/%s", outdirBaseURL, rev)
 		data["outroot"] = outdirInfo.outroot
 		data["outsub"] = outdirInfo.outsub
-		outdirShort := outdirInfo.path
+		outdirAbbrev := outdirInfo.path
 		// Showing the full path is too long in the webui so abbreviate home dir to ~.
 		// TODO(b/361703735): refactor https://chromium-review.googlesource.com/c/infra/infra/+/5804478/comment/dcfb372d_f21e4cc5/
 		if home, err := os.UserHomeDir(); err == nil {
-			outdirShort = strings.Replace(outdirShort, home, "~", 1)
+			outdirAbbrev = strings.Replace(outdirAbbrev, home, "~", 1)
 		}
-		data["outdirShort"] = outdirShort
+		data["outdirAbbrev"] = outdirAbbrev
+		data["outdirRel"] = outdirInfo.pathRel
 		data["revs"] = outdirInfo.metrics
 	}
 	err := tmpl.ExecuteTemplate(wr, "base", data)

@@ -30,6 +30,7 @@ const (
 
 type outdirInfo struct {
 	path         string
+	pathRel      string
 	manifestPath string
 	outroot      string
 	outsub       string
@@ -145,7 +146,7 @@ func loadOutdirInfo(execRoot, outdirPath, manifestPath string) (*outdirInfo, err
 
 	// Get path relative to execroot.
 	// TODO: support paths non-relative to execroot?
-	defaultOutdirExecRel, err := filepath.Rel(execRoot, outdirPath)
+	execRel, err := filepath.Rel(execRoot, outdirPath)
 	if err != nil {
 		return nil, fmt.Errorf("couldn't get outdir relative to execdir: %w", err)
 	}
@@ -157,7 +158,7 @@ func loadOutdirInfo(execRoot, outdirPath, manifestPath string) (*outdirInfo, err
 	}
 
 	// TODO(b/361703735): make sure this works on windows? https://chromium-review.googlesource.com/c/infra/infra/+/5803123/comment/502308d3_ac05bf91/
-	outroot, outsub := filepath.Split(defaultOutdirExecRel)
+	outroot, outsub := filepath.Split(execRel)
 	if outroot == "" || strings.Contains(outsub, "/") {
 		return nil, fmt.Errorf("outdir must match pattern `execroot/outroot/outsub`, others are not supported yet")
 	}
@@ -165,6 +166,7 @@ func loadOutdirInfo(execRoot, outdirPath, manifestPath string) (*outdirInfo, err
 
 	outdirInfo := &outdirInfo{
 		path:         outdirPath,
+		pathRel:      execRel,
 		manifestPath: manifestPath,
 		outroot:      outroot,
 		outsub:       outsub,
