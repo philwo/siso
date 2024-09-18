@@ -160,9 +160,9 @@ found in the LICENSE file. */}}
             <md-icon class="icon-cache-hit" title="Cache Hit">cloud_done</md-icon>
           {{end}}
         </td>
-        <td>{{formatIntervalMetricTimestamp .Ready}}</td>
-        <td>{{formatIntervalMetricTimestamp .Duration}}</td>
-        <td>{{formatIntervalMetricTimestamp (addIntervals .Ready .Duration)}}</td>
+        <td class="timestamp">{{formatIntervalMetricTimestamp .Ready}}</td>
+        <td class="timestamp">{{formatIntervalMetricHuman .Duration}}</td>
+        <td class="timestamp">{{formatIntervalMetricTimestamp (addIntervals .Ready .Duration)}}</td>
         <td>
           <svg height="20" class="step-timeline-bar">
             <rect x="{{divIntervalsScaled .Ready $buildDuration 100}}%" y="0"

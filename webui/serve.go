@@ -70,11 +70,12 @@ var (
 		},
 		"formatIntervalMetricTimestamp": func(i build.IntervalMetric) string {
 			d := time.Duration(i)
-			hour := int(d.Hours())
-			minute := int(d.Minutes()) % 60
+			minute := int(d.Minutes())
 			second := int(d.Seconds()) % 60
-			milli := d.Milliseconds() % 1000
-			return fmt.Sprintf("%02d:%02d:%02d.%03d", hour, minute, second, milli)
+			ms := d.Milliseconds() % 1000
+			// Reduce precision to 2 digits
+			ms = int64(math.Round(float64(ms) / 10))
+			return fmt.Sprintf("%2dm%02d.%02ds", minute, second, ms)
 		},
 		"formatIntervalMetricHuman": func(i build.IntervalMetric) string {
 			var sb strings.Builder

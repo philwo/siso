@@ -423,6 +423,11 @@ td.remote-indicator {
     font-variation-settings: 'FILL' 1;
 }
 
+.data-table-container .timestamp {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
 .step-rule:not(:empty) {
     background: var(--md-sys-color-surface-container);
     color: var(--md-sys-color-on-surface-container);
