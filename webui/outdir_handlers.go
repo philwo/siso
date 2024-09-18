@@ -554,10 +554,13 @@ func (s *WebuiServer) handleOutdirListSteps(w http.ResponseWriter, r *http.Reque
 			if critStepID == "" {
 				break
 			}
-			step := metrics.stepByStepID[critStepID]
-			filteredSteps = append(filteredSteps, step)
-			// TODO(b/349287453): add some sort of error to indicate if prev step was not found
-			critStepID = step.PrevStepID
+			if step, ok := metrics.stepByStepID[critStepID]; ok {
+				filteredSteps = append(filteredSteps, step)
+				critStepID = step.PrevStepID
+			} else {
+				// TODO(b/349287453): add some sort of error to indicate prev step was not found
+				break
+			}
 		}
 		slices.Reverse(filteredSteps)
 	default:
