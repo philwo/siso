@@ -48,6 +48,43 @@ found in the LICENSE file. */}}
         Cache Hit
       {{end}}
     </li>
+    {{if .step.Digest}}
+    <li>
+      <md-icon>cloud_circle</md-icon>
+      <span>
+        Digest:
+        <code id="step-{{$stepID}}-digest">{{.step.Digest}}</code>
+      </span>
+      <clipboard-copy for="step-{{$stepID}}-digest">
+        <md-icon-button>
+          <md-icon>content_copy</md-icon>
+        </md-icon-button>
+      </clipboard-copy>
+      <form id="recall-form"
+        action="{{$outdirRevBaseURL}}/steps/{{$stepID}}/recall/" method="POST" hx-push-url="false"
+        hx-select="#page-content" hx-target="#recall-dialog-form" hx-swap="innerHTML"
+        hx-on:htmx:before-request="document.getElementById('recall-dialog').show()">
+        <!-- TODO: show these in future, for now hardcode these. -->
+        <input name="project" label="Cloud project ID" type="hidden" value="rbe-chrome-untrusted">
+        <input name="reapi_instance" label="RE API instance name" type="hidden" value="default_instance">
+        <md-outlined-button>
+          Recall...
+        </md-outlined-button>
+      </form>
+      <md-dialog id="recall-dialog">
+        <div slot="headline">
+          Recall step
+        </div>
+        <form slot="content" id="recall-dialog-form" method="dialog" hx-trigger="none">
+          <md-circular-progress four-color indeterminate></md-circular-progress>
+          Loading...
+        </form>
+        <div slot="actions">
+          <md-text-button form="recall-dialog-form">Ok</md-text-button>
+        </div>
+      </md-dialog>
+    </li>
+    {{end}}
     <li>
       <md-icon>input_circle</md-icon>
       {{.step.Inputs}} input(s)
@@ -103,28 +140,5 @@ found in the LICENSE file. */}}
     </li>
     {{end}}
   </ul>
-
-  <h2>Tools</h2>
-  <h3>Recall</h3>
-  <form id="recall-form"
-        action="{{$outdirRevBaseURL}}/steps/{{$stepID}}/recall/" method="POST" hx-push-url="false"
-        hx-select="#page-content" hx-target="#recall-dialog-form" hx-swap="innerHTML"
-        hx-on:htmx:before-request="document.getElementById('recall-dialog').show()">
-    <md-outlined-text-field name="project" label="Cloud project ID" type="text" value="rbe-chrome-untrusted"></md-outlined-text-field>
-    <md-outlined-text-field name="reapi_instance" label="RE API instance name" type="text" value="default_instance"></md-outlined-text-field>
-    <md-filled-button>Recall</md-filled-button>
-  </form>
-  <md-dialog id="recall-dialog">
-    <div slot="headline">
-      Recall step
-    </div>
-    <form slot="content" id="recall-dialog-form" method="dialog" hx-trigger="none">
-      <md-circular-progress four-color indeterminate></md-circular-progress>
-      Loading...
-    </form>
-    <div slot="actions">
-      <md-text-button form="recall-dialog-form">Ok</md-text-button>
-    </div>
-  </md-dialog>
 </aside>
 {{end}}

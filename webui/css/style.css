@@ -468,6 +468,7 @@ td.remote-indicator {
     height: 40px;
     display: flex;
     align-items: center;
+    gap: 4px;
 }
 .step-details li > md-icon {
     margin-right: 10px;
