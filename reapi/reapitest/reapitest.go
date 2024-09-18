@@ -258,6 +258,41 @@ pathElements:
 	return nil, fmt.Errorf("missing symlink %s in %s: %s", elem, path.Dir(name), dir.Files)
 }
 
+// LookupDirectoryNode looks up a directory node by name from the tree.
+func (t InputTree) LookupDirectoryNode(ctx context.Context, name string) (*rpb.DirectoryNode, error) {
+	dir := &rpb.Directory{}
+	dirnode := &rpb.DirectoryNode{}
+	err := t.get(ctx, t.Root, dir)
+	if err != nil {
+		return nil, err
+	}
+	var elems []string
+pathElements:
+	for _, elem := range strings.Split(strings.Trim(name, "/"), "/") {
+		if elem == "." {
+			continue
+		}
+		for _, s := range dir.Directories {
+			if elem == s.Name {
+				subdir := &rpb.Directory{}
+				err = t.get(ctx, s.Digest, subdir)
+				if err != nil {
+					return nil, fmt.Errorf("missing %s %s: %w", strings.Join(elems, "/"), s.Digest, err)
+				}
+				dir = subdir
+				dirnode = s
+				elems = append(elems, elem)
+				continue pathElements
+			}
+		}
+		return nil, fmt.Errorf("missing dir %s in %s: %s", elem, strings.Join(elems, "."), dir.Directories)
+	}
+	if dirnode.Name != path.Base(name) {
+		return nil, fmt.Errorf("missing dir %s in the tree", name)
+	}
+	return dirnode, nil
+}
+
 func (t InputTree) Dump(ctx context.Context, w io.Writer) error {
 	return t.dump(ctx, w, t.Root, ".", "")
 }

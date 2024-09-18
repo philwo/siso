@@ -321,6 +321,9 @@ func upload(ctx context.Context, execRoot, buildDir string, hashFS *hashfs.HashF
 		}
 		fnames = append(fnames, fname)
 	}
+	// Construct a CAS tree, traversing directories.
+	// Some files are ignored by isolate command by default. e.g. *.pyc, .git/ dir.
+	// See also https://crrev.com/9ec59f1bc4603981e8ebb9c8fccfd16a311fd7fa/client/isolate/isolate.go#93
 	ds := digest.NewStore()
 	tree := merkletree.New(ds)
 	for i := 0; i < len(fnames); i++ {
@@ -333,8 +336,8 @@ func upload(ctx context.Context, execRoot, buildDir string, hashFS *hashfs.HashF
 				if err != nil {
 					return err
 				}
-				if d.IsDir() {
-					return nil
+				if d.IsDir() && d.Name() == ".git" {
+					return fs.SkipDir
 				}
 				fnames = append(fnames, filepath.ToSlash(filepath.Join(fname, path)))
 				return nil
@@ -342,6 +345,11 @@ func upload(ctx context.Context, execRoot, buildDir string, hashFS *hashfs.HashF
 			if err != nil {
 				return digest.Digest{}, err
 			}
+			continue
+		}
+		// To match with the implementation of `isolate` command,
+		// Exclude only *.pyc file, while keeping an empty __pycache__/ dir.
+		if strings.HasSuffix(pathname, ".pyc") {
 			continue
 		}
 		ents, err := hashFS.Entries(ctx, execRoot, []string{pathname})

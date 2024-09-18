@@ -87,6 +87,16 @@ func TestUpload(t *testing.T) {
 	hfs, cleanup := setupBuildDir(ctx, t, dir, buildDir)
 	defer cleanup()
 
+	// Create .git dir manually.
+	err := os.MkdirAll(filepath.Join(dir, "testing", "data", ".git"), 0755)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = os.WriteFile(filepath.Join(dir, "testing", "data", ".git", "config"), nil, 0755)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	fakere := &reapitest.Fake{}
 	cl := reapitest.New(ctx, t, fakere)
 
@@ -97,6 +107,7 @@ func TestUpload(t *testing.T) {
 	}
 	tree := reapitest.InputTree{CAS: fakere.CAS, Root: dg.Proto()}
 
+	// Files that should exist.
 	for _, f := range []string{
 		"testing/test_runner.py",
 		"testing/data/input1.txt",
@@ -105,6 +116,34 @@ func TestUpload(t *testing.T) {
 		buildDir + "/pyproto/proto.py",
 	} {
 		_, err := tree.LookupFileNode(ctx, f)
+		if err != nil {
+			t.Errorf("%q does not exist in the CAS tree. err=%v", f, err)
+		}
+	}
+	// Files that should not exist.
+	for _, f := range []string{
+		"testing/data/__pycache__/foo.pyc",
+	} {
+		_, err := tree.LookupFileNode(ctx, f)
+		if err == nil {
+			t.Errorf("%q should not exist in the CAS tree.", f)
+		}
+	}
+
+	// Direcotires that should not exist.
+	for _, f := range []string{
+		"testing/data/.git",
+	} {
+		_, err := tree.LookupDirectoryNode(ctx, f)
+		if err == nil {
+			t.Errorf("%q should not exist in the CAS tree.", f)
+		}
+	}
+	// Direcotires that should exist.
+	for _, f := range []string{
+		"testing/data/__pycache__",
+	} {
+		_, err := tree.LookupDirectoryNode(ctx, f)
 		if err != nil {
 			t.Errorf("%q does not exist in the CAS tree. err=%v", f, err)
 		}
