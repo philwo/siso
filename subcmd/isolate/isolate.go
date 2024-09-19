@@ -348,7 +348,7 @@ func upload(ctx context.Context, execRoot, buildDir string, hashFS *hashfs.HashF
 			continue
 		}
 		// To match with the implementation of `isolate` command,
-		// Exclude only *.pyc file, while keeping an empty __pycache__/ dir.
+		// exclude only *.pyc file, while keeping an empty __pycache__/ dir.
 		if strings.HasSuffix(pathname, ".pyc") {
 			continue
 		}
@@ -359,7 +359,14 @@ func upload(ctx context.Context, execRoot, buildDir string, hashFS *hashfs.HashF
 		if len(ents) == 0 {
 			return digest.Digest{}, fmt.Errorf("no digest for %s", pathname)
 		}
-		err = tree.Set(ents[0])
+		ent := ents[0]
+		// To match with the implementation of `isolate` command,
+		// trim '/' suffix from symlink targets.
+		// See also https://github.com/bazelbuild/remote-apis-sdks/blob/f4821a2a072c44f9af83002cf7a272fff8223fa3/go/pkg/cas/upload.go#L790C11-L790C25
+		if ent.Target != "" {
+			ent.Target = filepath.Clean(ent.Target)
+		}
+		err = tree.Set(ent)
 		if err != nil {
 			return digest.Digest{}, err
 		}

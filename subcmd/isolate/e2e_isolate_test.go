@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"infra/build/siso/hashfs"
@@ -113,6 +114,7 @@ func TestUpload(t *testing.T) {
 		"testing/data/input1.txt",
 		"testing/data/input2.txt",
 		"testing/data/nested/input3.txt",
+		"testing/data/linked_dir/foo.txt",
 		buildDir + "/pyproto/proto.py",
 	} {
 		_, err := tree.LookupFileNode(ctx, f)
@@ -144,6 +146,41 @@ func TestUpload(t *testing.T) {
 		"testing/data/__pycache__",
 	} {
 		_, err := tree.LookupDirectoryNode(ctx, f)
+		if err != nil {
+			t.Errorf("%q does not exist in the CAS tree. err=%v", f, err)
+		}
+	}
+
+	// Dir symlinks that should exist.
+
+	for _, f := range []string{
+		"testing/data/dir_with_dir_symlink/symlink",
+		"testing/data/dir_with_dir_symlink/symlink_with_slash",
+	} {
+		if runtime.GOOS == "windows" {
+			t.Skip("symlink is not available on Windows")
+			continue
+		}
+		n, err := tree.LookupSymlinkNode(ctx, f)
+		if err != nil {
+			t.Errorf("%q does not exist in the CAS tree. err=%v", f, err)
+			continue
+		}
+		wantTarget := "../linked_dir"
+		if n.Target != wantTarget {
+			t.Errorf("symlink target of %q was %q, want %q", f, n.Target, wantTarget)
+		}
+	}
+
+	// Symlinks that should exist.
+	for _, f := range []string{
+		"testing/data/dir_with_symlink/symlink",
+	} {
+		if runtime.GOOS == "windows" {
+			t.Skip("symlink is not available on Windows")
+			continue
+		}
+		_, err := tree.LookupSymlinkNode(ctx, f)
 		if err != nil {
 			t.Errorf("%q does not exist in the CAS tree. err=%v", f, err)
 		}
