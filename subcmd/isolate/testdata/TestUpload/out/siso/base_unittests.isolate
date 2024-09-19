@@ -3,6 +3,7 @@
     "files": [
       "../../testing/test_runner.py",
       "../../testing/data/",
+      "../../testing/data_withoutslash",
       "pyproto/proto.py"
     ]
   }

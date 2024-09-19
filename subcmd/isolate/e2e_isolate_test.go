@@ -104,7 +104,7 @@ func TestUpload(t *testing.T) {
 	target := "base_unittests"
 	dg, err := upload(ctx, dir, buildDir, hfs, cl, target)
 	if err != nil {
-		t.Errorf("failed to upload. %v", err)
+		t.Fatalf("failed to upload. %v", err)
 	}
 	tree := reapitest.InputTree{CAS: fakere.CAS, Root: dg.Proto()}
 
@@ -115,6 +115,7 @@ func TestUpload(t *testing.T) {
 		"testing/data/input2.txt",
 		"testing/data/nested/input3.txt",
 		"testing/data/linked_dir/foo.txt",
+		"testing/data_withoutslash/input4.txt",
 		buildDir + "/pyproto/proto.py",
 	} {
 		_, err := tree.LookupFileNode(ctx, f)
