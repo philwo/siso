@@ -78,7 +78,7 @@ func (b *Builder) execRemote(ctx context.Context, step *Step) error {
 				step.metrics.Cached = true
 			}
 			step.metrics.RunTime = IntervalMetric(time.Since(reExecStarted))
-			step.metrics.done(ctx, step)
+			step.metrics.done(ctx, step, b.start)
 			return err
 		})
 		reExecDur += time.Duration(step.metrics.RunTime)
@@ -120,7 +120,7 @@ func (b *Builder) execRemoteCache(ctx context.Context, step *Step) error {
 		}
 		b.progressStepCacheHit(ctx, step)
 		step.metrics.RunTime = IntervalMetric(time.Since(start))
-		step.metrics.done(ctx, step)
+		step.metrics.done(ctx, step, b.start)
 		step.metrics.Cached = true
 		return nil
 	})

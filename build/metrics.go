@@ -111,6 +111,9 @@ type StepMetric struct {
 	// the action.
 	// TODO: set in reproxy mode too
 	QueueTime IntervalMetric `json:"queue,omitempty"`
+	// ExecStartTime is set if the action was not cached, containing the time
+	// measured when the execution strategy started the process.
+	ExecStartTime IntervalMetric `json:"exec_start,omitempty"`
 	// ExecTime is the time measured from the execution strategy starting
 	// the process until the process exited.
 	ExecTime IntervalMetric `json:"exec,omitempty"`
@@ -144,7 +147,7 @@ func (m *StepMetric) init(ctx context.Context, b *Builder, step *Step, stepStart
 	m.Start = IntervalMetric(stepStart.Sub(step.readyTime))
 }
 
-func (m *StepMetric) done(ctx context.Context, step *Step) {
+func (m *StepMetric) done(ctx context.Context, step *Step, buildStart time.Time) {
 	m.WeightedDuration = IntervalMetric(step.getWeightedDuration())
 	m.Inputs = len(step.cmd.Inputs)
 	m.Outputs = len(step.cmd.Outputs)
@@ -158,6 +161,7 @@ func (m *StepMetric) done(ctx context.Context, step *Step) {
 	md := result.GetExecutionMetadata()
 	if !m.Cached {
 		m.QueueTime = IntervalMetric(md.GetWorkerStartTimestamp().AsTime().Sub(md.GetQueuedTimestamp().AsTime()))
+		m.ExecStartTime = IntervalMetric(md.GetExecutionStartTimestamp().AsTime().Sub(buildStart))
 	}
 	m.ExecTime = IntervalMetric(md.GetExecutionCompletedTimestamp().AsTime().Sub(md.GetExecutionStartTimestamp().AsTime()))
 	for _, any := range md.GetAuxiliaryMetadata() {

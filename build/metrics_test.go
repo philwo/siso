@@ -7,6 +7,7 @@ package build
 import (
 	"context"
 	"testing"
+	"time"
 
 	"infra/build/siso/execute"
 )
@@ -18,6 +19,6 @@ func TestStepMetricsDone_NoExecutionMetadata(t *testing.T) {
 		cmd:   &execute.Cmd{},
 	}
 	var m StepMetric
-	m.done(ctx, step)
+	m.done(ctx, step, time.Now())
 	t.Logf("m.done passed without panic")
 }

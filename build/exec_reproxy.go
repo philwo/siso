@@ -99,7 +99,7 @@ func (b *Builder) execReproxy(ctx context.Context, step *Step) error {
 			step.metrics.Cached = true
 		}
 		step.metrics.RunTime = IntervalMetric(time.Since(started))
-		step.metrics.done(ctx, step)
+		step.metrics.done(ctx, step, b.start)
 		return err
 	})
 	if err != nil {

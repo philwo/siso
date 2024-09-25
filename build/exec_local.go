@@ -97,7 +97,7 @@ func (b *Builder) execLocal(ctx context.Context, step *Step) error {
 			result.ExecutionMetadata.WorkerStartTimestamp = timestamppb.New(started)
 		}
 		step.metrics.RunTime = IntervalMetric(time.Since(started))
-		step.metrics.done(ctx, step)
+		step.metrics.done(ctx, step, b.start)
 		return err
 	})
 	if !errors.Is(err, context.Canceled) {
