@@ -104,7 +104,7 @@ found in the LICENSE file. */}}
           Output
           <div class="subrow">Action</div>
         </th>
-        <th scope="col" class="remote-indicator">Remote</th>
+        <th class="thin-column" scope="col" class="remote-indicator">Remote</th>
         {{if .sortSupported}}
           {{$sortReadyAsc := or (urlParamEq $currentURL "sort" "readyAsc") (not (urlParamIsSet $currentURL "sort"))}}
           {{$sortReadyDsc := urlParamEq $currentURL "sort" "readyDsc"}}
@@ -112,21 +112,21 @@ found in the LICENSE file. */}}
           {{$sortDurationDsc := urlParamEq $currentURL "sort" "durationDsc"}}
           {{$sortCompletionAsc := urlParamEq $currentURL "sort" "completionAsc"}}
           {{$sortCompletionDsc := urlParamEq $currentURL "sort" "completionDsc"}}
-          <th scope="col">
+          <th class="timestamp-column" scope="col">
             <md-text-button class="sort-header" trailing-icon
                 hx-get="{{if $sortReadyAsc}}{{urlParamReplace $currentURL "sort" "readyDsc"}}{{else}}{{urlParamReplace $currentURL "sort" "readyAsc"}}{{end}}">
               Ready
               {{if $sortReadyAsc}}<md-icon slot="icon">arrow_upward</md-icon>{{else if $sortReadyDsc}}<md-icon slot="icon">arrow_downward</md-icon>{{end}}
             </md-text-button>
           </th>
-          <th scope="col">
+          <th class="timestamp-column" scope="col">
             <md-text-button class="sort-header" trailing-icon
                 hx-get="{{if $sortDurationAsc}}{{urlParamReplace $currentURL "sort" "durationDsc"}}{{else}}{{urlParamReplace $currentURL "sort" "durationAsc"}}{{end}}">
               Duration
               {{if $sortDurationAsc}}<md-icon slot="icon">arrow_upward</md-icon>{{else if $sortDurationDsc}}<md-icon slot="icon">arrow_downward</md-icon>{{end}}
             </md-text-button>
           </th>
-          <th scope="col">
+          <th class="timestamp-column" scope="col">
             <md-text-button class="sort-header" trailing-icon
                 hx-get="{{if $sortCompletionAsc}}{{urlParamReplace $currentURL "sort" "completionDsc"}}{{else}}{{urlParamReplace $currentURL "sort" "completionAsc"}}{{end}}">
               Completion
@@ -138,7 +138,7 @@ found in the LICENSE file. */}}
           <th scope="col">Duration</th>
           <th scope="col">Completion</th>
         {{end}}
-        <th scope="col">Timeline</th>
+        <th class="timeline-column" scope="col">Timeline</th>
       </tr>
     </thead>
     <tbody id="data-table-body">
