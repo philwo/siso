@@ -13,8 +13,7 @@ found in the LICENSE file. */}}
     {{/* Need to add ?sort= to the URL manually if set because sort is handled outside of this form. */}}
     action="{{$outdirRevBaseURL}}/steps/{{if urlParamIsSet $currentURL "sort"}}?sort={{urlParamGet $currentURL "sort"}}{{end}}"
     method="GET"
-    hx-trigger="change,submit"
-    hx-ext-md-filter-chip-as-checkbox>
+    hx-trigger="change,submit">
   <div>
     {{/* TODO: deduplicate this with timeline on individual step and raw logs pages? */}}
     <ul class="revs-timeline">
@@ -72,27 +71,58 @@ found in the LICENSE file. */}}
         <md-icon>close</md-icon>
       </md-icon-button>
     </md-filled-text-field>
-    <h3 id="action-label">action</h3>
-    <md-chip-set aria-labelledby="action-label">
-      {{range $key, $count := .actionCounts}}
-        {{if gt $count 20}}
-        <input type="checkbox" id="action-{{$key}}"
-            name="action" value="{{$key}}"{{if urlHasParam $currentURL "action" $key}}checked{{end}}>
-        <label for="action-{{$key}}">
-          <md-filter-chip label="{{printf "%.25s" $key}} ({{$count}})"{{if urlHasParam $currentURL "action" $key}}selected{{end}}></md-filter-chip>
-        </label>
-        {{end}}
-      {{end}}
-    </md-chip-set>
-    <h3 id="rule-label">rule</h3>
-    <md-chip-set aria-labelledby="rule-label">
-      {{range $key, $count := .ruleCounts}}
-        <input type="checkbox" id="rule-{{$key}}"
-            name="rule" value="{{$key}}"{{if urlHasParam $currentURL "rule" $key}}checked{{end}}>
-        <label for="rule-{{$key}}">
-          <md-filter-chip label="{{$key}} ({{$count}})"{{if urlHasParam $currentURL "rule" $key}}selected{{end}}></md-filter-chip></label>
-      {{end}}
-    </md-chip-set>
+    <div>
+      <button type="button" class="filter-button" popovertarget="action-filter-popover"
+          style="anchor-name: --action-filter-anchor">
+        <md-icon>filter_alt</md-icon>
+        Ninja rules
+        <md-ripple></md-ripple>
+      </button>
+      <div popover class="filter-popover" id="action-filter-popover"
+          style="position-anchor: --action-filter-anchor">
+        <div class="popover-content">
+          <ul>
+            {{range .actionCounts}}
+            {{if gt .Count 1}}
+            <li>
+              <md-checkbox id="action-{{.Key}}"
+                  name="action" value="{{.Key}}" {{if urlHasParam $currentURL "action" .Key}}checked{{end}}></md-checkbox>
+              <label for="action-{{.Key}}">
+                {{.Key}} ({{.Count}})
+              </label>
+            </li>
+            {{end}}
+            {{end}}
+          </ul>
+          <md-elevation></md-elevation>
+        </div>
+      </div>
+    </div>
+    <div>
+      <button type="button" class="filter-button" popovertarget="rule-filter-popover"
+          style="anchor-name: --rule-filter-anchor">
+        <md-icon>filter_alt</md-icon>
+        Siso configs
+        <md-ripple></md-ripple>
+      </button>
+      <div popover class="filter-popover" id="rule-filter-popover"
+          style="position-anchor: --rule-filter-anchor">
+        <div class="popover-content">
+          <ul>
+            {{range .ruleCounts}}
+            <li>
+              <md-checkbox id="rule-{{.Key}}"
+                  name="rule" value="{{.Key}}" {{if urlHasParam $currentURL "rule" .Key}}checked{{end}}></md-checkbox>
+              <label for="rule-{{.Key}}">
+                {{.Key}} ({{.Count}})
+              </label>
+            </li>
+            {{end}}
+          </ul>
+          <md-elevation></md-elevation>
+        </div>
+      </div>
+    </div>
   </div>
 </form>
 </aside>
@@ -102,7 +132,7 @@ found in the LICENSE file. */}}
       <tr hx-push-url="true">
         <th scope="col">
           Output
-          <div class="subrow">Action</div>
+          <div class="subrow">Rule</div>
         </th>
         <th class="thin-column" scope="col" class="remote-indicator">Remote</th>
         {{if .sortSupported}}

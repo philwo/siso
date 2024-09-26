@@ -90,32 +90,6 @@ found in the LICENSE file. */}}
           <pre><code id="copy-error${nowNumeric}" class="error-log">${helper.innerHTML}</code></pre>
           <p>Please <a href="https://issues.chromium.org/issues/new?component=1456832" target="_blank">file an issue</a> if this seems unexpected.</p>`);
     });
-    // HTMX extension to allow <md-filter-chip> values to be automatically reset like <input type=checkbox>.
-    htmx.defineExtension('ext-md-filter-chip-as-checkbox', {
-      onEvent: function(name, event) {
-        if (event.detail.isError) return;
-        const elt = event.detail.requestConfig?.elt;
-        if (name === 'htmx:load') {
-          // When the page loads, save the default value of all <md-filter-chip>s.
-          document.querySelectorAll('md-filter-chip').forEach(chip => {
-            chip.dataset.originalValue = chip.selected;
-          });
-        } else if (name === 'htmx:beforeRequest') {
-          // Before making a request, ensure <md-filter-chip>s are cached with their original value.
-          // <form>s must opt in by setting the attribute hx-ext-md-filter-chip-as-checkbox.
-          if (!elt || !elt.closest('[hx-ext-md-filter-chip-as-checkbox]')) {
-            return;
-          }
-          elt.querySelectorAll('md-filter-chip').forEach(chip => {
-            chip.dataset.newValue = chip.selected;
-            const originalValue = chip.dataset.originalValue === 'true';
-            if (chip.selected != originalValue) {
-              chip.selected = originalValue;
-            }
-          });
-        }
-      }
-    });
     // Dark mode.
     window.toggleDarkMode = () => {
       const bodyEl = document.querySelector('body');

@@ -336,6 +336,42 @@ html, body {
     display: none;
 }
 
+.filter-button {
+    position: relative;
+    background: none;
+    border: none;
+    border-radius: 999px;
+    font-family: var(--md-ref-typeface-plain);
+    font-size: var(--md-sys-typescale-label-large-size);
+    display: flex;
+    align-items: center;
+    margin-top: 6px;
+    padding: 0 12px;
+    gap: 8px;
+    height: 36px;
+}
+.filter-popover {
+    position-area: center right;
+    position-try-fallbacks: top right;
+    background: transparent;
+    border: none;
+    margin: 0 -16px;
+    padding: 16px;
+}
+.filter-popover .popover-content {
+    position: relative;
+    background: var(--md-sys-color-surface-container);
+    --md-elevation-level: 2;
+    padding: 8px 16px;
+}
+.filter-popover .popover-content ul {
+    list-style: none;
+    padding: 0;
+}
+.filter-popover .popover-content li {
+    padding: 4px 0;
+}
+
 .data-table-container {
     overflow-x: scroll;
 }

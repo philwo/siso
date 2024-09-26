@@ -42,6 +42,11 @@ type outdirInfo struct {
 	ninjaState    *ninjautil.State
 }
 
+type fieldAggregate struct {
+	Key   string
+	Count int
+}
+
 // buildMetrics represents data for a single build revision.
 // (Exported fields are accessible from Go templates.)
 type buildMetrics struct {
@@ -49,8 +54,8 @@ type buildMetrics struct {
 	Rev           string
 	buildDuration build.IntervalMetric
 	lastStepID    string
-	ruleCounts    map[string]int
-	actionCounts  map[string]int
+	ruleCounts    []fieldAggregate
+	actionCounts  []fieldAggregate
 	// buildMetrics contains build.StepMetric related to overall build e.g. regenerate ninja files.
 	buildMetrics []*build.StepMetric
 	// StepMetrics contains build.StepMetric related to ninja executions.
@@ -89,8 +94,8 @@ func loadBuildMetrics(metricsPath string) (*buildMetrics, error) {
 		StepMetrics:  []*build.StepMetric{},
 		stepByStepID: make(map[string]*build.StepMetric),
 		stepByOutput: make(map[string]*build.StepMetric),
-		ruleCounts:   make(map[string]int),
-		actionCounts: make(map[string]int),
+		ruleCounts:   []fieldAggregate{},
+		actionCounts: []fieldAggregate{},
 	}
 
 	d := json.NewDecoder(f)
@@ -122,16 +127,39 @@ func loadBuildMetrics(metricsPath string) (*buildMetrics, error) {
 	}
 	metricsData.Rev = metricsData.buildMetrics[0].BuildID
 
+	actionCounts := make(map[string]int)
 	for _, metric := range metricsData.StepMetrics {
 		if metric.Action != "" {
-			metricsData.actionCounts[metric.Action]++
+			actionCounts[metric.Action]++
 		}
 	}
+	// TODO(b/349287453): use maps.Keys once go 1.23
+	for action := range actionCounts {
+		metricsData.actionCounts = append(metricsData.actionCounts, fieldAggregate{
+			Key:   action,
+			Count: actionCounts[action],
+		})
+	}
+	slices.SortFunc(metricsData.actionCounts, func(a, b fieldAggregate) int {
+		return cmp.Compare(b.Count, a.Count)
+	})
+
+	ruleCounts := make(map[string]int)
 	for _, metric := range metricsData.StepMetrics {
 		if metric.Rule != "" {
-			metricsData.ruleCounts[metric.Rule]++
+			ruleCounts[metric.Rule]++
 		}
 	}
+	// TODO(b/349287453): use maps.Keys once go 1.23
+	for rule := range ruleCounts {
+		metricsData.ruleCounts = append(metricsData.ruleCounts, fieldAggregate{
+			Key:   rule,
+			Count: ruleCounts[rule],
+		})
+	}
+	slices.SortFunc(metricsData.ruleCounts, func(a, b fieldAggregate) int {
+		return cmp.Compare(b.Count, a.Count)
+	})
 
 	return metricsData, nil
 }
