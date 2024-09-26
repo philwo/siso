@@ -166,8 +166,22 @@ found in the LICENSE file. */}}
         <td>
           <svg height="20" class="step-timeline-bar">
             <rect x="{{divIntervalsScaled .Ready $buildDuration 100}}%" y="0"
+                width="{{divIntervalsScaled .Start $buildDuration 100}}%" height="20"
+                style="fill: rgb(50, 176, 73)" />
+            <rect x="{{divIntervalsScaled (addIntervals .Ready .Start) $buildDuration 100}}%" y="0"
                 width="{{divIntervalsScaled .Duration $buildDuration 100}}%" height="20"
-                class="duration-interval" />
+                style="fill: rgb(48, 48, 48)" />
+            <rect x="{{divIntervalsScaled .ActionStartTime $buildDuration 100}}%" y="0"
+                width="{{divIntervalsScaled (subIntervals .ActionEndTime .ActionStartTime) $buildDuration 100}}%" height="20"
+                style="fill: rgb(251, 255, 0)" />
+            <rect x="{{divIntervalsScaled .ActionStartTime $buildDuration 100}}%" y="0"
+                width="{{divIntervalsScaled .RunTime $buildDuration 100}}%" height="20"
+                style="fill: rgb(223, 134, 30)" />
+            {{if .ExecStartTime}}
+            <rect x="{{divIntervalsScaled .ExecStartTime $buildDuration 100}}%" y="0"
+                width="{{divIntervalsScaled .ExecTime $buildDuration 100}}%" height="20"
+                style="fill: rgb(134, 39, 222)" />
+            {{end}}
           </svg>
         </td>
       </tr>

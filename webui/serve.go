@@ -65,6 +65,9 @@ var (
 		"addIntervals": func(a, b build.IntervalMetric) build.IntervalMetric {
 			return a + b
 		},
+		"subIntervals": func(a, b build.IntervalMetric) build.IntervalMetric {
+			return a - b
+		},
 		"trimPrefix": func(s, prefix string) string {
 			return strings.TrimPrefix(s, prefix)
 		},
