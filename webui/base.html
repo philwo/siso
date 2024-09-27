@@ -166,7 +166,7 @@ found in the LICENSE file. */}}
             </md-text-button>
             <md-menu id="outdir-menu" anchor="outdir-menu-button" positioning="popover">
               {{range $outsubs := .outsubs}}
-              <md-menu-item href="/{{$outroot}}/{{pathEscape $outsubs}}/builds/latest/steps/">
+              <md-menu-item href="/{{$outroot}}/{{pathEscape $outsubs}}/">
                 <div slot="headline">{{$outsubs}}</div>
               </md-menu-item>
               {{end}}
