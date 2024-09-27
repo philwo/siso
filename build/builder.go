@@ -39,6 +39,7 @@ import (
 	"infra/build/siso/hashfs/osfs"
 	"infra/build/siso/o11y/clog"
 	"infra/build/siso/o11y/iometrics"
+	"infra/build/siso/o11y/monitoring"
 	sisopprof "infra/build/siso/o11y/pprof"
 	"infra/build/siso/o11y/resultstore"
 	"infra/build/siso/o11y/trace"
@@ -798,6 +799,12 @@ func (b *Builder) recordMetrics(ctx context.Context, m StepMetric) {
 	fmt.Fprintf(b.metricsJSONWriter, "%s\n", mb)
 }
 
+func (b *Builder) recordCloudMonitoringActionMetrics(ctx context.Context, step *Step) {
+	// TODO: Upload action metrics even if the action didn't complete due to interrupt, timeout, RBE error, local error etc.
+	ar, cached := step.cmd.ActionResult()
+	monitoring.ExportActionMetrics(ctx, time.Duration(step.metrics.Duration), ar, cached)
+}
+
 func (b *Builder) recordNinjaLogs(ctx context.Context, s *Step) {
 	// TODO: b/298594790 - Use the same mtime with hashFS.
 	start := time.Duration(s.startTime.Sub(b.start)).Milliseconds()
@@ -809,7 +816,6 @@ func (b *Builder) recordNinjaLogs(ctx context.Context, s *Step) {
 	for _, output := range s.cmd.Outputs {
 		outputs = append(outputs, strings.TrimPrefix(output, buildDir))
 	}
-
 	ninjautil.WriteNinjaLogEntries(ctx, b.ninjaLogWriter, start, end, s.endTime, outputs, s.cmd.Args)
 }
 
