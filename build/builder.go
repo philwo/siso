@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/logging"
+	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
 	log "github.com/golang/glog"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -802,7 +803,14 @@ func (b *Builder) recordMetrics(ctx context.Context, m StepMetric) {
 func (b *Builder) recordCloudMonitoringActionMetrics(ctx context.Context, step *Step) {
 	// TODO: Upload action metrics even if the action didn't complete due to interrupt, timeout, RBE error, local error etc.
 	ar, cached := step.cmd.ActionResult()
-	monitoring.ExportActionMetrics(ctx, time.Duration(step.metrics.Duration), ar, cached)
+	var remoteAr *rpb.ActionResult
+	if step.metrics.IsRemote {
+		remoteAr = ar
+	} else if step.metrics.Fallback {
+		remoteAr = step.cmd.RemoteFallbackResult()
+	}
+	monitoring.ExportActionMetrics(
+		ctx, time.Duration(step.metrics.Duration), ar, remoteAr, cached)
 }
 
 func (b *Builder) recordNinjaLogs(ctx context.Context, s *Step) {

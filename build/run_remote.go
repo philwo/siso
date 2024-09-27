@@ -105,6 +105,8 @@ func (b *Builder) runRemote(ctx context.Context, step *Step) error {
 		step.metrics.Fallback = true
 		msgs := cmdOutput(ctx, "FALLBACK", step.cmd, step.def.Binding("command"), step.def.RuleName(), err)
 		b.logOutput(ctx, msgs, false)
+		ar, _ := step.cmd.ActionResult()
+		step.cmd.SetRemoteFallbackResult(ar) // Preserve remote action result.
 		err = b.execLocal(ctx, step)
 		if err != nil {
 			return err

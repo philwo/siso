@@ -166,11 +166,11 @@ func (mr genericNode) MonitoredResource() (resType string, labels map[string]str
 }
 
 // ExportActionMetrics exports metrics for one log record to opencensus.
-func ExportActionMetrics(ctx context.Context, latency time.Duration, ar *rpb.ActionResult, cached bool) {
-	exitCode := ar.GetExitCode()
+func ExportActionMetrics(ctx context.Context, latency time.Duration, ar *rpb.ActionResult, remoteAr *rpb.ActionResult, cached bool) {
 	// Use the same status values with CommandResultStatus in remote-apis-sdks to be aligned with Reclient. e.g. SUCCESS, CACHE_HIT
 	// See also CommandResultStatus in remote-apis-sdks.
 	// https://github.com/bazelbuild/remote-apis-sdks/blob/f4821a2a072c44f9af83002cf7a272fff8223fa3/go/api/command/command.proto#L172
+	exitCode := ar.GetExitCode()
 	var status string
 	switch {
 	case cached:
@@ -180,12 +180,22 @@ func ExportActionMetrics(ctx context.Context, latency time.Duration, ar *rpb.Act
 	case exitCode == 0:
 		status = "SUCCESS"
 	}
+
+	remoteExitCode := remoteAr.GetExitCode()
+	var remoteStatus string
+	switch {
+	case cached:
+		remoteStatus = "CACHE_HIT"
+	case remoteExitCode != 0:
+		remoteStatus = "NON_ZERO_EXIT"
+	case remoteExitCode == 0:
+		remoteStatus = "SUCCESS"
+	}
 	actCtx := contextWithTags(contextWithTags(ctx, staticLabels), map[tag.Key]string{
-		statusKey:   status,
-		exitCodeKey: strconv.FormatInt(int64(exitCode), 10),
-		// TODO: Distinguish remote result from local result when local fallback happens.
-		// remoteStatusKey:   "",
-		// remoteExitCodeKey: "",
+		statusKey:         status,
+		exitCodeKey:       strconv.FormatInt(int64(exitCode), 10),
+		remoteStatusKey:   remoteStatus,
+		remoteExitCodeKey: strconv.FormatInt(int64(remoteExitCode), 10),
 	})
 	stats.Record(actCtx, actionCount.M(1))
 	stats.Record(actCtx, actionLatency.M(float64(latency)/1e6))
