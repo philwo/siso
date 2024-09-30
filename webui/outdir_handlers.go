@@ -316,6 +316,8 @@ func (s *WebuiServer) handleOutdirViewLog(w http.ResponseWriter, r *http.Request
 		"siso_output":      "siso_output.%s",
 		"siso_trace.json":  "siso_trace.%s.json",
 	}
+
+	// Make sure this file is allowed.
 	requestedFile := r.PathValue("file")
 	revFileFormatter, ok := allowedFilesMap[requestedFile]
 	if !ok {
@@ -323,11 +325,56 @@ func (s *WebuiServer) handleOutdirViewLog(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	rev := r.PathValue("rev")
-	actualFile := requestedFile
-	if rev != "latest" {
-		actualFile = fmt.Sprintf(revFileFormatter, rev)
+	revID := r.PathValue("rev")
+	// Webui identifies builds using build ID, but build ID is only known in siso_metrics.json.
+	// We need to find the siso_metrics.json that contains the build ID to figure out the suffix.
+	// Do this every page load because we don't know if another build has happened since past reload.
+	// If this has happened, then the suffix would have changed.
+	// (The alternative is either store all files in-memory, or refactor Webui to watch for files changing.)
+	matches, err := filepath.Glob(filepath.Join(outdirInfo.path, "siso_metrics*.json"))
+	if err != nil {
+		s.renderBuildViewError(http.StatusInternalServerError, fmt.Sprintf("failed to glob siso_metrics*.json: %v", err), w, r, outdirInfo)
+		return
 	}
+	buildSuffix := "unknown"
+	// The loop to try reading every siso_metrics.json.
+	// Use a buffer with small cap because these files are huge.
+	// We only use the first build ID in the file which should be in the first few lines.
+	buffer := make([]byte, 4096)
+	for _, match := range matches {
+		file, err := os.Open(match)
+		if err != nil {
+			continue
+		}
+		defer file.Close() // OK to ignore error, because we're just reading.
+		n, err := file.Read(buffer)
+		if err != nil && err != io.EOF {
+			// TODO: log?
+			continue
+		}
+		// Use n returned from file.Read so that we don't read more than the actual file.
+		if strings.Contains(string(buffer[:n]), revID) {
+			basename := filepath.Base(match)
+			buildSuffix = strings.TrimPrefix(basename, "siso_metrics.")
+			buildSuffix = strings.TrimSuffix(buildSuffix, ".json")
+			break
+		}
+	}
+	if buildSuffix == "unknown" {
+		if err != nil {
+			s.renderBuildViewError(http.StatusInternalServerError, fmt.Sprintf("failed to read siso_metrics*.json: %v", err), w, r, outdirInfo)
+			return
+		}
+		s.renderBuildViewError(http.StatusNotFound, fmt.Sprintf("couldn't find siso_metrics identifying build %s", revID), w, r, outdirInfo)
+		return
+	}
+
+	// Now that correct suffix is known then can get the right file.
+	actualFile := requestedFile
+	if buildSuffix != "" {
+		actualFile = fmt.Sprintf(revFileFormatter, buildSuffix)
+	}
+
 	fileContents, err := os.ReadFile(filepath.Join(s.defaultOutdir, actualFile))
 	if err != nil {
 		s.renderBuildViewError(http.StatusInternalServerError, fmt.Sprintf("failed to open file: %v", err), w, r, outdirInfo)
