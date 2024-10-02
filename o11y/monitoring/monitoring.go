@@ -57,7 +57,7 @@ var (
 )
 
 // SetupViews sets up monitoring views. This can only be run once.
-func SetupViews(version string, labels map[string]string) error {
+func SetupViews(ctx context.Context, version string, labels map[string]string) error {
 	if len(staticLabels) != 0 {
 		return errors.New("views were already setup, cannot overwrite")
 	}
@@ -76,6 +76,7 @@ func SetupViews(version string, labels map[string]string) error {
 		staticLabels[k] = v
 		keys = append(keys, k)
 	}
+	clog.Infof(ctx, "static labels for monitoring were set. %v", staticLabels)
 	views := []*view.View{
 		{
 			Measure:     actionLatency,
@@ -113,6 +114,10 @@ func NewExporter(ctx context.Context, project, prefix, rbeProject string, copts 
 	if err != nil {
 		return nil, err
 	}
+	// Location is hard-coded in Reclient.
+	// https://github.com/bazelbuild/reclient/blob/4d9d00de3f05c24ce2af03455243bed45e94a9fe/internal/pkg/monitoring/monitoring.go#L50C17-L50C30
+	// TODO: Check if it's fine to set different locations, also non-GCE bots and workstations don't have GCE zone value.
+	location := "us-central1-a"
 	opts := stackdriver.Options{
 		ProjectID:               project,
 		MonitoringClientOptions: copts,
@@ -129,11 +134,8 @@ func NewExporter(ctx context.Context, project, prefix, rbeProject string, copts 
 		MonitoredResource: genericNode{
 			project:   project,
 			namespace: rbeProject,
-			// Location is hard-coded in Reclient.
-			// https://github.com/bazelbuild/reclient/blob/4d9d00de3f05c24ce2af03455243bed45e94a9fe/internal/pkg/monitoring/monitoring.go#L50C17-L50C30
-			// TODO: Check if it's fine to set different locations, also non-GCE bots and workstations don't have GCE zone value.
-			location: "us-central1-a",
-			node:     hostname,
+			location:  location,
+			node:      hostname,
 		},
 		DefaultMonitoringLabels: &stackdriver.Labels{},
 	}
@@ -144,6 +146,7 @@ func NewExporter(ctx context.Context, project, prefix, rbeProject string, copts 
 	if err = e.StartMetricsExporter(); err != nil {
 		return nil, err
 	}
+	clog.Infof(ctx, "Stackdriver exporter has started in %q. metric_prefix=%q, generic node labels={project=%q, namespace=%q, location=%q, node=%q}", project, prefix, project, rbeProject, location, hostname)
 	return e, nil
 }
 

@@ -567,6 +567,11 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 			metricsLabels[kv[0]] = kv[1]
 		}
 
+		if c.metricsProject == "" {
+			// TODO: crbug.com/368518993 - Use the siso project ID by default.
+			// It may require changes on monitoring pipeline and permissions etc.
+			return stats, errors.New("cloud project ID for Cloud monitoring must be specified by -metrics_project or RBE_metrics_project")
+		}
 		e, err := c.initCloudMonitoring(ctx, credential, c.metricsProject, monitoringPrefix, projectID, metricsLabels)
 		if err != nil {
 			return stats, err
@@ -1141,7 +1146,8 @@ func (c *ninjaCmdRun) initCloudTrace(ctx context.Context, projectID string, cred
 }
 
 func (c *ninjaCmdRun) initCloudMonitoring(ctx context.Context, credential cred.Cred, projectID, prefix, rbeProjectID string, labels map[string]string) (*stackdriver.Exporter, error) {
-	if err := monitoring.SetupViews(c.version, labels); err != nil {
+	clog.Infof(ctx, "enable cloud monitoring in %s", projectID)
+	if err := monitoring.SetupViews(ctx, c.version, labels); err != nil {
 		return nil, err
 	}
 	return monitoring.NewExporter(
