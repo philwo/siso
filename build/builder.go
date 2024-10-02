@@ -1072,10 +1072,11 @@ func (b *Builder) updateDeps(ctx context.Context, step *Step) error {
 	clog.Infof(ctx, "update deps=%s: %s %s %d updated:%t pure:%t/%t->true", step.cmd.Deps, output, base64.StdEncoding.EncodeToString(step.cmd.CmdHash), len(deps), updated, step.cmd.Pure, step.cmd.Pure)
 	span.SetAttr("deps", len(deps))
 	span.SetAttr("updated", updated)
-	for i := range deps {
-		deps[i] = b.path.MaybeFromWD(ctx, deps[i])
+	canonicalizedDeps := make([]string, 0, len(deps))
+	for _, dep := range deps {
+		canonicalizedDeps = append(canonicalizedDeps, b.path.MaybeFromWD(ctx, dep))
 	}
-	depsFixCmd(ctx, b, step, deps)
+	depsFixCmd(ctx, b, step, canonicalizedDeps)
 	return nil
 }
 
