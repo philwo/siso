@@ -13,6 +13,12 @@ import (
 // TODO(b/267409605): At minimum have test coverage parity with
 // https://github.com/ninja-build/ninja/blob/master/src/lexer_test.cc
 
+func parseEvalStringForTest(in string) (EvalString, error) {
+	l := lexer{buf: []byte(in + "\n")}
+	estr, err := l.VarValue()
+	return estr, err
+}
+
 func TestLexerVarValue(t *testing.T) {
 	l := lexer{buf: []byte("plain text $var $VaR ${x}\n")}
 	v, err := l.VarValue()
@@ -27,7 +33,7 @@ func TestLexerVarValue(t *testing.T) {
 	if got, want := s, "plain text ${var} ${VaR} ${x}"; got != want {
 		t.Errorf("RawString=%q; want=%q", got, want)
 	}
-	v2, err := parseEvalString(s)
+	v2, err := parseEvalStringForTest(s)
 	if err != nil {
 		t.Errorf("parseEvalString(%q)=_ %v; want nil error", s, err)
 	}
@@ -50,7 +56,7 @@ func TestLexerVarValue_Escapes(t *testing.T) {
 	if got, want := s, " $$ab c: cde"; got != want {
 		t.Errorf("RawString=%q; want=%q", got, want)
 	}
-	v2, err := parseEvalString(s)
+	v2, err := parseEvalStringForTest(s)
 	if err != nil {
 		t.Errorf("parseEvalString(%q)=_ %v; want nil error", s, err)
 	}

@@ -94,12 +94,6 @@ func (e EvalString) RawString() string {
 	return sb.String()
 }
 
-func parseEvalString(in string) (EvalString, error) {
-	l := lexer{buf: []byte(in + "\n")}
-	estr, err := l.VarValue()
-	return estr, err
-}
-
 func (e EvalString) empty() bool {
 	return len(e.s) == 0
 }

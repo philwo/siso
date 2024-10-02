@@ -333,10 +333,14 @@ func (l *lexer) VarValue() (EvalString, error) {
 }
 
 var nonLiteralChar charmap
+var whitespaceChar charmap
 
 func init() {
 	for _, ch := range []byte("$ :\r\n|\000") {
 		nonLiteralChar.set(ch)
+	}
+	for _, ch := range []byte(" \t\r\n") {
+		whitespaceChar.set(ch)
 	}
 }
 
@@ -489,4 +493,43 @@ loop:
 	}
 	copy(e.s, esbuf.s)
 	return e, nil
+}
+
+// skipBytesAny returns offset in buf where the byte is not in charmap.
+func skipBytesAny(buf []byte, cm charmap) int {
+	for i, ch := range buf {
+		if !cm.contains(ch) {
+			return i
+		}
+	}
+	return len(buf)
+}
+
+// skipSpaces returns next offset of non-whitespace char in buf[pos:].
+// it will skip "$\n" or "$\r\n".
+func skipSpaces(buf []byte, pos int, whitespaceChar charmap) int {
+	n := 0
+	for {
+		i := skipBytesAny(buf[pos+n:], whitespaceChar)
+		n += i
+		if len(buf) == pos+n {
+			return n
+		}
+		if buf[pos+n] != '$' {
+			return n
+		}
+		if pos+n+1 < len(buf) {
+			switch buf[pos+n+1] {
+			case '\n', ' ', '\t':
+				n += 2
+				continue
+			case '\r':
+				if pos+n+2 < len(buf) && buf[pos+n+2] == '\n' {
+					n += 3
+					continue
+				}
+			}
+		}
+		return n
+	}
 }
