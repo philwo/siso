@@ -621,7 +621,11 @@ func (p *plan) done(ctx context.Context, step *Step) {
 		}
 		i = 0
 		for _, s := range p.targets[out].waits {
-			if s.ReadyToRun(step.String(), out) {
+			prevNonPhony := step.String()
+			if step.def.IsPhony() {
+				prevNonPhony = step.prevStepID
+			}
+			if s.ReadyToRun(prevNonPhony, out) {
 				p.npendings--
 				nready++
 				if log.V(1) {
