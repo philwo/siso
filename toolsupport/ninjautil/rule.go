@@ -4,10 +4,18 @@
 
 package ninjautil
 
+import (
+	"bytes"
+	"fmt"
+	"hash/maphash"
+	"sync/atomic"
+)
+
 // rule represents a build rule.
 // Further reading: https://ninja-build.org/manual.html#_rules
 // TODO(b/267409605): Add tests for Rule methods.
 type rule struct {
+	next     *rule // for ruleMap
 	name     string
 	bindings map[string]EvalString
 }
@@ -71,4 +79,77 @@ func (b *ruleBinding) lookupRule(ruleName string) (*rule, bool) {
 func (b *ruleBinding) lookupRuleCurrentScope(ruleName string) (*rule, bool) {
 	r, ok := b.rules[ruleName]
 	return r, ok
+}
+
+// ruleMap is a map rules by its name for fast concurrent updates.
+type ruleMap struct {
+	seed  maphash.Seed
+	rules []atomic.Pointer[rule]
+}
+
+// newRuleMap creates new ruleMap for size n.
+func newRuleMap(n int) *ruleMap {
+	rm := &ruleMap{
+		seed: maphash.MakeSeed(),
+	}
+	// numRulesPerBuckets is the number of rules per buckets.
+	// We want to keep it small to avoid contention.
+	const numRulesPerBuckets = 8
+	// prepare sufficient buckets for size n.
+	numBuckets := 1
+	for n/numBuckets >= numRulesPerBuckets {
+		numBuckets <<= 1
+	}
+	rm.rules = make([]atomic.Pointer[rule], numBuckets)
+	return rm
+}
+
+// setRule sets a rule in ruleMap.
+func (rm *ruleMap) setRule(r *rule) error {
+	if rm == nil || len(rm.rules) == 0 {
+		return fmt.Errorf("no rule map")
+	}
+	var slot *atomic.Pointer[rule]
+	if len(rm.rules) == 1 {
+		slot = &rm.rules[0]
+	} else {
+		h := maphash.String(rm.seed, r.name)
+		slot = &rm.rules[h&uint64(len(rm.rules)-1)]
+	}
+	var search *rule
+	for {
+		head := slot.Load()
+		search = head
+		for search != nil {
+			if search.name == r.name {
+				return fmt.Errorf("duplicate rule %q", r.name)
+			}
+			search = search.next
+		}
+		r.next = head
+		if slot.CompareAndSwap(head, r) {
+			return nil
+		}
+	}
+}
+
+// lookupRule looks up rule by its name.
+func (rm *ruleMap) lookupRule(name []byte) (*rule, bool) {
+	if rm == nil || len(rm.rules) == 0 {
+		return nil, false
+	}
+	var r *rule
+	if len(rm.rules) == 1 {
+		r = rm.rules[0].Load()
+	} else {
+		h := maphash.Bytes(rm.seed, name)
+		r = rm.rules[h&uint64(len(rm.rules)-1)].Load()
+	}
+	for r != nil {
+		if bytes.Equal([]byte(r.name), name) {
+			return r, true
+		}
+		r = r.next
+	}
+	return nil, false
 }
