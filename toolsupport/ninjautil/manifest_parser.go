@@ -21,6 +21,15 @@ import (
 	"infra/build/siso/o11y/clog"
 )
 
+// multipleRulesError is an error that multiple rules generates the same output.
+type multipleRulesError struct {
+	target string
+}
+
+func (e multipleRulesError) Error() string {
+	return fmt.Sprintf("multiple rules generates %s", e.target)
+}
+
 // ManifestParser parses Ninja manifests. (i.e. .ninja files)
 type ManifestParser struct {
 	// Stores all information found while parsing the .ninja file.

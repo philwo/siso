@@ -109,6 +109,33 @@ func matchIndent(buf []byte) int {
 	return i
 }
 
+// findNextLine returns offset of next logical line from buf[s:].
+// i.e. for `n := findNextLine(buf, s)`, buf[n:] will be next logical line,
+// or end of buf.
+func findNextLine(buf []byte, s int) int {
+	for {
+		i := bytes.IndexByte(buf[s:], '\n')
+		if i < 0 { // each EOF?
+			return len(buf)
+		}
+		if i > 1 {
+			// check if it is "$\r\n"
+			if buf[s+i-2] == '$' && buf[s+i-1] == '\r' {
+				s = s + i + 1
+				continue
+			}
+		}
+		if i > 0 {
+			// check if it is "$\n"
+			if buf[s+i-1] == '$' {
+				s = s + i + 1
+				continue
+			}
+		}
+		return s + i + 1
+	}
+}
+
 type charmap [8]uint32
 
 func (m *charmap) set(ch byte) {
