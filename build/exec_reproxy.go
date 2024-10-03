@@ -76,7 +76,7 @@ func (b *Builder) execReproxy(ctx context.Context, step *Step) error {
 		case reproxyexec.WorkerNameFallback:
 			step.metrics.IsLocal = true
 			step.metrics.Fallback = true
-			fallbackResult := step.cmd.RemoteFallbackResult()
+			fallbackResult, _ := step.cmd.RemoteFallbackResult()
 			exitCode := -1
 			if e := fallbackResult.GetExitCode(); e != 0 {
 				exitCode = int(e)

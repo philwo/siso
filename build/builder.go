@@ -800,17 +800,18 @@ func (b *Builder) recordMetrics(ctx context.Context, m StepMetric) {
 	fmt.Fprintf(b.metricsJSONWriter, "%s\n", mb)
 }
 
-func (b *Builder) recordCloudMonitoringActionMetrics(ctx context.Context, step *Step) {
-	// TODO: Upload action metrics even if the action didn't complete due to interrupt, timeout, RBE error, local error etc.
+func (b *Builder) recordCloudMonitoringActionMetrics(ctx context.Context, step *Step, actionErr error) {
 	ar, cached := step.cmd.ActionResult()
 	var remoteAr *rpb.ActionResult
+	var remoteErr error
 	if step.metrics.IsRemote {
 		remoteAr = ar
+		remoteErr = actionErr
 	} else if step.metrics.Fallback {
-		remoteAr = step.cmd.RemoteFallbackResult()
+		remoteAr, remoteErr = step.cmd.RemoteFallbackResult()
 	}
 	monitoring.ExportActionMetrics(
-		ctx, time.Duration(step.metrics.Duration), ar, remoteAr, cached)
+		ctx, time.Duration(step.metrics.Duration), ar, remoteAr, actionErr, remoteErr, cached)
 }
 
 func (b *Builder) recordNinjaLogs(ctx context.Context, s *Step) {

@@ -388,7 +388,7 @@ func processResponse(ctx context.Context, cmd *execute.Cmd, response *ppb.RunRes
 			ExitCode:  fallbackInfo.GetExitCode(),
 			StdoutRaw: fallbackInfo.GetStdout(),
 			StderrRaw: fallbackInfo.GetStderr(),
-		})
+		}, nil)
 	}
 
 	// any stdout/stderr is unexpected, write this out and stop if received.

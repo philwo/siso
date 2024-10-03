@@ -169,19 +169,22 @@ func (mr genericNode) MonitoredResource() (resType string, labels map[string]str
 }
 
 // ExportActionMetrics exports metrics for one log record to opencensus.
-func ExportActionMetrics(ctx context.Context, latency time.Duration, ar *rpb.ActionResult, remoteAr *rpb.ActionResult, cached bool) {
+func ExportActionMetrics(ctx context.Context, latency time.Duration, ar, remoteAr *rpb.ActionResult, actionErr, remoteErr error, cached bool) {
 	// Use the same status values with CommandResultStatus in remote-apis-sdks to be aligned with Reclient. e.g. SUCCESS, CACHE_HIT
 	// See also CommandResultStatus in remote-apis-sdks.
 	// https://github.com/bazelbuild/remote-apis-sdks/blob/f4821a2a072c44f9af83002cf7a272fff8223fa3/go/api/command/command.proto#L172
+	// TODO: Support REMOTE_ERROR, LOCAL_ERROR types if necessary.
 	exitCode := ar.GetExitCode()
-	var status string
+	var st string
 	switch {
 	case cached:
-		status = "CACHE_HIT"
+		st = "CACHE_HIT"
+	case status.Code(actionErr) == codes.DeadlineExceeded || errors.Is(actionErr, context.DeadlineExceeded):
+		st = "TIMEOUT"
 	case exitCode != 0:
-		status = "NON_ZERO_EXIT"
-	case exitCode == 0:
-		status = "SUCCESS"
+		st = "NON_ZERO_EXIT"
+	default:
+		st = "SUCCESS"
 	}
 
 	remoteExitCode := remoteAr.GetExitCode()
@@ -189,13 +192,15 @@ func ExportActionMetrics(ctx context.Context, latency time.Duration, ar *rpb.Act
 	switch {
 	case cached:
 		remoteStatus = "CACHE_HIT"
+	case status.Code(remoteErr) == codes.DeadlineExceeded || errors.Is(remoteErr, context.DeadlineExceeded):
+		remoteStatus = "TIMEOUT"
 	case remoteExitCode != 0:
 		remoteStatus = "NON_ZERO_EXIT"
-	case remoteExitCode == 0:
+	default:
 		remoteStatus = "SUCCESS"
 	}
 	actCtx := contextWithTags(contextWithTags(ctx, staticLabels), map[tag.Key]string{
-		statusKey:         status,
+		statusKey:         st,
 		exitCodeKey:       strconv.FormatInt(int64(exitCode), 10),
 		remoteStatusKey:   remoteStatus,
 		remoteExitCodeKey: strconv.FormatInt(int64(remoteExitCode), 10),

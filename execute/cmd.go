@@ -208,11 +208,17 @@ type Cmd struct {
 	actionDigest digest.Digest
 
 	actionResult *rpb.ActionResult
+
 	// actionResult is cached result if cachedResult is true.
 	cachedResult bool
 
-	// reproxy remote fallback
+	// remoteFallbackResult is rpb.ActionResult from remote execution.
+	// This is used to distinguish from actionResult when local fallback happens.
 	remoteFallbackResult *rpb.ActionResult
+
+	// remoteFallbackError is an error returned while running remote execution.
+	// This is used to distinguish from an error when local fallback happens.
+	remoteFallbackError error
 }
 
 // String returns an ID of the cmd.
@@ -638,14 +644,15 @@ func (c *Cmd) ActionResult() (*rpb.ActionResult, bool) {
 	return c.actionResult, c.cachedResult
 }
 
-// SetRemoteFallbackResult sets remote action failed result for reproxy.
-func (c *Cmd) SetRemoteFallbackResult(result *rpb.ActionResult) {
+// SetRemoteFallbackResult sets remote action failed result and remote error of the cmd, which ended up with local fallback.
+func (c *Cmd) SetRemoteFallbackResult(result *rpb.ActionResult, err error) {
 	c.remoteFallbackResult = result
+	c.remoteFallbackError = err
 }
 
-// RemoteFallbackResult returns the remote action failed result of the cmd for reproxy.
-func (c *Cmd) RemoteFallbackResult() *rpb.ActionResult {
-	return c.remoteFallbackResult
+// RemoteFallbackResult returns the remote action failed result and remote error of the cmd, which ended up with local fallback.
+func (c *Cmd) RemoteFallbackResult() (*rpb.ActionResult, error) {
+	return c.remoteFallbackResult, c.remoteFallbackError
 }
 
 // entriesFromResult returns output file entries and depfile entries for the cmd and result.

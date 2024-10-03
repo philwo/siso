@@ -85,7 +85,7 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 			stepLogEntry(ctx, logger, step, duration, err)
 			b.recordMetrics(ctx, step.metrics)
 			b.recordNinjaLogs(ctx, step)
-			b.recordCloudMonitoringActionMetrics(ctx, step)
+			b.recordCloudMonitoringActionMetrics(ctx, step, err)
 			b.stats.update(ctx, &step.metrics, step.cmd.Pure)
 			b.finalizeTrace(ctx, tc)
 			b.outputFailureSummary(ctx, step, err)
