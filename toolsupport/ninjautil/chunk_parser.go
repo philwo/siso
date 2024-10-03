@@ -345,8 +345,34 @@ func (ch *chunk) setupInChunk(ctx context.Context, state *State, scope *fileScop
 			i++
 			continue
 		case statementInclude:
-			// TODO(b/365906703): use fileParser to parse chunks.
-			return fmt.Errorf("line:%d include not supported", lineno(ch.buf, st.s))
+			include, err := ch.parseInclude(ctx, i, &buf, scope)
+			if err != nil {
+				return err
+			}
+			fp := &fileParser{
+				state:  state,
+				parent: scope.parent,
+				scope:  *scope,
+				sema:   make(chan struct{}, 1),
+			}
+			state.filenames = append(state.filenames, include)
+			fp.buf, err = fp.readFile(ctx, include)
+			if err != nil {
+				return err
+			}
+			fp.chunks = splitIntoChunks(ctx, fp.buf)
+			err = fp.parseChunks(ctx)
+			if err != nil {
+				return err
+			}
+			fp.alloc(ctx)
+			err = fp.setup(ctx)
+			if err != nil {
+				return err
+			}
+			ch.includeChunks(ctx, i, fp.chunks)
+			i++
+			continue
 		case statementSubninja:
 			i++
 			continue
@@ -411,8 +437,7 @@ func (ch *chunk) buildGraphInChunk(ctx context.Context, state *State, fileState 
 			if err != nil {
 				return err
 			}
-			_ = nodes
-			// TODO(b/365906703): fileState.addDefaults(nodes)
+			fileState.addDefaults(nodes)
 			i++
 			continue
 		case statementInclude:
@@ -423,8 +448,7 @@ func (ch *chunk) buildGraphInChunk(ctx context.Context, state *State, fileState 
 			if err != nil {
 				return err
 			}
-			_ = subninja
-			// TODO(b/365906703): fileState.addSubninja(subninja)
+			fileState.addSubninja(subninja)
 			i++
 			continue
 		default:

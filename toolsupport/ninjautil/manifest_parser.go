@@ -47,26 +47,6 @@ type ManifestParser struct {
 	wd   string
 }
 
-type fileState struct {
-	edges     []*Edge
-	defaults  []*Node
-	filenames []string
-}
-
-func (s *fileState) addEdge(rule *rule, env *BindingEnv) *Edge {
-	edge := &Edge{
-		rule: rule,
-		pool: defaultPool,
-		env:  env,
-	}
-	s.edges = append(s.edges, edge)
-	return edge
-}
-
-func (s *fileState) addDefault(n *Node) {
-	s.defaults = append(s.defaults, n)
-}
-
 // NewManifestParser creates a new manifest parser.
 func NewManifestParser(state *State) *ManifestParser {
 	rules := newRuleBinding(nil)
