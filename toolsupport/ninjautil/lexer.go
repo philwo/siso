@@ -495,10 +495,20 @@ loop:
 	return e, nil
 }
 
+// indexBytesAny returns offset in buf where the byte is in charmap.
+func indexBytesAny(buf []byte, cm charmap) int {
+	for i := range buf {
+		if cm.contains(buf[i]) {
+			return i
+		}
+	}
+	return len(buf)
+}
+
 // skipBytesAny returns offset in buf where the byte is not in charmap.
 func skipBytesAny(buf []byte, cm charmap) int {
-	for i, ch := range buf {
-		if !cm.contains(ch) {
+	for i := range buf {
+		if !cm.contains(buf[i]) {
 			return i
 		}
 	}
