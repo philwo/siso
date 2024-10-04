@@ -178,6 +178,11 @@ func (gcc depsGCC) depsInputs(ctx context.Context, b *Builder, step *Step) ([]st
 func (depsGCC) scandeps(ctx context.Context, b *Builder, step *Step) ([]string, error) {
 	var ins []string
 	err := b.scanDepsSema.Do(ctx, func(ctx context.Context) error {
+		// fastDeps + remote execution may have already run.
+		// In this case, do not change ActionStartTime set by the remote exec.
+		if step.metrics.ActionStartTime == 0 {
+			step.metrics.ActionStartTime = IntervalMetric(time.Since(b.start))
+		}
 		params := gccutil.ExtractScanDepsParams(ctx, step.cmd.Args, step.cmd.Env)
 		for i := range params.Sources {
 			params.Sources[i] = b.path.MaybeFromWD(ctx, params.Sources[i])

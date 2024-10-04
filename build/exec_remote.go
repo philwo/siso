@@ -45,7 +45,11 @@ func (b *Builder) execRemote(ctx context.Context, step *Step) error {
 				step.metrics.RemoteRetry++
 			}
 			reExecStarted := time.Now()
-			step.metrics.ActionStartTime = IntervalMetric(reExecStarted.Sub(b.start))
+			// Record ActionStartTime only when it's not set, yet.
+			// This avoids overriding ActionStartTime for retries.
+			if step.metrics.ActionStartTime == 0 {
+				step.metrics.ActionStartTime = IntervalMetric(reExecStarted.Sub(b.start))
+			}
 			ctx = reapi.NewContext(ctx, &rpb.RequestMetadata{
 				ActionId:                step.cmd.ID,
 				ToolInvocationId:        b.id,

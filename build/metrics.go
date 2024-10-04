@@ -102,7 +102,9 @@ type StepMetric struct {
 	// strategies in execution metadata of result.
 
 	// ActionStartTime is the time it took since build start until
-	// the action starts execution.
+	// the action starts. After ActionStartTime, scandeps/retry/fallback
+	// may happen and there might be internal waiting time. e.g. remote
+	// exec semaphore.
 	ActionStartTime IntervalMetric `json:"action_start,omitempty"`
 	// RunTime is the total duration of the action execution, including
 	// overhead such as uploading / downloading files.
@@ -118,7 +120,7 @@ type StepMetric struct {
 	// the process until the process exited.
 	ExecTime IntervalMetric `json:"exec,omitempty"`
 	// ActionEndTime is the time it took since build start until
-	// the action completes the execution.
+	// the action completes.
 	ActionEndTime IntervalMetric `json:"action_end,omitempty"`
 
 	Inputs  int `json:"inputs,omitempty"`  // how many input files.

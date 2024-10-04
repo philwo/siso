@@ -128,8 +128,13 @@ type Step struct {
 	queueTime     time.Time
 	queueSize     int
 	queueDuration time.Duration
-	startTime     time.Time
-	endTime       time.Time
+
+	// startTime is the time that the step starts running in a dedicated goroutine.
+	// There might be other semaphore throttling for local exec, scandeps, remote exec.
+	startTime time.Time
+
+	// endTime is the time that the step ends.
+	endTime time.Time
 
 	metrics StepMetric
 

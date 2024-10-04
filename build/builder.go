@@ -816,7 +816,7 @@ func (b *Builder) recordCloudMonitoringActionMetrics(ctx context.Context, step *
 
 func (b *Builder) recordNinjaLogs(ctx context.Context, s *Step) {
 	// TODO: b/298594790 - Use the same mtime with hashFS.
-	start := time.Duration(s.startTime.Sub(b.start)).Milliseconds()
+	start := time.Duration(s.metrics.ActionStartTime).Milliseconds()
 	end := time.Duration(s.metrics.ActionEndTime).Milliseconds()
 
 	// Remove prefixed working directory path from Outputs.
