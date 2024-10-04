@@ -227,6 +227,32 @@ func TestScanDepsParams(t *testing.T) {
 				Defines: map[string]string{},
 			},
 		},
+		{
+			name: "clang-proflie-sample-use",
+			args: []string{
+				"../../third_party/llvm-build/Release+Asserts/bin/clang++",
+				"-MMD",
+				"-MF",
+				"android_clang_arm/obj/skia/skia_core_and_effects/SkRecords.o.d",
+				"-fprofile-sample-use=../../chrome/android/profiles/afdo.prof",
+				"-c",
+				"../../third_party/skia/src/core/SkRecords.cpp",
+				"-o",
+				"android_clang_arm/obj/skia/skia_core_and_effects/SkRecords.o",
+			},
+			want: ScanDepsParams{
+				Sources: []string{
+					"../../third_party/skia/src/core/SkRecords.cpp",
+				},
+				Files: []string{
+					"../../chrome/android/profiles/afdo.prof",
+				},
+				Sysroots: []string{
+					"../../third_party/llvm-build/Release+Asserts",
+				},
+				Defines: map[string]string{},
+			},
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got := ExtractScanDepsParams(ctx, tc.args, tc.env)

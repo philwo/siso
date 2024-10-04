@@ -92,6 +92,8 @@ func ExtractScanDepsParams(ctx context.Context, args, env []string) ScanDepsPara
 			res.Frameworks = append(res.Frameworks, strings.TrimPrefix(arg, "-F"))
 		case strings.HasPrefix(arg, "-fprofile-use="):
 			res.Files = append(res.Files, strings.TrimPrefix(arg, "-fprofile-use="))
+		case strings.HasPrefix(arg, "-fprofile-sample-use="):
+			res.Files = append(res.Files, strings.TrimPrefix(arg, "-fprofile-sample-use="))
 		case strings.HasPrefix(arg, "-fsanitize-ignorelist="):
 			res.Files = append(res.Files, strings.TrimPrefix(arg, "-fsanitize-ignorelist="))
 		case strings.HasPrefix(arg, "-iframework"):
