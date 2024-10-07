@@ -154,7 +154,7 @@ func (c *depsRun) run(ctx context.Context, args []string) error {
 		}
 		fmt.Fprintf(w, "\n")
 	}
-	return nil
+	return w.Flush()
 }
 
 func depsTargets(ctx context.Context, state *ninjautil.State, depsLog *ninjautil.DepsLog, args []string) ([]string, error) {
