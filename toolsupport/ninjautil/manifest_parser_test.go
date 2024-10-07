@@ -293,8 +293,8 @@ build b: cat c
 	p := NewManifestParser(state)
 	p.SetWd(dir)
 	err = p.Load(ctx, "build.ninja")
-	var wantErr = p.lexer.errorf("multiple rules generate b")
-	if !errors.Is(err, wantErr) {
+	var wantErr multipleRulesError
+	if !errors.As(err, &wantErr) {
 		t.Errorf("p.Load() got: %v; want: %v", err, wantErr)
 	}
 }

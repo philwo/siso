@@ -27,22 +27,6 @@ type fileState struct {
 	subninjas []string
 }
 
-// TODO(b/365906703): remove this
-func (s *fileState) addEdge(rule *rule, env *BindingEnv) *Edge {
-	edge := &Edge{
-		rule: rule,
-		pool: defaultPool,
-		env:  env,
-	}
-	s.edges = append(s.edges, edge)
-	return edge
-}
-
-// TODO(b/365906703): remove this
-func (fs *fileState) addDefault(node *Node) {
-	fs.defaults = append(fs.defaults, node)
-}
-
 // addDefaults adds nodes for default target.
 func (fs *fileState) addDefaults(nodes []*Node) {
 	fs.mu.Lock()
@@ -261,7 +245,7 @@ func (p *fileParser) alloc(ctx context.Context) {
 
 	for i := range p.chunks {
 		ch := &p.chunks[i]
-		// TODO(b/365906703): ch.nodemap = p.state.nodeMap.localNodeMap(ch.nbuild) // estimates # of nodes
+		ch.nodemap = p.state.nodeMap.localNodeMap(ch.nbuild) // estimates # of nodes
 
 		ch.ruleArena = p.ruleArena.chunk(ch.nrule)
 		ch.edgeArena = p.edgeArena.chunk(ch.nbuild)

@@ -7,7 +7,6 @@ package ninjautil
 import (
 	"context"
 	"fmt"
-	"hash/maphash"
 	"os"
 	"path/filepath"
 	"sort"
@@ -24,7 +23,7 @@ var (
 	consolePool = newPool("console", 1)
 	// The phony rule is used to "alias" targets to another name. We implement this as a "rule" that just takes
 	// the specified targets as inputs, produces no outputs, runs no command.
-	phonyRule = newRule("phony")
+	phonyRule = &rule{name: "phony"}
 )
 
 // A Pool limits the number of concurrently running actions.
@@ -56,13 +55,11 @@ type State struct {
 	pools sync.Map // string:poolName -> *Pool
 
 	// Paths map from target name (or pathname used in build's inputs/outputs) to *Node.
-	// bigMap is used during parse, and freeze it in nodes, paths.
-	nodeMap bigMap
+	// nodeMap is used during parse and lookup by path, and freeze it in nodes.
+	nodeMap *nodeMap
 	nodes   []*Node
-	paths   map[string]*Node
 
-	// Bindings contains all rules and variables defined in this scope.
-	bindings *BindingEnv
+	scope *fileScope
 
 	mu sync.Mutex // protects edges, defaults, filenames
 
@@ -76,12 +73,9 @@ type State struct {
 
 // NewState creates new state.
 func NewState() *State {
-	bindings := newBindingEnv(nil)
 	s := &State{
-		nodeMap: bigMap{
-			seed: maphash.MakeSeed(),
-		},
-		bindings: bindings,
+		nodeMap: newNodeMap(),
+		scope:   newFileScope(nil),
 	}
 	s.pools.Store("", defaultPool)
 	s.pools.Store("console", consolePool)
@@ -94,7 +88,11 @@ func (s *State) addPool(pool *Pool) {
 
 // LookupPool looks up pool.
 func (s *State) LookupPool(poolName string) (*Pool, bool) {
-	p, ok := s.pools.Load(poolName)
+	return s.lookupPool([]byte(poolName))
+}
+
+func (s *State) lookupPool(poolName []byte) (*Pool, bool) {
+	p, ok := s.pools.Load(string(poolName))
 	if !ok {
 		return nil, false
 	}
@@ -113,15 +111,6 @@ func (s *State) Pools() map[string]*Pool {
 	return m
 }
 
-// node returns a node.
-func (s *State) node(path []byte) *Node {
-	return s.nodeMap.node(path)
-}
-
-func (s *State) nodeByPath(path string) (*Node, bool) {
-	return s.nodeMap.lookup(path)
-}
-
 // NumNodes returns a number of nodes.
 func (s *State) NumNodes() int {
 	return len(s.nodes)
@@ -137,30 +126,8 @@ func (s *State) LookupNode(id int) (*Node, bool) {
 
 // LookupNodeByPath returns a node.
 func (s *State) LookupNodeByPath(path string) (*Node, bool) {
-	n, ok := s.paths[path]
+	n, ok := s.nodeMap.lookup(path)
 	return n, ok
-}
-
-func (s *State) addIn(edge *Edge, path []byte) {
-	n := s.node(path)
-	edge.inputs = append(edge.inputs, n)
-	n.addOutEdge(edge)
-}
-
-func (s *State) addOut(edge *Edge, path []byte) bool {
-	// Nodes can only have one incoming edge
-	n := s.node(path)
-	if !n.setInEdge(edge) {
-		return false
-	}
-	edge.outputs = append(edge.outputs, n)
-	return true
-}
-
-func (s *State) addValidation(edge *Edge, path []byte) {
-	n := s.node(path)
-	edge.validations = append(edge.validations, n)
-	n.addValidationOutEdge(edge)
 }
 
 // AllNodes returns all nodes.
@@ -349,12 +316,7 @@ func (s *State) PhonyNodes() []*Node {
 
 // AddBinding adds bindings.
 func (s *State) AddBinding(name, value string) {
-	s.bindings.addBinding(name, value)
-}
-
-// LookupBinding looks up binding.
-func (s *State) LookupBinding(name string) string {
-	return s.bindings.Lookup(name)
+	s.scope.setVar([]byte(name), evalString{v: []byte(value)})
 }
 
 // Filenames returns files parsed by the parser (e.g. build.ninja and its subninja etc.)

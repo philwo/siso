@@ -5,23 +5,26 @@
 package ninjautil
 
 import (
+	"bytes"
 	"fmt"
 	"io"
-	"sort"
 	"strings"
-	"sync"
+	"sync/atomic"
 )
 
 // Node represents a node (target file) in build graph.
 type Node struct {
-	next *Node // used for bigMap
+	next *Node // for bigMap
 
-	id          int
-	path        string
-	mu          sync.Mutex
-	inEdge      *Edge // the edge that generates the file for this node.
-	outs        []*Edge
-	validations []*Edge
+	id   int
+	path string
+
+	inEdge atomic.Pointer[Edge] // the edge that generates the file for this node.
+
+	nouts        atomic.Int64
+	nvalidations atomic.Int64
+
+	outs []*Edge
 }
 
 func (n *Node) ID() int { return n.id }
@@ -31,45 +34,19 @@ func (n *Node) String() string { return n.path }
 // Path is the path of the node.
 func (n *Node) Path() string { return n.path }
 
-func (n *Node) addOutEdge(e *Edge) {
-	n.mu.Lock()
-	defer n.mu.Unlock()
-	n.outs = append(n.outs, e)
-}
-
-func (n *Node) addValidationOutEdge(e *Edge) {
-	n.mu.Lock()
-	defer n.mu.Unlock()
-	n.validations = append(n.validations, e)
-}
-
 // OutEdges returns out-edges of the node.
 func (n *Node) OutEdges() []*Edge {
 	return n.outs
 }
 
-// ValidationEdges returns validation-edges of the node.
-func (n *Node) ValidationEdges() []*Edge {
-	return n.validations
-}
-
-func (n *Node) hasInEdge() bool {
-	return n.inEdge != nil
-}
-
 func (n *Node) setInEdge(edge *Edge) bool {
-	n.mu.Lock()
-	defer n.mu.Unlock()
-	if n.hasInEdge() {
-		return false
-	}
-	n.inEdge = edge
-	return true
+	swapped := n.inEdge.CompareAndSwap(nil, edge)
+	return swapped
 }
 
 // InEdge returns in-edge of the node.
 func (n *Node) InEdge() (*Edge, bool) {
-	e := n.inEdge
+	e := n.inEdge.Load()
 	return e, e != nil
 }
 
@@ -78,8 +55,10 @@ func (n *Node) InEdge() (*Edge, bool) {
 type Edge struct {
 	rule *rule
 
-	pool *Pool
-	env  *BindingEnv
+	pool  *Pool
+	pos   int
+	env   buildScope
+	scope *fileScope
 
 	inputs      []*Node
 	outputs     []*Node
@@ -95,41 +74,75 @@ type Edge struct {
 type edgeEnv struct {
 	edge        *Edge
 	shellEscape bool
-	lookups     []string
-	recursive   bool
 }
 
+// Lookup looks up a variable by key, and returns evaludated value.
 func (e *edgeEnv) Lookup(key string) string {
+	var buf bytes.Buffer
+	val, ok := e.edge.env.lookupVar(e.edge.pos, []byte(key))
+	if ok {
+		s, err := evaluate(e, &buf, val)
+		if err != nil {
+			return ""
+		}
+		return string(s)
+	}
+	// rule may be in parent scope
+	val, ok = e.edge.rule.lookupVar(-1, []byte(key))
+	if ok {
+		val.pos = e.edge.pos
+		s, err := evaluate(e, &buf, val)
+		if err != nil {
+			return ""
+		}
+		return string(s)
+	}
+	if e.edge.scope == nil {
+		return ""
+	}
+	val, ok = e.edge.scope.lookupVar(e.edge.pos, []byte(key))
+	if ok {
+		s, err := evaluate(e, &buf, val)
+		if err != nil {
+			return ""
+		}
+		return string(s)
+	}
+	return ""
+}
+
+func (e *edgeEnv) lookupVar(pos int, key []byte) (evalString, bool) {
 	sep := " "
 	// Handle special in/out keys.
 	// https://ninja-build.org/manual.html#ref_rule
-	switch key {
+	switch string(key) {
 	case "in_newline":
 		sep = "\n"
 		fallthrough
 	case "in":
 		n := len(e.edge.inputs) - e.edge.implicitDeps - e.edge.orderOnlyDeps
-		return e.pathList(e.edge.inputs[:n], sep)
+		return evalString{
+			v: []byte(e.pathList(e.edge.inputs[:n], sep)),
+		}, true
 	case "out":
 		n := len(e.edge.outputs) - e.edge.implicitOuts
-		return e.pathList(e.edge.outputs[:n], sep)
+		return evalString{
+			v: []byte(e.pathList(e.edge.outputs[:n], sep)),
+		}, true
 	}
-	if e.recursive {
-		for _, s := range e.lookups {
-			if s == key {
-				// TODO(b/271218091): better to return error property rather than panic,
-				// as it doesn't recover on package boundary. It won't happen in chromium source,
-				// so no need to fix it now, but better to fix it sometime.
-				panic(fmt.Errorf("cycle in rule variables %q", e.lookups))
-			}
-		}
-	}
-	val, ok := e.edge.rule.Binding(key)
+	ev, ok := e.edge.env.lookupVar(pos, key)
 	if ok {
-		e.lookups = append(e.lookups, key)
+		return ev, true
 	}
-	e.recursive = true
-	return e.edge.env.lookupWithFallback(key, val, e)
+	ev, ok = e.edge.rule.lookupVar(-1, key)
+	if ok {
+		ev.pos = e.edge.pos
+		return ev, true
+	}
+	if e.edge.scope == nil {
+		return evalString{}, false
+	}
+	return e.edge.scope.lookupVar(pos, key)
 }
 
 func (e *edgeEnv) pathList(paths []*Node, sep string) string {
@@ -161,6 +174,25 @@ func (e *Edge) UnescapedBinding(name string) string {
 	return env.Lookup(name)
 }
 
+func (e *Edge) rawBinding(name []byte) ([]byte, bool) {
+	val, ok := e.env.lookupVar(e.pos, name)
+	if ok {
+		return val.v, true
+	}
+	val, ok = e.rule.lookupVar(-1, name)
+	if ok {
+		return val.v, true
+	}
+	if e.scope == nil {
+		return nil, false
+	}
+	val, ok = e.scope.lookupVar(e.pos, name)
+	if ok {
+		return val.v, true
+	}
+	return nil, false
+}
+
 // RawBinding returns raw eval string of binding value in the edge.
 func (e *Edge) RawBinding(name string) string {
 	env := edgeEnv{edge: e, shellEscape: true}
@@ -178,11 +210,11 @@ func (e *Edge) RawBinding(name string) string {
 		n := len(env.edge.outputs) - env.edge.implicitOuts
 		return env.pathList(env.edge.outputs[:n], sep)
 	}
-	val, ok := env.edge.rule.Binding(name)
-	if !ok {
-		return ""
+	val, ok := e.rawBinding([]byte(name))
+	if ok {
+		return string(val)
 	}
-	return val.RawString()
+	return ""
 }
 
 // RuleName returns a rule name used by the edge.
@@ -230,19 +262,14 @@ func (e *Edge) IsPhony() bool {
 // Print writes edge information in writer.
 // TODO: add test for print.
 func (e *Edge) Print(w io.Writer) {
-	e.env.parent.Print(w)
+	e.scope.Print(w)
 	if e.pool != nil && e.pool.Name() != "" {
-		fmt.Fprintf(w, "pool %s\n", escapeNinjaToken(e.pool.Name()))
+		fmt.Fprintf(w, "pool %s\n", e.pool.Name())
 		fmt.Fprintf(w, "  depth = %d\n\n", e.pool.Depth())
 	}
-	fmt.Fprintf(w, "rule %s\n", escapeNinjaToken(e.rule.name))
-	var bindings []string
-	for k := range e.rule.bindings {
-		bindings = append(bindings, k)
-	}
-	sort.Strings(bindings)
-	for _, k := range bindings {
-		fmt.Fprintf(w, "  %s = %s\n", escapeNinjaToken(k), e.rule.bindings[k].RawString())
+	fmt.Fprintf(w, "rule %s\n", e.rule.name)
+	for _, rb := range e.rule.bindings {
+		fmt.Fprintf(w, "  %s = %s\n", rb.name, rb.value.v)
 	}
 	fmt.Fprintf(w, "\n")
 	if len(e.outputs) == 1 {
@@ -294,14 +321,7 @@ func (e *Edge) Print(w io.Writer) {
 			}
 		}
 	}
-	bindings = nil
-	for k := range e.env.bindings {
-		bindings = append(bindings, k)
-	}
-	sort.Strings(bindings)
-	for _, k := range bindings {
-		fmt.Fprintf(w, "  %s = %s\n", escapeNinjaToken(k), escapeNinjaValue(e.env.bindings[k]))
-	}
+	e.env.Print(w)
 }
 
 func escapeNinjaValue(s string) string {

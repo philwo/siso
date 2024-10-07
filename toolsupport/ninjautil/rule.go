@@ -17,68 +17,38 @@ import (
 type rule struct {
 	next     *rule // for ruleMap
 	name     string
-	bindings map[string]EvalString
-}
-
-func newRule(name string) *rule {
-	return &rule{
-		name:     name,
-		bindings: make(map[string]EvalString),
-	}
+	bindings []binding
 }
 
 // Name returns rule's name.
 func (r *rule) Name() string { return r.name }
 
-// addBinding adds bindings to the rule.
-func (r *rule) addBinding(key string, val EvalString) {
-	r.bindings[key] = val
+// setVar adds bindings to the rule.
+func (r *rule) setVar(key []byte, val evalString) {
+	r.bindings = append(r.bindings, binding{
+		name:  key,
+		value: val,
+	})
 }
 
-// Binding returns binding in the rule.
-func (r *rule) Binding(key string) (EvalString, bool) {
-	v, ok := r.bindings[key]
-	return v, ok
-}
-
-func (r *rule) hasBinding(key string) bool {
-	_, ok := r.bindings[key]
-	return ok
-}
-
-// ruleBinding is a mappings of rule names to rules.
-type ruleBinding struct {
-	rules  map[string]*rule
-	parent *ruleBinding
-}
-
-func newRuleBinding(parent *ruleBinding) *ruleBinding {
-	return &ruleBinding{
-		rules:  make(map[string]*rule),
-		parent: parent,
+// lookupVar looks up a binding in the rule.
+func (r *rule) lookupVar(pos int, key []byte) (evalString, bool) {
+	var ret evalString
+	var found bool
+	for i := len(r.bindings) - 1; i >= 0; i-- {
+		b := r.bindings[i]
+		if pos >= 0 && b.value.pos >= pos {
+			continue
+		}
+		if found && b.value.pos < ret.pos {
+			continue
+		}
+		if bytes.Equal(b.name, key) {
+			ret = b.value
+			found = true
+		}
 	}
-}
-
-func (b *ruleBinding) addRule(rule *rule) {
-	b.rules[rule.Name()] = rule
-}
-
-// lookupRule looks up rules in the binding env.
-func (b *ruleBinding) lookupRule(ruleName string) (*rule, bool) {
-	r, ok := b.rules[ruleName]
-	if ok {
-		return r, true
-	}
-	if b.parent != nil {
-		return b.parent.lookupRule(ruleName)
-	}
-	return nil, false
-}
-
-// lookupRuleCurrentScope looks up rules in the current scope in the binding env.
-func (b *ruleBinding) lookupRuleCurrentScope(ruleName string) (*rule, bool) {
-	r, ok := b.rules[ruleName]
-	return r, ok
+	return ret, found
 }
 
 // ruleMap is a map rules by its name for fast concurrent updates.

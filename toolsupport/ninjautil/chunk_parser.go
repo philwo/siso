@@ -473,7 +473,7 @@ func (ch *chunk) parseName(s, e int) ([]byte, error) {
 func (ch *chunk) parseBuild(ctx context.Context, i int, buf *bytes.Buffer, state *State, scope *fileScope) (int, error) {
 	st := ch.statements[i]
 	edge := ch.edgeArena.new()
-	// TODO(b/365906703): edge.scope = scope
+	edge.scope = scope
 
 	outs := ch.outPaths[:0]
 	pp := newPathParser(ch.buf[st.v:st.e])
@@ -520,14 +520,22 @@ func (ch *chunk) parseBuild(ctx context.Context, i int, buf *bytes.Buffer, state
 
 	i++
 	n := ch.countStatement(i, statementBuildVar)
-	// TODO(b/365906703): edge.env.set(ch.buf, ch.statements[i:i+n])
+	edge.env.set(ch.buf, ch.statements[i:i+n])
 	i += n
-	// TODO(b/365906703): edge.pos = ch.statements[i-1].pos + 1
-	// TODO(b/365906703): pool handling
+	edge.pos = ch.statements[i-1].pos + 1
+	poolName, ok := edge.rawBinding([]byte("pool"))
+	if ok && len(poolName) > 0 {
+		pool, ok := state.lookupPool(poolName)
+		if !ok {
+			return 0, fmt.Errorf("unknown pool name %q", poolName)
+		}
+		edge.pool = pool
+	} else {
+		edge.pool = defaultPool
+	}
 	edge.outputs = ch.edgePathSlab.slice(len(outs))[:0]
-	var env evalEnv // TODO(b/365906703): &edge.env
 	for i := range outs {
-		n, err := ch.targetNode(env, buf, outs[i])
+		n, err := ch.targetNode(&edge.env, buf, outs[i])
 		if err != nil {
 			return 0, err
 		}
@@ -539,24 +547,24 @@ func (ch *chunk) parseBuild(ctx context.Context, i int, buf *bytes.Buffer, state
 	edge.implicitOuts = implicitOuts
 	edge.inputs = ch.edgePathSlab.slice(len(ins))[:0]
 	for i := range ins {
-		n, err := ch.targetNode(env, buf, ins[i])
+		n, err := ch.targetNode(&edge.env, buf, ins[i])
 		if err != nil {
 			return 0, err
 		}
 		edge.inputs = append(edge.inputs, n)
-		// TODO(b/365906703): n.nouts.Add(1)
+		n.nouts.Add(1)
 		// link out edge later
 	}
 	edge.implicitDeps = implicit
 	edge.orderOnlyDeps = orderOnly
 
 	for i := range validations {
-		n, err := ch.targetNode(env, buf, validations[i])
+		n, err := ch.targetNode(&edge.env, buf, validations[i])
 		if err != nil {
 			return 0, err
 		}
 		edge.validations = append(edge.validations, n)
-		// TODO(b/365906703): n.nvalidations.Add(1)
+		n.nvalidations.Add(1)
 	}
 	return i, nil
 }
@@ -642,9 +650,8 @@ func (ch *chunk) parseRule(ctx context.Context, i int, scope *fileScope, rule *r
 	if err != nil {
 		return 0, fmt.Errorf("line:%d failed to set rule %q: %w", lineno(ch.buf, st.s), name, err)
 	}
-	// TODO(b/365906703): rule.bindings = ch.bindingArena.slice(ch.countStatement(i+1, statementRuleVar))[:0]
-	var env evalSetEnv // TODO(b/365906703): rule
-	i, err = ch.parseRuleBindings(ctx, i+1, env)
+	rule.bindings = ch.bindingArena.slice(ch.countStatement(i+1, statementRuleVar))[:0]
+	i, err = ch.parseRuleBindings(ctx, i+1, rule)
 	if err != nil {
 		return 0, err
 	}
@@ -652,7 +659,7 @@ func (ch *chunk) parseRule(ctx context.Context, i int, scope *fileScope, rule *r
 }
 
 // parseRuleBindings parses binding vars from statements[i:] and sets them in env.
-func (ch *chunk) parseRuleBindings(ctx context.Context, i int, rule evalSetEnv) (int, error) {
+func (ch *chunk) parseRuleBindings(ctx context.Context, i int, rule *rule) (int, error) {
 	for ; i < len(ch.statements); i++ {
 		st := ch.statements[i]
 		if st.t != statementRuleVar {
