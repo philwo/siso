@@ -5,6 +5,7 @@
 package query
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"flag"
@@ -125,13 +126,14 @@ func (c *depsRun) run(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
+	w := bufio.NewWriter(os.Stdout)
 	for _, target := range targets {
 		deps, depsTime, err := depsLog.Get(ctx, target)
 		if err != nil {
 			if errors.Is(err, ninjautil.ErrNoDepsLog) {
 				continue
 			}
-			fmt.Printf("%s: deps log error: %v\n", target, err)
+			fmt.Fprintf(w, "%s: deps log error: %v\n", target, err)
 			continue
 		}
 		state := "STALE"
@@ -148,9 +150,9 @@ func (c *depsRun) run(ctx context.Context, args []string) error {
 		fmt.Printf("%s: #deps %d, deps mtime %d (%s)\n",
 			target, len(deps), depsTime.Nanosecond(), state)
 		for _, d := range deps {
-			fmt.Printf("    %s\n", d)
+			fmt.Fprintf(w, "    %s\n", d)
 		}
-		fmt.Printf("\n")
+		fmt.Fprintf(w, "\n")
 	}
 	return nil
 }
