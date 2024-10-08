@@ -199,6 +199,7 @@ func (hfs *HashFS) Close(ctx context.Context) error {
 		hfs.journal = nil
 	}
 	hfs.journalMu.Unlock()
+	clog.Infof(ctx, "close journal")
 	if hfs.clean.Load() || !hfs.loaded.Load() {
 		clog.Warningf(ctx, "not save state clean=%t loaded=%t", hfs.clean.Load(), hfs.loaded.Load())
 		return nil

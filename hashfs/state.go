@@ -597,6 +597,7 @@ func Save(ctx context.Context, state *pb.State, opts Option) error {
 
 // State returns a State of the HashFS.
 func (hfs *HashFS) State(ctx context.Context) *pb.State {
+	started := time.Now()
 	state := &pb.State{}
 	type d struct {
 		name string
@@ -699,6 +700,7 @@ func (hfs *HashFS) State(ctx context.Context) *pb.State {
 			}
 		}
 	}
+	clog.Infof(ctx, "state %d entries: %s", len(state.Entries), time.Since(started))
 	return state
 }
 
