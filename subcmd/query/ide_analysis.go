@@ -415,10 +415,15 @@ func (a *ideAnalyzer) analyzeCPP(ctx context.Context, edge *ninjautil.Edge, resu
 			})
 		}
 		// add buildable unit for the inEdge
-		bu := a.buildableUnit(ctx, inEdge, pb.Language_LANGUAGE_UNSPECIFIED, generatedFiles, nil)
+		bu := a.buildableUnit(ctx, inEdge, pb.Language_LANGUAGE_UNSPECIFIED, edgeCmdArgs(inEdge), generatedFiles, nil)
 		deps[bu.Id] = bu
 	}
-	buildableUnit := a.buildableUnit(ctx, edge, pb.Language_LANGUAGE_CPP, nil, deps)
+	depIDs := make([]string, 0, len(deps))
+	for k := range deps {
+		depIDs = append(depIDs, k)
+	}
+	sort.Strings(depIDs)
+	buildableUnit := a.buildableUnit(ctx, edge, pb.Language_LANGUAGE_CPP, cmdArgs, nil, depIDs)
 	result.UnitId = buildableUnit.Id
 	result.Invalidation = a.invalidation(ctx)
 
@@ -430,21 +435,18 @@ func (a *ideAnalyzer) analyzeCPP(ctx context.Context, edge *ninjautil.Edge, resu
 	return result, deps
 }
 
-func (a *ideAnalyzer) analyzeJava(ctx context.Context, edge *ninjautil.Edge, result *pb.AnalysisResult) (*pb.AnalysisResult, map[string]*pb.BuildableUnit) {
-	// TODO: implement this
-	clog.Infof(ctx, "analyze java %s", result.SourceFilePath)
-	return result, nil
+func edgeCmdArgs(edge *ninjautil.Edge) []string {
+	command := edge.Binding("command")
+	cmdArgs, err := shutil.Split(command)
+	if err != nil {
+		cmdArgs = []string{"/bin/sh", "-c", command}
+	}
+	return cmdArgs
 }
 
-func (a *ideAnalyzer) buildableUnit(ctx context.Context, edge *ninjautil.Edge, language pb.Language, outputs []*pb.GeneratedFile, deps map[string]*pb.BuildableUnit) *pb.BuildableUnit {
+func (a *ideAnalyzer) buildableUnit(ctx context.Context, edge *ninjautil.Edge, language pb.Language, cmdArgs []string, outputs []*pb.GeneratedFile, depIDs []string) *pb.BuildableUnit {
 	outPath := edge.Outputs()[0].Path()
 	clog.Infof(ctx, "buildableUnit for %s: lang=%s", outPath, language)
-
-	var depIDs []string
-	for k := range deps {
-		depIDs = append(depIDs, k)
-	}
-	sort.Strings(depIDs)
 
 	seen := make(map[string]bool)
 	var sourceFiles []string
@@ -458,13 +460,16 @@ func (a *ideAnalyzer) buildableUnit(ctx context.Context, edge *ninjautil.Edge, l
 			clog.Infof(ctx, "generated source file: %s", in.Path())
 			continue
 		}
+		switch language {
+		case pb.Language_LANGUAGE_JAVA:
+			switch filepath.Ext(in.Path()) {
+			case ".java", ".jar", ".class":
+			default:
+				clog.Infof(ctx, "ignore non java source: %s", in.Path())
+				continue
+			}
+		}
 		sourceFiles = append(sourceFiles, in.Path())
-	}
-
-	command := edge.Binding("command")
-	cmdArgs, err := shutil.Split(command)
-	if err != nil {
-		cmdArgs = []string{"/bin/sh", "-c", command}
 	}
 
 	return &pb.BuildableUnit{
