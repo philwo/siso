@@ -879,7 +879,7 @@ func (s *StepDef) CheckInputDeps(ctx context.Context, depInputs []string) (bool,
 		deps[dep] = true
 	}
 	seen := make(map[string]bool)
-	checkInputDep(ctx, s.globals, s.edge, deps, seen)
+	checkInputDep(ctx, s.globals, s.edge, false, deps, seen)
 	if len(deps) == 0 {
 		return false, nil
 	}
@@ -901,7 +901,7 @@ func (s *StepDef) CheckInputDeps(ctx context.Context, depInputs []string) (bool,
 	return true, fmt.Errorf("deps inputs have no dependencies from %q to %q - unknown", outputPath, depInputs)
 }
 
-func checkInputDep(ctx context.Context, globals *globals, edge *ninjautil.Edge, deps, seen map[string]bool) {
+func checkInputDep(ctx context.Context, globals *globals, edge *ninjautil.Edge, checkOutputs bool, deps, seen map[string]bool) {
 	if len(deps) == 0 {
 		return
 	}
@@ -914,7 +914,6 @@ func checkInputDep(ctx context.Context, globals *globals, edge *ninjautil.Edge, 
 			if len(deps) == 0 {
 				return
 			}
-			continue
 		}
 		if seen[p] {
 			continue
@@ -926,8 +925,24 @@ func checkInputDep(ctx context.Context, globals *globals, edge *ninjautil.Edge, 
 		}
 		edges = append(edges, inEdge)
 	}
+	if checkOutputs {
+		for _, out := range edge.Outputs() {
+			p := globals.targetPath(ctx, out)
+			if deps[p] {
+				delete(deps, p)
+				if len(deps) == 0 {
+					return
+				}
+				continue
+			}
+			if seen[p] {
+				continue
+			}
+			seen[p] = true
+		}
+	}
 	for _, inEdge := range edges {
-		checkInputDep(ctx, globals, inEdge, deps, seen)
+		checkInputDep(ctx, globals, inEdge, true, deps, seen)
 	}
 }
 
