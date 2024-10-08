@@ -97,6 +97,15 @@ func TestUpload(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Create .pyc file manually.
+	err = os.MkdirAll(filepath.Join(dir, "testing", "data", "__pycache__"), 0755)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = os.WriteFile(filepath.Join(dir, "testing", "data", "__pycache__", "foo.pyc"), nil, 0755)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	fakere := &reapitest.Fake{}
 	cl := reapitest.New(ctx, t, fakere)
