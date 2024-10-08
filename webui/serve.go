@@ -144,8 +144,8 @@ type WebuiServer struct {
 	outsubs           []string
 	runbuildState
 
-	mu      sync.Mutex
-	outdirs map[string]*outdirInfo
+	outdirsMu sync.Mutex
+	outdirs   map[string]*outdirInfo
 }
 
 type runningStepInfo struct {
@@ -200,24 +200,12 @@ func outdirBaseURL(r *http.Request) string {
 
 // renderBuildView renders a build-related view.
 // TODO(b/361703735): return data instead of write to response writer? https://chromium-review.googlesource.com/c/infra/infra/+/5803123/comment/4ce69ada_31730349/
-func (s *WebuiServer) renderBuildView(wr http.ResponseWriter, r *http.Request, tmpl *template.Template, outdirInfo *outdirInfo, data map[string]any) error {
-	// TODO: change this hardcoded assumption
-	data["currentBaseURL"] = outdirBaseURL(r)
-	// TODO(b/361461051): refactor rev so that it's not required as part of rendering pages in general.
+func (s *WebuiServer) renderBuildView(wr http.ResponseWriter, r *http.Request, tmpl *template.Template, data map[string]any) error {
 	rev := r.PathValue("rev")
-	if rev == "" {
-		rev = outdirInfo.latestRevID
-	}
-	data["outsubs"] = s.outsubs
-	data["versionID"] = s.sisoVersion
-	data["currentURL"] = r.URL
-	data["currentRev"] = rev
-	// TODO(b/361461051): refactor so outdirInfo is not required as part of rendering pages in general.
-	// the current outroot and outsub should be available from the context.
-	if outdirInfo != nil {
-		outdirBaseURL := fmt.Sprintf("/%s/%s", url.PathEscape(outdirInfo.outroot), url.PathEscape(outdirInfo.outsub))
-		data["outdirBaseURL"] = outdirBaseURL
-		data["outdirRevBaseURL"] = fmt.Sprintf("%s/builds/%s", outdirBaseURL, rev)
+	if outdirInfo, err := s.getOutdirForRequest(r); err == nil {
+		if rev == "" {
+			rev = outdirInfo.latestRevID
+		}
 		data["outroot"] = outdirInfo.outroot
 		data["outsub"] = outdirInfo.outsub
 		outdirAbbrev := outdirInfo.path
@@ -229,6 +217,14 @@ func (s *WebuiServer) renderBuildView(wr http.ResponseWriter, r *http.Request, t
 		data["outdirAbbrev"] = outdirAbbrev
 		data["outdirRel"] = outdirInfo.pathRel
 		data["revs"] = outdirInfo.metrics
+	}
+	data["outsubs"] = s.outsubs
+	data["versionID"] = s.sisoVersion
+	data["currentURL"] = r.URL
+	data["currentRev"] = rev
+	data["outdirBaseURL"] = outdirBaseURL(r)
+	if rev != "" {
+		data["outdirRevBaseURL"] = fmt.Sprintf("%s/builds/%s", data["outdirBaseURL"], rev)
 	}
 	err := tmpl.ExecuteTemplate(wr, "base", data)
 	if err != nil {
@@ -245,7 +241,7 @@ func (s *WebuiServer) renderBuildViewError(status int, message string, w http.Re
 		fmt.Fprintf(w, "failed to load error view: %s\n", err)
 		return
 	}
-	err = s.renderBuildView(w, r, tmpl, outdirInfo, map[string]any{
+	err = s.renderBuildView(w, r, tmpl, map[string]any{
 		"errorTitle":   http.StatusText(status),
 		"errorMessage": message,
 	})

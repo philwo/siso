@@ -33,7 +33,7 @@ type runbuildState struct {
 }
 
 func (s *WebuiServer) handleRunbuildGet(w http.ResponseWriter, r *http.Request) {
-	outdirInfo, err := s.ensureOutdirForRequest(r)
+	outdirInfo, err := s.getOutdirForRequest(r)
 	if err != nil {
 		s.renderBuildViewError(http.StatusNotFound, fmt.Sprintf("outdir failed to load for request %s: %v", r.URL, err), w, r, outdirInfo)
 		return
@@ -47,7 +47,7 @@ func (s *WebuiServer) handleRunbuildGet(w http.ResponseWriter, r *http.Request) 
 
 	s.activeBuildMu.Lock()
 	defer s.activeBuildMu.Unlock()
-	err = s.renderBuildView(w, r, tmpl, outdirInfo, map[string]any{
+	err = s.renderBuildView(w, r, tmpl, map[string]any{
 		"activeBuildLog":     s.activeBuildLog.String(),
 		"activeBuildRunning": s.activeBuildRunning,
 		"activeBuildOutdir":  s.activeBuildOutdir,
@@ -59,7 +59,7 @@ func (s *WebuiServer) handleRunbuildGet(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *WebuiServer) handleRunbuildPost(w http.ResponseWriter, r *http.Request) {
-	outdirInfo, err := s.ensureOutdirForRequest(r)
+	outdirInfo, err := s.getOutdirForRequest(r)
 	if err != nil {
 		s.renderBuildViewError(http.StatusNotFound, fmt.Sprintf("outdir failed to load for request %s: %v", r.URL, err), w, r, outdirInfo)
 		return
@@ -184,7 +184,7 @@ func (s *WebuiServer) handleRunbuildPost(w http.ResponseWriter, r *http.Request)
 		}
 	}()
 
-	err = s.renderBuildView(w, r, tmpl, outdirInfo, map[string]any{
+	err = s.renderBuildView(w, r, tmpl, map[string]any{
 		"activeBuildRunning": s.activeBuildRunning,
 		"activeBuildOutdir":  s.activeBuildOutdir,
 		"activeBuildTarget":  s.activeBuildTarget,
