@@ -200,6 +200,11 @@ type Cmd struct {
 	// running.  localexec only.
 	Console bool
 
+	// outfiles is outputs of the step in build graph.
+	// These outputs will be recorded with cmdhash.
+	// Other outputs in c.Outputs will be recorded without cmdhash.
+	outfiles map[string]bool
+
 	// preOutputEntries is update entries of outputs before execution.
 	preOutputEntries []hashfs.UpdateEntry
 
@@ -224,6 +229,16 @@ type Cmd struct {
 // String returns an ID of the cmd.
 func (c *Cmd) String() string {
 	return c.ID
+}
+
+// InitOutputs initializes outputs for the cmd.
+// c.Outputs will be recorded as outputs of the command in hashfs
+// in RecordOutputs or RecordOutputsFromLocal.
+func (c *Cmd) InitOutputs() {
+	c.outfiles = make(map[string]bool)
+	for _, out := range c.Outputs {
+		c.outfiles[out] = true
+	}
 }
 
 // AllInputs returns all inputs of the cmd.
@@ -655,26 +670,18 @@ func (c *Cmd) RemoteFallbackResult() (*rpb.ActionResult, error) {
 	return c.remoteFallbackResult, c.remoteFallbackError
 }
 
-// entriesFromResult returns output file entries and depfile entries for the cmd and result.
-// if depfile is in output, its entry is in entries, not depEntries to have
-// cmdhash in the entry.
-func (c *Cmd) entriesFromResult(ctx context.Context, ds hashfs.DataSource, result *rpb.ActionResult) (entries, depEntries []merkletree.Entry) {
-	depfile := c.Depfile
-	for _, out := range c.Outputs {
-		if out == depfile {
-			depfile = ""
-			break
-		}
-	}
-
+// entriesFromResult returns output file entries and additional entries for the cmd and result.
+// output file entries will be recorded with cmdhash.
+// additional output file entries will be recorded without cmdhash.
+func (c *Cmd) entriesFromResult(ctx context.Context, ds hashfs.DataSource, result *rpb.ActionResult) (entries, additionalEntries []merkletree.Entry) {
 	for _, f := range result.GetOutputFiles() {
 		if f.Digest == nil {
 			continue
 		}
 		fname := filepath.ToSlash(filepath.Join(c.Dir, f.Path))
 		d := digest.FromProto(f.Digest)
-		if fname == depfile {
-			depEntries = append(depEntries, merkletree.Entry{
+		if !c.outfiles[fname] {
+			additionalEntries = append(additionalEntries, merkletree.Entry{
 				Name:         fname,
 				Data:         digest.NewData(ds.Source(d, fname), d),
 				IsExecutable: f.IsExecutable,
@@ -704,7 +711,7 @@ func (c *Cmd) entriesFromResult(ctx context.Context, ds hashfs.DataSource, resul
 			Name: dname,
 		})
 	}
-	return entries, depEntries
+	return entries, additionalEntries
 }
 
 func hashfsUpdate(ctx context.Context, hfs *hashfs.HashFS, execRoot string, entries []merkletree.Entry, mtime time.Time, cmdhash []byte, action digest.Digest) error {
@@ -748,18 +755,18 @@ func (c *Cmd) RecordPreOutputs(ctx context.Context) {
 
 // RecordOutputs records cmd's outputs from action result in hashfs.
 func (c *Cmd) RecordOutputs(ctx context.Context, ds hashfs.DataSource, now time.Time) error {
-	entries, depEntries := c.entriesFromResult(ctx, ds, c.actionResult)
-	clog.Infof(ctx, "output entries %d+%d", len(entries), len(depEntries))
+	entries, additionalEntries := c.entriesFromResult(ctx, ds, c.actionResult)
+	clog.Infof(ctx, "output entries %d+%d", len(entries), len(additionalEntries))
 	err := hashfsUpdate(ctx, c.HashFS, c.ExecRoot, entries, now, c.CmdHash, c.actionDigest)
 	if err != nil {
 		return fmt.Errorf("failed to update hashfs from remote: %w", err)
 	}
-	if len(depEntries) == 0 {
+	if len(additionalEntries) == 0 {
 		return nil
 	}
-	err = hashfsUpdate(ctx, c.HashFS, c.ExecRoot, depEntries, now, nil, c.actionDigest)
+	err = hashfsUpdate(ctx, c.HashFS, c.ExecRoot, additionalEntries, now, nil, c.actionDigest)
 	if err != nil {
-		return fmt.Errorf("failed to update hashfs from remote[depfile]: %w", err)
+		return fmt.Errorf("failed to update hashfs from remote[additional]: %w", err)
 	}
 	return nil
 }
@@ -853,15 +860,30 @@ func (c *Cmd) computeOutputEntries(ctx context.Context, entries []hashfs.UpdateE
 
 // RecordOutputsFromLocal records cmd's outputs from local disk in hashfs.
 func (c *Cmd) RecordOutputsFromLocal(ctx context.Context, now time.Time) error {
-	if c.Depfile != "" {
-		entries := retrieveLocalOutputEntries(ctx, c.HashFS, c.ExecRoot, []string{c.Depfile})
+	var additionalFiles []string
+	if c.Depfile != "" && !c.outfiles[c.Depfile] {
+		additionalFiles = append(additionalFiles, c.Depfile)
+	}
+	for _, out := range c.Outputs {
+		if !c.outfiles[out] {
+			additionalFiles = append(additionalFiles, out)
+		}
+	}
+	if len(additionalFiles) > 0 {
+		sort.Strings(additionalFiles)
+		entries := retrieveLocalOutputEntries(ctx, c.HashFS, c.ExecRoot, additionalFiles)
 		entries = c.computeOutputEntries(ctx, entries, c.Restat, now, nil)
 		err := c.HashFS.Update(ctx, c.ExecRoot, entries)
 		if err != nil {
-			return fmt.Errorf("failed to update hashfs from local[depfile]: %w", err)
+			return fmt.Errorf("failed to update hashfs from local[additional]: %w", err)
 		}
 	}
-	entries := retrieveLocalOutputEntries(ctx, c.HashFS, c.ExecRoot, c.Outputs)
+	var outs []string
+	for out := range c.outfiles {
+		outs = append(outs, out)
+	}
+	sort.Strings(outs)
+	entries := retrieveLocalOutputEntries(ctx, c.HashFS, c.ExecRoot, outs)
 	entries = c.computeOutputEntries(ctx, entries, c.Restat, now, c.CmdHash)
 	err := c.HashFS.Update(ctx, c.ExecRoot, entries)
 	if err != nil {

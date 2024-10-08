@@ -165,12 +165,12 @@ to register handlers and step configs.
             * `includes`: glob patterns to match to indirect inputs.
               * if it contains '/', full match to input path with [path.Match](https://pkg.go.dev/path#Match).
               * otherwise, match basename of input path with [path.Match](https://pkg.go.dev/path#Match).
-          * `outputs`: additional outputs
+          * `outputs`: additional outputs. note: ignored in `cleandead`.
           * `outputs_map`: different deps based on outputs[0]
              * key: outputs[0]
              * value
                * `inputs`: additional inputs
-               * `outputs`: additional outputs
+               * `outputs`: additional outputs. note: ignored in `cleandead`.
                * `platform`: additional platform properties
                * `platform_ref`: overrides reference to platform properties
           * `restat`: true if step cmd reads output file and not write it
@@ -229,7 +229,7 @@ All inputs should be ready to use (via `ctx.fs`).
     * `fix`: fix step
       * `inputs`: input pathnames
       * `tool_inputs`: input pathnames (not modified by deps)
-      * `outputs`: output pathnames
+      * `outputs`: output pathnames. note: ignored in `cleandead`.
       * `args`: args for the step
       * `reproxy_config`: [`REProxyConfig`](../execute/cmd.go) in json-encoded format.
     * `write`: write file

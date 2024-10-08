@@ -424,6 +424,7 @@ func newCmd(ctx context.Context, b *Builder, stepDef StepDef) *execute.Cmd {
 		}
 		cmd.Platform["dockerRuntime"] = "runsc"
 	}
+	cmd.InitOutputs()
 	return cmd
 }
 
