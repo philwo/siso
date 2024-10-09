@@ -749,6 +749,13 @@ loop:
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "failed to WriteTo: %v\n", err)
 			}
+			fmt.Fprintf(os.Stderr, "\nwait more 10 minutes.\n")
+			time.Sleep(10 * time.Minute)
+			fmt.Fprintf(os.Stderr, "siso still didn't finish in %s after build finished \ndump all goroutines:\n", time.Since(finished))
+			err = pprof.Lookup("goroutine").WriteTo(os.Stderr, 1)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "failed to WriteTo: %v\n", err)
+			}
 			os.Exit(1)
 		}()
 	}
