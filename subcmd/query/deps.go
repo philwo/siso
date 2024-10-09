@@ -6,6 +6,7 @@ package query
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"flag"
@@ -147,12 +148,13 @@ func (c *depsRun) run(ctx context.Context, args []string) error {
 				state = "VALID"
 			}
 		}
-		fmt.Printf("%s: #deps %d, deps mtime %d (%s)\n",
+		var buf bytes.Buffer
+		fmt.Fprintf(&buf, "%s: #deps %d, deps mtime %d (%s)\n",
 			target, len(deps), depsTime.Nanosecond(), state)
 		for _, d := range deps {
-			fmt.Fprintf(w, "    %s\n", d)
+			fmt.Fprintf(&buf, "    %s\n", d)
 		}
-		fmt.Fprintf(w, "\n")
+		fmt.Fprintln(w, buf.String())
 	}
 	return w.Flush()
 }
