@@ -465,9 +465,10 @@ func (d *DepsLog) Record(ctx context.Context, output string, mtime time.Time, de
 		}
 	}
 	var depIDs []int
-	for _, dep := range deps {
+	for i, dep := range deps {
 		dep = filepath.ToSlash(dep)
 		di, added := d.uniquePathIdx(dep)
+		deps[i] = d.paths[di]
 		if added {
 			willUpdateDeps = true
 			err := d.recordPath(ctx, di, dep)
