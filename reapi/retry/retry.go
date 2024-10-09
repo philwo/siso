@@ -19,7 +19,7 @@ import (
 	"infra/build/siso/o11y/clog"
 )
 
-func retriableError(err error, called int) bool {
+func retriableError(err error, authRetry *int) bool {
 	st, ok := status.FromError(err)
 	if !ok {
 		st = status.FromContextError(err)
@@ -41,21 +41,32 @@ func retriableError(err error, called int) bool {
 		// Expected OAuth 2 access token, login cookie or other valid authentication credential.
 		// See https://developers.google.com/identity/sign-in/web/devconsole-project.
 		// (access token expired, need to refresh).
-		// but should not retry if it gets in the first request (wrong auth?)
+		// or
+		// code = PermissionDenied desc = The caller does not have permission
+		//
+		// but should not retry (wrong auth, instance without permission)
+		// code = PermissionDenied desc = Permission "xx" denied on resource "yy" (or it may not exist)
+		// code = PermissionDenied desc = Permission denied on resource project xx
+		// code = PermissionDenied desc = Remote Build Execution API has not been used in project rbe-android before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/remotebuildexecution.googleapis.com/overview?project=rbe-android then retry. If you enabled this API recently, wait a few minutes for the action to propagate to our systems and retry.
 		codes.Unauthenticated,
 		codes.PermissionDenied:
-		return called != 1
+		// Allow authRetry at most once.
+		// Next call should not fail with auth error if it was
+		// token expired.
+		// It does not make sense to retry more if it is lack of
+		// permission or so.
+		*authRetry++
+		return *authRetry < 2
 	}
 	return false
 }
 
 // Do calls function `f` and retries with exponential backoff for errors that are known to be retriable.
 func Do(ctx context.Context, f func() error) error {
-	called := 0
+	authRetry := 0
 	return retry.Retry(ctx, transient.Only(retry.Default), func() error {
-		called++
 		err := f()
-		if retriableError(err, called) {
+		if retriableError(err, &authRetry) {
 			return errors.Annotate(err, "retriable error").Tag(transient.Tag).Err()
 		}
 		return err
