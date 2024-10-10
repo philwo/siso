@@ -73,7 +73,7 @@ func (s *fileScope) Print(w io.Writer) {
 	}
 	sort.Strings(keys)
 	for _, key := range keys {
-		ev, _ := s.bindings.get(0, []byte(key))
+		ev, _ := s.bindings.get(-1, []byte(key))
 		fmt.Fprintf(w, "%s = %s\n", key, ev.v)
 	}
 	fmt.Fprintln(w)

@@ -47,7 +47,8 @@ func (sb *shardBindings) init(seed maphash.Seed, n int) {
 	}
 }
 
-// get looks up evalString associated with key, if any.
+// get looks up evalString associated with key before pos, if any.
+// when pos < 0, no pos check.
 func (sb *shardBindings) get(pos int, key []byte) (evalString, bool) {
 	var zero evalString
 	if sb == nil {
