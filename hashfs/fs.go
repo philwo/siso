@@ -716,6 +716,57 @@ func (hfs *HashFS) Forget(ctx context.Context, root string, inputs []string) {
 	}
 }
 
+// ForgetMissingsInDir forgets cached entry under root/dir if it isn't
+// generated files/dirs by any steps and doesn't exist on local disk.
+// It is used for a step that removes files under a dir. b/350662100
+func (hfs *HashFS) ForgetMissingsInDir(ctx context.Context, root, dir string) {
+	inputs := []string{dir}
+	var needCheck []string
+	for len(inputs) > 0 {
+		fname := inputs[0]
+		copy(inputs, inputs[1:])
+		inputs = inputs[:len(inputs)-1]
+		fi, err := hfs.Stat(ctx, root, fname)
+		if errors.Is(err, fs.ErrNotExist) {
+			// If it doesn't exist in hashfs,
+			// no need to check more.
+			continue
+		}
+		if fi.IsDir() {
+			dents, err := hfs.ReadDir(ctx, root, fname)
+			if err != nil {
+				clog.Warningf(ctx, "readdir failed for %q: %v", fname, err)
+				continue
+			}
+			for _, dent := range dents {
+				inputs = append(inputs, filepath.ToSlash(filepath.Join(fname, dent.Name())))
+			}
+		}
+		if fi.IsChanged() {
+			// it is explicitly generated file/dir,
+			// no need to check more.
+			continue
+		}
+		needCheck = append(needCheck, fname)
+	}
+	err := ForgetMissingsSemaphore.Do(ctx, func(ctx context.Context) error {
+		for _, fname := range needCheck {
+			fullname := filepath.Join(root, fname)
+			fullname = filepath.ToSlash(fullname)
+			_, err := hfs.OS.Lstat(ctx, fullname)
+			if errors.Is(err, fs.ErrNotExist) {
+				clog.Infof(ctx, "forget missing %s", fullname)
+				hfs.directory.delete(ctx, fullname)
+				continue
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		clog.Warningf(ctx, "forget missings in dir: %v", err)
+	}
+}
+
 // ForgetMissings forgets cached entry for input under root
 // if it doesn't exist on local disk, and returns valid inputs.
 // It is currently used for deps=msvc only to workaround clang-cl issue.
@@ -744,7 +795,7 @@ func (hfs *HashFS) ForgetMissings(ctx context.Context, root string, inputs []str
 		for _, fname := range needCheck {
 			fullname := filepath.Join(root, fname)
 			fullname = filepath.ToSlash(fullname)
-			_, err := os.Lstat(fullname)
+			_, err := hfs.OS.Lstat(ctx, fullname)
 			if errors.Is(err, fs.ErrNotExist) {
 				clog.Infof(ctx, "forget missing %s", fullname)
 				hfs.directory.delete(ctx, fullname)

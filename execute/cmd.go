@@ -134,6 +134,10 @@ type Cmd struct {
 	// Outputs are output files of the cmd, relative to ExecRoot.
 	Outputs []string
 
+	// ReconcileOutputdirs are output directories where the cmd would
+	// modify files/dirs, invisible to build graph.
+	ReconcileOutputdirs []string
+
 	// Deps specifies deps type of the cmd, "gcc", "msvc".
 	Deps string
 
@@ -860,6 +864,9 @@ func (c *Cmd) computeOutputEntries(ctx context.Context, entries []hashfs.UpdateE
 
 // RecordOutputsFromLocal records cmd's outputs from local disk in hashfs.
 func (c *Cmd) RecordOutputsFromLocal(ctx context.Context, now time.Time) error {
+	for _, dir := range c.ReconcileOutputdirs {
+		c.HashFS.ForgetMissingsInDir(ctx, c.ExecRoot, dir)
+	}
 	var additionalFiles []string
 	if c.Depfile != "" && !c.outfiles[c.Depfile] {
 		additionalFiles = append(additionalFiles, c.Depfile)

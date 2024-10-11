@@ -72,12 +72,14 @@ func starActionsFix(thread *starlark.Thread, fn *starlark.Builtin, args starlark
 	var inputsValue, toolInputsValue, outputsValue starlark.Value
 	var cmdArgsValue starlark.Value
 	var reproxyConfigValue starlark.Value
+	var reconcileOutputdirsValue starlark.Value
 	err := starlark.UnpackArgs("fix", args, kwargs,
 		"inputs?", &inputsValue,
 		"tool_inputs?", &toolInputsValue,
 		"outputs?", &outputsValue,
 		"args?", &cmdArgsValue,
-		"reproxy_config?", &reproxyConfigValue)
+		"reproxy_config?", &reproxyConfigValue,
+		"reconcile_outputdirs?", &reconcileOutputdirsValue)
 	if err != nil {
 		return starlark.None, err
 	}
@@ -114,6 +116,13 @@ func starActionsFix(thread *starlark.Thread, fn *starlark.Builtin, args starlark
 			return starlark.None, fmt.Errorf("reproxy_config is not a string")
 		}
 	}
+	var reconcileOutputdirs []string
+	if reconcileOutputdirsValue != nil {
+		reconcileOutputdirs, err = unpackList(reconcileOutputdirsValue)
+		if err != nil {
+			return starlark.None, err
+		}
+	}
 	if inputsValue != nil {
 		c.cmd.Inputs = uniqueList(inputs)
 	}
@@ -131,6 +140,9 @@ func starActionsFix(thread *starlark.Thread, fn *starlark.Builtin, args starlark
 		if err != nil {
 			return starlark.None, fmt.Errorf("failed to parse reproxy_config: %w", err)
 		}
+	}
+	if reconcileOutputdirs != nil {
+		c.cmd.ReconcileOutputdirs = reconcileOutputdirs
 	}
 	return starlark.None, nil
 }
