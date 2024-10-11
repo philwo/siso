@@ -163,6 +163,8 @@ found in the LICENSE file. */}}
                 onclick="document.getElementById('outdir-menu').open = !document.getElementById('outdir-menu').open">
               {{if .outdirAbbrev}}
                 {{.outdirAbbrev}}
+              {{else if .viewingUploaded}}
+                <em>uploaded</em>
               {{else}}
                 <em>unknown</em>
               {{end}}

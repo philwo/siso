@@ -144,8 +144,9 @@ type WebuiServer struct {
 	outsubs           []string
 	runbuildState
 
-	outdirsMu sync.Mutex
-	outdirs   map[string]*outdirInfo
+	metricsMu       sync.Mutex
+	outdirMetrics   map[string]*outdirInfo
+	uploadedMetrics []*buildMetrics
 }
 
 type runningStepInfo struct {
@@ -192,6 +193,10 @@ func (s *WebuiServer) loadView(view string) (*template.Template, error) {
 	return template, nil
 }
 
+func didRequestUploadedMetrics(r *http.Request) bool {
+	return r.PathValue("outroot") == "uploads" && r.PathValue("outsub") == "view"
+}
+
 // baseURLFromRequest gets the base URL from context.
 // This is a HARDCODED assumption that siso webui only has routes that start with outdir.
 func outdirBaseURL(r *http.Request) string {
@@ -202,7 +207,9 @@ func outdirBaseURL(r *http.Request) string {
 // TODO(b/361703735): return data instead of write to response writer? https://chromium-review.googlesource.com/c/infra/infra/+/5803123/comment/4ce69ada_31730349/
 func (s *WebuiServer) renderBuildView(wr http.ResponseWriter, r *http.Request, tmpl *template.Template, data map[string]any) error {
 	rev := r.PathValue("rev")
-	if outdirInfo, err := s.getOutdirForRequest(r); err == nil {
+	if didRequestUploadedMetrics(r) {
+		data["viewingUploaded"] = true
+	} else if outdirInfo, err := s.getOutdirForRequest(r); err == nil {
 		if rev == "" {
 			rev = outdirInfo.latestRevID
 		}
@@ -258,7 +265,7 @@ func NewServer(version string, localDevelopment bool, port int, defaultOutdir, c
 		templatesFS:      fs.FS(content),
 		sseServer:        newSseServer(),
 		defaultOutdir:    defaultOutdir,
-		outdirs:          make(map[string]*outdirInfo),
+		outdirMetrics:    make(map[string]*outdirInfo),
 		port:             port,
 	}
 	if localDevelopment {
@@ -277,7 +284,7 @@ func NewServer(version string, localDevelopment bool, port int, defaultOutdir, c
 	if err != nil {
 		return nil, fmt.Errorf("failed to preload outdir: %w", err)
 	}
-	s.outdirs[defaultOutdir] = defaultOutdirInfo
+	s.outdirMetrics[defaultOutdir] = defaultOutdirInfo
 	s.defaultOutdirRoot = defaultOutdirInfo.outroot
 	s.defaultOutdirSub = defaultOutdirInfo.outsub
 
@@ -303,6 +310,17 @@ func NewServer(version string, localDevelopment bool, port int, defaultOutdir, c
 	}
 
 	return &s, nil
+}
+
+func (s *WebuiServer) LoadStandaloneMetrics(metricsPath string) error {
+	metrics, err := loadBuildMetrics(metricsPath)
+	if err != nil {
+		return fmt.Errorf("failed to load metrics: %w", err)
+	}
+	s.metricsMu.Lock()
+	s.uploadedMetrics = append(s.uploadedMetrics, metrics)
+	s.metricsMu.Unlock()
+	return nil
 }
 
 func (s *WebuiServer) staticFileHandler(h http.Handler) http.Handler {
@@ -343,6 +361,27 @@ func (s *WebuiServer) Serve() int {
 	outdirRouter.HandleFunc("/{outroot}/{outsub}/builds/{rev}/steps/", s.handleOutdirListSteps)
 	outdirRouter.HandleFunc("/{outroot}/{outsub}/targets/{target}/", s.handleOutdirListTargets)
 
+	// Handlers for uploaded metrics.
+	// We define these explicitly by catching all URLs starting with /uploads/view/, and defining a subset
+	// of the /{outroot}/{outsub}/ routes so that only supported routes will load, and all others will 404.
+	// (For example, it doesn't make sense to support /runbuild/ or /reload/ for uploaded metrics.)
+	// Siso webui was created assuming /{outroot}/{outsub}/ with on-disk metrics rather than uploaded.
+	// Furthermore, we also have hardcoded links built around this URL structure.
+	// It would probably be more ideal to have just "/uploads/{rev}/builds/steps/", but it would require more refactoring.
+	uploadsRouter := http.NewServeMux()
+	uploadsRouter.HandleFunc("/uploads/view/", s.handleOutdirRoot)
+	uploadsRouter.HandleFunc("/uploads/view/builds/{rev}/aggregates/", s.handleOutdirAggregates)
+	uploadsRouter.HandleFunc("POST /uploads/view/builds/{rev}/steps/{id}/recall/", s.handleOutdirDoRecall)
+	uploadsRouter.HandleFunc("/uploads/view/builds/{rev}/steps/{id}/", s.handleOutdirViewStep)
+	uploadsRouter.HandleFunc("/uploads/view/builds/{rev}/steps/", s.handleOutdirListSteps)
+	http.HandleFunc("/uploads/view/", func(w http.ResponseWriter, r *http.Request) {
+		// This is how we hack around the hardcoded assumption that URLs are /{outroot}/{outsub}/.
+		// Common code paths will then have checks to handle this special case.
+		r.SetPathValue("outroot", "uploads")
+		r.SetPathValue("outsub", "view")
+		uploadsRouter.ServeHTTP(w, r)
+	})
+
 	// Default catch-all handler.
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		// Redirect root to default outdir.
@@ -361,6 +400,13 @@ func (s *WebuiServer) Serve() int {
 	http.Handle("/third_party/", http.StripPrefix("/third_party/", s.staticFileHandler(http.FileServerFS(mwc.NodeModulesFS))))
 
 	fmt.Printf("listening on http://localhost:%d/...\n", s.port)
+	// Hack for now to make loading external siso_metrics.json more usable, until we can have the homepage automatically show "here's all the loaded siso_metrics"
+	if len(s.uploadedMetrics) > 0 {
+		fmt.Printf("for provided siso_metrics.json:\n")
+		for _, metrics := range s.uploadedMetrics {
+			fmt.Printf("- http://localhost:%d/uploads/view/builds/%s/steps/\n", s.port, metrics.Rev)
+		}
+	}
 	err := http.ListenAndServe(fmt.Sprintf(":%d", s.port), nil)
 	if errors.Is(err, http.ErrServerClosed) {
 		fmt.Printf("server closed\n")

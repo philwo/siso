@@ -243,9 +243,9 @@ func loadOutdirInfo(execRoot, outdirPath, manifestPath string) (*outdirInfo, err
 // getOutdirForRequest lazy-loads outdir for the request, returning cached result if possible.
 func (s *WebuiServer) getOutdirForRequest(r *http.Request) (*outdirInfo, error) {
 	abs := filepath.Join(s.execRoot, r.PathValue("outroot"), r.PathValue("outsub"))
-	s.outdirsMu.Lock()
-	defer s.outdirsMu.Unlock()
-	outdirInfo, ok := s.outdirs[abs]
+	s.metricsMu.Lock()
+	defer s.metricsMu.Unlock()
+	outdirInfo, ok := s.outdirMetrics[abs]
 	if !ok {
 		var err error
 		// TODO: support override manifest path (i.e. other than build.ninja?)
@@ -253,7 +253,7 @@ func (s *WebuiServer) getOutdirForRequest(r *http.Request) (*outdirInfo, error) 
 		if err != nil {
 			return nil, fmt.Errorf("couldn't load outdir %s: %w", abs, err)
 		}
-		s.outdirs[abs] = outdirInfo
+		s.outdirMetrics[abs] = outdirInfo
 	}
 	return outdirInfo, nil
 }
@@ -272,9 +272,9 @@ func (s *WebuiServer) handleOutdirReload(w http.ResponseWriter, r *http.Request)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	s.outdirsMu.Lock()
-	s.outdirs[outdirInfo.path] = newOutdirInfo
-	s.outdirsMu.Unlock()
+	s.metricsMu.Lock()
+	s.outdirMetrics[outdirInfo.path] = newOutdirInfo
+	s.metricsMu.Unlock()
 
 	// Then redirect to root page.
 	http.Redirect(w, r, outdirBaseURL(r), http.StatusTemporaryRedirect)
@@ -511,17 +511,27 @@ func (s *WebuiServer) handleOutdirDoRecall(w http.ResponseWriter, r *http.Reques
 }
 
 func (s *WebuiServer) handleOutdirViewStep(w http.ResponseWriter, r *http.Request) {
-	outdirInfo, err := s.getOutdirForRequest(r)
-	if err != nil {
-		s.renderBuildViewError(http.StatusNotFound, fmt.Sprintf("outdir failed to load for request %s: %v", r.URL, err), w, r, outdirInfo)
-		return
-	}
-
 	var metrics *buildMetrics
-	for _, m := range outdirInfo.metrics {
-		if m.Rev == r.PathValue("rev") {
-			metrics = m
-			break
+	var outdirInfo *outdirInfo
+	var err error
+	if didRequestUploadedMetrics(r) {
+		for _, m := range s.uploadedMetrics {
+			if m.Rev == r.PathValue("rev") {
+				metrics = m
+				break
+			}
+		}
+	} else {
+		outdirInfo, err = s.getOutdirForRequest(r)
+		if err != nil {
+			s.renderBuildViewError(http.StatusNotFound, fmt.Sprintf("outdir failed to load for request %s: %v", r.URL, err), w, r, outdirInfo)
+			return
+		}
+		for _, m := range outdirInfo.metrics {
+			if m.Rev == r.PathValue("rev") {
+				metrics = m
+				break
+			}
 		}
 	}
 	if metrics == nil {
@@ -546,9 +556,11 @@ func (s *WebuiServer) handleOutdirViewStep(w http.ResponseWriter, r *http.Reques
 	// (A step could have multiple outputs, and we only log the first output as the output name.
 	// So if it changes across builds it won't work. But it's expected to be stable for most builds.)
 	inOtherRevs := make(map[string]build.StepMetric)
-	for _, m := range outdirInfo.metrics {
-		if step, ok := m.stepByOutput[stepData.Output]; ok {
-			inOtherRevs[m.Rev] = *step
+	if outdirInfo != nil {
+		for _, m := range outdirInfo.metrics {
+			if step, ok := m.stepByOutput[stepData.Output]; ok {
+				inOtherRevs[m.Rev] = *step
+			}
 		}
 	}
 
@@ -574,17 +586,27 @@ func (s *WebuiServer) handleOutdirViewStep(w http.ResponseWriter, r *http.Reques
 }
 
 func (s *WebuiServer) handleOutdirListSteps(w http.ResponseWriter, r *http.Request) {
-	outdirInfo, err := s.getOutdirForRequest(r)
-	if err != nil {
-		s.renderBuildViewError(http.StatusNotFound, fmt.Sprintf("outdir failed to load for request %s: %v", r.URL, err), w, r, outdirInfo)
-		return
-	}
-
 	var metrics *buildMetrics
-	for _, m := range outdirInfo.metrics {
-		if m.Rev == r.PathValue("rev") {
-			metrics = m
-			break
+	var outdirInfo *outdirInfo
+	var err error
+	if didRequestUploadedMetrics(r) {
+		for _, m := range s.uploadedMetrics {
+			if m.Rev == r.PathValue("rev") {
+				metrics = m
+				break
+			}
+		}
+	} else {
+		outdirInfo, err = s.getOutdirForRequest(r)
+		if err != nil {
+			s.renderBuildViewError(http.StatusNotFound, fmt.Sprintf("outdir failed to load for request %s: %v", r.URL, err), w, r, outdirInfo)
+			return
+		}
+		for _, m := range outdirInfo.metrics {
+			if m.Rev == r.PathValue("rev") {
+				metrics = m
+				break
+			}
 		}
 	}
 	if metrics == nil {

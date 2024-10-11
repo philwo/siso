@@ -39,6 +39,7 @@ type webuiRun struct {
 	outdir           string
 	configRepoDir    string
 	fname            string
+	metricsFile      string
 }
 
 func (c *webuiRun) init() {
@@ -47,6 +48,7 @@ func (c *webuiRun) init() {
 	c.Flags.StringVar(&c.outdir, "C", "", "path to outdir")
 	c.Flags.StringVar(&c.configRepoDir, "config_repo_dir", "build/config/siso", "config repo directory (relative to exec root)")
 	c.Flags.StringVar(&c.fname, "f", "build.ninja", "input build manifest filename (relative to -C)")
+	c.Flags.StringVar(&c.metricsFile, "metrics_file", "", "optional path to siso_metrics.json to load (experimental, -C is still required for now)")
 }
 
 func (c *webuiRun) Run(a subcommands.Application, args []string, env subcommands.Env) int {
@@ -62,6 +64,13 @@ func (c *webuiRun) Run(a subcommands.Application, args []string, env subcommands
 			fmt.Fprintf(os.Stderr, "failed to init server: %v\n", err)
 		}
 		return 1
+	}
+	if c.metricsFile != "" {
+		err = s.LoadStandaloneMetrics(c.metricsFile)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "failed to load metrics_file: %v\n", err)
+			return 1
+		}
 	}
 	return s.Serve()
 }
