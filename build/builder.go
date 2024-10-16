@@ -398,7 +398,9 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 			const size = 64 << 10
 			buf := make([]byte, size)
 			buf = buf[:runtime.Stack(buf, false)]
-			clog.Errorf(ctx, "panic in build: %v\n%s", r, buf)
+			loc := panicLocation(buf)
+			clog.Errorf(ctx, "panic in build: %v\n%s", r, loc)
+			clog.Warningf(ctx, "%s", buf)
 			if err == nil {
 				err = fmt.Errorf("panic in build: %v", r)
 			}
@@ -675,8 +677,10 @@ loop:
 					} else {
 						out = fmt.Sprintf("%p", step)
 					}
-					clog.Errorf(ctx, "runStep panic: %v\nstep: %s\n%s", r, out, buf)
-					err = fmt.Errorf("panic: %v: %s", r, buf)
+					loc := panicLocation(buf)
+					clog.Errorf(ctx, "runStep panic: %v\nstep: %s\n%s", r, out, loc)
+					clog.Warningf(ctx, "%s", buf)
+					err = fmt.Errorf("panic: %v: %s", r, loc)
 				}
 			}()
 			defer done(nil)
