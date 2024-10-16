@@ -732,20 +732,22 @@ func (hfs *HashFS) ForgetMissingsInDir(ctx context.Context, root, dir string) {
 			// no need to check more.
 			continue
 		}
-		if fi.IsDir() {
-			dents, err := hfs.ReadDir(ctx, root, fname)
-			if err != nil {
-				clog.Warningf(ctx, "readdir failed for %q: %v", fname, err)
+		if err == nil {
+			if fi.IsDir() {
+				dents, err := hfs.ReadDir(ctx, root, fname)
+				if err != nil {
+					clog.Warningf(ctx, "readdir failed for %q: %v", fname, err)
+					continue
+				}
+				for _, dent := range dents {
+					inputs = append(inputs, filepath.ToSlash(filepath.Join(fname, dent.Name())))
+				}
+			}
+			if fi.IsChanged() {
+				// it is explicitly generated file/dir,
+				// no need to check more.
 				continue
 			}
-			for _, dent := range dents {
-				inputs = append(inputs, filepath.ToSlash(filepath.Join(fname, dent.Name())))
-			}
-		}
-		if fi.IsChanged() {
-			// it is explicitly generated file/dir,
-			// no need to check more.
-			continue
 		}
 		needCheck = append(needCheck, fname)
 	}
@@ -782,7 +784,7 @@ func (hfs *HashFS) ForgetMissings(ctx context.Context, root string, inputs []str
 			clog.Infof(ctx, "remove from inputs %s: %v", fname, err)
 			continue
 		}
-		if fi.IsChanged() {
+		if err == nil && fi.IsChanged() {
 			// it is explicit generated file.
 			// no need to check on disk.
 			availables = append(availables, fname)
