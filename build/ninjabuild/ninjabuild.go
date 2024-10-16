@@ -246,12 +246,22 @@ func (g *Graph) Reload(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	g.Reset(ctx)
+	g.reset(ctx)
 	return nil
 }
 
-// Reset resets graph status.
-func (g *Graph) Reset(ctx context.Context) {
+// Reset resets graph status and hashfs.
+func (g *Graph) Reset(ctx context.Context) error {
+	// need to refresh hashfs to clear dirty state.
+	err := g.globals.hashFS.Refresh(ctx, g.globals.path.ExecRoot)
+	if err != nil {
+		return err
+	}
+	g.reset(ctx)
+	return nil
+}
+
+func (g *Graph) reset(ctx context.Context) {
 	g.visited = make(map[*ninjautil.Edge]*edgeStepDef)
 	g.validations = nil
 	g.globals.targetPaths = make([]string, g.globals.nstate.NumNodes())
