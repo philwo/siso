@@ -264,6 +264,7 @@ func (g *Graph) Reset(ctx context.Context) error {
 func (g *Graph) reset(ctx context.Context) {
 	g.visited = make(map[*ninjautil.Edge]*edgeStepDef)
 	g.validations = nil
+	g.globals.depsLog.Reset()
 	g.globals.targetPaths = make([]string, g.globals.nstate.NumNodes())
 	g.globals.edgeRules = make([]*edgeRule, g.globals.nstate.NumNodes())
 	g.globals.phony = make(map[string]bool)

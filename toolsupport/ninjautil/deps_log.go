@@ -287,6 +287,17 @@ readLoop:
 	return depsLog, nil
 }
 
+// Reset resets deps log, so recorded entries is available for Get.
+func (d *DepsLog) Reset() {
+	d.mu.Lock()
+	d.rPaths = d.paths
+	for k, v := range d.pathIdx {
+		d.rPathIdx[k] = v
+	}
+	d.rDeps = d.deps
+	d.mu.Unlock()
+}
+
 // NeedsRecompact reports whether it needs recompact or not.
 func (d *DepsLog) NeedsRecompact() bool {
 	return d.needsRecompact
