@@ -16,7 +16,6 @@ import (
 	"cloud.google.com/go/logging"
 	"google.golang.org/grpc/status"
 
-	"infra/build/siso/execute"
 	"infra/build/siso/o11y/clog"
 	"infra/build/siso/o11y/trace"
 	"infra/build/siso/reapi"
@@ -131,8 +130,8 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 	exited, err := b.handleStep(ctx, step)
 	if err != nil {
 		if !experiments.Enabled("keep-going-handle-error", "handle %s failed: %v", step, err) {
-			msgs := cmdOutput(ctx, "FAILED[handle]:", step.cmd, step.def.Binding("command"), step.def.RuleName(), err)
-			b.logOutput(ctx, msgs, step.cmd.Console)
+			res := cmdOutput(ctx, cmdOutputResultFAILED, "handle", step.cmd, step.def.Binding("command"), step.def.RuleName(), err)
+			b.logOutput(ctx, res, step.cmd.Console)
 			clog.Warningf(ctx, "Failed to exec(handle): %v", err)
 			return fmt.Errorf("failed to run handler for %s: %w", step, err)
 		}
@@ -150,8 +149,8 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 
 	err = b.setupRSP(ctx, step)
 	if err != nil {
-		msgs := cmdOutput(ctx, "FAILED[rsp]:", step.cmd, step.def.Binding("command"), step.def.RuleName(), err)
-		b.logOutput(ctx, msgs, step.cmd.Console)
+		res := cmdOutput(ctx, cmdOutputResultFAILED, "rsp", step.cmd, step.def.Binding("command"), step.def.RuleName(), err)
+		b.logOutput(ctx, res, step.cmd.Console)
 		return fmt.Errorf("failed to setup rsp: %s: %w", step, err)
 	}
 	defer func() {
@@ -177,10 +176,10 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 			// RBE returns permission denied when
 			// platform container image are not available
 			// on RBE worker.
-			msgs := cmdOutput(ctx, "FAILED[badContainer]:", step.cmd, step.def.Binding("command"), step.def.RuleName(), err)
-			b.logOutput(ctx, msgs, step.cmd.Console)
+			res := cmdOutput(ctx, cmdOutputResultFAILED, "badContainer", step.cmd, step.def.Binding("command"), step.def.RuleName(), err)
+			b.logOutput(ctx, res, step.cmd.Console)
 		default:
-			msgs := cmdOutput(ctx, "FAILED:", step.cmd, step.def.Binding("command"), step.def.RuleName(), err)
+			msgs := cmdOutput(ctx, cmdOutputResultFAILED, "", step.cmd, step.def.Binding("command"), step.def.RuleName(), err)
 			b.logOutput(ctx, msgs, step.cmd.Console)
 		}
 		return StepError{
@@ -189,9 +188,9 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 		}
 	}
 
-	msgs := cmdOutput(ctx, "SUCCESS:", step.cmd, step.def.Binding("command"), step.def.RuleName(), nil)
-	if len(msgs) > 0 {
-		b.logOutput(ctx, msgs, step.cmd.Console)
+	res := cmdOutput(ctx, cmdOutputResultSUCCESS, "", step.cmd, step.def.Binding("command"), step.def.RuleName(), nil)
+	if res != nil {
+		b.logOutput(ctx, res, step.cmd.Console)
 		if experiments.Enabled("fail-on-stdouterr", "step %s emit stdout/stderr", step) {
 			return fmt.Errorf("%s emit stdout/stderr", step)
 		}
@@ -263,117 +262,6 @@ func (b *Builder) handleStep(ctx context.Context, step *Step) (bool, error) {
 		step.metrics.NoExec = true
 	}
 	return exited, nil
-}
-
-// cmdOutput returns cmd ouptut log (result, id, desc, err, action, output, args, stdout, stderr).
-// it will return nil if ctx is canceled or success with no stdout/stderr.
-func cmdOutput(ctx context.Context, result string, cmd *execute.Cmd, cmdline, rule string, err error) []string {
-	if ctx.Err() != nil {
-		return nil
-	}
-	stdout := cmd.Stdout()
-	stderr := cmd.Stderr()
-	if cmd.Deps == "msvc" {
-		// cl.exe, clang-cl shows included file to stderr
-		// but RBE merges stderr into stdout...
-		_, stdout = msvcutil.ParseShowIncludes(stdout)
-		_, stderr = msvcutil.ParseShowIncludes(stderr)
-	}
-	if err == nil && len(stdout) == 0 && len(stderr) == 0 {
-		return nil
-	}
-	var output string
-	if len(cmd.Outputs) > 0 {
-		output = cmd.Outputs[0]
-		if strings.HasPrefix(output, cmd.Dir+"/") {
-			output = "./" + strings.TrimPrefix(output, cmd.Dir+"/")
-		}
-	}
-	var msgs []string
-	msgs = append(msgs, fmt.Sprintf("%s %s %q %s\n", result, cmd, output, cmd.Desc))
-	if err != nil {
-		msgs = append(msgs, fmt.Sprintf("err: %v\n", err))
-		if berr, ok := err.(interface{ Backtrace() string }); ok {
-			msgs = append(msgs, fmt.Sprintf("stacktrace: %s\n", berr.Backtrace()))
-		}
-	}
-	if rule != "" {
-		msgs = append(msgs, fmt.Sprintf("siso_rule:%s\n", rule))
-	}
-	digest := cmd.ActionDigest()
-	if !digest.IsZero() {
-		msgs = append(msgs, fmt.Sprintf("digest:%s\n", cmd.ActionDigest().String()))
-	}
-	msgs = append(msgs, fmt.Sprintf("%q %q\n%s\n", cmd.ActionName, output, cmdline))
-	rsp := cmd.RSPFile
-	if rsp != "" {
-		msgs = append(msgs, fmt.Sprintf(" %s=%q\n", rsp, cmd.RSPFileContent))
-	}
-	if len(stdout) > 0 {
-		msgs = append(msgs, fmt.Sprintf("stdout:\n%s", string(stdout)))
-	}
-	if len(stderr) > 0 {
-		msgs = append(msgs, fmt.Sprintf("stderr:\n%s", string(stderr)))
-	}
-	return msgs
-
-}
-
-func (b *Builder) logOutput(ctx context.Context, msgs []string, console bool) {
-	if len(msgs) == 0 {
-		return
-	}
-	if b.outputLogWriter != nil {
-		fmt.Fprint(b.outputLogWriter, strings.Join(msgs, "")+"\f\n")
-		if strings.HasPrefix(msgs[0], "FALLBACK") {
-			return
-		}
-		var sb strings.Builder
-		switch {
-		case strings.HasPrefix(msgs[0], "FAILED"):
-			fmt.Fprint(&sb, ui.SGR(ui.Red, msgs[0]))
-		case strings.HasPrefix(msgs[0], "SUCCESS"):
-			fmt.Fprint(&sb, ui.SGR(ui.Green, msgs[0]))
-		default:
-			fmt.Fprint(&sb, msgs[0])
-		}
-		for _, msg := range msgs[1:] {
-			switch {
-			case strings.HasPrefix(msg, "err:"):
-				fmt.Fprint(&sb, msg)
-			case strings.HasPrefix(msg, "stdout:"), strings.HasPrefix(msg, "stderr:"):
-				if !console {
-					fmt.Fprint(&sb, msg)
-				}
-			default:
-				// Print other messages such as command line, siso_rule only when verboseFailures=true.
-				if b.verboseFailures {
-					fmt.Fprint(&sb, msg)
-				}
-			}
-		}
-		out := sb.String()
-		if !strings.HasSuffix(out, "\n") {
-			out += "\n"
-		}
-		ui.Default.PrintLines(out + "\n")
-		return
-	}
-	if strings.HasPrefix(msgs[0], "FALLBACK") {
-		return
-	}
-	if console {
-		var nmsgs []string
-		for _, msg := range msgs {
-			switch {
-			case strings.HasPrefix(msg, "stdout:"), strings.HasPrefix(msg, "stderr:"):
-				continue
-			}
-			nmsgs = append(nmsgs, msg)
-		}
-		msgs = nmsgs
-	}
-	ui.Default.PrintLines(append([]string{"\n", "\n"}, msgs...)...)
 }
 
 func (b *Builder) outputFailureSummary(ctx context.Context, step *Step, err error) {

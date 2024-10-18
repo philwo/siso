@@ -103,8 +103,8 @@ func (b *Builder) runRemote(ctx context.Context, step *Step) error {
 		}
 		step.metrics.IsRemote = false
 		step.metrics.Fallback = true
-		msgs := cmdOutput(ctx, "FALLBACK", step.cmd, step.def.Binding("command"), step.def.RuleName(), err)
-		b.logOutput(ctx, msgs, false)
+		res := cmdOutput(ctx, cmdOutputResultFALLBACK, "", step.cmd, step.def.Binding("command"), step.def.RuleName(), err)
+		b.logOutput(ctx, res, false)
 		// Preserve remote action result and error.
 		ar, _ := step.cmd.ActionResult()
 		step.cmd.SetRemoteFallbackResult(ar, err)
@@ -139,9 +139,9 @@ func (b *Builder) tryFastStep(ctx context.Context, step, fastStep *Step, cacheCh
 func (b *Builder) fastStepDone(ctx context.Context, step, fastStep *Step) error {
 	step.metrics = fastStep.metrics
 	step.metrics.DepsLog = true
-	msgs := cmdOutput(ctx, "SUCCESS:", fastStep.cmd, step.def.Binding("command"), step.def.RuleName(), nil)
-	if len(msgs) > 0 {
-		b.logOutput(ctx, msgs, step.cmd.Console)
+	res := cmdOutput(ctx, cmdOutputResultSUCCESS, "fast", fastStep.cmd, step.def.Binding("command"), step.def.RuleName(), nil)
+	if res != nil {
+		b.logOutput(ctx, res, step.cmd.Console)
 		if experiments.Enabled("fail-on-stdouterr", "step %s emit stdout/stderr", step) {
 			return fmt.Errorf("%s emit stdout/stderr", step)
 		}

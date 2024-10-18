@@ -86,6 +86,10 @@ func (t *TermUI) Height() int {
 	return t.height
 }
 
+func (t *TermUI) Width() int {
+	return t.width
+}
+
 // PrintLines implements the ui.ui interface.
 // If msgs starts with \n, it will print from the current line.
 // Otherwise, it will replace the last N lines, where N is len(msgs).

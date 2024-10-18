@@ -65,8 +65,8 @@ func (b *Builder) execRemote(ctx context.Context, step *Step) error {
 			result, cached := step.cmd.ActionResult()
 			if err == nil && !validateRemoteActionResult(result) {
 				clog.Errorf(ctx, "no outputs in action result. retry without cache lookup. b/350360391")
-				msgs := cmdOutput(ctx, "RETRY", step.cmd, step.def.Binding("command"), step.def.RuleName(), err)
-				b.logOutput(ctx, msgs, false)
+				res := cmdOutput(ctx, cmdOutputResultRETRY, "", step.cmd, step.def.Binding("command"), step.def.RuleName(), err)
+				b.logOutput(ctx, res, false)
 				step.metrics.RemoteRetry++
 				step.cmd.SkipCacheLookup = true
 				step.setPhase(phase)
