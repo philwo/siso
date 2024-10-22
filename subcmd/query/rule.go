@@ -42,13 +42,15 @@ func cmdRule() *subcommands.Command {
 type ruleRun struct {
 	subcommands.CommandRunBase
 
-	dir   string
-	fname string
+	dir     string
+	fname   string
+	binding string
 }
 
 func (c *ruleRun) init() {
 	c.Flags.StringVar(&c.dir, "C", ".", "ninja running directory to find build.ninja")
 	c.Flags.StringVar(&c.fname, "f", "build.ninja", "input build filename (relative to -C")
+	c.Flags.StringVar(&c.binding, "binding", "", "print binding value for the target")
 }
 
 func (c *ruleRun) Run(a subcommands.Application, args []string, env subcommands.Env) int {
@@ -85,6 +87,10 @@ func (c *ruleRun) run(ctx context.Context, args []string) error {
 		edge, ok := node.InEdge()
 		if !ok {
 			fmt.Printf("# no rule to build %s\n\n", node.Path())
+			continue
+		}
+		if c.binding != "" {
+			fmt.Println(edge.Binding(c.binding))
 			continue
 		}
 		edge.Print(os.Stdout)
