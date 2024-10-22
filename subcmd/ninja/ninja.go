@@ -372,7 +372,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		limits.REWrap = c.remoteJobs
 	}
 	if c.ninjaJobs >= 0 {
-		fmt.Fprintf(os.Stderr, "-j is specified. but not supported. b/288829511\n")
+		fmt.Fprintf(os.Stderr, "-j is not supported. use -remote_jobs instead\n")
 	}
 	if c.failuresAllowed == 0 {
 		c.failuresAllowed = math.MaxInt
@@ -957,7 +957,7 @@ func (c *ninjaCmdRun) init() {
 	c.Flags.IntVar(&c.failuresAllowed, "k", 1, "keep going until N jobs fail (0 means inifinity)")
 	c.Flags.StringVar(&c.actionSalt, "action_salt", "", "action salt")
 
-	c.Flags.IntVar(&c.ninjaJobs, "j", -1, "run N jobs in parallel (0 means infinity). not supported b/288829511")
+	c.Flags.IntVar(&c.ninjaJobs, "j", -1, "not supported. use -remote_jobs instead")
 	c.Flags.IntVar(&c.remoteJobs, "remote_jobs", 0, "run N remote jobs in parallel. when the value is no positive, the default will be computed based on # of CPUs.")
 	c.Flags.StringVar(&c.fname, "f", "build.ninja", "input build manifest filename (relative to -C)")
 
