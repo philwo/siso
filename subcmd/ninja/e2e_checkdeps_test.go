@@ -19,7 +19,7 @@ func TestBuild_CheckDeps(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
 
-	ninja := func(t *testing.T, w io.Writer) (build.Stats, error) {
+	ninja := func(t *testing.T, target string, w io.Writer) (build.Stats, error) {
 		t.Helper()
 		build.SetExperimentForTest("check-deps")
 		defer func() {
@@ -30,17 +30,27 @@ func TestBuild_CheckDeps(t *testing.T) {
 		})
 		defer cleanup()
 		opt.OutputLogWriter = w
-		return runNinja(ctx, "build.ninja", graph, opt, nil, runNinjaOpts{})
+		return runNinja(ctx, "build.ninja", graph, opt, []string{target}, runNinjaOpts{})
 	}
 
 	setupFiles(t, dir, t.Name(), nil)
 	var sisoOutput bytes.Buffer
-	stats, err := ninja(t, &sisoOutput)
+	t.Logf("-- first build bar.h")
+	stats, err := ninja(t, "bar.h", &sisoOutput)
+	if err != nil {
+		t.Fatalf("ninja err: %v", err)
+	}
+	if stats.Done != stats.Total || stats.Total != 1 {
+		t.Errorf("done=%d total=%d; want done=total=1", stats.Done, stats.Total)
+	}
+
+	t.Logf("-- second build all")
+	stats, err = ninja(t, "all", &sisoOutput)
 	if err != nil {
 		t.Fatalf("ninja err: %v", err)
 	}
 	if stats.Done != stats.Total || stats.Total != 5 {
-		t.Errorf("done=%d total=%d; want done=total=5", stats.Done, stats.Total)
+		t.Errorf("done=%d total=%d; want done=total=4", stats.Done, stats.Total)
 	}
 
 	t.Logf("siso_output:\n%s", sisoOutput.String())
