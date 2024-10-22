@@ -141,10 +141,8 @@ func evaluateAppend(env evalEnv, buf *bytes.Buffer, val evalString, lookups [][]
 			if env == nil {
 				continue
 			}
-			for _, p := range lookups {
-				if bytes.Equal(varname, p) {
-					return nil, fmt.Errorf("cycle in rule variable %q", varname)
-				}
+			if len(lookups) > 255 {
+				return nil, fmt.Errorf("cycle in rule variable %q (%q)", varname, lookups)
 			}
 			v, ok := env.lookupVar(val.pos, varname)
 			if ok {

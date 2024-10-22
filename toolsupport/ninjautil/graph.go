@@ -142,7 +142,7 @@ func (e *edgeEnv) lookupVar(pos int, key []byte) (evalString, bool) {
 	if e.edge.scope == nil {
 		return evalString{}, false
 	}
-	return e.edge.scope.lookupVar(pos, key)
+	return e.edge.scope.lookupVar(-1, key)
 }
 
 func (e *edgeEnv) pathList(paths []*Node, sep string) string {

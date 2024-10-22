@@ -245,7 +245,7 @@ build obj/base/nocompile.o: nocompile ../../base/test/nocompile.nc
   defines =
   include_dirs =
   cflags =
-  clfags_cc =
+  cflags_cc =
   source_name_part = nocompile
   defines = -DDCHECK_ALWAYS_ON=1
   include_dirs = -I../.. -Igen
@@ -275,6 +275,42 @@ build obj/base/nocompile.o: nocompile ../../base/test/nocompile.nc
 		t.Errorf("command=%q; want=%q", got, want)
 	}
 
+}
+
+func TestParser_Binding_Recursive(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	err := os.WriteFile(filepath.Join(dir, "build.ninja"), []byte(`
+cflags_cc = /Fpobj/generated_api_types_cc.pch /Yubuild/precompile.h
+
+rule cxx
+  command = ..\..\third_party\llvm-build\Release+Asserts\bin\clang-cl.exe /c ${in} /Fo${out} /W4 ${cflags_cc} /Fd"obj/api/generated_api_types_cc.pdb"
+  # ${cflags_cc} should be "/Fpobj/generated_api_types_cc.pch /Yubuild/precompile.h /Ycbuild/precompile.h"
+
+build obj/api/generated_api_types/precompile.cc.obj: cxx ../../build/precompile.cc || phony/input_deps
+  cflags_cc = ${cflags_cc} /Ycbuild/precompile.h
+`), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state := NewState()
+	p := NewManifestParser(state)
+	p.SetWd(dir)
+	err = p.Load(ctx, "build.ninja")
+	if err != nil {
+		t.Fatalf("Load %v", err)
+	}
+	node, ok := state.LookupNodeByPath("obj/api/generated_api_types/precompile.cc.obj")
+	if !ok {
+		t.Fatal("missing obj/api/generated_api_types/precompile.cc.obj")
+	}
+	edge, ok := node.InEdge()
+	if !ok {
+		t.Fatal("no inEdge for obj/api/generated_api_types/precompile.cc.obj")
+	}
+	if got, want := edge.Binding("command"), `..\..\third_party\llvm-build\Release+Asserts\bin\clang-cl.exe /c ../../build/precompile.cc /Foobj/api/generated_api_types/precompile.cc.obj /W4 /Fpobj/generated_api_types_cc.pch /Yubuild/precompile.h /Ycbuild/precompile.h /Fd"obj/api/generated_api_types_cc.pdb"`; got != want {
+		t.Errorf("command=%q; want=%q", got, want)
+	}
 }
 
 func TestParser_Dupbuild_Error(t *testing.T) {
