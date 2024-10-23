@@ -2,39 +2,40 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 //
-// excerpt from google3/devtools/srcfs/daemon/cog/cog_local_rpc_service.proto#27
-// TODO(ukai): update proto once protoc supports edition etc.
+// excerpt from google3/devtools/srcfs/daemon/cog/cog_local_rpc_service.proto#28
 
-syntax = "proto2";
+edition = "2023";
 
 package devtools_srcfs;
 
 option go_package = "infra/build/siso/toolsupport/cogutil/proto";
+option features.utf8_validation = NONE;
 
 service CogLocalRpcService {
   rpc BuildfsInsert(BuildfsInsertRequest) returns (BuildfsInsertResponse) {}
 }
 
 message BuildfsInsertion {
-  optional string path = 1;
+  string path = 1;
 
   // SHA256 of the file content.
-  optional string digest = 2;
+  string digest = 2;
 
   // Size of the file.
-  optional int64 size = 3;
+  int64 size = 3;
 
   enum Mode {
+    option features.enum_type = CLOSED;
     FILE = 0;
     EXECUTABLE_FILE = 1;
   }
 
-  optional Mode mode = 4;
+  Mode mode = 4;
 }
 
 message BuildfsInsertRequest {
-  optional string reapi_server = 1;
-  optional string reapi_instance = 2;
+  string reapi_server = 1;
+  string reapi_instance = 2;
   repeated BuildfsInsertion insertions = 3;
 }
 

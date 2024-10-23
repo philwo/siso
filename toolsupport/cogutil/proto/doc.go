@@ -6,4 +6,4 @@
 package proto
 
 //go:generate ../../../scripts/install-protoc-gen-go
-//go:generate protoc -I. --go_out=. --go_opt=paths=source_relative --go-grpc_out=. --go-grpc_opt=paths=source_relative local_rpc_service.proto
+//go:generate protoc -I. --go_out=. --go_opt=paths=source_relative --go-grpc_out=. --go-grpc_opt=paths=source_relative --experimental_editions local_rpc_service.proto
