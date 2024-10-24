@@ -40,8 +40,8 @@ func TestCmdOutput(t *testing.T) {
 			stdout: []byte("warning: warning message\n"),
 			rule:   "clang/cxx",
 			want: `SUCCESS:  "./foo.o" CXX foo.o
+build step: cxx "./foo.o"
 siso_rule: clang/cxx
-action: cxx
 ../../third_party/llvm-build/Release+Asserts/bin/clang++ -c ../../base/base.cc
 stdout:
 warning: warning message
@@ -52,7 +52,7 @@ warning: warning message
 			result: cmdOutputResultSUCCESS,
 			stdout: []byte("warning: warning message\n"),
 			want: `SUCCESS:  "./foo.o" CXX foo.o
-action: cxx
+build step: cxx "./foo.o"
 ../../third_party/llvm-build/Release+Asserts/bin/clang++ -c ../../base/base.cc
 stdout:
 warning: warning message
@@ -64,8 +64,8 @@ warning: warning message
 			stderr: []byte("error: error message\n"),
 			rule:   "clang/cxx",
 			want: `SUCCESS:  "./foo.o" CXX foo.o
+build step: cxx "./foo.o"
 siso_rule: clang/cxx
-action: cxx
 ../../third_party/llvm-build/Release+Asserts/bin/clang++ -c ../../base/base.cc
 stderr:
 error: error message
@@ -77,8 +77,8 @@ error: error message
 			stderr: []byte("error: error message"),
 			rule:   "clang/cxx",
 			want: `SUCCESS:  "./foo.o" CXX foo.o
+build step: cxx "./foo.o"
 siso_rule: clang/cxx
-action: cxx
 ../../third_party/llvm-build/Release+Asserts/bin/clang++ -c ../../base/base.cc
 stderr:
 error: error message
@@ -91,8 +91,8 @@ error: error message
 			err:    errors.New("failed to exec: exit=1"),
 			want: `FAILED:  "./foo.o" CXX foo.o
 err: failed to exec: exit=1
+build step: cxx "./foo.o"
 siso_rule: clang/cxx
-action: cxx
 ../../third_party/llvm-build/Release+Asserts/bin/clang++ -c ../../base/base.cc
 `,
 		},
@@ -102,7 +102,7 @@ action: cxx
 			err:    errors.New("failed to exec: exit=1"),
 			want: `FAILED:  "./foo.o" CXX foo.o
 err: failed to exec: exit=1
-action: cxx
+build step: cxx "./foo.o"
 ../../third_party/llvm-build/Release+Asserts/bin/clang++ -c ../../base/base.cc
 `,
 		},

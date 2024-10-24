@@ -181,7 +181,7 @@ func (p *progress) step(ctx context.Context, b *Builder, step *Step, s string) {
 			// message of progress.update
 		}
 	}
-	if ui.IsTerminal() && !p.verbose && (time.Since(t) < 30*time.Millisecond || strings.HasPrefix(s, progressPrefixFinish)) {
+	if ui.IsTerminal() && !p.verbose && (time.Since(t) < 30*time.Millisecond || (strings.HasPrefix(s, progressPrefixFinish) && step != nil && step.cmd.OutputResult() == "")) {
 		return
 	}
 	var lines []string
@@ -194,6 +194,16 @@ func (p *progress) step(ctx context.Context, b *Builder, step *Step, s string) {
 				dur,
 				step.def.Binding("command"))
 			fmt.Println(msg)
+		} else if strings.HasPrefix(s, progressPrefixFinish) && step != nil && step.cmd.OutputResult() != "" {
+			msg = fmt.Sprintf("[%d/%d] %s %s",
+				stat.Done-stat.Skipped, stat.Total-stat.Skipped,
+				dur,
+				step.def.Binding("command"))
+			if step.cmd.OutputResult() != "" {
+				msg += "\n" + step.cmd.OutputResult() + "\n"
+			}
+			fmt.Println(msg)
+
 		} else if step == nil {
 			fmt.Println(msg)
 		}
@@ -257,13 +267,23 @@ func (p *progress) step(ctx context.Context, b *Builder, step *Step, s string) {
 		))
 		fallthrough
 	default:
+		var result string
 		if step != nil {
 			msg = fmt.Sprintf("[%d/%d] %s %s",
 				stat.Done-stat.Skipped, stat.Total-stat.Skipped,
 				dur,
 				s)
+			result = step.cmd.OutputResult()
+			if result != "" {
+				if !ui.IsTerminal() {
+					result = "\n" + result
+				}
+			}
 		}
 		lines = append(lines, msg)
+		if result != "" {
+			lines = append(lines, result+"\n")
+		}
 		ui.Default.PrintLines(lines...)
 	}
 	p.mu.Lock()

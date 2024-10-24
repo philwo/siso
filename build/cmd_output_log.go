@@ -71,14 +71,14 @@ func (c *cmdOutputLog) String() string {
 			fmt.Fprintf(&sb, "stacktrace: %s\n", berr.Backtrace())
 		}
 	}
-	if c.sisoRule != "" {
-		fmt.Fprintf(&sb, "siso_rule: %s\n", c.sisoRule)
-	}
 	digest := c.cmd.ActionDigest()
 	if !digest.IsZero() {
 		fmt.Fprintf(&sb, "digest: %s\n", digest.String())
 	}
-	fmt.Fprintf(&sb, "action: %s\n", c.cmd.ActionName)
+	fmt.Fprintf(&sb, "build step: %s %q\n", c.cmd.ActionName, c.output)
+	if c.sisoRule != "" {
+		fmt.Fprintf(&sb, "siso_rule: %s\n", c.sisoRule)
+	}
 	fmt.Fprintf(&sb, "%s\n", c.cmdline)
 	rsp := c.cmd.RSPFile
 	if rsp != "" {
@@ -190,9 +190,9 @@ func cmdOutput(ctx context.Context, result cmdOutputResult, phase string, cmd *e
 	return res
 }
 
-func (b *Builder) logOutput(ctx context.Context, cmdOutput *cmdOutputLog, console bool) {
+func (b *Builder) logOutput(ctx context.Context, cmdOutput *cmdOutputLog, console bool) string {
 	if cmdOutput == nil {
-		return
+		return ""
 	}
 	var width int
 	tui, ok := ui.Default.(*ui.TermUI)
@@ -202,13 +202,12 @@ func (b *Builder) logOutput(ctx context.Context, cmdOutput *cmdOutputLog, consol
 	if b.outputLogWriter != nil {
 		fmt.Fprint(b.outputLogWriter, cmdOutput.String()+"\f\n")
 		if cmdOutput.result == cmdOutputResultFALLBACK {
-			return
+			return ""
 		}
-		ui.Default.PrintLines(cmdOutput.Msg(width, console, b.verboseFailures) + "\n")
-		return
+		return cmdOutput.Msg(width, console, b.verboseFailures)
 	}
 	if cmdOutput.result == cmdOutputResultFALLBACK {
-		return
+		return ""
 	}
-	ui.Default.PrintLines("\n", "\n", cmdOutput.Msg(width, console, true)+"\n")
+	return cmdOutput.Msg(width, console, true)
 }

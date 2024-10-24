@@ -228,6 +228,8 @@ type Cmd struct {
 	// remoteFallbackError is an error returned while running remote execution.
 	// This is used to distinguish from an error when local fallback happens.
 	remoteFallbackError error
+
+	outputResult string
 }
 
 // String returns an ID of the cmd.
@@ -946,4 +948,12 @@ type ExitError struct {
 
 func (e ExitError) Error() string {
 	return fmt.Sprintf("exit=%d", e.ExitCode)
+}
+
+func (c *Cmd) SetOutputResult(msg string) {
+	c.outputResult = msg
+}
+
+func (c *Cmd) OutputResult() string {
+	return c.outputResult
 }
