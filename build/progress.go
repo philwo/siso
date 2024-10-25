@@ -181,9 +181,19 @@ func (p *progress) step(ctx context.Context, b *Builder, step *Step, s string) {
 			// message of progress.update
 		}
 	}
-	if ui.IsTerminal() && !p.verbose && (time.Since(t) < 30*time.Millisecond || (strings.HasPrefix(s, progressPrefixFinish) && step != nil && step.cmd.OutputResult() == "")) {
+	hasOutputResult := strings.HasPrefix(s, progressPrefixFinish) && step != nil && step.cmd.OutputResult() != ""
+	if ui.IsTerminal() && !p.verbose && !hasOutputResult && (time.Since(t) < 30*time.Millisecond || strings.HasPrefix(s, progressPrefixFinish)) {
+		// not output when all conditions below met.
+		//  - terminal
+		//  - not verbose
+		//  - no output result
+		//  - too soon (in 30ms) or finished message
 		return
 	}
+	// will output if
+	//  - not terminal
+	//  - verbose mode
+	//  - has output result
 	var lines []string
 	msg := s
 	switch {
