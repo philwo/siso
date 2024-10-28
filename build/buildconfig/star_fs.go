@@ -23,6 +23,7 @@ import (
 //	read(fname): reads a file.
 //	is_dir(fname): check if fname is a dir.
 //	exists(fname): check if fname exists.
+//	size(fname): report size of fname's content.
 //	canonpath(fname): canonicalize path from working dir relative path.
 func starFS(ctx context.Context, fs fs.FS, path *build.Path, fsc *fscache) starlark.Value {
 	receiver := starFSReceiver{
@@ -34,11 +35,13 @@ func starFS(ctx context.Context, fs fs.FS, path *build.Path, fsc *fscache) starl
 	fsRead := starlark.NewBuiltin("read", starFSRead).BindReceiver(receiver)
 	fsIsDir := starlark.NewBuiltin("is_dir", starFSIsDir).BindReceiver(receiver)
 	fsExists := starlark.NewBuiltin("exists", starFSExists).BindReceiver(receiver)
+	fsSize := starlark.NewBuiltin("size", starFSSize).BindReceiver(receiver)
 	fsCanonPath := starlark.NewBuiltin("canonpath", starFSCanonPath).BindReceiver(receiver)
 	return starlarkstruct.FromStringDict(starlark.String("fs"), map[string]starlark.Value{
 		"read":      fsRead,
 		"is_dir":    fsIsDir,
 		"exists":    fsExists,
+		"size":      fsSize,
 		"canonpath": fsCanonPath,
 	})
 }
@@ -114,6 +117,24 @@ func starFSExists(thread *starlark.Thread, fn *starlark.Builtin, args starlark.T
 		return starlark.False, nil
 	}
 	return starlark.True, nil
+}
+
+// Starlark function `fs.size(fname)` to get file size.
+func starFSSize(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	c, ok := fn.Receiver().(starFSReceiver)
+	if !ok {
+		return starlark.None, fmt.Errorf("unexpected receiver: %v", fn.Receiver())
+	}
+	var fname string
+	err := starlark.UnpackArgs("size", args, kwargs, "fname", &fname)
+	if err != nil {
+		return starlark.None, err
+	}
+	fi, err := fs.Stat(c.fs, fname)
+	if err != nil {
+		return starlark.None, err
+	}
+	return starlark.MakeInt64(fi.Size()), nil
 }
 
 // Starlark function `fs.canonpath(fname)` to canonicalize path from working directory relative path.

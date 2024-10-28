@@ -98,6 +98,8 @@ to register handlers and step configs.
       * `fname`: filename
     * `exists` check path exists.
       * `fname`: filename
+    * `size` get file size.
+      * `fname`: filename
     * `canonpath`: convert wd relative to exec root relative
       * `fname`: filename
 
