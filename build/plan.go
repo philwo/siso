@@ -78,7 +78,8 @@ type Graph interface {
 
 // TargetError is an error of unknown target for build.
 type TargetError struct {
-	err error
+	err      error
+	Suggests []string
 }
 
 func (e TargetError) Unwrap() error {
@@ -197,7 +198,7 @@ func schedule(ctx context.Context, sched *scheduler, graph Graph, args ...string
 	started := time.Now()
 	clog.Infof(ctx, "schedule targets: %v [%d]: %v", targets, graph.NumTargets(), err)
 	if err != nil {
-		return TargetError{err: err}
+		return TargetError{err: err, Suggests: suggestTargets(ctx, sched, graph, args...)}
 	}
 	for _, t := range targets {
 		switch sched.plan.targets[t].scan {
@@ -731,4 +732,33 @@ func (p *plan) dump(ctx context.Context, graph Graph) {
 	sort.Strings(outs)
 	clog.Infof(ctx, "waits=%d no-trigger=%d", waitTargets, len(outs))
 	clog.Infof(ctx, "no steps will trigger %q", outs)
+}
+
+func suggestTargets(ctx context.Context, sched *scheduler, graph Graph, args ...string) []string {
+	rel, err := filepath.Rel(filepath.Join(sched.path.ExecRoot, sched.path.Dir), sched.path.ExecRoot)
+	if err != nil {
+		clog.Warningf(ctx, "failed to get rel to exec root: %v", err)
+		return nil
+	}
+	var suggests []string
+	for _, arg := range args {
+		_, err := graph.Targets(ctx, arg)
+		if err == nil {
+			// this target is ok as is.
+			suggests = append(suggests, arg)
+			continue
+		}
+		arg = strings.TrimSuffix(arg, "^")
+		_, err = sched.hashFS.Stat(ctx, sched.path.ExecRoot, arg)
+		if err != nil {
+			// not sure how to correct this.
+			continue
+		}
+		arg = filepath.ToSlash(filepath.Join(rel, arg) + "^")
+		_, err = graph.Targets(ctx, arg)
+		if err == nil {
+			suggests = append(suggests, arg)
+		}
+	}
+	return suggests
 }

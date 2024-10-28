@@ -203,6 +203,13 @@ func (c *ninjaCmdRun) Run(a subcommands.Application, args []string, env subcomma
 					msgPrefix = ui.SGR(ui.BackgroundRed, msgPrefix)
 				}
 				fmt.Fprintf(os.Stderr, "\n%6s %s: %v\n", dur, msgPrefix, errTarget)
+				if len(errTarget.Suggests) > 0 {
+					fmt.Fprintf(os.Stderr, "Did you mean:")
+					for _, s := range errTarget.Suggests {
+						fmt.Fprintf(os.Stderr, " %q", s)
+					}
+					fmt.Fprintln(os.Stderr, " ?")
+				}
 				return 1
 			}
 			var errMissingSource build.MissingSourceError
