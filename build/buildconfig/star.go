@@ -33,6 +33,8 @@ const (
 	cmdFieldToolInputs = "tool_inputs"
 	// cmd expanded_inputs. func
 	cmdFieldExpandedInputs = "expanded_inputs"
+	// cmd rspfile_content. bytes
+	cmdFieldRSPFileContent = "rspfile_content"
 	// cmd outputs. list
 	cmdFieldOutputs = "outputs"
 )
@@ -55,7 +57,8 @@ func packCmd(ctx context.Context, cmd *execute.Cmd, expandedInputs func() []stri
 			log.V(1).Infof("cmd.expanded_inputs")
 			return packList(expandedInputs()), nil
 		}),
-		cmdFieldOutputs: packList(cmd.Outputs),
+		cmdFieldRSPFileContent: starlark.Bytes(cmd.RSPFileContent),
+		cmdFieldOutputs:        packList(cmd.Outputs),
 	}), nil
 }
 

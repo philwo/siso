@@ -262,6 +262,7 @@ All inputs should be ready to use (via `ctx.fs`).
   * `inputs` list: input pathnames
   * `tool_inputs` list: input pathnames (rule's inputs).
   * `expanded_inputs`: func returns list: expanded input pathnames
+  * `rspfile_content`: bytes: rspfile content
   * `outputs` list: output pathnames
 
 `print` will print in log.
