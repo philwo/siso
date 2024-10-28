@@ -76,6 +76,19 @@ type Graph interface {
 	Filenames() []string
 }
 
+// TargetError is an error of unknown target for build.
+type TargetError struct {
+	err error
+}
+
+func (e TargetError) Unwrap() error {
+	return e.err
+}
+
+func (e TargetError) Error() string {
+	return e.err.Error()
+}
+
 // MissingSourceError is an error of missing source needed for build.
 type MissingSourceError struct {
 	Target   string
@@ -184,7 +197,7 @@ func schedule(ctx context.Context, sched *scheduler, graph Graph, args ...string
 	started := time.Now()
 	clog.Infof(ctx, "schedule targets: %v [%d]: %v", targets, graph.NumTargets(), err)
 	if err != nil {
-		return err
+		return TargetError{err: err}
 	}
 	for _, t := range targets {
 		switch sched.plan.targets[t].scan {

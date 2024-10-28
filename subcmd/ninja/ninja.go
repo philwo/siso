@@ -195,6 +195,16 @@ func (c *ninjaCmdRun) Run(a subcommands.Application, args []string, env subcomma
 			fmt.Fprintf(os.Stderr, "%v\n", err)
 
 		case errors.As(err, &errBuild):
+			var errTarget build.TargetError
+			if errors.As(errBuild.err, &errTarget) {
+				msgPrefix := "Schedule Failure"
+				if ui.IsTerminal() {
+					dur = ui.SGR(ui.Bold, dur)
+					msgPrefix = ui.SGR(ui.BackgroundRed, msgPrefix)
+				}
+				fmt.Fprintf(os.Stderr, "\n%6s %s: %v\n", dur, msgPrefix, errTarget)
+				return 1
+			}
 			var errMissingSource build.MissingSourceError
 			if errors.As(errBuild.err, &errMissingSource) {
 				msgPrefix := "Schedule Failure"
@@ -210,7 +220,7 @@ func (c *ninjaCmdRun) Run(a subcommands.Application, args []string, env subcomma
 				dur = ui.SGR(ui.Bold, dur)
 				msgPrefix = ui.SGR(ui.BackgroundRed, msgPrefix)
 			}
-			fmt.Fprintf(os.Stderr, "%6s %s: %d done %d failed %d remaining - %.02f/s\n %v\n", dur, msgPrefix, stats.Done-stats.Skipped, stats.Fail, stats.Total-stats.Done, sps, errBuild.err)
+			fmt.Fprintf(os.Stderr, "\n%6s %s: %d done %d failed %d remaining - %.02f/s\n %v\n", dur, msgPrefix, stats.Done-stats.Skipped, stats.Fail, stats.Total-stats.Done, sps, errBuild.err)
 			suggest := fmt.Sprintf("see %s for command line and output", c.logFilename(c.outputLogFile))
 			if c.sisoInfoLog != "" {
 				suggest += fmt.Sprintf("\n or %s", c.logFilename(c.sisoInfoLog))
@@ -230,7 +240,7 @@ func (c *ninjaCmdRun) Run(a subcommands.Application, args []string, env subcomma
 			if ui.IsTerminal() {
 				msgPrefix = ui.SGR(ui.BackgroundRed, msgPrefix)
 			}
-			fmt.Fprintf(os.Stderr, "%6s %s: %v\n", ui.FormatDuration(time.Since(c.started)), msgPrefix, err)
+			fmt.Fprintf(os.Stderr, "\n%6s %s: %v\n", ui.FormatDuration(time.Since(c.started)), msgPrefix, err)
 		}
 		return 1
 	}
