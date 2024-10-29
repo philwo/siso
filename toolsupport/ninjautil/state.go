@@ -299,7 +299,7 @@ func (s *State) hatTarget(t string) (*Node, bool) {
 func (s *State) SpellcheckTarget(t string) (string, error) {
 	const maxEditDistance = 3
 	minDistance := maxEditDistance + 1
-	var result string
+	var similar, submatch string
 	for _, n := range s.nodes {
 		if n == nil {
 			continue
@@ -307,13 +307,19 @@ func (s *State) SpellcheckTarget(t string) (string, error) {
 		d := editDistance(t, n.Path(), maxEditDistance)
 		if d < minDistance {
 			minDistance = d
-			result = n.Path()
+			similar = n.Path()
+		}
+		if (submatch == "" || len(n.Path()) < len(submatch)) && strings.Contains(n.Path(), t) {
+			submatch = n.Path()
 		}
 	}
-	if result == "" {
-		return "", fmt.Errorf("no target similar to %q in edit distance %d", t, maxEditDistance)
+	if similar != "" {
+		return similar, nil
 	}
-	return result, nil
+	if submatch != "" {
+		return submatch, nil
+	}
+	return "", fmt.Errorf("no target similar to %q in edit distance %d, or contains %q as substring", t, maxEditDistance, t)
 }
 
 func (s *State) mergeFileState(fstate *fileState) {
