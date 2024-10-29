@@ -453,7 +453,9 @@ func fixInputs(ctx context.Context, stepDef *StepDef, inputs, excludes []string)
 			_, err := stepDef.globals.hashFS.Stat(ctx, stepDef.globals.path.ExecRoot, in)
 			if err != nil {
 				if errors.Is(err, fs.ErrNotExist) {
-					clog.Infof(ctx, "input %s is phony", in)
+					if log.V(1) {
+						clog.Infof(ctx, "input %s is phony", in)
+					}
 					continue
 				}
 				clog.Warningf(ctx, "input %s is phony: %v", in, err)
