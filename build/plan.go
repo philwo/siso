@@ -48,6 +48,9 @@ type Graph interface {
 	// Targets returns target paths for given args.
 	Targets(context.Context, ...string) ([]Target, error)
 
+	// SpellcheckTarget returns the most similar target from given target.
+	SpellcheckTarget(string) (string, error)
+
 	// Validations returns validation targets detected by past StepDef calls.
 	Validations() []Target
 
@@ -746,6 +749,11 @@ func suggestTargets(ctx context.Context, sched *scheduler, graph Graph, args ...
 		if err == nil {
 			// this target is ok as is.
 			suggests = append(suggests, arg)
+			continue
+		}
+		t, err := graph.SpellcheckTarget(arg)
+		if err == nil {
+			suggests = append(suggests, t)
 			continue
 		}
 		arg = strings.TrimSuffix(arg, "^")

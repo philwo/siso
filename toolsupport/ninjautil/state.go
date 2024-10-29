@@ -295,6 +295,27 @@ func (s *State) hatTarget(t string) (*Node, bool) {
 	return nil, false
 }
 
+// SpellcheckTarget returns the most similar target from given target.
+func (s *State) SpellcheckTarget(t string) (string, error) {
+	const maxEditDistance = 3
+	minDistance := maxEditDistance + 1
+	var result string
+	for _, n := range s.nodes {
+		if n == nil {
+			continue
+		}
+		d := editDistance(t, n.Path(), maxEditDistance)
+		if d < minDistance {
+			minDistance = d
+			result = n.Path()
+		}
+	}
+	if result == "" {
+		return "", fmt.Errorf("no target similar to %q in edit distance %d", t, maxEditDistance)
+	}
+	return result, nil
+}
+
 func (s *State) mergeFileState(fstate *fileState) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

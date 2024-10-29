@@ -408,6 +408,11 @@ func (g *Graph) Targets(ctx context.Context, args ...string) ([]build.Target, er
 	return targets, nil
 }
 
+// SpellcheckTarget finds closest target name from t.
+func (g *Graph) SpellcheckTarget(t string) (string, error) {
+	return g.globals.nstate.SpellcheckTarget(t)
+}
+
 // Validations returns validation targets detected by past StepDef calls.
 func (g *Graph) Validations() []build.Target {
 	return g.validations
