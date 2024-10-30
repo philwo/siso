@@ -24,6 +24,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"cloud.google.com/go/compute/metadata"
 	"cloud.google.com/go/logging"
 	"cloud.google.com/go/profiler"
 	"contrib.go.opencensus.io/exporter/stackdriver"
@@ -1140,12 +1141,28 @@ func (c *ninjaCmdRun) initCloudLogging(ctx context.Context, projectID, execRoot 
 
 func (c *ninjaCmdRun) initCloudProfiler(ctx context.Context, projectID string, credential cred.Cred) {
 	clog.Infof(ctx, "enable cloud profiler %q in %s", c.cloudProfilerServiceName, projectID)
-	err := profiler.Start(profiler.Config{
+	config := profiler.Config{
 		Service:        c.cloudProfilerServiceName,
 		ServiceVersion: fmt.Sprintf("%s/%s", c.version, runtime.GOOS),
 		MutexProfiling: true,
 		ProjectID:      projectID,
-	}, credential.ClientOptions()...)
+	}
+	if metadata.OnGCE() {
+		// need to set zone,instance if it seems to run on GCE
+		// but metadata failed to reply them. b/376372151
+		var err error
+		config.Zone, err = metadata.ZoneWithContext(ctx)
+		if err != nil {
+			clog.Warningf(ctx, "failed to get zone from metadata: %v", err)
+			config.Zone = "us-central1-a"
+		}
+		config.Instance, err = metadata.InstanceNameWithContext(ctx)
+		if err != nil {
+			clog.Warningf(ctx, "failed to get instnace from metadata: %v", err)
+			config.Instance = "non-gce-instance"
+		}
+	}
+	err := profiler.Start(config, credential.ClientOptions()...)
 	if err != nil {
 		clog.Errorf(ctx, "failed to start cloud profiler: %v", err)
 	}
