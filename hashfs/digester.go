@@ -129,6 +129,12 @@ func (d *digester) stop(ctx context.Context) {
 }
 
 func (d *digester) lazyCompute(ctx context.Context, fname string, e *entry) {
+	e.mu.Lock()
+	ed := e.d
+	e.mu.Unlock()
+	if !ed.IsZero() {
+		return
+	}
 	select {
 	case <-ctx.Done():
 		clog.Warningf(ctx, "ignore lazyCompute %s: %v", fname, context.Cause(ctx))
@@ -154,6 +160,12 @@ func (d *digester) lazyCompute(ctx context.Context, fname string, e *entry) {
 
 func (d *digester) compute(ctx context.Context, fname string, e *entry) {
 	if e.err != nil || e.src == nil {
+		return
+	}
+	e.mu.Lock()
+	ed := e.d
+	e.mu.Unlock()
+	if !ed.IsZero() {
 		return
 	}
 	err := DigestSemaphore.Do(ctx, func(ctx context.Context) error {
