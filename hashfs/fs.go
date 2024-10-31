@@ -784,7 +784,7 @@ func (hfs *HashFS) ForgetMissings(ctx context.Context, root string, inputs []str
 			clog.Infof(ctx, "remove from inputs %s: %v", fname, err)
 			continue
 		}
-		if err == nil && fi.IsChanged() {
+		if err == nil && (fi.IsChanged() || fi.IsMissingChecked()) {
 			// it is explicit generated file.
 			// no need to check on disk.
 			availables = append(availables, fname)
@@ -802,6 +802,12 @@ func (hfs *HashFS) ForgetMissings(ctx context.Context, root string, inputs []str
 				clog.Infof(ctx, "forget missing %s", fullname)
 				hfs.directory.delete(ctx, fullname)
 				continue
+			}
+			fi, err := hfs.Stat(ctx, root, fname)
+			if err == nil {
+				fi.e.mu.Lock()
+				fi.e.isMissingChecked = true
+				fi.e.mu.Unlock()
 			}
 			availables = append(availables, fname)
 		}
@@ -1398,6 +1404,8 @@ type entry struct {
 
 	// isChanged indicates the file is changed in the session.
 	isChanged bool
+	// isMissingChecked indicates the file is checked in ForgetMissings.
+	isMissingChecked bool
 
 	target string // symlink.
 
@@ -2292,6 +2300,14 @@ func (fi FileInfo) IsChanged() bool {
 	fi.e.mu.Lock()
 	defer fi.e.mu.Unlock()
 	return fi.e.isChanged
+}
+
+// IsMissingChecked returns true if file has been checked existence
+// for ForgetMissings.
+func (fi FileInfo) IsMissingChecked() bool {
+	fi.e.mu.Lock()
+	defer fi.e.mu.Unlock()
+	return fi.e.isMissingChecked
 }
 
 // IsDir returns true if it is the directory.
