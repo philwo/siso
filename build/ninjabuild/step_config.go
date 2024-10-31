@@ -368,6 +368,7 @@ func (sc StepConfig) Lookup(ctx context.Context, bpath *build.Path, edge *ninjau
 	// TODO(ukai): use execroot relative if it is in execroot?
 	if ok {
 		args0 = strings.Trim(args0, `"`)
+		args0 = strings.ReplaceAll(args0, "$:", ":")
 		if filepath.IsAbs(args0) && !strings.HasPrefix(args0, bpath.ExecRoot) {
 			args0 = filepath.Base(args0)
 			command = args0 + " " + args
