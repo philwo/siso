@@ -751,21 +751,34 @@ func suggestTargets(ctx context.Context, sched *scheduler, graph Graph, args ...
 			suggests = append(suggests, arg)
 			continue
 		}
-		t, err := graph.SpellcheckTarget(arg)
+		target := strings.TrimSuffix(arg, "^")
+		_, err = sched.hashFS.Stat(ctx, sched.path.ExecRoot, filepath.Join(sched.path.Dir, target))
+		if err == nil {
+			// just missing ^?
+			target := filepath.ToSlash(target) + "^"
+			_, err = graph.Targets(ctx, target)
+			if err == nil {
+				suggests = append(suggests, target)
+				continue
+			}
+		}
+		_, err = sched.hashFS.Stat(ctx, sched.path.ExecRoot, target)
+		if err == nil {
+			// wrong relative dir?
+			target := filepath.ToSlash(filepath.Join(rel, target) + "^")
+			_, err = graph.Targets(ctx, target)
+			if err == nil {
+				suggests = append(suggests, target)
+				continue
+			}
+		}
+		t, err := graph.SpellcheckTarget(target)
 		if err == nil {
 			suggests = append(suggests, t)
-			continue
 		}
-		arg = strings.TrimSuffix(arg, "^")
-		_, err = sched.hashFS.Stat(ctx, sched.path.ExecRoot, arg)
-		if err != nil {
-			// not sure how to correct this.
-			continue
-		}
-		arg = filepath.ToSlash(filepath.Join(rel, arg) + "^")
-		_, err = graph.Targets(ctx, arg)
+		t, err = graph.SpellcheckTarget(filepath.Join(rel, target))
 		if err == nil {
-			suggests = append(suggests, arg)
+			suggests = append(suggests, t+"^")
 		}
 	}
 	return suggests
