@@ -64,10 +64,15 @@ func depsFastStep(ctx context.Context, b *Builder, step *Step) (*Step, error) {
 	// because it would access many files, which would call syscalls
 	// and may create new threads.
 	err := b.scanDepsSema.Do(ctx, func(ctx context.Context) error {
-		depsIns, err := step.def.DepInputs(ctx)
+		depsIter, err := step.def.DepInputs(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to get fast deps log (deps=%q): %w", step.cmd.Deps, err)
 		}
+		var depsIns []string
+		depsIter(func(in string) bool {
+			depsIns = append(depsIns, in)
+			return true
+		})
 		newCmd, err = ds.DepsFastCmd(ctx, b, step.cmd)
 		if err != nil {
 			return err

@@ -225,14 +225,16 @@ func inputMtime(ctx context.Context, b *Builder, stepDef StepDef) (string, time.
 	var inmtime time.Time
 	lastIn := ""
 	ins := stepDef.TriggerInputs(ctx)
-	deps, err := stepDef.DepInputs(ctx)
+	depsIter, err := stepDef.DepInputs(ctx)
 	if err != nil {
 		return "", inmtime, fmt.Errorf("failed to load deps: %w", err)
 	}
 	seen := make(map[string]bool)
-	for _, in := range append(ins, deps...) {
+
+	var retErr error
+	appendSeq(ins, depsIter)(func(in string) bool {
 		if seen[in] {
-			continue
+			return true
 		}
 		seen[in] = true
 		var mtime time.Time
@@ -242,16 +244,19 @@ func inputMtime(ctx context.Context, b *Builder, stepDef StepDef) (string, time.
 			// phony target
 			ps, ok := v.(phonyState)
 			if !ok {
-				return "", inmtime, fmt.Errorf("unexpected value in dirtyPhony for %s: %T", in, v)
+				retErr = fmt.Errorf("unexpected value in dirtyPhony for %s: %T", in, v)
+				return false
 			}
 			if ps.dirty {
-				return "", inmtime, fmt.Errorf("input %s (phony): %w", in, errDirty)
+				retErr = fmt.Errorf("input %s (phony): %w", in, errDirty)
+				return false
 			}
 			mtime = ps.mtime
 		} else {
 			fi, err := b.hashFS.Stat(ctx, b.path.ExecRoot, in)
 			if err != nil {
-				return "", inmtime, fmt.Errorf("missing input %s: %w", in, err)
+				retErr = fmt.Errorf("missing input %s: %w", in, err)
+				return false
 			}
 			mtime = fi.ModTime()
 			changed = fi.IsChanged()
@@ -261,8 +266,24 @@ func inputMtime(ctx context.Context, b *Builder, stepDef StepDef) (string, time.
 			lastIn = in
 		}
 		if changed {
-			return "", inmtime, fmt.Errorf("input %s: %w", in, errDirty)
+			retErr = fmt.Errorf("input %s: %w", in, errDirty)
+			return false
 		}
+		return true
+	})
+	if retErr != nil {
+		return "", inmtime, retErr
 	}
 	return lastIn, inmtime, nil
+}
+
+func appendSeq(ins []string, iter func(func(string) bool)) func(yield func(string) bool) {
+	return func(yield func(string) bool) {
+		for _, in := range ins {
+			if !yield(in) {
+				return
+			}
+		}
+		iter(yield)
+	}
 }

@@ -44,7 +44,7 @@ type StepDef struct {
 	pure      bool
 
 	// from depfile/depslog
-	deps   []string // exec root relative
+	deps   func(yield func(string) bool) // exec root relative
 	deperr error
 
 	envfile string // for ninja -t msvc -e <envfile> --
@@ -368,17 +368,17 @@ func (s *StepDef) TriggerInputs(ctx context.Context) []string {
 }
 
 // DepInputs returns inputs stored in depfile / depslog.
-func (s *StepDef) DepInputs(ctx context.Context) ([]string, error) {
+func (s *StepDef) DepInputs(ctx context.Context) (func(yield func(string) bool), error) {
 	ctx, span := trace.NewSpan(ctx, "stepdef-dep-inputs")
 	defer span.Close(nil)
-	if len(s.deps) == 0 && s.deperr == nil {
+	if s.deps == nil && s.deperr == nil {
 		s.deps, s.deperr = depInputs(ctx, s)
 	}
 	return s.deps, s.deperr
 }
 
 // depInputs returns deps inputs of the step.
-func depInputs(ctx context.Context, s *StepDef) ([]string, error) {
+func depInputs(ctx context.Context, s *StepDef) (func(yield func(string) bool), error) {
 	var deps []string
 	var err error
 	switch s.edge.Binding("deps") {
@@ -401,7 +401,7 @@ func depInputs(ctx context.Context, s *StepDef) ([]string, error) {
 		// deps info is in depfile
 		depfile := s.edge.UnescapedBinding("depfile")
 		if depfile == "" {
-			return nil, nil
+			return func(yield func(string) bool) {}, nil
 		}
 		df := s.globals.path.MaybeFromWD(ctx, depfile)
 		if s.edge.Binding("generator") != "" {
@@ -423,12 +423,14 @@ func depInputs(ctx context.Context, s *StepDef) ([]string, error) {
 			clog.Infof(ctx, "depfile %s: %d", depfile, len(deps))
 		}
 	}
-	inputs := make([]string, 0, len(deps))
-	for _, in := range deps {
-		rin := s.globals.path.MaybeFromWD(ctx, in)
-		inputs = append(inputs, rin)
-	}
-	return inputs, nil
+	return func(yield func(string) bool) {
+		for _, in := range deps {
+			rin := s.globals.path.MaybeFromWD(ctx, in)
+			if !yield(rin) {
+				return
+			}
+		}
+	}, nil
 }
 
 // ToolInputs returns tool inputs of the step.

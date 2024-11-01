@@ -66,10 +66,11 @@ type StepDef interface {
 	// For  deps in deps log, use DepInputs.
 	TriggerInputs(context.Context) []string
 
-	// DepInputs returns inputs via depfile of the step.
-	// if depfile is not set, returns nil, nil
+	// DepInputs returns iterator for inputs via depfile of the step.
+	// if depfile is not set, returns emptyIter, nil
 	// if depfile or deplog is not found, returns wrapped ErrMissingDeps.
-	DepInputs(context.Context) ([]string, error)
+	// TODO: use iter.Seq[string] in go 1.23
+	DepInputs(context.Context) (func(yield func(string) bool), error)
 
 	// ToolInputs returns tool inputs of the step.
 	// ToolInputs is added to deps inputs.
@@ -451,17 +452,18 @@ func stepInputs(ctx context.Context, b *Builder, stepDef StepDef) []string {
 		seen[in] = true
 		inputs = append(inputs, in)
 	}
-	deps, err := stepDef.DepInputs(ctx)
+	depsIter, err := stepDef.DepInputs(ctx)
 	if err != nil {
 		return inputs
 	}
-	for _, in := range deps {
+	depsIter(func(in string) bool {
 		if seen[in] {
-			continue
+			return true
 		}
 		seen[in] = true
 		inputs = append(inputs, in)
-	}
+		return true
+	})
 	return inputs
 }
 
