@@ -423,7 +423,7 @@ func depInputs(ctx context.Context, s *StepDef) ([]string, error) {
 			clog.Infof(ctx, "depfile %s: %d", depfile, len(deps))
 		}
 	}
-	var inputs []string
+	inputs := make([]string, 0, len(deps))
 	for _, in := range deps {
 		rin := s.globals.path.MaybeFromWD(ctx, in)
 		inputs = append(inputs, rin)
