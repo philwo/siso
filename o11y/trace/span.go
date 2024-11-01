@@ -11,6 +11,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"path"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -105,8 +106,8 @@ func (t *Context) newSpan(ctx context.Context, name string, parent *Span) *Span 
 		parent:      parent,
 		displayName: name,
 		start:       time.Now(),
-		attrs:       make(map[string]any),
 	}
+	span.attrs = span.attrBuf[:0] // assign a new empty slice with the pre-allocated capacity (=2) for attrBuf.
 	if log.V(2) {
 		clog.Infof(ctx, "new span %s %q<%v", name, spanID, parent)
 	}
@@ -166,8 +167,14 @@ type Span struct {
 	displayName string
 	start       time.Time
 	end         time.Time
-	attrs       map[string]any
+	attrs       []attrKV
+	attrBuf     [2]attrKV // avoid allocation for small number of attrs.
 	status      *spb.Status
+}
+
+type attrKV struct {
+	key   string
+	value any
 }
 
 // SetAttr sets attributes in the span.
@@ -177,7 +184,7 @@ func (s *Span) SetAttr(key string, value any) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.attrs[key] = value
+	s.attrs = append(s.attrs, attrKV{key: key, value: value})
 }
 
 // Add adds span data as a child of the span and returns it.
@@ -193,7 +200,14 @@ func (s *Span) Add(ctx context.Context, sd SpanData) *Span {
 	s.mu.Unlock()
 	ss.start = sd.Start
 	ss.end = sd.End
-	ss.attrs = sd.Attrs
+	var keys []string
+	for key := range sd.Attrs {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		ss.attrs = append(ss.attrs, attrKV{key: key, value: sd.Attrs[key]})
+	}
 	ss.status = sd.Status
 	return ss
 }
@@ -214,10 +228,10 @@ func (s *Span) protoAttrs() *tracepb.Span_Attributes {
 		return nil
 	}
 	m := make(map[string]*tracepb.AttributeValue)
-	for k, v := range s.attrs {
-		av := attrValue(v)
+	for _, kv := range s.attrs {
+		av := attrValue(kv.value)
 		if av != nil {
-			m[k] = av
+			m[kv.key] = av
 		}
 	}
 	return &tracepb.Span_Attributes{
@@ -235,11 +249,15 @@ func (s *Span) data() SpanData {
 	if end.IsZero() {
 		end = time.Now()
 	}
+	attrs := make(map[string]any)
+	for _, a := range s.attrs {
+		attrs[a.key] = a.value
+	}
 	return SpanData{
 		Name:   s.displayName,
 		Start:  s.start,
 		End:    end,
-		Attrs:  s.attrs,
+		Attrs:  attrs,
 		Status: s.status,
 	}
 }
