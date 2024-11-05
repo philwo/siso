@@ -63,6 +63,8 @@ func (as *activeSteps) Pop() any {
 
 func (p *progress) start(ctx context.Context, b *Builder) {
 	p.started = time.Now()
+	p.lastChanged = time.Now()
+	p.lastProcessList = time.Now()
 	p.verbose = b.verbose
 	p.resultstoreUploader = b.resultstoreUploader
 	p.done = make(chan struct{})
