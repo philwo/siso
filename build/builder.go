@@ -1154,3 +1154,7 @@ func (b *Builder) prepareAllOutDirs(ctx context.Context) error {
 func (b *Builder) ActiveSteps() []ActiveStepInfo {
 	return b.progress.ActiveSteps()
 }
+
+func (b *Builder) localFallbackEnabled() bool {
+	return !experiments.Enabled("no-fallback", "") && !b.hashFS.OnCog()
+}

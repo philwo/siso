@@ -52,6 +52,9 @@ func depsFastStep(ctx context.Context, b *Builder, step *Step) (*Step, error) {
 	if len(step.cmd.Platform) == 0 || step.cmd.Platform["container-image"] == "" {
 		return nil, errors.New("no fast-deps (no remote step)")
 	}
+	if b.hashFS.OnCog() {
+		return nil, errors.New("no fast-deps (on Cog)")
+	}
 	if experiments.Enabled("no-fast-deps", "disable fast-deps and force scandeps") {
 		return nil, errors.New("no fast-deps (SISO_EXPERIMENTS)")
 	}

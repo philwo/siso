@@ -22,7 +22,7 @@ import (
 func (b *Builder) execRemote(ctx context.Context, step *Step) error {
 	ctx, span := trace.NewSpan(ctx, "exec-remote")
 	defer span.Close(nil)
-	noFallback := experiments.Enabled("no-fallback", "no-fallback tries for reapi deadline exceeded at most 4 times")
+	noFallback := !b.localFallbackEnabled()
 	var timeout time.Duration
 	if noFallback {
 		// In no-fallback mode, remote execution will be tried 4 times at most.

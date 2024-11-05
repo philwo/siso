@@ -244,6 +244,11 @@ func (hfs *HashFS) DataSource() DataSource {
 	return hfs.opt.DataSource
 }
 
+// OnCog returns whether it is on Cog or not.
+func (hfs *HashFS) OnCog() bool {
+	return hfs.opt.CogFS != nil
+}
+
 func needPathClean(names ...string) bool {
 	for _, name := range names {
 		// even on windows, we use /-path in hashfs.

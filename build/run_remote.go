@@ -98,7 +98,7 @@ func (b *Builder) runRemote(ctx context.Context, step *Step) error {
 			clog.Errorf(ctx, "not relocatable: %v", err)
 			return err
 		}
-		if experiments.Enabled("no-fallback", "remote-exec %s failed. no-fallback", step) {
+		if !b.localFallbackEnabled() {
 			return fmt.Errorf("remote-exec %s failed no-fallback: %w", step.cmd.ActionDigest(), err)
 		}
 		step.metrics.IsRemote = false
