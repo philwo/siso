@@ -8,12 +8,15 @@ import (
 	"container/heap"
 	"context"
 	"fmt"
+	"os/exec"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"infra/build/siso/o11y/clog"
 	"infra/build/siso/o11y/resultstore"
 	"infra/build/siso/ui"
 )
@@ -24,6 +27,9 @@ type progress struct {
 	numLocal atomic.Int32
 	mu       sync.Mutex
 	ts       time.Time
+
+	lastChanged     time.Time
+	lastProcessList time.Time
 
 	resultstoreUploader *resultstore.Uploader
 
@@ -78,6 +84,7 @@ func (p *progress) update(ctx context.Context, b *Builder) {
 			return
 		case <-ticker.C:
 			p.count.Add(1)
+			var noProgress time.Duration
 			p.mu.Lock()
 			var si *stepInfo
 			for len(p.actives) > 0 {
@@ -98,7 +105,16 @@ func (p *progress) update(ctx context.Context, b *Builder) {
 					s.step.addWeightedDuration(wd)
 				}
 			}
+			const processListThreshold = 3 * time.Minute
+			if time.Since(p.lastChanged) > processListThreshold && time.Since(p.lastProcessList) > processListThreshold {
+				p.lastProcessList = time.Now()
+				noProgress = time.Since(p.lastChanged)
+			}
 			p.mu.Unlock()
+			if noProgress > 0 {
+				clog.Warningf(ctx, "thrashing? no step finished more than %s", noProgress)
+				go p.processList(ctx)
+			}
 			if !ui.IsTerminal() || b.verbose {
 				continue
 			}
@@ -158,6 +174,7 @@ func (p *progress) step(ctx context.Context, b *Builder, step *Step, s string) {
 	p.mu.Lock()
 	t := p.ts
 	if step != nil {
+		p.lastChanged = time.Now()
 		if strings.HasPrefix(s, progressPrefixStart) {
 			heap.Push(&p.actives, &stepInfo{
 				step: step,
@@ -340,4 +357,17 @@ func (p *progress) ActiveSteps() []ActiveStepInfo {
 		})
 	}
 	return activeSteps
+}
+
+func (p *progress) processList(ctx context.Context) {
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "windows":
+		cmd = exec.Command("tasklist.exe")
+	default:
+		// TODO(ukai): need to support other OS?
+		return
+	}
+	out, err := cmd.CombinedOutput()
+	clog.Warningf(ctx, "process list: %v\n%s", err, out)
 }
