@@ -200,8 +200,11 @@ func (p *progress) step(ctx context.Context, b *Builder, step *Step, s string) {
 			// message of progress.update
 		}
 	}
-	hasOutputResult := strings.HasPrefix(s, progressPrefixFinish) && step != nil && step.cmd.OutputResult() != ""
-	if ui.IsTerminal() && !p.verbose && !hasOutputResult && (time.Since(t) < 30*time.Millisecond || strings.HasPrefix(s, progressPrefixFinish)) {
+	var outputResult string
+	if strings.HasPrefix(s, progressPrefixFinish) && step != nil {
+		outputResult = step.cmd.OutputResult()
+	}
+	if ui.IsTerminal() && !p.verbose && outputResult != "" && (time.Since(t) < 30*time.Millisecond || strings.HasPrefix(s, progressPrefixFinish)) {
 		// not output when all conditions below met.
 		//  - terminal
 		//  - not verbose
@@ -223,13 +226,13 @@ func (p *progress) step(ctx context.Context, b *Builder, step *Step, s string) {
 				dur,
 				step.def.Binding("command"))
 			fmt.Println(msg)
-		} else if strings.HasPrefix(s, progressPrefixFinish) && step != nil && step.cmd.OutputResult() != "" {
+		} else if strings.HasPrefix(s, progressPrefixFinish) && step != nil {
 			msg = fmt.Sprintf("[%d/%d] %s %s",
 				stat.Done-stat.Skipped, stat.Total-stat.Skipped,
 				dur,
 				step.def.Binding("command"))
-			if step.cmd.OutputResult() != "" {
-				msg += "\n" + step.cmd.OutputResult() + "\n"
+			if outputResult != "" {
+				msg += "\n" + outputResult + "\n"
 			}
 			fmt.Println(msg)
 
@@ -296,22 +299,20 @@ func (p *progress) step(ctx context.Context, b *Builder, step *Step, s string) {
 		))
 		fallthrough
 	default:
-		var result string
 		if step != nil {
 			msg = fmt.Sprintf("[%d/%d] %s %s",
 				stat.Done-stat.Skipped, stat.Total-stat.Skipped,
 				dur,
 				s)
-			result = step.cmd.OutputResult()
-			if result != "" {
+			if outputResult != "" {
 				if !ui.IsTerminal() {
-					result = "\n" + result
+					outputResult = "\n" + outputResult
 				}
 			}
 		}
 		lines = append(lines, msg)
-		if result != "" {
-			lines = append(lines, result+"\n")
+		if outputResult != "" {
+			lines = append(lines, outputResult+"\n")
 		}
 		ui.Default.PrintLines(lines...)
 	}
