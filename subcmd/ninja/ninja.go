@@ -1766,11 +1766,11 @@ func (ds dataSource) Close(ctx context.Context) error {
 	return ds.client.Close()
 }
 
-func (ds dataSource) DigestData(d digest.Digest, fname string) digest.Data {
-	return digest.NewData(ds.Source(d, fname), d)
+func (ds dataSource) DigestData(ctx context.Context, d digest.Digest, fname string) digest.Data {
+	return digest.NewData(ds.Source(ctx, d, fname), d)
 }
 
-func (ds dataSource) Source(d digest.Digest, fname string) digest.Source {
+func (ds dataSource) Source(_ context.Context, d digest.Digest, fname string) digest.Source {
 	return source{
 		dataSource: ds,
 		d:          d,
@@ -1786,7 +1786,7 @@ type source struct {
 
 func (s source) Open(ctx context.Context) (io.ReadCloser, error) {
 	if s.dataSource.cache != nil {
-		src := s.dataSource.cache.Source(s.d, s.fname)
+		src := s.dataSource.cache.Source(ctx, s.d, s.fname)
 		r, err := src.Open(ctx)
 		if err == nil {
 			return r, nil

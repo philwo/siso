@@ -66,7 +66,7 @@ func (c CacheStore) HasContent(ctx context.Context, d digest.Digest) bool {
 }
 
 // Source returns digest source for fname identified by the digest.
-func (c CacheStore) Source(d digest.Digest, fname string) digest.Source {
+func (c CacheStore) Source(_ context.Context, d digest.Digest, fname string) digest.Source {
 	return digestSource{
 		c:     c.client,
 		d:     d,

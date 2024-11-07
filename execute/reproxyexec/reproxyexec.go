@@ -440,7 +440,7 @@ type reproxyOutputsDataSource struct {
 	osfs     *osfs.OSFS
 }
 
-func (ds reproxyOutputsDataSource) Source(_ digest.Digest, fname string) digest.Source {
+func (ds reproxyOutputsDataSource) Source(_ context.Context, _ digest.Digest, fname string) digest.Source {
 	path := filepath.Join(ds.execRoot, fname)
 	return ds.osfs.FileSource(path, -1)
 }

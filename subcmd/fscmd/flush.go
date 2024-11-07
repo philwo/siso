@@ -181,7 +181,7 @@ func (c *flushRun) flush(ctx context.Context, cacheStore reapi.CacheStore, fname
 	if err != nil {
 		return err
 	}
-	src := cacheStore.Source(d, fname)
+	src := cacheStore.Source(ctx, d, fname)
 	r, err := src.Open(ctx)
 	if err != nil {
 		_ = w.Close()

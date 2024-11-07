@@ -158,7 +158,7 @@ func (c *LocalCache) HasContent(ctx context.Context, d digest.Digest) bool {
 }
 
 // Source returns digest source for fname identified by the digest.
-func (c *LocalCache) Source(d digest.Digest, fname string) digest.Source {
+func (c *LocalCache) Source(_ context.Context, d digest.Digest, fname string) digest.Source {
 	return dataSource{c: c, d: d, fname: fname, m: c.IOMetrics()}
 }
 

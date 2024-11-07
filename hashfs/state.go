@@ -76,7 +76,7 @@ func (o *Option) RegisterFlags(flagSet *flag.FlagSet) {
 
 // DataSource is an interface to get digest source for digest and its name.
 type DataSource interface {
-	Source(digest.Digest, string) digest.Source
+	Source(context.Context, digest.Digest, string) digest.Source
 }
 
 func isGzip(b []byte) bool {
@@ -269,7 +269,7 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 					return nil
 				}
 
-				e, _ := newStateEntry(ent, time.Time{}, hfs.opt.DataSource, hfs.OS)
+				e, _ := newStateEntry(ctx, ent, time.Time{}, hfs.opt.DataSource, hfs.OS)
 				e.cmdhash = h
 				e.action = toDigest(ent.Action)
 				entries[i] = e
@@ -281,7 +281,7 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 				dirty.Store(true)
 				return nil
 			}
-			e, et := newStateEntry(ent, fi.ModTime(), hfs.opt.DataSource, hfs.OS)
+			e, et := newStateEntry(ctx, ent, fi.ModTime(), hfs.opt.DataSource, hfs.OS)
 			e.cmdhash = h
 			e.action = toDigest(ent.Action)
 			ftype := "file"
@@ -419,7 +419,7 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 	return nil
 }
 
-func newStateEntry(ent *pb.Entry, ftime time.Time, dataSource DataSource, osfs *osfs.OSFS) (*entry, entryStateType) {
+func newStateEntry(ctx context.Context, ent *pb.Entry, ftime time.Time, dataSource DataSource, osfs *osfs.OSFS) (*entry, entryStateType) {
 	lready := make(chan bool, 1)
 	entTime := time.Unix(0, ent.Id.ModTime)
 	var entType entryStateType
@@ -451,7 +451,7 @@ func newStateEntry(ent *pb.Entry, ftime time.Time, dataSource DataSource, osfs *
 		} else {
 			// not the same as local, but digest is in state.
 			// probably, exists in RBE side, or local cache.
-			src = dataSource.Source(entDigest, ent.Name)
+			src = dataSource.Source(ctx, entDigest, ent.Name)
 		}
 	} else if ent.Target != "" {
 		mode |= fs.ModeSymlink

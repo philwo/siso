@@ -1304,7 +1304,7 @@ func (ns noSource) String() string {
 
 type noDataSource struct{}
 
-func (noDataSource) Source(d digest.Digest, fname string) digest.Source {
+func (noDataSource) Source(_ context.Context, d digest.Digest, fname string) digest.Source {
 	return noSource{fname}
 }
 

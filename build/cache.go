@@ -41,7 +41,7 @@ type CacheStore interface {
 	HasContent(context.Context, digest.Digest) bool
 
 	// Source returns digest source for the name identified by the digest.
-	Source(digest.Digest, string) digest.Source
+	Source(context.Context, digest.Digest, string) digest.Source
 }
 
 // Cache is a cache used in the builder.

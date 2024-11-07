@@ -689,14 +689,14 @@ func (c *Cmd) entriesFromResult(ctx context.Context, ds hashfs.DataSource, resul
 		if !c.outfiles[fname] {
 			additionalEntries = append(additionalEntries, merkletree.Entry{
 				Name:         fname,
-				Data:         digest.NewData(ds.Source(d, fname), d),
+				Data:         digest.NewData(ds.Source(ctx, d, fname), d),
 				IsExecutable: f.IsExecutable,
 			})
 			continue
 		}
 		entries = append(entries, merkletree.Entry{
 			Name:         fname,
-			Data:         digest.NewData(ds.Source(d, fname), d),
+			Data:         digest.NewData(ds.Source(ctx, d, fname), d),
 			IsExecutable: f.IsExecutable,
 		})
 	}
