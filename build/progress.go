@@ -204,7 +204,7 @@ func (p *progress) step(ctx context.Context, b *Builder, step *Step, s string) {
 	if strings.HasPrefix(s, progressPrefixFinish) && step != nil {
 		outputResult = step.cmd.OutputResult()
 	}
-	if ui.IsTerminal() && !p.verbose && outputResult != "" && (time.Since(t) < 30*time.Millisecond || strings.HasPrefix(s, progressPrefixFinish)) {
+	if ui.IsTerminal() && !p.verbose && outputResult == "" && (time.Since(t) < 30*time.Millisecond || strings.HasPrefix(s, progressPrefixFinish)) {
 		// not output when all conditions below met.
 		//  - terminal
 		//  - not verbose
