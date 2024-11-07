@@ -47,6 +47,7 @@ import (
 	"infra/build/siso/auth/cred"
 	"infra/build/siso/build"
 	"infra/build/siso/build/buildconfig"
+	"infra/build/siso/build/cachestore"
 	"infra/build/siso/build/ninjabuild"
 	"infra/build/siso/hashfs"
 	"infra/build/siso/o11y/clog"
@@ -1735,7 +1736,7 @@ func (c *ninjaCmdRun) logSymlink(ctx context.Context) error {
 }
 
 type dataSource struct {
-	cache  build.CacheStore
+	cache  cachestore.CacheStore
 	client *reapi.Client
 }
 

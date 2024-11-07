@@ -15,6 +15,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"infra/build/siso/build/cachestore"
 	"infra/build/siso/execute"
 	"infra/build/siso/o11y/clog"
 	"infra/build/siso/o11y/iometrics"
@@ -25,28 +26,13 @@ import (
 
 // CacheOptions is cache options.
 type CacheOptions struct {
-	Store      CacheStore
+	Store      cachestore.CacheStore
 	EnableRead bool
-}
-
-// CacheStore is an interface of cache store.
-type CacheStore interface {
-	// GetActionResult gets the action result of the action identified by the digest.
-	GetActionResult(context.Context, digest.Digest) (*rpb.ActionResult, error)
-	// GetContent gets the content of the file identified by the digest.
-	GetContent(context.Context, digest.Digest, string) ([]byte, error)
-	// SetContent sets the content of the file identified by the digest.
-	SetContent(context.Context, digest.Digest, string, []byte) error
-	// HasContent checks whether content of the digest exists in the cache.
-	HasContent(context.Context, digest.Digest) bool
-
-	// Source returns digest source for the name identified by the digest.
-	Source(context.Context, digest.Digest, string) digest.Source
 }
 
 // Cache is a cache used in the builder.
 type Cache struct {
-	store      CacheStore
+	store      cachestore.CacheStore
 	enableRead bool
 
 	sema *semaphore.Semaphore
