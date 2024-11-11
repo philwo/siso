@@ -28,9 +28,6 @@ func (b *Builder) execLocal(ctx context.Context, step *Step) error {
 	step.cmd.RemoteWrapper = ""
 
 	step.setPhase(stepInput)
-	// expand inputs to get full action inputs,
-	// before preparing inputs on local disk for local action.
-	depsExpandInputs(ctx, b, step)
 	err := b.prepareLocalInputs(ctx, step)
 	if err != nil && !experiments.Enabled("ignore-missing-local-inputs", "step %s missing inputs: %v", step, err) {
 		return err

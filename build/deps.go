@@ -114,10 +114,6 @@ func depsExpandInputs(ctx context.Context, b *Builder, step *Step) {
 	switch step.cmd.Deps {
 	case "gcc", "msvc":
 	default:
-		if step.def.Binding("siso_handler") != "" {
-			// already expanded before handle.
-			return
-		}
 		oldlen := len(step.cmd.Inputs)
 		expanded := step.def.ExpandedInputs(ctx)
 		inputs := make([]string, 0, oldlen+len(expanded))

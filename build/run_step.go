@@ -124,7 +124,6 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 
 	b.progressStepStarted(ctx, step)
 	defer b.progressStepFinished(ctx, step)
-	depsExpandInputs(ctx, b, step)
 
 	step.setPhase(stepHandler)
 	exited, err := b.handleStep(ctx, step)
@@ -146,7 +145,6 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 		}
 		clog.Warningf(ctx, "handle step failure: %v", err)
 	}
-
 	err = b.setupRSP(ctx, step)
 	if err != nil {
 		res := cmdOutput(ctx, cmdOutputResultFAILED, "rsp", step.cmd, step.def.Binding("command"), step.def.RuleName(), err)
@@ -160,6 +158,9 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 		}
 		b.teardownRSP(ctx, step)
 	}()
+
+	// expand inputs to get full action inputs unless deps=gcc,msvc
+	depsExpandInputs(ctx, b, step)
 
 	runCmd := b.runStrategy(ctx, step)
 	err = runCmd(ctx, step)
