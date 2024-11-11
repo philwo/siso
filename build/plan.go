@@ -331,7 +331,9 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 			switch targets[out].scan {
 			case scanStateNotVisited:
 				targets[out].scan = nextState
-				clog.Infof(ctx, "scan state %v other target %s", nextState, targetPath(ctx, graph, out))
+				if log.V(1) {
+					clog.Infof(ctx, "scan state %v other target %s", nextState, targetPath(ctx, graph, out))
+				}
 			}
 		}
 	}()
