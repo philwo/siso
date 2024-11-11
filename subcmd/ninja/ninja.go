@@ -906,10 +906,10 @@ func runNinja(ctx context.Context, fname string, graph *ninjabuild.Graph, bopts 
 				} else {
 					ui.Default.PrintLines(fmt.Sprintf(" %s: %s\n", ui.SGR(ui.Green, "last failed targets fixed"), failedTargets))
 				}
-			}
-			err = graph.Reset(ctx)
-			if err != nil {
-				return stats, err
+				err = graph.Reset(ctx)
+				if err != nil {
+					return stats, err
+				}
 			}
 		}
 		err := os.Remove(failedTargetsFile)
