@@ -16,6 +16,7 @@ import (
 
 	"go.chromium.org/luci/common/cli"
 
+	"infra/build/siso/o11y/clog"
 	"infra/build/siso/toolsupport/ninjautil"
 )
 
@@ -45,11 +46,16 @@ type inputsRun struct {
 
 	dir   string
 	fname string
+
+	includeDeps bool
+	depsLogFile string
 }
 
 func (c *inputsRun) init() {
 	c.Flags.StringVar(&c.dir, "C", ".", "ninja running directory to find build.ninja")
 	c.Flags.StringVar(&c.fname, "f", "build.ninja", "input build filename (relative to -C)")
+	c.Flags.BoolVar(&c.includeDeps, "include_deps", false, "include inputs recorded in deps log file")
+	c.Flags.StringVar(&c.depsLogFile, "deps_log", ".siso_deps", "deps log filename (relative to -C)")
 }
 
 func (c *inputsRun) Run(a subcommands.Application, args []string, env subcommands.Env) int {
@@ -78,6 +84,13 @@ func (c *inputsRun) run(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
+	var depsLog *ninjautil.DepsLog
+	if c.includeDeps {
+		depsLog, err = ninjautil.NewDepsLog(ctx, c.depsLogFile)
+		if err != nil {
+			return fmt.Errorf("failed to load deps log: %w\nYou would need to build once?", err)
+		}
+	}
 	nodes, err := state.Targets(args)
 	if err != nil {
 		return err
@@ -87,12 +100,14 @@ func (c *inputsRun) run(ctx context.Context, args []string) error {
 		targets = append(targets, n.Path())
 	}
 	g := &inputsGraph{
-		seen: make(map[string]bool),
+		state:   state,
+		depsLog: depsLog,
+		seen:    make(map[string]bool),
 	}
 	isTargets := make(map[string]bool)
 	for _, t := range targets {
 		isTargets[t] = true
-		err := g.Traverse(ctx, state, t)
+		err := g.Traverse(ctx, t)
 		if err != nil {
 			return err
 		}
@@ -112,17 +127,27 @@ func (c *inputsRun) run(ctx context.Context, args []string) error {
 }
 
 type inputsGraph struct {
-	seen map[string]bool
+	state   *ninjautil.State
+	depsLog *ninjautil.DepsLog
+	seen    map[string]bool
 }
 
-func (g *inputsGraph) Traverse(ctx context.Context, state *ninjautil.State, target string) error {
+type targetNotFoundError struct {
+	target string
+}
+
+func (e targetNotFoundError) Error() string {
+	return fmt.Sprintf("target not found: %q", e.target)
+}
+
+func (g *inputsGraph) Traverse(ctx context.Context, target string) error {
 	if g.seen[target] {
 		return nil
 	}
 	g.seen[target] = true
-	n, ok := state.LookupNodeByPath(target)
+	n, ok := g.state.LookupNodeByPath(target)
 	if !ok {
-		return fmt.Errorf("target not found: %q", target)
+		return targetNotFoundError{target: target}
 	}
 	edge, ok := n.InEdge()
 	if !ok {
@@ -130,7 +155,35 @@ func (g *inputsGraph) Traverse(ctx context.Context, state *ninjautil.State, targ
 	}
 	for _, in := range edge.Inputs() {
 		p := in.Path()
-		err := g.Traverse(ctx, state, p)
+		err := g.Traverse(ctx, p)
+		if err != nil {
+			return err
+		}
+	}
+	if g.depsLog == nil {
+		return nil
+	}
+	var deps []string
+	var err error
+	switch edge.Binding("deps") {
+	case "gcc", "msvc":
+		deps, _, err = g.depsLog.Get(ctx, target)
+		if err != nil {
+			return fmt.Errorf("deps log for target not found %q: %w", target, err)
+		}
+	default:
+		// TODO: read depfile?
+	}
+	if len(deps) == 0 {
+		return nil
+	}
+	for _, dep := range deps {
+		err := g.Traverse(ctx, dep)
+		var terr targetNotFoundError
+		if errors.As(err, &terr) {
+			clog.Infof(ctx, "target for deps %q: implicit header?", dep)
+			continue
+		}
 		if err != nil {
 			return err
 		}
