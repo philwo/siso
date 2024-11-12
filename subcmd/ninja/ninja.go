@@ -1741,22 +1741,27 @@ type dataSource struct {
 }
 
 func (c *ninjaCmdRun) initDataSource(ctx context.Context, credential cred.Cred) (dataSource, error) {
-	if !c.localCacheEnable {
+	layeredCache := build.NewLayeredCache()
+	if c.localCacheEnable {
+		cache, err := build.NewLocalCache(c.cacheDir)
+		if err != nil {
+			clog.Warningf(ctx, "failed to create local cache - no local cache enabled: %v", err)
+		} else {
+			layeredCache.AddLayer(cache)
+		}
+	} else {
 		c.cacheDir = ""
 	}
 	var ds dataSource
 	var err error
-	ds.cache, err = build.NewLocalCache(c.cacheDir)
-	if err != nil {
-		clog.Warningf(ctx, "no local cache enabled: %v", err)
-	}
 	if c.reopt.IsValid() {
 		ds.client, err = reapi.New(ctx, credential, *c.reopt)
 		if err != nil {
 			return ds, err
 		}
-		ds.cache = ds.client.CacheStore()
+		layeredCache.AddLayer(ds.client.CacheStore())
 	}
+	ds.cache = layeredCache
 	return ds, nil
 }
 
