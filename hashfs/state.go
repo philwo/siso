@@ -235,7 +235,6 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 				select {
 				case <-gctx.Done():
 					err := context.Cause(gctx)
-					clog.Errorf(gctx, "interrupted in fs.SetState: %v", err)
 					return err
 				default:
 				}
@@ -371,6 +370,7 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 	}
 	err := eg.Wait()
 	if err != nil {
+		clog.Warningf(ctx, "failed in SetState: %v", err)
 		return err
 	}
 	for i, ent := range state.Entries {

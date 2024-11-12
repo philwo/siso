@@ -1380,6 +1380,8 @@ func (hfs *HashFS) Flush(ctx context.Context, execRoot string, files []string) e
 func (hfs *HashFS) Refresh(ctx context.Context, execRoot string) error {
 	// TODO: optimize?
 	state := hfs.State(ctx)
+	// reset loaded as it reset entry data.
+	hfs.loaded.Store(false)
 	hfs.directory = &directory{isRoot: true}
 	err := hfs.SetState(ctx, state)
 	werr := hfs.WaitReady(ctx)
