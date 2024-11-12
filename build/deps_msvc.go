@@ -119,6 +119,13 @@ func (depsMSVC) DepsAfterRun(ctx context.Context, b *Builder, step *Step) ([]str
 			// and break no-op check.
 			continue
 		}
+		fi, err := b.hashFS.Stat(ctx, b.path.ExecRoot, in)
+		if err == nil && fi.IsDir() {
+			// ignore directory input by `-I`
+			// even if the same base name
+			// (for libc++ headers, like `utility`).
+			continue
+		}
 		in = b.path.MaybeToWD(ctx, in)
 		if m[in] {
 			continue
