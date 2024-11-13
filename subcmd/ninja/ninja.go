@@ -1132,10 +1132,23 @@ func (c *ninjaCmdRun) initCloudLogging(ctx context.Context, projectID, execRoot 
 	ctx = clog.NewContext(ctx, logger)
 	grpclog.SetLoggerV2(logger)
 	return ctx, logger.URL(), func() {
-		err := logger.Close()
-		if err != nil {
-			// Don't use clog as it's closing Cloud logging client.
-			log.Warningf("falied to close Cloud logger: %v", err)
+		errch := make(chan error, 1)
+		go func() {
+			errch <- logger.Close()
+		}()
+		timeout := 1 * time.Second
+		if c.batch {
+			timeout = 10 * time.Second
+		}
+		// Don't use clog as it's closing Cloud logging client.
+		select {
+
+		case <-time.After(timeout):
+			log.Warningf("close not finished in %s", timeout)
+		case err := <-errch:
+			if err != nil {
+				log.Warningf("falied to close Cloud logger: %v", err)
+			}
 		}
 	}, nil
 }

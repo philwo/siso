@@ -380,37 +380,25 @@ func (l *Logger) V(level int) bool {
 // Close closes the logger. it will flush log entries.
 func (l *Logger) Close() error {
 	l.Infof("close log")
-	errch := make(chan error, 1)
-	go func() {
-		glog.Flush()
-		if l == nil {
-			errch <- nil
-			return
-		}
-		if l.client == nil {
-			errch <- nil
-			return
-		}
-		var lerr, aerr error
-		if l.logger != nil {
-			lerr = l.logger.Flush()
-		}
-		if l.accessLogger != nil {
-			aerr = l.accessLogger.Flush()
-		}
-		// not close client to avoid 'panic: send on closed channel'
-		// b/282860686
-		// https://github.com/googleapis/google-cloud-go/issues/7944
-		if lerr != nil || aerr != nil {
-			errch <- fmt.Errorf("failed to flush logging: %w, %w", lerr, aerr)
-			return
-		}
-		errch <- nil
-	}()
-	select {
-	case <-time.After(1 * time.Second):
-		return fmt.Errorf("close not finished in 1sec")
-	case err := <-errch:
-		return err
+	glog.Flush()
+	if l == nil {
+		return nil
 	}
+	if l.client == nil {
+		return nil
+	}
+	var lerr, aerr error
+	if l.logger != nil {
+		lerr = l.logger.Flush()
+	}
+	if l.accessLogger != nil {
+		aerr = l.accessLogger.Flush()
+	}
+	// not close client to avoid 'panic: send on closed channel'
+	// b/282860686
+	// https://github.com/googleapis/google-cloud-go/issues/7944
+	if lerr != nil || aerr != nil {
+		return fmt.Errorf("failed to flush logging: %w, %w", lerr, aerr)
+	}
+	return nil
 }
