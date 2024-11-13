@@ -12,9 +12,11 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"infra/build/siso/execute"
 	"infra/build/siso/o11y/clog"
 	"infra/build/siso/o11y/trace"
 	"infra/build/siso/reapi"
+	"infra/build/siso/ui"
 )
 
 var errDepsLog = errors.New("failed to exec with deps log")
@@ -97,6 +99,15 @@ func (b *Builder) runRemote(ctx context.Context, step *Step) error {
 		if errors.Is(err, errNotRelocatable) {
 			clog.Errorf(ctx, "not relocatable: %v", err)
 			return err
+		}
+		var eerr execute.ExitError
+		if ui.IsTerminal() && errors.As(err, &eerr) && len(step.cmd.Stdout())+len(step.cmd.Stderr()) > 0 && b.failuresAllowed == 1 {
+			// report compile fail early to developers.
+			// If user runs on non-terminal or user sets a
+			// non-default -k, then it implies that they want to
+			// keep going as much as possible and
+			// correct result, rather than fast feedback.
+			return fmt.Errorf("remote-exec %s failed: %w", step.cmd.ActionDigest(), err)
 		}
 		if !b.localFallbackEnabled() {
 			return fmt.Errorf("remote-exec %s failed no-fallback: %w", step.cmd.ActionDigest(), err)
