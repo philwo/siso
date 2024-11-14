@@ -418,6 +418,9 @@ func (d *DepsLog) Get(ctx context.Context, output string) ([]string, time.Time, 
 	if !found {
 		return nil, mtime, ErrNoDepsLog
 	}
+	if i < 0 || i >= len(d.rPaths) {
+		return nil, mtime, fmt.Errorf("no path entry for %s %d: %w", output, i, ErrNoDepsLog)
+	}
 	if d.rPaths[i] != output {
 		clog.Errorf(ctx, "inconsistent paths %s -> %d -> %s", output, i, d.rPaths[i])
 		return nil, mtime, errors.New("inconsistent path in deps log")

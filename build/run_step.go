@@ -61,6 +61,9 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 	logger := clog.FromContext(ctx)
 	logger.Formatter = logFormat
 	defer func(span *trace.Span) {
+		if r := recover(); r != nil {
+			panic(r) // re-throw panic, handled in *Builder.Build.
+		}
 		if errors.Is(err, context.Canceled) {
 			span.Close(status.FromContextError(err).Proto())
 			return
