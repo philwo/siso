@@ -58,6 +58,8 @@ type Option struct {
 	CompressThreads int    // number of threads to use for data compression
 	OSFSOption      osfs.Option
 
+	FSMonitor FSMonitor
+
 	DataSource  DataSource
 	OutputLocal OutputLocalFunc
 	Ignore      IgnoreFunc
@@ -220,6 +222,18 @@ func fromDigest(d digest.Digest) *pb.Digest {
 // SetState sets states to the HashFS.
 func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 	start := time.Now()
+	fsm := hfs.opt.FSMonitor
+	if fsm == nil {
+		fsm = osfsMonitor{}
+	}
+	if scanner, ok := fsm.(fsScanner); ok {
+		err := scanner.Scan(ctx)
+		if err != nil {
+			clog.Warningf(ctx, "fsmonitor scan failed: %v", err)
+			// fallback to osfsMonitor.
+			fsm = osfsMonitor{}
+		}
+	}
 	outputLocal := hfs.opt.OutputLocal
 	var neq, nnew, nnotexist, nfail, ninvalidate atomic.Int64
 	var dirty atomic.Bool
@@ -251,8 +265,8 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 				clog.Infof(ctx, "ignore %s", ent.Name)
 				return nil
 			}
-			fi, err := os.Lstat(ent.Name)
-			if errors.Is(err, os.ErrNotExist) {
+			fi, err := fsm.FileInfo(ctx, ent)
+			if errors.Is(err, fs.ErrNotExist) {
 				if log.V(1) {
 					clog.Infof(gctx, "not exist %s", ent.Name)
 				}
@@ -267,7 +281,6 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 					clog.Warningf(gctx, "not exist output-needed file: %s", ent.Name)
 					return nil
 				}
-
 				e, _ := newStateEntry(ctx, ent, time.Time{}, hfs.opt.DataSource, hfs.OS)
 				e.cmdhash = h
 				e.action = toDigest(ent.Action)

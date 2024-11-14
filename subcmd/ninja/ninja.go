@@ -16,6 +16,7 @@ import (
 	"io/fs"
 	"math"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
@@ -59,6 +60,7 @@ import (
 	"infra/build/siso/reapi/merkletree"
 	"infra/build/siso/toolsupport/cogutil"
 	"infra/build/siso/toolsupport/ninjautil"
+	"infra/build/siso/toolsupport/watchmanutil"
 	"infra/build/siso/ui"
 )
 
@@ -705,6 +707,41 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	if cogfs != nil {
 		ui.Default.PrintLines(ui.SGR(ui.Yellow, fmt.Sprintf("build in cog: %s\n", cogfs.Info())))
 		c.fsopt.CogFS = cogfs
+	}
+
+	if fsmonitor := os.Getenv("SISO_FSMONITOR"); fsmonitor != "" {
+		var fsmonitorPath string
+		if !filepath.IsAbs(fsmonitor) {
+			fsmonitorPath, err = exec.LookPath(fsmonitor)
+			if err != nil {
+				clog.Warningf(ctx, "failed to find fsmonitor %q: %v", fsmonitor, err)
+				fmt.Fprintln(os.Stderr, ui.SGR(ui.BackgroundRed, fmt.Sprintf("SISO_FSMONITOR=%q: failed %v", fsmonitor, err)))
+			}
+		} else {
+			fsmonitorPath = fsmonitor
+		}
+		if fsmonitorPath != "" {
+			fsm := strings.TrimSuffix(filepath.Base(fsmonitor), filepath.Ext(fsmonitor))
+			switch fsm {
+			case "watchman":
+				fsm, err := watchmanutil.New(ctx, fsmonitorPath, execRoot)
+				if err != nil {
+					clog.Warningf(ctx, "failed to initialize watchman: %v", err)
+					fmt.Fprintln(os.Stderr, ui.SGR(ui.BackgroundRed, fmt.Sprintf("SISO_FSMONITOR=watchman: failed %v", err)))
+				} else {
+					fmt.Fprintln(os.Stdout, ui.SGR(ui.Yellow, fmt.Sprintf("use watchman as fsmonitor: %s", fsm.Version())))
+					c.fsopt.FSMonitor = fsm
+					defer func() {
+						err := fsm.Close(ctx)
+						if err != nil {
+							clog.Warningf(ctx, "close watchman: %v", err)
+						}
+					}()
+				}
+			default:
+				fmt.Fprintln(os.Stderr, ui.SGR(ui.BackgroundRed, fmt.Sprintf("unknown SISO_FSMONITOR=%q (%q)", fsmonitor, fsm)))
+			}
+		}
 	}
 
 	spin.Start("loading fs state")
