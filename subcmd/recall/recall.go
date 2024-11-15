@@ -213,6 +213,9 @@ func (c *run) run(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
+		fmt.Printf("cache=true\n")
+		printActionResult(result)
+
 	case codes.NotFound:
 	default:
 		return fmt.Errorf("failed to get action result of %s: %w", actionDigest, err)
@@ -322,9 +325,13 @@ func (c *run) call(ctx context.Context, reopt reapi.Option, credential cred.Cred
 	if err != nil {
 		log.Errorf("err: %v", err)
 	}
-	result := resp.GetResult()
-	fmt.Printf("exit=%d\n", result.GetExitCode())
 	fmt.Printf("cache=%t\n", resp.GetCachedResult())
+	printActionResult(resp.GetResult())
+	return err
+}
+
+func printActionResult(result *rpb.ActionResult) {
+	fmt.Printf("exit=%d\n", result.GetExitCode())
 	if len(result.GetOutputFiles()) > 0 {
 		fmt.Printf("output_files\n")
 		for _, f := range result.GetOutputFiles() {
@@ -384,7 +391,6 @@ func (c *run) call(ctx context.Context, reopt reapi.Option, credential cred.Cred
 			}
 		}
 	}
-	return err
 }
 
 func timestampSub(t1, t2 *tspb.Timestamp) time.Duration {
