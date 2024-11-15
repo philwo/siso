@@ -729,14 +729,8 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 					clog.Warningf(ctx, "failed to initialize watchman: %v", err)
 					fmt.Fprintln(os.Stderr, ui.SGR(ui.BackgroundRed, fmt.Sprintf("SISO_FSMONITOR=watchman: failed %v", err)))
 				} else {
-					fmt.Fprintln(os.Stdout, ui.SGR(ui.Yellow, fmt.Sprintf("use watchman as fsmonitor: %s", fsm.Version())))
+					fmt.Fprintln(os.Stdout, ui.SGR(ui.Yellow, fmt.Sprintf("use watchman as fsmonitor: %s", fsmonitorPath)))
 					c.fsopt.FSMonitor = fsm
-					defer func() {
-						err := fsm.Close(ctx)
-						if err != nil {
-							clog.Warningf(ctx, "close watchman: %v", err)
-						}
-					}()
 				}
 			default:
 				fmt.Fprintln(os.Stderr, ui.SGR(ui.BackgroundRed, fmt.Sprintf("unknown SISO_FSMONITOR=%q (%q)", fsmonitor, fsm)))

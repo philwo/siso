@@ -222,16 +222,14 @@ func fromDigest(d digest.Digest) *pb.Digest {
 // SetState sets states to the HashFS.
 func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 	start := time.Now()
-	fsm := hfs.opt.FSMonitor
-	if fsm == nil {
-		fsm = osfsMonitor{}
-	}
-	if scanner, ok := fsm.(fsScanner); ok {
-		err := scanner.Scan(ctx)
+	var fsm FileInfoer = osfsInfoer{}
+	if hfs.opt.FSMonitor != nil && state.LastChecked != "" {
+		f, err := hfs.opt.FSMonitor.Scan(ctx, state.LastChecked)
 		if err != nil {
-			clog.Warningf(ctx, "fsmonitor scan failed: %v", err)
-			// fallback to osfsMonitor.
-			fsm = osfsMonitor{}
+			clog.Warningf(ctx, "failed to fsmonitor scan %q: %v", state.LastChecked, err)
+		} else {
+			clog.Infof(ctx, "use fsmonitor scan %q", state.LastChecked)
+			fsm = f
 		}
 	}
 	outputLocal := hfs.opt.OutputLocal
@@ -713,7 +711,16 @@ func (hfs *HashFS) State(ctx context.Context) *pb.State {
 			}
 		}
 	}
-	clog.Infof(ctx, "state %d entries: %s", len(state.Entries), time.Since(started))
+	if hfs.opt.FSMonitor != nil {
+		token, err := hfs.opt.FSMonitor.ClockToken(ctx)
+		if err != nil {
+			clog.Warningf(ctx, "failed to get fsmonitor token: %v", err)
+		} else {
+			clog.Infof(ctx, "fsmonitor last checked = %q", token)
+			state.LastChecked = token
+		}
+	}
+	clog.Infof(ctx, "state %d entries token:%q: %s", len(state.Entries), state.LastChecked, time.Since(started))
 	return state
 }
 

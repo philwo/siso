@@ -14,11 +14,10 @@ import (
 	"path/filepath"
 	"time"
 
+	"infra/build/siso/hashfs"
 	pb "infra/build/siso/hashfs/proto"
 	"infra/build/siso/o11y/clog"
 )
-
-const clockFilename = ".siso_watchman_clock"
 
 // Watchman interacts with watchman.
 // https://facebook.github.io/watchman/
@@ -26,8 +25,6 @@ type Watchman struct {
 	watchmanPath string
 	dir          string
 
-	// watchman clock of the last checked.
-	clock watchClock
 	// list reported by `watchman since`.
 	since watchSince
 	// `watchman since` data keyed by filename.
@@ -46,25 +43,7 @@ func New(ctx context.Context, watchmanPath, dir string) (*Watchman, error) {
 	if err != nil {
 		return nil, err
 	}
-	buf, err := os.ReadFile(clockFilename)
-	if err != nil {
-		clog.Warningf(ctx, "failed to read %s: %v", clockFilename, err)
-	} else {
-		err = json.Unmarshal(buf, &w.clock)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse clock %s: %w", clockFilename, err)
-		}
-		clog.Infof(ctx, "watchman last clock: %q", buf)
-	}
 	return w, nil
-}
-
-// Version returns version of watchman.
-func (w *Watchman) Version() string {
-	if w.clock.Clock != "" {
-		return fmt.Sprintf("%s\n  version=%q last clock=%q", w.watchmanPath, w.clock.Version, w.clock.Clock)
-	}
-	return fmt.Sprintf("%s\n  version=%q no last clock", w.watchmanPath, w.clock.Version)
 }
 
 type watchListData struct {
@@ -83,7 +62,6 @@ func (w *Watchman) check(ctx context.Context) error {
 		return fmt.Errorf("failed to parse watch-list %q: %w", buf, err)
 	}
 	clog.Infof(ctx, "watchman version: %s", wl.Version)
-	w.clock.Version = wl.Version
 	dir := filepath.Clean(w.dir)
 	for i := range wl.Roots {
 		if filepath.Clean(wl.Roots[i]) == dir {
@@ -96,17 +74,6 @@ func (w *Watchman) check(ctx context.Context) error {
 type watchClock struct {
 	Version string `json:"version"`
 	Clock   string `json:"clock"`
-}
-
-// Close closes watchman.
-// it saves current clock in `.siso_watchman_clock`.
-func (w *Watchman) Close(ctx context.Context) error {
-	out, err := exec.CommandContext(ctx, w.watchmanPath, "clock", w.dir).Output()
-	if err != nil {
-		return err
-	}
-	clog.Infof(ctx, "watchman save clock: %q", out)
-	return os.WriteFile(clockFilename, out, 0644)
 }
 
 type watchSinceFile struct {
@@ -124,33 +91,77 @@ type watchSince struct {
 	Files   []watchSinceFile `json:"files"`
 }
 
-// Scan calls `watchman since` to finds all files that were modified.
-func (w *Watchman) Scan(ctx context.Context) error {
-	if w.since.Version != "" && w.since.Clock != "" {
-		w.clock.Version = w.since.Version
-		w.clock.Clock = w.since.Clock
+// ClockToken returns watchman clock.
+func (w *Watchman) ClockToken(ctx context.Context) (string, error) {
+	out, err := exec.CommandContext(ctx, w.watchmanPath, "clock", w.dir).Output()
+	if err != nil {
+		return "", err
 	}
-	if w.clock.Version == "" || w.clock.Clock == "" {
-		return fmt.Errorf("no watchman last clock")
+	var clk watchClock
+	err = json.Unmarshal(out, &clk)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse `watchman clock` output: %w", err)
 	}
+	return clk.Clock, nil
+
+}
+
+// Scan calls `watchman since` to finds all files that were modified since token.
+func (w *Watchman) Scan(ctx context.Context, token string) (hashfs.FileInfoer, error) {
+	ws := &WatchmanScan{
+		w:     w,
+		done:  make(chan struct{}),
+		token: token,
+	}
+	go ws.scan(ctx)
+	// Wait at most 200 msec before using FileInfo method.
+	// For no-op build, `wathman scan` took <100 msec on windows/cloudtop,
+	// so 200 msec would be sufficient to omit unnecessary os.Lstat call
+	// in FileInfo.
+	select {
+	case <-time.After(200 * time.Millisecond):
+		// still scanning
+		return ws, nil
+	case <-ws.done:
+		// scan done
+		return ws, nil
+	case <-ctx.Done():
+		return nil, context.Cause(ctx)
+	}
+}
+
+type WatchmanScan struct {
+	w     *Watchman
+	done  chan struct{}
+	token string
+
+	err error
+	// list reported by `watchman since $dir $token`
+	since watchSince
+	m     map[string]*watchSinceFile
+}
+
+func (ws *WatchmanScan) scan(ctx context.Context) {
+	defer close(ws.done)
 	started := time.Now()
 	// `watchman since` returns many files and may take time to parse the result.
 	// we might want to exclude patterns that are known not to be used for build?
-	out, err := exec.CommandContext(ctx, w.watchmanPath, "since", w.dir, w.clock.Clock).Output()
+	out, err := exec.CommandContext(ctx, ws.w.watchmanPath, "since", ws.w.dir, ws.token).Output()
 	if err != nil {
-		return err
+		ws.err = err
+		return
 	}
-	err = json.Unmarshal(out, &w.since)
+	err = json.Unmarshal(out, &ws.since)
 	if err != nil {
-		return fmt.Errorf("failed to parse watchman since: %w", err)
+		ws.err = fmt.Errorf("failed to parse watchman since: %w", err)
+		return
 	}
-	clog.Infof(ctx, "watchman since %s->%s %d files in %s", w.clock.Clock, w.since.Clock, len(w.since.Files), time.Since(started))
-	w.m = make(map[string]*watchSinceFile)
-	for i := range w.since.Files {
-		fname := filepath.ToSlash(filepath.Join(w.dir, w.since.Files[i].Name))
-		w.m[fname] = &w.since.Files[i]
+	clog.Infof(ctx, "watchman since %s->%s %d files in %s", ws.token, ws.since.Clock, len(ws.since.Files), time.Since(started))
+	ws.m = make(map[string]*watchSinceFile)
+	for i := range ws.since.Files {
+		fname := filepath.ToSlash(filepath.Join(ws.w.dir, ws.since.Files[i].Name))
+		ws.m[fname] = &ws.since.Files[i]
 	}
-	return nil
 }
 
 type FileInfo struct {
@@ -198,8 +209,18 @@ func (fi FileInfo) Sys() any {
 }
 
 // FileInfo returns file info for the entry.
-func (w *Watchman) FileInfo(ctx context.Context, ent *pb.Entry) (fs.FileInfo, error) {
-	f, ok := w.m[ent.Name]
+func (ws *WatchmanScan) FileInfo(ctx context.Context, ent *pb.Entry) (fs.FileInfo, error) {
+	select {
+	case <-ws.done:
+	default:
+		// still scanning.
+		return os.Lstat(ent.Name)
+	}
+	if ws.err != nil {
+		// can't use scan's result
+		return os.Lstat(ent.Name)
+	}
+	f, ok := ws.m[ent.Name]
 	if !ok {
 		// ent.Name is not modified since last build.
 		// we can use the entry as is.

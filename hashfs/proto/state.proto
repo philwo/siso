@@ -35,4 +35,7 @@ message Entry {
 
 message State {
   repeated Entry entries = 1;
+
+  // last checked token for fsmonitor (e.g. watchman)
+  string last_checked = 2;
 }
