@@ -68,6 +68,9 @@ type HashFS struct {
 
 	digester digester
 
+	// loadErr keeps load error.
+	loadErr error
+
 	// clean if loaded state is matched with local disk's state.
 	clean atomic.Bool
 
@@ -114,23 +117,33 @@ func New(ctx context.Context, opt Option) (*HashFS, error) {
 		journalFile := opt.StateFile + ".journal"
 
 		fstate, err := Load(ctx, opt)
-		if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			clog.Infof(ctx, "missing fs state. new build? %v", err)
+			// missing .siso_fs_state is not considered as load error.
+			fstate = &pb.State{}
+		} else if err != nil {
 			clog.Warningf(ctx, "Failed to load fs state from %s: %v", opt.StateFile, err)
+			fsys.loadErr = err
 			fstate = &pb.State{}
 		} else {
 			clog.Infof(ctx, "Load fs state from %s: %s", opt.StateFile, time.Since(start))
 		}
-		// if previous build didn't finish properly, journal file
-		// is not removed, so recover last build updates from the journal.
-		reconciled := loadJournal(ctx, journalFile, fstate)
-		if err := fsys.SetState(ctx, fstate); err != nil {
-			return nil, err
-		}
-		if reconciled {
-			// save fstate to make it base state for next journaling.
-			err := Save(ctx, fstate, opt)
-			if err != nil {
-				clog.Errorf(ctx, "Failed to save reconciled fs state in %s: %v", opt.StateFile, err)
+
+		// for corrupted fs state, we also don't use journal,
+		// as we don't have base state for the journal.
+		if fsys.loadErr == nil {
+			// if previous build didn't finish properly, journal file
+			// is not removed, so recover last build updates from the journal.
+			reconciled := loadJournal(ctx, journalFile, fstate)
+			if err := fsys.SetState(ctx, fstate); err != nil {
+				return nil, err
+			}
+			if reconciled {
+				// save fstate to make it base state for next journaling.
+				err := Save(ctx, fstate, opt)
+				if err != nil {
+					clog.Errorf(ctx, "Failed to save reconciled fs state in %s: %v", opt.StateFile, err)
+				}
 			}
 		}
 		err = os.Remove(journalFile)
@@ -147,6 +160,11 @@ func New(ctx context.Context, opt Option) (*HashFS, error) {
 	}
 	go fsys.digester.start()
 	return fsys, nil
+}
+
+// LoadErr returns load error.
+func (hfs *HashFS) LoadErr() error {
+	return hfs.loadErr
 }
 
 // WaitReady waits fs state is updated in memory.

@@ -802,6 +802,9 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 			clog.Errorf(ctx, "close hashfs: %v", err)
 		}
 	}()
+	if err := hashFS.LoadErr(); err != nil {
+		fmt.Fprintln(os.Stderr, ui.SGR(ui.BackgroundRed, fmt.Sprintf("unable to do incremental build as fs state is corrupted: %v", err)))
+	}
 
 	_, err = os.Stat(failedTargetsFile)
 	lastFailed := err == nil
