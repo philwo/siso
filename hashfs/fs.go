@@ -377,6 +377,9 @@ func (hfs *HashFS) Stat(ctx context.Context, root, fname string) (FileInfo, erro
 	if log.V(1) {
 		clog.Infof(ctx, "stat new entry %s %s", fname, e)
 	}
+	if errors.Is(e.err, context.Canceled) {
+		return FileInfo{}, e.err
+	}
 	var err error
 	if dir != nil {
 		e, err = dir.store(ctx, filepath.Base(fname), e)
@@ -416,6 +419,9 @@ func (hfs *HashFS) ReadDir(ctx context.Context, root, name string) (dents []DirE
 	if !ok {
 		e = newLocalEntry()
 		e.init(ctx, dname, hfs.executables, hfs.OS)
+		if errors.Is(e.err, context.Canceled) {
+			return nil, e.err
+		}
 		var err error
 		e, err = hfs.directory.store(ctx, dname, e)
 		if err != nil {
@@ -469,6 +475,9 @@ func (hfs *HashFS) ReadFile(ctx context.Context, root, fname string) ([]byte, er
 	if !ok {
 		e = newLocalEntry()
 		e.init(ctx, fname, hfs.executables, hfs.OS)
+		if errors.Is(e.err, context.Canceled) {
+			return nil, e.err
+		}
 		var err error
 		e, err = hfs.directory.store(ctx, fname, e)
 		if err != nil {
@@ -583,6 +592,9 @@ func (hfs *HashFS) Copy(ctx context.Context, root, src, dst string, mtime time.T
 			clog.Infof(ctx, "new entry for copy src %s", srcfname)
 		}
 		e.init(ctx, srcfname, hfs.executables, hfs.OS)
+		if errors.Is(e.err, context.Canceled) {
+			return e.err
+		}
 		var err error
 		e, err := hfs.directory.store(ctx, srcfname, e)
 		if err != nil {
@@ -892,6 +904,9 @@ func (hfs *HashFS) Entries(ctx context.Context, root string, inputs []string) ([
 		}
 		e = newLocalEntry()
 		e.init(ctx, fname, hfs.executables, hfs.OS)
+		if errors.Is(e.err, context.Canceled) {
+			return nil, e.err
+		}
 		if log.V(1) {
 			clog.Infof(ctx, "tree new entry %s", fname)
 		}
@@ -1108,6 +1123,9 @@ func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []Update
 				e.action = ent.Action
 				e.updatedTime = ent.UpdatedTime
 				e.isChanged = ent.IsChanged
+			}
+			if errors.Is(e.err, context.Canceled) {
+				return e.err
 			}
 			// notify this output to scandeps.
 			err := hfs.dirStoreAndNotify(ctx, fname, e)

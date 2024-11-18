@@ -641,7 +641,7 @@ func (hfs *HashFS) State(ctx context.Context) *pb.State {
 			}
 			e := v.(*entry)
 			if e.err != nil {
-				if log.V(1) {
+				if bool(log.V(1)) || !errors.Is(e.err, fs.ErrNotExist) {
 					clog.Infof(ctx, "ignore %s: err:%v", name, e.err)
 				}
 				continue
