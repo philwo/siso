@@ -21,6 +21,7 @@ import (
 	"infra/build/siso/o11y/clog"
 	"infra/build/siso/o11y/trace"
 	"infra/build/siso/toolsupport/makeutil"
+	"infra/build/siso/ui"
 )
 
 type depsProcessor interface {
@@ -55,8 +56,11 @@ func depsFastStep(ctx context.Context, b *Builder, step *Step) (*Step, error) {
 	if b.hashFS.OnCog() {
 		return nil, errors.New("no fast-deps (on Cog)")
 	}
-	if !experiments.Enabled("fast-deps", "") {
-		return nil, errors.New("no fast-deps (no SISO_EXPERIMENTS=fast-deps)")
+	if ui.IsTerminal() && !experiments.Enabled("fast-deps", "") {
+		return nil, errors.New("no fast-deps (interactive. no SISO_EXPERIMENTS=fast-deps)")
+	}
+	if experiments.Enabled("no-fast-deps", "disable fast-deps and force scandeps") {
+		return nil, errors.New("no fast-deps (SISO_EXPERIMENTS=no-fast-deps)")
 	}
 	ds, found := depsProcessors[step.cmd.Deps]
 	if !found {
