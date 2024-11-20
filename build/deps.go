@@ -55,8 +55,8 @@ func depsFastStep(ctx context.Context, b *Builder, step *Step) (*Step, error) {
 	if b.hashFS.OnCog() {
 		return nil, errors.New("no fast-deps (on Cog)")
 	}
-	if experiments.Enabled("no-fast-deps", "disable fast-deps and force scandeps") {
-		return nil, errors.New("no fast-deps (SISO_EXPERIMENTS)")
+	if !experiments.Enabled("fast-deps", "") {
+		return nil, errors.New("no fast-deps (no SISO_EXPERIMENTS=fast-deps)")
 	}
 	ds, found := depsProcessors[step.cmd.Deps]
 	if !found {
