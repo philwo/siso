@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"path"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -24,25 +25,38 @@ import (
 )
 
 func treeInputs(ctx context.Context, fn func(context.Context, string) (merkletree.TreeEntry, error), precomputedDirs, dirs []string) []merkletree.TreeEntry {
-	var treeEntries []merkletree.TreeEntry
-	for _, dir := range precomputedDirs {
-		ti, err := fn(ctx, dir)
-		if err != nil {
-			clog.Warningf(ctx, "treeinput[precomputed] %s: %v", dir, err)
-			continue
-		}
-		treeEntries = append(treeEntries, ti)
-	}
-	for _, dir := range dirs {
-		ti, err := fn(ctx, dir)
-		if err != nil {
-			if log.V(1) {
-				clog.Infof(ctx, "treeinput[dir] %s: %v", dir, err)
+	treeEntries := make([]merkletree.TreeEntry, len(precomputedDirs)+len(dirs))
+	var wg sync.WaitGroup
+	wg.Add(len(treeEntries))
+	for i, dir := range precomputedDirs {
+		go func() {
+			defer wg.Done()
+			ti, err := fn(ctx, dir)
+			if err != nil {
+				clog.Warningf(ctx, "treeinput[precomputed] %s: %v", dir, err)
+				return
 			}
-			continue
-		}
-		treeEntries = append(treeEntries, ti)
+			treeEntries[i] = ti
+		}()
 	}
+	i0 := len(precomputedDirs)
+	for i, dir := range dirs {
+		go func() {
+			defer wg.Done()
+			ti, err := fn(ctx, dir)
+			if err != nil {
+				if log.V(1) {
+					clog.Infof(ctx, "treeinput[dir] %s: %v", dir, err)
+				}
+				return
+			}
+			treeEntries[i0+i] = ti
+		}()
+	}
+	wg.Wait()
+	treeEntries = slices.DeleteFunc(treeEntries, func(e merkletree.TreeEntry) bool {
+		return e.Name == ""
+	})
 	return treeEntries
 }
 
