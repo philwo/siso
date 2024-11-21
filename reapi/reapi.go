@@ -206,7 +206,6 @@ func NewFromConn(ctx context.Context, opt Option, conn grpcClientConn) (*Client,
 		InstanceName: opt.Instance,
 	})
 	if err != nil {
-		clog.Errorf(ctx, "Failed to get capabilities: %v", err)
 		conn.Close()
 		return nil, err
 	}

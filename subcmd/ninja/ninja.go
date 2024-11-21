@@ -37,7 +37,9 @@ import (
 	"google.golang.org/api/option"
 	mrpb "google.golang.org/genproto/googleapis/api/monitoredres"
 	rspb "google.golang.org/genproto/googleapis/devtools/resultstore/v2"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/grpclog"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.chromium.org/luci/auth"
@@ -251,7 +253,11 @@ func (c *ninjaCmdRun) Run(a subcommands.Application, args []string, env subcomma
 			if ui.IsTerminal() {
 				msgPrefix = ui.SGR(ui.BackgroundRed, msgPrefix)
 			}
-			fmt.Fprintf(os.Stderr, "\n%6s %s: %v\n", ui.FormatDuration(time.Since(c.started)), msgPrefix, err)
+			if status.Code(err) == codes.Unavailable {
+				fmt.Fprintf(os.Stderr, "\n%6s %s: could not connect to backend. If you want to build offline, pass `-o` or `--offline`\n %v\n", ui.FormatDuration(time.Since(c.started)), msgPrefix, err)
+			} else {
+				fmt.Fprintf(os.Stderr, "\n%6s %s: %v\n", ui.FormatDuration(time.Since(c.started)), msgPrefix, err)
+			}
 		}
 		return 1
 	}
