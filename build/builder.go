@@ -728,7 +728,7 @@ loop:
 		if err == nil {
 			ui.Default.PrintLines(fmt.Sprintf("%s finished", name), "")
 		} else {
-			ui.Default.PrintLines(fmt.Sprintf("%s failed: %v", name, err), "")
+			ui.Default.PrintLines(fmt.Sprintf("%s failed", name), "")
 		}
 	}
 	// metrics for full build session, without step_id etc.
