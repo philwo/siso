@@ -23,6 +23,8 @@ Chrome developers. Chromium and Chrome are only supported projects.
 The projects that import //build/config from Chromium might be able to use Siso.
 However, they are not tested or supported, yet.
 
+As of Nov 2024, Siso is used by default for Chromium build on gLinux machine.
+
 As of July 2024, Siso is used in all Chromium and Chrome builders, including official
 builds released to users.
 
