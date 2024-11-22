@@ -14,16 +14,18 @@ import (
 	"sync/atomic"
 	"time"
 
+	"infra/build/siso/execute"
 	"infra/build/siso/o11y/resultstore"
 	"infra/build/siso/ui"
 )
 
 type progress struct {
-	started  time.Time
-	verbose  bool
-	numLocal atomic.Int32
-	mu       sync.Mutex
-	ts       time.Time
+	started    time.Time
+	verbose    bool
+	numLocal   atomic.Int32
+	mu         sync.Mutex
+	ts         time.Time
+	consoleCmd *execute.Cmd
 
 	resultstoreUploader *resultstore.Uploader
 
@@ -64,6 +66,18 @@ func (p *progress) start(ctx context.Context, b *Builder) {
 	go p.update(ctx, b)
 }
 
+func (p *progress) startConsoleCmd(cmd *execute.Cmd) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.consoleCmd = cmd
+}
+
+func (p *progress) finishConsoleCmd() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.consoleCmd = nil
+}
+
 func (p *progress) update(ctx context.Context, b *Builder) {
 	lastUpdate := time.Now()
 	lastStepUpdate := time.Now()
@@ -98,8 +112,9 @@ func (p *progress) update(ctx context.Context, b *Builder) {
 					s.step.addWeightedDuration(wd)
 				}
 			}
+			consoleOut := p.consoleCmd != nil && p.consoleCmd.ConsoleOut.Load()
 			p.mu.Unlock()
-			if !ui.IsTerminal() || b.verbose {
+			if !ui.IsTerminal() || b.verbose || consoleOut {
 				continue
 			}
 			if si == nil || si.step == nil {

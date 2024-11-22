@@ -76,6 +76,9 @@ func (b *Builder) execLocal(ctx context.Context, step *Step) error {
 	err = sema.Do(ctx, func(ctx context.Context) error {
 		clog.Infof(ctx, "step state: %s", stateMessage)
 		step.setPhase(phase)
+		if step.cmd.Console {
+			b.progress.startConsoleCmd(step.cmd)
+		}
 		started := time.Now()
 		// local exec might be called as fallback.
 		// Do not change ActionStartTime if it's already set.
@@ -85,6 +88,9 @@ func (b *Builder) execLocal(ctx context.Context, step *Step) error {
 		err := b.localExec.Run(ctx, step.cmd)
 		dur = time.Since(started)
 		step.setPhase(stepOutput)
+		if step.cmd.Console {
+			b.progress.finishConsoleCmd()
+		}
 		step.metrics.IsLocal = true
 		result, cached := step.cmd.ActionResult()
 		if cached {

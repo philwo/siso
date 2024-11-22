@@ -10,12 +10,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
@@ -28,6 +28,7 @@ import (
 	"infra/build/siso/o11y/clog"
 	"infra/build/siso/sync/semaphore"
 	"infra/build/siso/toolsupport/straceutil"
+	"infra/build/siso/ui"
 )
 
 // TODO(b/270886586): Compare local execution with/without local execution server.
@@ -76,19 +77,18 @@ func run(ctx context.Context, cmd *execute.Cmd) (*rpb.ActionResult, error) {
 	c.Dir = filepath.Join(cmd.ExecRoot, cmd.Dir)
 	c.Stdout = cmd.StdoutWriter()
 	c.Stderr = cmd.StderrWriter()
+	var consoleWG sync.WaitGroup
+	var consoleCancel func()
 	if cmd.Console {
 		c.Stdin = os.Stdin
 
 		// newline after siso status line if cmd outputs.
 		checkClose := func(f *os.File, s string) {
 			err := f.Close()
-			if err != nil {
+			if err != nil && !errors.Is(err, fs.ErrClosed) {
 				clog.Warningf(ctx, "close %s: %v", s, err)
 			}
 		}
-		var wg sync.WaitGroup
-		defer wg.Wait()
-
 		stdoutr, stdoutw, err := os.Pipe()
 		if err != nil {
 			return nil, err
@@ -99,33 +99,40 @@ func run(ctx context.Context, cmd *execute.Cmd) (*rpb.ActionResult, error) {
 		if err != nil {
 			return nil, err
 		}
-
 		defer checkClose(stderrr, "stderr(r)")
 		defer checkClose(stderrw, "stderr(w)")
+
 		rctx, cancel := context.WithCancel(ctx)
 		defer cancel()
-		var outStarted atomic.Bool
+		consoleCancel = func() {
+			cancel()
+			checkClose(stdoutr, "stdout(r)")
+			checkClose(stdoutw, "stdout(w)")
+			checkClose(stderrr, "stderr(r)")
+			checkClose(stderrw, "stderr(w)")
+		}
 		consoleOut := func(r io.Reader, w io.Writer, s string) {
-			defer wg.Done()
+			defer consoleWG.Done()
 			var buf [1]byte
 			n, err := r.Read(buf[:])
 			if err != nil {
+				clog.Warningf(rctx, "consoleOut %s: read %v", s, err)
 				return
 			}
-			if !outStarted.Swap(true) {
+			if !cmd.ConsoleOut.Swap(true) {
 				fmt.Fprintln(w)
 			}
 			_, err = w.Write(buf[:n])
 			if err != nil {
-				clog.Warningf(rctx, "write %s: %v", s, err)
+				clog.Warningf(rctx, "console write %s: %v", s, err)
 			}
 			_, err = io.Copy(w, r)
 			if err != nil && !errors.Is(err, os.ErrClosed) {
-				clog.Warningf(rctx, "copy %s: %v", s, err)
+				clog.Warningf(rctx, "console copy %s: %v", s, err)
 			}
 		}
 
-		wg.Add(2)
+		consoleWG.Add(2)
 		go consoleOut(stdoutr, os.Stdout, "stdout")
 		go consoleOut(stderrr, os.Stderr, "stderr")
 
@@ -169,6 +176,13 @@ func run(ctx context.Context, cmd *execute.Cmd) (*rpb.ActionResult, error) {
 			ru = rusage(c)
 		}
 		log.V(1).Infof("%s filetrace=false %v", cmd.ID, err)
+	}
+	if cmd.Console {
+		consoleCancel()
+		consoleWG.Wait()
+		if ui.IsTerminal() && cmd.ConsoleOut.Load() {
+			fmt.Printf("\n\n\n\n") // preserve console output from progress report
+		}
 	}
 	e := time.Now()
 

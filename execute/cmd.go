@@ -16,6 +16,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
@@ -203,6 +204,9 @@ type Cmd struct {
 	// Console indicates the command attaches stdin/stdout/stderr when
 	// running.  localexec only.
 	Console bool
+
+	// ConsoleOut indicates the command outputs to the console.
+	ConsoleOut atomic.Bool
 
 	// outfiles is outputs of the step in build graph.
 	// These outputs will be recorded with cmdhash.
