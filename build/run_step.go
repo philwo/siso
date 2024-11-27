@@ -156,7 +156,9 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 	}
 	defer func() {
 		if err != nil && !errors.Is(err, context.Canceled) {
-			clog.Warningf(ctx, "failed to exec %v: preserve rsp=%s", err, step.cmd.RSPFile)
+			// force flush to disk
+			ferr := b.hashFS.Flush(ctx, step.cmd.ExecRoot, []string{step.cmd.RSPFile})
+			clog.Warningf(ctx, "failed to exec %v: preserve rsp=%s flush:%v", err, step.cmd.RSPFile, ferr)
 			return
 		}
 		b.teardownRSP(ctx, step)
