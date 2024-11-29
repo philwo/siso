@@ -12,6 +12,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"time"
 
 	"github.com/maruel/subcommands"
@@ -58,6 +59,7 @@ type flushRun struct {
 	projectID string
 	reopt     *reapi.Option
 	force     bool
+	recursive bool
 }
 
 func (c *flushRun) init() {
@@ -71,6 +73,7 @@ func (c *flushRun) init() {
 	}
 	c.reopt.RegisterFlags(&c.Flags, envs)
 	c.Flags.BoolVar(&c.force, "f", false, "force to fetch")
+	c.Flags.BoolVar(&c.recursive, "recursive", true, "flush recursively")
 }
 
 func (c *flushRun) Run(a subcommands.Application, args []string, env subcommands.Env) int {
@@ -133,50 +136,108 @@ func (c *flushRun) run(ctx context.Context) error {
 	stm := hashfs.StateMap(st)
 	for _, fname := range c.Flags.Args() {
 		fmt.Printf("%s ...", fname)
-		_ = os.Stdout.Sync()
+		_ = os.Stdout.Sync() // to print not ended by newline immediately.
+
 		fullpath := filepath.ToSlash(filepath.Join(wd, fname))
-		_, err := os.Lstat(fullpath)
-		if !c.force && err == nil {
-			fmt.Printf("exists\n")
+		ent, ok := stm[fullpath]
+		var isDir bool
+		if !ok {
+			fi, err := os.Lstat(fullpath)
+			isDir = err == nil && fi.IsDir()
+		} else {
+			isDir = isDirEnt(ent)
+		}
+		if isDir {
+			// directory
+			if !c.recursive {
+				fmt.Printf("dir\n")
+				continue
+			}
+			children := childEntries(ctx, stm, fullpath)
+			fmt.Printf("dir - expands %d\n", len(children))
+			for _, ent := range children {
+				fname, err := filepath.Rel(wd, ent.Name)
+				if err != nil {
+					fname = ent.Name
+				}
+				fname = filepath.ToSlash(fname)
+				fmt.Printf("%s ...", fname)
+				_ = os.Stdout.Sync()
+				c.flushEntry(ctx, cacheStore, fname, ent)
+			}
 			continue
 		}
-		ent, ok := stm[fullpath]
 		if !ok {
 			fmt.Printf("not found\n")
 			continue
 		}
-		if ent.Target != "" {
-			err := os.Symlink(ent.Target, fullpath)
-			if err != nil {
-				fmt.Printf("%v\n", err)
-				continue
-			}
-			fmt.Printf("symlink\n")
-			continue
-		}
-		d := toDigest(ent.Digest)
-		if d.IsZero() {
-			// directory
-			fmt.Printf("dir\n")
-			continue
-		}
-		action := toDigest(ent.Action)
-		if action.IsZero() {
-			// no remote action
-			fmt.Printf("local generated\n")
-			continue
-		}
-		err = c.flush(ctx, cacheStore, fname, d, ent)
-		if err != nil {
-			fmt.Printf("err: %v\n", err)
-			continue
-		}
-		fmt.Printf("done\n")
+		c.flushEntry(ctx, cacheStore, fname, ent)
 	}
 	return nil
 }
 
-func (c *flushRun) flush(ctx context.Context, cacheStore reapi.CacheStore, fname string, d digest.Digest, ent *pb.Entry) error {
+func isDirEnt(ent *pb.Entry) bool {
+	return toDigest(ent.Digest).IsZero() && ent.Target == ""
+}
+
+// childEntries returns entries from stm that exists under fullpath.
+// We only need hashfs's entry since if file already exists locally,
+// flush need nothing to do.
+// Note that `siso isolate` need to collect local files to send isolate server,
+// so should use hashfs Walk to collect files.
+func childEntries(ctx context.Context, stm map[string]*pb.Entry, fullpath string) []*pb.Entry {
+	var fnames []string
+	for k := range stm {
+		fnames = append(fnames, k)
+	}
+	sort.Strings(fnames)
+	var children []*pb.Entry
+	for _, fname := range fnames {
+		ent := stm[fname]
+		rel, err := filepath.Rel(fullpath, ent.Name)
+		if err != nil {
+			continue
+		}
+		if !filepath.IsLocal(rel) {
+			continue
+		}
+		if isDirEnt(ent) {
+			continue
+		}
+		children = append(children, ent)
+	}
+	return children
+}
+
+func (c *flushRun) flushEntry(ctx context.Context, cacheStore reapi.CacheStore, fname string, ent *pb.Entry) {
+	_, err := os.Lstat(ent.Name)
+	if !c.force && err == nil {
+		fmt.Printf("exists\n")
+		return
+	}
+	if ent.Target != "" {
+		err := os.Symlink(ent.Target, ent.Name)
+		if err != nil {
+			fmt.Printf("%v\n", err)
+		}
+		fmt.Printf("symlink\n")
+		return
+	}
+	d := toDigest(ent.Digest)
+	action := toDigest(ent.Action)
+	if action.IsZero() {
+		// no remote action
+		fmt.Printf("local generated\n")
+		return
+	}
+	err = c.flushFile(ctx, cacheStore, fname, d, ent)
+	if err != nil {
+		fmt.Printf("err: %v\n", err)
+	}
+	fmt.Printf("done\n")
+}
+
+func (c *flushRun) flushFile(ctx context.Context, cacheStore reapi.CacheStore, fname string, d digest.Digest, ent *pb.Entry) error {
 	w, err := os.Create(fname)
 	if err != nil {
 		return err
