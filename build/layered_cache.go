@@ -63,11 +63,13 @@ func (lc *LayeredCache) GetContent(ctx context.Context, d digest.Digest, f strin
 
 // SetContent sets the content of the file identified by the digest.
 func (lc *LayeredCache) SetContent(ctx context.Context, d digest.Digest, f string, content []byte) error {
-	// TODO: For now, this writes to all caches.
-	// A future optimization would be to only write to the first layer, and
-	// trigger an upload to remote layers in another thread.
-	for _, cache := range lc.caches {
-		if err := cache.SetContent(ctx, d, f, content); err != nil {
+	// Intentionally only write to the first layer of the cache.
+	// Pro: More performant because no slow cache uploads.
+	// Con: No shared remote cache for pure local actions. However, that doesn't
+	//   matter too much, since it'd only be useful if the entry was purged from
+	//   your local CAS but still existed in your local ActionResult cache.
+	if len(lc.caches) > 0 {
+		if err := lc.caches[0].SetContent(ctx, d, f, content); err != nil {
 			return err
 		}
 	}
