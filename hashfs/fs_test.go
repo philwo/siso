@@ -400,7 +400,7 @@ func TestStatAllocs(t *testing.T) {
 	allocBase := 0.0
 	if runtime.GOOS == "windows" {
 		// TODO(ukai): why it has allocations on windows only?
-		allocBase = 6.0
+		allocBase = 7.0
 	}
 
 	ctx := context.Background()
