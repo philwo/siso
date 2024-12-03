@@ -236,7 +236,7 @@ func (c *ninjaCmdRun) Run(a subcommands.Application, args []string, env subcomma
 				msgPrefix = ui.SGR(ui.BackgroundRed, msgPrefix)
 			}
 			fmt.Fprintf(os.Stderr, "\n%6s %s: %d done %d failed %d remaining - %.02f/s\n %v\n", dur, msgPrefix, stats.Done-stats.Skipped, stats.Fail, stats.Total-stats.Done, sps, errBuild.err)
-			suggest := fmt.Sprintf("see %s for command line and output", c.logFilename(c.outputLogFile, c.startDir))
+			suggest := fmt.Sprintf("see %s for full command line and output", c.logFilename(c.outputLogFile, c.startDir))
 			if c.sisoInfoLog != "" {
 				suggest += fmt.Sprintf("\n or %s", c.logFilename(c.sisoInfoLog, c.startDir))
 			}
