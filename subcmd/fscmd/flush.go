@@ -163,7 +163,10 @@ func (c *flushRun) run(ctx context.Context) error {
 				fname = filepath.ToSlash(fname)
 				fmt.Printf("%s ...", fname)
 				_ = os.Stdout.Sync()
-				c.flushEntry(ctx, cacheStore, fname, ent)
+				err = c.flushEntry(ctx, cacheStore, fname, ent)
+				if err != nil {
+					return err
+				}
 			}
 			continue
 		}
@@ -171,7 +174,10 @@ func (c *flushRun) run(ctx context.Context) error {
 			fmt.Printf("not found\n")
 			continue
 		}
-		c.flushEntry(ctx, cacheStore, fname, ent)
+		err = c.flushEntry(ctx, cacheStore, fname, ent)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -209,32 +215,44 @@ func childEntries(ctx context.Context, stm map[string]*pb.Entry, fullpath string
 	return children
 }
 
-func (c *flushRun) flushEntry(ctx context.Context, cacheStore reapi.CacheStore, fname string, ent *pb.Entry) {
-	_, err := os.Lstat(ent.Name)
+func (c *flushRun) flushEntry(ctx context.Context, cacheStore reapi.CacheStore, fname string, ent *pb.Entry) error {
+	mtime := time.Unix(0, ent.GetId().GetModTime())
+	fi, err := os.Lstat(ent.Name)
 	if !c.force && err == nil {
-		fmt.Printf("exists\n")
-		return
+		if fi.ModTime().Equal(mtime) {
+			// disk is same.
+			fmt.Printf("exists\n")
+			return nil
+		}
+		if fi.ModTime().Before(mtime) {
+			// disk is newer than state.
+			fmt.Printf("new file exists\n")
+			return fmt.Errorf("disk is newer than state: disk=%s state=%s. use '-f' to force update", fi.ModTime(), mtime)
+		}
 	}
+	// force, or no disk, or disk is older than state.
 	if ent.Target != "" {
 		err := os.Symlink(ent.Target, ent.Name)
 		if err != nil {
 			fmt.Printf("%v\n", err)
 		}
 		fmt.Printf("symlink\n")
-		return
+		return nil
 	}
 	d := toDigest(ent.Digest)
 	action := toDigest(ent.Action)
 	if action.IsZero() {
 		// no remote action
 		fmt.Printf("local generated\n")
-		return
+		return nil
 	}
 	err = c.flushFile(ctx, cacheStore, fname, d, ent)
 	if err != nil {
 		fmt.Printf("err: %v\n", err)
+		return fmt.Errorf("flush err: %w", err)
 	}
 	fmt.Printf("done\n")
+	return nil
 }
 
 func (c *flushRun) flushFile(ctx context.Context, cacheStore reapi.CacheStore, fname string, d digest.Digest, ent *pb.Entry) error {
