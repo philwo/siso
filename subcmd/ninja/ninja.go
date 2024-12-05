@@ -482,6 +482,13 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 			}()
 		}
 	}
+
+	resetCrashOutput, err := c.setupCrashOutput(ctx)
+	if err != nil {
+		return stats, err
+	}
+	defer resetCrashOutput()
+
 	buildPath := build.NewPath(execRoot, c.dir)
 
 	if err = uuid.Validate(c.buildID); err != nil {
@@ -2055,4 +2062,18 @@ func (c *ninjaCmdRun) commandLines() []*rspb.CommandLine {
 	cmdline.Args = append(cmdline.Args, c.Flags.Args()...)
 	cmdlines = append(cmdlines, cmdline)
 	return cmdlines
+}
+
+func (c *ninjaCmdRun) setupCrashOutput(ctx context.Context) (func(), error) {
+	fname := c.logFilename("siso_crash", "")
+	rotateFiles(ctx, fname)
+	crashFile, err := os.Create(fname)
+	if err != nil {
+		return nil, err
+	}
+	err = debug.SetCrashOutput(crashFile, debug.CrashOptions{})
+	if err != nil {
+		return nil, err
+	}
+	return func() { debug.SetCrashOutput(nil, debug.CrashOptions{}) }, crashFile.Close()
 }
