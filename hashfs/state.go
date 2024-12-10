@@ -390,6 +390,7 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 		}
 	}
 	hfs.setStateCh = make(chan error, 1)
+	clean := nnew.Load() == 0 && nnotexist.Load() == 0 && nfail.Load() == 0 && ninvalidate.Load() == 0
 	// store in background.
 	go func() {
 		defer close(hfs.setStateCh)
@@ -422,11 +423,12 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 				return
 			}
 		}
+		hfs.clean.Store(clean)
+		hfs.loaded.Store(true)
+		clog.Infof(ctx, "set state done: clean:%t loaded:true: %s", hfs.clean.Load(), time.Since(start))
 		hfs.setStateCh <- nil
 	}()
-	hfs.clean.Store(nnew.Load() == 0 && nnotexist.Load() == 0 && nfail.Load() == 0 && ninvalidate.Load() == 0)
-	clog.Infof(ctx, "set state done: clean:%t eq:%d new:%d not-exist:%d fail:%d invalidate:%d: %s", hfs.clean.Load(), neq.Load(), nnew.Load(), nnotexist.Load(), nfail.Load(), ninvalidate.Load(), time.Since(start))
-	hfs.loaded.Store(true)
+	clog.Infof(ctx, "load state done: eq:%d new:%d not-exist:%d fail:%d invalidate:%d: %s", neq.Load(), nnew.Load(), nnotexist.Load(), nfail.Load(), ninvalidate.Load(), time.Since(start))
 	return nil
 }
 
