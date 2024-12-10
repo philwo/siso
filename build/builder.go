@@ -1054,6 +1054,16 @@ func (b *Builder) progressStepFinished(ctx context.Context, step *Step) {
 	b.progress.step(ctx, b, step, progressPrefixFinish+step.cmd.Desc)
 }
 
+// progressStepRetry shows progress of the retried step.
+func (b *Builder) progressStepRetry(ctx context.Context, step *Step) {
+	b.progress.step(ctx, b, step, progressPrefixRetry+step.cmd.Desc)
+}
+
+// progressStepFallback shows progress of the fallback step.
+func (b *Builder) progressStepFallback(ctx context.Context, step *Step) {
+	b.progress.step(ctx, b, step, progressPrefixFallback+step.cmd.Desc)
+}
+
 var errNotRelocatable = errors.New("request is not relocatable")
 
 func (b *Builder) updateDeps(ctx context.Context, step *Step) error {

@@ -43,6 +43,7 @@ func (b *Builder) execRemote(ctx context.Context, step *Step) error {
 			step.setPhase(phase)
 			if phase == stepRetryRun {
 				step.metrics.RemoteRetry++
+				b.progressStepRetry(ctx, step)
 			}
 			reExecStarted := time.Now()
 			// Record ActionStartTime only when it's not set, yet.

@@ -167,6 +167,8 @@ const (
 	progressPrefixCacheHit = "c "
 	progressPrefixStart    = "S "
 	progressPrefixFinish   = "F "
+	progressPrefixRetry    = "r "
+	progressPrefixFallback = "f "
 )
 
 func (p *progress) step(ctx context.Context, b *Builder, step *Step, s string) {
