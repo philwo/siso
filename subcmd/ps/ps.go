@@ -140,10 +140,14 @@ func (c *run) Run(a subcommands.Application, args []string, env subcommands.Env)
 func (c *run) render(ctx context.Context, lines []string, activeSteps []build.ActiveStepInfo) {
 	headings := len(lines)
 	for _, as := range activeSteps {
+		dur := as.ServDur
+		if dur == "" {
+			dur = "(" + as.Dur + ")"
+		}
 		if c.termui {
-			lines = append(lines, fmt.Sprintf("%10s %9s %s", as.Dur, as.Phase, as.Desc))
+			lines = append(lines, fmt.Sprintf("%10s %9s %s", dur, as.Phase, as.Desc))
 		} else {
-			lines = append(lines, fmt.Sprintf("%10s %9s %s\n", as.Dur, as.Phase, as.Desc))
+			lines = append(lines, fmt.Sprintf("%10s %9s %s\n", dur, as.Phase, as.Desc))
 		}
 		if c.n > 0 && len(lines) >= c.n {
 			break

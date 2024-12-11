@@ -146,18 +146,44 @@ type stepState struct {
 	mu               sync.Mutex
 	phase            stepPhase
 	weightedDuration time.Duration
+
+	// start time to wait the step to serv.
+	// i.e. local semaphore, remote semaphore.
+	waitStart time.Time
+
+	// accumulated wait duration in the step.
+	waitDuration time.Duration
 }
 
 func (s *stepState) SetPhase(phase stepPhase) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.phase = phase
+	switch phase {
+	case stepLocalWait, stepREWrapperWait, stepRemoteWait, stepFallbackWait, stepRetryWait:
+		s.waitStart = time.Now()
+	default:
+		if !s.waitStart.IsZero() {
+			s.waitDuration += time.Since(s.waitStart)
+		}
+		s.waitStart = time.Time{}
+	}
 }
 
 func (s *stepState) Phase() stepPhase {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.phase
+}
+
+func (s *stepState) WaitDuration() time.Duration {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	dur := s.waitDuration
+	if !s.waitStart.IsZero() {
+		dur += time.Since(s.waitStart)
+	}
+	return dur
 }
 
 // NumWaits returns number of waits for the step.
@@ -273,6 +299,10 @@ func (s *Step) setPhase(phase stepPhase) {
 // phase returns the phase of the step.
 func (s *Step) phase() stepPhase {
 	return s.state.Phase()
+}
+
+func (s *Step) servDuration() time.Duration {
+	return time.Since(s.startTime) - s.state.WaitDuration()
 }
 
 // Done checks the step is done.

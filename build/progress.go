@@ -125,9 +125,14 @@ func (p *progress) update(ctx context.Context, b *Builder) {
 				continue
 			}
 			lastStepUpdate = time.Now()
-			dur := time.Since(si.step.startTime).Round(d)
 			phase := si.step.phase()
-			msg := fmt.Sprintf("%s[%s]: %s", ui.FormatDuration(dur), phase, si.desc)
+			dur := si.step.servDuration()
+			var msg string
+			if dur > 0 {
+				msg = fmt.Sprintf("%s[%s]: %s", ui.FormatDuration(dur), phase, si.desc)
+			} else {
+				msg = fmt.Sprintf("[%s]: %s", phase, si.desc)
+			}
 			switch phase {
 			case stepFallbackWait, stepFallbackRun, stepRetryWait, stepRetryRun:
 				msg = ui.SGR(ui.Red, msg)
@@ -329,7 +334,15 @@ type ActiveStepInfo struct {
 	ID    string
 	Desc  string
 	Phase string
-	Dur   string
+
+	// step duration since when it's ready to run.
+	Dur string
+
+	// step accumulated service duration (local exec, or remote call).
+	// not including local execution queue, remote execution queue,
+	// but including all of remote call (reapi or reproxy), uploading
+	// inputs, downloading outputs etc.
+	ServDur string
 }
 
 func (p *progress) ActiveSteps() []ActiveStepInfo {
@@ -356,11 +369,16 @@ func (p *progress) ActiveSteps() []ActiveStepInfo {
 		if phase == "done" {
 			continue
 		}
+		var servDur string
+		if dur := s.step.servDuration(); dur > 0 {
+			servDur = ui.FormatDuration(dur)
+		}
 		activeSteps = append(activeSteps, ActiveStepInfo{
-			ID:    s.step.String(),
-			Desc:  s.desc,
-			Phase: phase,
-			Dur:   ui.FormatDuration(now.Sub(s.step.startTime)),
+			ID:      s.step.String(),
+			Desc:    s.desc,
+			Phase:   phase,
+			Dur:     ui.FormatDuration(now.Sub(s.step.startTime)),
+			ServDur: servDur,
 		})
 	}
 	return activeSteps
