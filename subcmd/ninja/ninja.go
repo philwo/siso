@@ -1870,9 +1870,11 @@ type source struct {
 func (s source) Open(ctx context.Context) (io.ReadCloser, error) {
 	if s.dataSource.cache != nil {
 		src := s.dataSource.cache.Source(ctx, s.d, s.fname)
-		r, err := src.Open(ctx)
-		if err == nil {
-			return r, nil
+		if src != nil {
+			r, err := src.Open(ctx)
+			if err == nil {
+				return r, nil
+			}
 		}
 		// fallback
 	}
