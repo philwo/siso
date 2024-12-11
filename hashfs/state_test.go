@@ -272,6 +272,11 @@ func TestState(t *testing.T) {
 	}
 	defer hashFS.Close(ctx)
 
+	err = hashFS.WaitReady(ctx)
+	if err != nil {
+		t.Fatalf("WaitReady=%v; want nil", err)
+	}
+
 	err = hashFS.WriteFile(ctx, dir, "stamp", nil, false, time.Now(), []byte("dummy-cmdhash"))
 	if err != nil {
 		t.Errorf("WriteFile(...)=%v; want nil error", err)
@@ -310,6 +315,11 @@ func TestState_Dir(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer hashFS.Close(ctx)
+
+	err = hashFS.WaitReady(ctx)
+	if err != nil {
+		t.Fatalf("WaitReady=%v; want nil", err)
+	}
 
 	mtime := time.Now()
 	h := sha256.New()
@@ -383,7 +393,10 @@ func TestState_Symlink(t *testing.T) {
 				t.Errorf("close=%v", err)
 			}
 		}()
-
+		err = hashFS.WaitReady(ctx)
+		if err != nil {
+			t.Fatalf("WaitReady=%v; want nil", err)
+		}
 		fi, err := hashFS.Stat(ctx, dir, "symlink")
 		if err != nil {
 			t.Fatalf("Stat(%q)=%v", "symlink", err)
@@ -433,7 +446,10 @@ func TestState_Symlink(t *testing.T) {
 				t.Errorf("close=%v", err)
 			}
 		}()
-
+		err = hashFS.WaitReady(ctx)
+		if err != nil {
+			t.Fatalf("WaitReady=%v; want nil", err)
+		}
 		fi, err := hashFS.Stat(ctx, dir, "symlink")
 		if err != nil {
 			t.Fatalf("Stat(%q)=%v", "symlink", err)
@@ -460,6 +476,11 @@ func createBenchmarkState(tb testing.TB, dir string) *pb.State {
 		tb.Fatal(err)
 	}
 	defer hashFS.Close(ctx)
+	err = hashFS.WaitReady(ctx)
+	if err != nil {
+		tb.Fatalf("WaitReady=%v; want nil", err)
+	}
+
 	fsys := hashFS.FileSystem(ctx, dir)
 	err = fs.WalkDir(fsys, ".", func(path string, d fs.DirEntry, err error) error {
 		return err
