@@ -133,6 +133,38 @@ outputs:
 
 	ruleBuf := step.def.RuleFix(ctx, inadds, outadds)
 
+	// Annotate inputs with GN target if found.
+	var inaddsAnnotated []string
+	for _, inadd := range inadds {
+		fi, err := b.hashFS.Stat(ctx, b.path.ExecRoot, inadd)
+		if err != nil {
+			clog.Warningf(ctx, "failed to stat inadd %s: %v", inadd, err)
+			inaddsAnnotated = append(inaddsAnnotated, inadd)
+			continue
+		}
+		// All paths are relative to execroot, attempt to make relative to wd.
+		// If no CmdHash then means source file, so use hat target in that case.
+		lookup := b.path.MaybeToWD(ctx, inadd)
+		if len(fi.CmdHash()) == 0 {
+			lookup = fmt.Sprintf("%s^", lookup)
+		}
+		// Look up target in graph and annotate with all potential results.
+		targets, err := b.graph.Targets(ctx, lookup)
+		if err == nil {
+			for _, target := range targets {
+				step, _, _, outputs, err := b.graph.StepDef(ctx, target, nil)
+				if len(outputs) > 0 && len(step.Binding("gn_target")) > 0 {
+					inadd = fmt.Sprintf("%s (gn target: %s)", inadd, step.Binding("gn_target"))
+				} else if err != nil {
+					clog.Warningf(ctx, "get StepDef for inadd %s failed: %v", inadd, err)
+				}
+			}
+		} else {
+			clog.Warningf(ctx, "couldn't fetch targets for inadd %s: %v", inadd, err)
+		}
+		inaddsAnnotated = append(inaddsAnnotated, inadd)
+	}
+
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, `cmd: %s pure:%t/false restat:%t %s
 action: %s %s
@@ -156,7 +188,7 @@ allInputs:
 		command, dur.Milliseconds(),
 		len(allInputs), len(inouts), len(allOutputs),
 		len(inerrs), len(outerrs),
-		strings.Join(inadds, "\n+"),
+		strings.Join(inaddsAnnotated, "\n+"),
 		strings.Join(indels, "\n-"),
 		strings.Join(outadds, "\n+"),
 		strings.Join(outdels, "\n-"),
