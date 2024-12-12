@@ -15,11 +15,14 @@ import (
 	"google.golang.org/grpc/status"
 
 	"infra/build/siso/build/cachestore"
+	"infra/build/siso/o11y/clog"
 	"infra/build/siso/reapi/digest"
 )
 
 // LayeredCache is a multi-layer cache. It will attempt to read from caches in
-// priority order, and when writing, attempts to write to all caches.
+// priority order, and when doing so, performs write-through caching to all
+// faster caches.
+// When writing, it only writes to the first layer to improve performance.
 type LayeredCache struct {
 	// The caches here are ordered by priority (higher priority first).
 	caches []cachestore.CacheStore
@@ -52,11 +55,21 @@ func (lc *LayeredCache) GetActionResult(ctx context.Context, d digest.Digest) (a
 
 // GetContent gets the content of the file identified by the digest.
 func (lc *LayeredCache) GetContent(ctx context.Context, d digest.Digest, f string) (content []byte, err error) {
-	for _, cache := range lc.caches {
+	for i, cache := range lc.caches {
 		content, err = cache.GetContent(ctx, d, f)
-		if err == nil || !isNotExist(err) {
+		if isNotExist(err) {
+			continue
+		}
+		if err != nil {
 			return content, err
 		}
+		// If it exists in a slow cache, write it to all faster caches.
+		for j := range i {
+			if err := lc.caches[j].SetContent(ctx, d, f, content); err != nil {
+				clog.Warningf(ctx, "failed to write digest %s to cache: %v", d.String(), err)
+			}
+		}
+		return content, err
 	}
 	return nil, fmt.Errorf("no caches to retrieve content from")
 }

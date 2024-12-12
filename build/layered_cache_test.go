@@ -93,4 +93,11 @@ func TestLayeredCache(t *testing.T) {
 			t.Errorf("io.ReadAll(Source(%v).Open()) = %v, want %v", tc, gotContent, tc)
 		}
 	}
+
+	if second.HasContent(ctx, makeDigest(FirstOnly)) {
+		t.Errorf("second.HasContent(%v) = true, want false", FirstOnly)
+	}
+	if !first.HasContent(ctx, makeDigest(SecondOnly)) {
+		t.Errorf("first.HasContent(%v) = false, want true", SecondOnly)
+	}
 }
