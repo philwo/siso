@@ -290,12 +290,12 @@ func (c *Cmd) RemoteArgs() ([]string, error) {
 			c.Platform["InputRootAbsolutePath"] = rootPath
 		}
 	}
-	if c.RemoteWrapper != "" {
-		args = append([]string{c.RemoteWrapper}, args...)
-	}
 	if c.RemoteCommand != "" {
 		// Replace the first args. But don't modify the Cmd.Args for fallback.
 		args = append([]string{c.RemoteCommand}, args[1:]...)
+	}
+	if c.RemoteWrapper != "" {
+		args = append([]string{c.RemoteWrapper}, args...)
 	}
 	return args, nil
 }
