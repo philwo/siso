@@ -18,6 +18,10 @@ import (
 type CacheStore interface {
 	// GetActionResult gets the action result of the action identified by the digest.
 	GetActionResult(context.Context, digest.Digest) (*rpb.ActionResult, error)
+	// SetActionResult gets the action result of the action identified by the digest.
+	// If a failing action is provided, caching will be skipped.
+	SetActionResult(context.Context, digest.Digest, *rpb.ActionResult) error
+
 	// GetContent gets the content of the file identified by the digest.
 	GetContent(context.Context, digest.Digest, string) ([]byte, error)
 	// SetContent sets the content of the file identified by the digest.

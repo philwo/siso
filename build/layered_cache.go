@@ -53,6 +53,20 @@ func (lc *LayeredCache) GetActionResult(ctx context.Context, d digest.Digest) (a
 	return nil, fmt.Errorf("no caches to retrieve content from")
 }
 
+// SetActionResult sets the action result of the action identified by the digest.
+// If a failing action is provided, caching will be skipped.
+func (lc *LayeredCache) SetActionResult(ctx context.Context, d digest.Digest, ar *rpb.ActionResult) error {
+	// Intentionally only write to the first layer of the cache to improve
+	// performance.
+	// See SetContent for rationale.
+	if len(lc.caches) > 0 {
+		if err := lc.caches[0].SetActionResult(ctx, d, ar); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // GetContent gets the content of the file identified by the digest.
 func (lc *LayeredCache) GetContent(ctx context.Context, d digest.Digest, f string) (content []byte, err error) {
 	for i, cache := range lc.caches {

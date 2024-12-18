@@ -38,6 +38,18 @@ func (c CacheStore) GetActionResult(ctx context.Context, d digest.Digest) (*rpb.
 	return c.client.GetActionResult(ctx, d)
 }
 
+// SetActionResult sets action result for the action identified by the digest.
+// If a failing action is provided, caching will be skipped.
+func (c CacheStore) SetActionResult(ctx context.Context, d digest.Digest, ar *rpb.ActionResult) error {
+	// Intentionally no-op. Setting the action result could allow a malicious
+	// actor to perform arbitrary code execution.
+	// May reconsider in the future for trusted workers, but for now, do nothing.
+
+	// Intentionally return no error, as it is intended for this function to be
+	// called.
+	return nil
+}
+
 // GetContent gets contents for the fname identified by the digest.
 func (c CacheStore) GetContent(ctx context.Context, d digest.Digest, fname string) ([]byte, error) {
 	return c.client.Get(ctx, d, fname)

@@ -85,6 +85,45 @@ func (c *LocalCache) GetActionResult(ctx context.Context, d digest.Digest) (*rpb
 	return result, nil
 }
 
+// SetActionResult sets the action result of the action identified by the digest.
+// If a failing action is provided, caching will be skipped.
+func (c *LocalCache) SetActionResult(ctx context.Context, d digest.Digest, ar *rpb.ActionResult) error {
+	// Don't cache failing actions, as RBE won't either.
+	if c == nil || ar.ExitCode != 0 {
+		return nil
+	}
+	b, err := proto.Marshal(ar)
+	if err != nil {
+		return nil
+	}
+
+	fname := c.actionCacheFilename(d)
+	_, err, _ = c.singleflight.Do(fname, func() (any, error) {
+		err := os.MkdirAll(filepath.Dir(fname), 0755)
+		c.m.OpsDone(err)
+		if err != nil {
+			return nil, err
+		}
+		// Write to a temporary file first before renaming to perform an atomic
+		// write.
+		tmp := fname + ".tmp"
+		err = os.WriteFile(tmp, b, 0644)
+		c.m.WriteDone(len(b), err)
+		if err != nil {
+			c.m.OpsDone(os.Remove(tmp))
+			return nil, err
+		}
+		err = os.Rename(tmp, fname)
+		c.m.OpsDone(err)
+		if err != nil {
+			c.m.OpsDone(os.Remove(tmp))
+			return nil, err
+		}
+		return nil, nil
+	})
+	return err
+}
+
 // GetContent returns content of the fname identified by the digest.
 func (c *LocalCache) GetContent(ctx context.Context, d digest.Digest, _ string) ([]byte, error) {
 	_, span := trace.NewSpan(ctx, "cache-get-content")
