@@ -44,11 +44,22 @@ func isNotExist(err error) bool {
 
 // GetActionResult gets the action result of the action identified by the digest.
 func (lc *LayeredCache) GetActionResult(ctx context.Context, d digest.Digest) (ar *rpb.ActionResult, err error) {
-	for _, cache := range lc.caches {
+	for i, cache := range lc.caches {
 		ar, err = cache.GetActionResult(ctx, d)
-		if err == nil || !isNotExist(err) {
+		if isNotExist(err) {
+			continue
+		}
+		// Don't cache failure results, as RBE won't cache such a result.
+		if err != nil || ar.ExitCode != 0 {
 			return ar, err
 		}
+		// If it exists in a slow cache, write it to all faster caches.
+		for j := range i {
+			if err := lc.caches[j].SetActionResult(ctx, d, ar); err != nil {
+				clog.Warningf(ctx, "failed to write action result with digest %s to cache: %v", d.String(), err)
+			}
+		}
+		return ar, err
 	}
 	return nil, fmt.Errorf("no caches to retrieve content from")
 }

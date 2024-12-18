@@ -9,6 +9,9 @@ import (
 	"io"
 	"testing"
 
+	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
+	"google.golang.org/protobuf/proto"
+
 	"infra/build/siso/build/cachestore"
 	"infra/build/siso/reapi/digest"
 )
@@ -18,6 +21,7 @@ const SecondOnly = "secondonly"
 const Both = "both"
 const Neither = "neither"
 const NewlyAdded = "newly_added"
+const ActionResult = "action_result"
 
 func makeDigest(s string) digest.Digest {
 	return digest.FromBytes(s, []byte(s)).Digest()
@@ -99,5 +103,59 @@ func TestLayeredCache(t *testing.T) {
 	}
 	if !first.HasContent(ctx, makeDigest(SecondOnly)) {
 		t.Errorf("first.HasContent(%v) = false, want true", SecondOnly)
+	}
+}
+
+func TestWriteThroughCache(t *testing.T) {
+	ctx := context.Background()
+	cache := NewLayeredCache()
+
+	first, err := NewLocalCache(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	cache.AddLayer(first)
+
+	second, err := NewLocalCache(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	wantProto := &rpb.ActionResult{StdoutRaw: []byte("a")}
+	if err := second.SetActionResult(ctx, makeDigest(ActionResult), wantProto); err != nil {
+		t.Fatal(err)
+	}
+
+	cache.AddLayer(second)
+
+	// It should initially only exist in the second cache
+	_, err = first.GetActionResult(ctx, makeDigest(ActionResult))
+	if err == nil {
+		t.Errorf("first.GetActionResult(%v) succeeded, want failure", ActionResult)
+	}
+	ar, err := second.GetActionResult(ctx, makeDigest(ActionResult))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !proto.Equal(ar, wantProto) {
+		t.Errorf("second.GetActionResult(%v) = %v, want %v", ActionResult, ar, wantProto)
+	}
+
+	ar, err = cache.GetActionResult(ctx, makeDigest(ActionResult))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !proto.Equal(ar, wantProto) {
+		t.Errorf("cache.GetActionResult(%v) = %v, want %v", ActionResult, ar, wantProto)
+	}
+
+	// While reading from the second layer of the cache, it should have written
+	// to the first layer of the cache, so it should now exist.
+	ar, err = first.GetActionResult(ctx, makeDigest(ActionResult))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !proto.Equal(ar, wantProto) {
+		t.Errorf("first.GetActionResult(%v) = %v, want %v", ActionResult, ar, wantProto)
 	}
 }
