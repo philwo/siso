@@ -121,7 +121,10 @@ func TestWriteThroughCache(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	wantProto := &rpb.ActionResult{StdoutRaw: []byte("a")}
+	wantProto := &rpb.ActionResult{
+		StdoutRaw:   []byte("a"),
+		OutputFiles: []*rpb.OutputFile{{Path: "foo"}},
+	}
 	if err := second.SetActionResult(ctx, makeDigest(ActionResult), wantProto); err != nil {
 		t.Fatal(err)
 	}

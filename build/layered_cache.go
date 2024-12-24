@@ -53,7 +53,13 @@ func (lc *LayeredCache) GetActionResult(ctx context.Context, d digest.Digest) (a
 		if err != nil || ar.ExitCode != 0 {
 			return ar, err
 		}
-		// If it exists in a slow cache, write it to all faster caches.
+		// Don't cache invalid action results.
+		// However, the cache still needs to be returned, in order to set
+		// SkipCacheLookup=true to execute the remote action forcibly.
+		if !validateRemoteActionResult(ar) {
+			return ar, err
+		}
+		// If a valid cache exists in a slow cache, write it to all faster caches.
 		for j := range i {
 			if err := lc.caches[j].SetActionResult(ctx, d, ar); err != nil {
 				clog.Warningf(ctx, "failed to write action result with digest %s to cache: %v", d.String(), err)
