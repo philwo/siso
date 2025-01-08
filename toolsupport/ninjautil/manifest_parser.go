@@ -8,9 +8,10 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
-	"runtime"
 
 	"golang.org/x/sync/errgroup"
+
+	"infra/build/siso/runtimex"
 )
 
 // multipleRulesError is an error that multiple rules generates the same output.
@@ -45,7 +46,7 @@ func NewManifestParser(state *State) *ManifestParser {
 	}
 }
 
-var loaderConcurrency = runtime.NumCPU()
+var loaderConcurrency = runtimex.NumCPU()
 
 // SetWd sets working directory to use for loading files.
 func (p *ManifestParser) SetWd(wd string) {

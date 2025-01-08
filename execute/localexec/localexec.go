@@ -14,7 +14,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"sync"
 	"time"
 
@@ -26,6 +25,7 @@ import (
 	"infra/build/siso/execute"
 	epb "infra/build/siso/execute/proto"
 	"infra/build/siso/o11y/clog"
+	"infra/build/siso/runtimex"
 	"infra/build/siso/sync/semaphore"
 	"infra/build/siso/toolsupport/straceutil"
 	"infra/build/siso/ui"
@@ -66,7 +66,7 @@ func (LocalExec) Run(ctx context.Context, cmd *execute.Cmd) (err error) {
 }
 
 // fix for http://b/278658064 windows: fork/exec: Not enough memory resources are available to process this command.
-var forkSema = semaphore.New("fork", runtime.NumCPU())
+var forkSema = semaphore.New("fork", runtimex.NumCPU())
 
 func run(ctx context.Context, cmd *execute.Cmd) (*rpb.ActionResult, error) {
 	if len(cmd.Args) == 0 {

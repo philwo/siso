@@ -14,6 +14,7 @@ import (
 	"sync"
 
 	"infra/build/siso/o11y/clog"
+	"infra/build/siso/runtimex"
 	"infra/build/siso/ui"
 )
 
@@ -62,7 +63,7 @@ var (
 //	SISO_LIMITS=step=1024,local=8,remote=80
 func DefaultLimits(ctx context.Context) Limits {
 	limitOnce.Do(func() {
-		numCPU := runtime.NumCPU()
+		numCPU := runtimex.NumCPU()
 		stepLimit := limitForStep(ctx, numCPU)
 		defaultLimits = Limits{
 			Step:      stepLimit,

@@ -9,7 +9,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"runtime"
 	"time"
 
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
@@ -22,11 +21,12 @@ import (
 	"infra/build/siso/reapi/digest"
 	"infra/build/siso/reapi/merkletree"
 	_ "infra/build/siso/reapi/proto" // for auxiliary metadata
+	"infra/build/siso/runtimex"
 	"infra/build/siso/sync/semaphore"
 )
 
 // Semaphore enforces a limit on parallel digest calculations to prevent an OOM.
-var Semaphore = semaphore.New("remoteexec-digest", runtime.NumCPU()*10)
+var Semaphore = semaphore.New("remoteexec-digest", runtimex.NumCPU()*10)
 
 // RemoteExec is executor with remote exec API.
 type RemoteExec struct {

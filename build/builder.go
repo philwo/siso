@@ -47,6 +47,7 @@ import (
 	"infra/build/siso/reapi"
 	"infra/build/siso/reapi/digest"
 	"infra/build/siso/reapi/merkletree"
+	"infra/build/siso/runtimex"
 	"infra/build/siso/scandeps"
 	"infra/build/siso/sync/semaphore"
 	"infra/build/siso/toolsupport/ninjautil"
@@ -265,7 +266,7 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 		logger.Infof("disable reclient integration")
 	}
 	experiments.ShowOnce()
-	numCPU := runtime.NumCPU()
+	numCPU := runtimex.NumCPU()
 	if (opts.Limits == Limits{}) {
 		opts.Limits = DefaultLimits(ctx)
 	}

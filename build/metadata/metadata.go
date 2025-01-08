@@ -10,6 +10,8 @@ import (
 	"runtime"
 	"sort"
 	"strconv"
+
+	"infra/build/siso/runtimex"
 )
 
 // Metadata contains structured metadata for the build.
@@ -27,7 +29,7 @@ func New() Metadata {
 		entries: make(map[string]string),
 	}
 	// Set the well-known keys that are not set by calls to Set.
-	metadata.entries["num_cpu"] = strconv.Itoa(runtime.NumCPU())
+	metadata.entries["num_cpu"] = strconv.Itoa(runtimex.NumCPU())
 	metadata.entries["goos"] = runtime.GOOS
 	metadata.entries["goarch"] = runtime.GOARCH
 	// TODO: want to include hostname, too?

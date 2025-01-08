@@ -8,7 +8,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"runtime"
 	"runtime/trace"
 	"strconv"
 	"time"
@@ -16,6 +15,7 @@ import (
 	log "github.com/golang/glog"
 
 	"infra/build/siso/o11y/clog"
+	"infra/build/siso/runtimex"
 )
 
 // chunk is a chunk in a file.
@@ -53,7 +53,7 @@ type chunk struct {
 // splitIntoChunks splits buf into chunks.
 func splitIntoChunks(ctx context.Context, buf []byte) []chunk {
 	defer trace.StartRegion(ctx, "ninja.split").End()
-	chunkCount := runtime.NumCPU()
+	chunkCount := runtimex.NumCPU()
 	chunkSize := max(1024*1024, len(buf)/chunkCount+1)
 
 	chunks := make([]chunk, 0, chunkCount)

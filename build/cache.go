@@ -7,7 +7,6 @@ package build
 import (
 	"context"
 	"errors"
-	"runtime"
 	"time"
 
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
@@ -21,6 +20,7 @@ import (
 	"infra/build/siso/o11y/iometrics"
 	"infra/build/siso/o11y/trace"
 	"infra/build/siso/reapi/digest"
+	"infra/build/siso/runtimex"
 	"infra/build/siso/sync/semaphore"
 )
 
@@ -53,7 +53,7 @@ func NewCache(ctx context.Context, opts CacheOptions) (*Cache, error) {
 		enableRead: opts.EnableRead,
 
 		// TODO(b/274038010): cache-digest semaphore should share with execute/remotecache?
-		sema: semaphore.New("cache-digest", runtime.NumCPU()*10),
+		sema: semaphore.New("cache-digest", runtimex.NumCPU()*10),
 
 		m: iometrics.New("cache-content"),
 	}, nil

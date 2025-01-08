@@ -22,12 +22,13 @@ import (
 	"infra/build/siso/o11y/iometrics"
 	"infra/build/siso/reapi/digest"
 	"infra/build/siso/reapi/retry"
+	"infra/build/siso/runtimex"
 	"infra/build/siso/sync/semaphore"
 )
 
 // LstatSemaphore is a semaphore to control concurrent lstat,
 // to protect from thread exhaustion. b/365856347
-var LstatSemaphore = semaphore.New("osfs-lstat", runtime.NumCPU()*2)
+var LstatSemaphore = semaphore.New("osfs-lstat", runtimex.NumCPU()*2)
 
 // defaultDigestXattr is default xattr for digest. http://shortn/_8GHggPD2vw
 const defaultDigestXattr = "google.digest.sha256"

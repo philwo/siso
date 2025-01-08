@@ -30,6 +30,7 @@ import (
 	"infra/build/siso/hashfs/osfs"
 	"infra/build/siso/reapi/digest"
 	"infra/build/siso/reapi/merkletree"
+	"infra/build/siso/runtimex"
 )
 
 func TestStamp(t *testing.T) {
@@ -323,7 +324,7 @@ func TestStat_Race(t *testing.T) {
 	// keep most cpus busy
 	var count atomic.Int64
 	const n = 1000
-	for i := 0; i < runtime.NumCPU()-1; i++ {
+	for i := 0; i < runtimex.NumCPU()-1; i++ {
 		eg.Go(func() error {
 			for {
 				if count.Load() == n {

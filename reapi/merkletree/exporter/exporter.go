@@ -11,7 +11,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"runtime"
 
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
 	"golang.org/x/sync/errgroup"
@@ -19,6 +18,7 @@ import (
 
 	"infra/build/siso/o11y/clog"
 	"infra/build/siso/reapi/digest"
+	"infra/build/siso/runtimex"
 	"infra/build/siso/sync/semaphore"
 )
 
@@ -38,7 +38,7 @@ type Exporter struct {
 func New(client Client) *Exporter {
 	return &Exporter{
 		client: client,
-		sema:   semaphore.New("exporter", runtime.NumCPU()),
+		sema:   semaphore.New("exporter", runtimex.NumCPU()),
 	}
 }
 

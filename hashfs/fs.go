@@ -32,6 +32,7 @@ import (
 	"infra/build/siso/o11y/trace"
 	"infra/build/siso/reapi/digest"
 	"infra/build/siso/reapi/merkletree"
+	"infra/build/siso/runtimex"
 	"infra/build/siso/sync/semaphore"
 )
 
@@ -41,10 +42,10 @@ const maxSymlinks = 40
 
 // ForgetMissingsSemaphore is a semaphore to control concurrent ForgetMissings.
 // os.Lstat in ForgetMissings would create lots of thread. b/325565625
-var ForgetMissingsSemaphore = semaphore.New("fs-forget", runtime.NumCPU()*2)
+var ForgetMissingsSemaphore = semaphore.New("fs-forget", runtimex.NumCPU()*2)
 
 // FlushSemaphore is a semaphore to control concurrent flushes.
-var FlushSemaphore = semaphore.New("fs-flush", runtime.NumCPU()*2)
+var FlushSemaphore = semaphore.New("fs-flush", runtimex.NumCPU()*2)
 
 func isExecutable(fi fs.FileInfo, fname string, m map[string]bool) bool {
 	if fi.Mode()&0111 != 0 {

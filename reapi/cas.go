@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"io"
 	"path"
-	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -31,12 +30,13 @@ import (
 	"infra/build/siso/reapi/bytestreamio"
 	"infra/build/siso/reapi/digest"
 	"infra/build/siso/reapi/retry"
+	"infra/build/siso/runtimex"
 	"infra/build/siso/sync/semaphore"
 )
 
 var (
 	// FileSemaphore limits concurrent file access to create BatchUpdateBlobgs to protect from runtime thread exhaustion.
-	FileSemaphore = semaphore.New("reapi-cas-file", runtime.NumCPU())
+	FileSemaphore = semaphore.New("reapi-cas-file", runtimex.NumCPU())
 )
 
 const (

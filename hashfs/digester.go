@@ -6,18 +6,18 @@ package hashfs
 
 import (
 	"context"
-	"runtime"
 	"sync"
 	"time"
 
 	"infra/build/siso/o11y/clog"
 	"infra/build/siso/o11y/trace"
 	"infra/build/siso/reapi/digest"
+	"infra/build/siso/runtimex"
 	"infra/build/siso/sync/semaphore"
 )
 
 // DigestSemaphore is a semaphore to control concurrent digest calculation.
-var DigestSemaphore = semaphore.New("file-digest", runtime.NumCPU())
+var DigestSemaphore = semaphore.New("file-digest", runtimex.NumCPU())
 
 // Keep track what files are currently accessed for digest calculation.
 // On Windows, it would fail with ERROR_SHARING_VIOLATION when it
@@ -71,7 +71,7 @@ type digester struct {
 
 func (d *digester) start() {
 	defer close(d.done)
-	n := runtime.NumCPU() - 1
+	n := runtimex.NumCPU() - 1
 	if n == 0 {
 		n = 1
 	}

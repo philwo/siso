@@ -11,7 +11,6 @@ import (
 	"io/fs"
 	"path"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -20,10 +19,11 @@ import (
 
 	"infra/build/siso/o11y/clog"
 	"infra/build/siso/o11y/trace"
+	"infra/build/siso/runtimex"
 	"infra/build/siso/sync/semaphore"
 )
 
-var cppScanSema = semaphore.New("cppscan", runtime.NumCPU())
+var cppScanSema = semaphore.New("cppscan", runtimex.NumCPU())
 
 // fsview is a view of filesystem per scandeps process.
 // It will reduce unnecessary contention to filesystem.
