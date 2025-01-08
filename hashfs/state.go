@@ -33,6 +33,7 @@ import (
 	pb "infra/build/siso/hashfs/proto"
 	"infra/build/siso/o11y/clog"
 	"infra/build/siso/reapi/digest"
+	"infra/build/siso/toolsupport/artfsutil"
 	"infra/build/siso/toolsupport/cogutil"
 )
 
@@ -64,6 +65,7 @@ type Option struct {
 	OutputLocal OutputLocalFunc
 	Ignore      IgnoreFunc
 	CogFS       *cogutil.Client
+	ArtFS       *artfsutil.Client
 }
 
 // RegisterFlags registers flags for the option.

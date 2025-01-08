@@ -1058,7 +1058,8 @@ func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []Update
 		return entries[i].Name < entries[j].Name
 	})
 
-	if hfs.opt.CogFS != nil {
+	if hfs.opt.CogFS != nil || hfs.opt.ArtFS != nil {
+		// TODO: pass UpdateEntry so artfs can set mtime?
 		var updates []merkletree.Entry
 		var updateIdx []int
 		var nFromLocals, nNonFiles int
@@ -1078,7 +1079,12 @@ func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []Update
 			updates = append(updates, *ent.Entry)
 		}
 		if len(updates) > 0 {
-			err := hfs.opt.CogFS.BuildfsInsert(ctx, execRoot, updates)
+			var err error
+			if hfs.opt.CogFS != nil {
+				err = hfs.opt.CogFS.BuildfsInsert(ctx, execRoot, updates)
+			} else {
+				err = hfs.opt.ArtFS.ArtfsInsert(ctx, execRoot, updates)
+			}
 			if err != nil {
 				clog.Warningf(ctx, "cog buildfs insert %d under %s: %v", len(updates), execRoot, err)
 			} else {

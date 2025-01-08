@@ -60,6 +60,7 @@ import (
 	"infra/build/siso/reapi"
 	"infra/build/siso/reapi/digest"
 	"infra/build/siso/reapi/merkletree"
+	"infra/build/siso/toolsupport/artfsutil"
 	"infra/build/siso/toolsupport/cogutil"
 	"infra/build/siso/toolsupport/ninjautil"
 	"infra/build/siso/toolsupport/watchmanutil"
@@ -148,6 +149,9 @@ type ninjaCmdRun struct {
 	reCacheEnableRead bool
 	// reCacheEnableWrite bool
 	reproxyAddr string
+
+	artfsDir      string
+	artfsEndpoint string
 
 	enableCloudLogging bool
 	enableResultstore  bool
@@ -397,11 +401,6 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		return stats, flagError{err: fmt.Errorf("unknown tool %q", c.subtool)}
 	}
 
-	limits := build.DefaultLimits(ctx)
-	if c.remoteJobs > 0 {
-		limits.Remote = c.remoteJobs
-		limits.REWrap = c.remoteJobs
-	}
 	if c.ninjaJobs >= 0 {
 		fmt.Fprintf(os.Stderr, "-j is not supported. use -remote_jobs instead\n")
 	}
@@ -490,6 +489,14 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	defer resetCrashOutput()
 
 	buildPath := build.NewPath(execRoot, c.dir)
+
+	// compute default limits based on fstype of work dir (e.g. artfs),
+	// not of exec root.
+	limits := build.DefaultLimits(ctx)
+	if c.remoteJobs > 0 {
+		limits.Remote = c.remoteJobs
+		limits.REWrap = c.remoteJobs
+	}
 
 	if err = uuid.Validate(c.buildID); err != nil {
 		return stats, flagError{err: fmt.Errorf("%q is an invalid build ID. -build_id must be a UUID", c.buildID)}
@@ -730,6 +737,14 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	if cogfs != nil {
 		ui.Default.PrintLines(ui.SGR(ui.Yellow, fmt.Sprintf("build in cog: %s\n", cogfs.Info())))
 		c.fsopt.CogFS = cogfs
+	}
+	if c.artfsDir != "" && c.artfsEndpoint != "" {
+		artfs, err := artfsutil.New(ctx, c.artfsDir, c.artfsEndpoint)
+		if err != nil {
+			return stats, err
+		}
+		ui.Default.PrintLines(ui.SGR(ui.Yellow, "build on artfs\n"))
+		c.fsopt.ArtFS = artfs
 	}
 
 	if fsmonitor := os.Getenv("SISO_FSMONITOR"); fsmonitor != "" {
@@ -1077,6 +1092,9 @@ func (c *ninjaCmdRun) init() {
 	// reclient_helper.py sets the RBE_server_address
 	// https://chromium.googlesource.com/chromium/tools/depot_tools.git/+/e13840bd9a04f464e3bef22afac1976fc15a96a0/reclient_helper.py#138
 	c.reproxyAddr = os.Getenv("RBE_server_address")
+
+	c.Flags.StringVar(&c.artfsDir, "artfs_dir", "", "artfs mount point")
+	c.Flags.StringVar(&c.artfsEndpoint, "artfs_endpoint", "localhost:65001", "artfs server endpoint")
 
 	c.Flags.DurationVar(&c.traceThreshold, "trace_threshold", 1*time.Minute, "threshold for trace record")
 	c.Flags.DurationVar(&c.traceSpanThreshold, "trace_span_threshold", 100*time.Millisecond, "theshold for trace span record")
