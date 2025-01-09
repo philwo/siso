@@ -1146,7 +1146,13 @@ func (c *ninjaCmdRun) initWorkdirs(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-
+	realCWD, err := filepath.EvalSymlinks(cwd)
+	if err != nil {
+		clog.Warningf(ctx, "failed to eval symlinks %q: %v", cwd, err)
+	} else if cwd != realCWD {
+		clog.Infof(ctx, "cwd %s -> %s", cwd, realCWD)
+		cwd = realCWD
+	}
 	if !filepath.IsAbs(c.configRepoDir) {
 		execRoot, err = build.DetectExecRoot(cwd, c.configRepoDir)
 		if err != nil {
