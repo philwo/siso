@@ -22,6 +22,8 @@ import (
 type Options struct {
 	ProjectID string
 
+	ServiceName string
+
 	// threshold of step duration to export.
 	// it will not export step trace if step duration is less than this.
 	StepThreshold time.Duration
@@ -35,6 +37,7 @@ type Options struct {
 // Exporter is trace exporter.
 type Exporter struct {
 	ProjectID     string
+	ServiceName   string
 	stepThreshold time.Duration
 	spanThreshold time.Duration
 	client        *trace.Client
@@ -50,6 +53,7 @@ type Exporter struct {
 func NewExporter(ctx context.Context, opts Options) (*Exporter, error) {
 	e := &Exporter{
 		ProjectID:     opts.ProjectID,
+		ServiceName:   opts.ServiceName,
 		stepThreshold: opts.StepThreshold,
 		spanThreshold: opts.SpanThreshold,
 		q:             make(chan []*tracepb.Span, 1000),
@@ -135,6 +139,18 @@ func (e *Exporter) Export(ctx context.Context, tc *Context) {
 			}
 			ndropped++
 			continue
+		}
+		if e.ServiceName != "" {
+			if span.Attributes == nil {
+				span.Attributes = &tracepb.Span_Attributes{}
+			}
+			attrs := span.Attributes
+			if attrs.AttributeMap == nil {
+				attrs.AttributeMap = make(map[string]*tracepb.AttributeValue)
+			}
+			if _, ok := attrs.AttributeMap["service.name"]; !ok {
+				attrs.AttributeMap["service.name"] = attrValue(e.ServiceName)
+			}
 		}
 		spans = append(spans, span)
 	}

@@ -1270,6 +1270,7 @@ func (c *ninjaCmdRun) initCloudTrace(ctx context.Context, projectID string, cred
 	clog.Infof(ctx, "enable trace in %s [trace > %s]", projectID, c.traceThreshold)
 	traceExporter, err := trace.NewExporter(ctx, trace.Options{
 		ProjectID:     projectID,
+		ServiceName:   fmt.Sprintf("siso/%s/%s", c.version, runtime.GOOS),
 		StepThreshold: c.traceThreshold,
 		SpanThreshold: c.traceSpanThreshold,
 		ClientOptions: append([]option.ClientOption{}, credential.ClientOptions()...),
