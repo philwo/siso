@@ -335,7 +335,9 @@ func (s *StepDef) Inputs(ctx context.Context) []string {
 		targets = append(targets, p)
 	}
 	for _, p := range edgeSolibs(s.edge) {
-		clog.Infof(ctx, "solib %s", p)
+		if s.rule.Debug {
+			clog.Infof(ctx, "solib %s", p)
+		}
 		p := globals.path.MaybeFromWD(ctx, p)
 		if seen[p] {
 			continue
