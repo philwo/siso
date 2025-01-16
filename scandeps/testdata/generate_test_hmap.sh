@@ -10,6 +10,11 @@ set -e
 this_dir="$(cd $(dirname "$0"); pwd)"
 
 # expected to run this on MacOSX. /tmp -> /private/tmp
+if [[ "$(uname)" != Darwin ]]; then
+  echo "skip scandeps/testdata/generate_test_hmap.sh: " \
+       "need to run on Darwin" 1>&2
+  exit
+fi
 mkdir -p /private/tmp/siso-scandeps-test/out/siso
 (cd /private/tmp/siso-scandeps-test/out/siso && \
  repodir="${this_dir}/../../subcmd/ninja/testdata/TestBuild_Hmap"
