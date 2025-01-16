@@ -145,10 +145,17 @@ type Cmd struct {
 	// Depfile specifies a filename for dep info, relative to ExecRoot.
 	Depfile string
 
-	// If Restat is true
-	// - output files may be used only for inputs
-	// - no need to update mtime if content is not changed.
+	// If Restat is true,
+	// output files may be used only for inputs. i.e.
+	// output files would not be produced if they would be the same
+	// as before by local command execution, so mtime would not be
+	// updated, but UpdateTime is updated and IsChagned becomes true.
 	Restat bool
+
+	// If RestatContent is true, works as if reset=true for content.
+	// i.e. if output content is the same as before, don't update mtime
+	// but update UpdateTime and IsChagned to be false.
+	RestatContent bool
 
 	// Pure indicates whether the cmd is pure.
 	// This is analogue to pure function.
@@ -683,75 +690,76 @@ func (c *Cmd) RemoteFallbackResult() (*rpb.ActionResult, error) {
 // entriesFromResult returns output file entries and additional entries for the cmd and result.
 // output file entries will be recorded with cmdhash.
 // additional output file entries will be recorded without cmdhash.
-func (c *Cmd) entriesFromResult(ctx context.Context, ds hashfs.DataSource, result *rpb.ActionResult) (entries, additionalEntries []merkletree.Entry) {
+func (c *Cmd) entriesFromResult(ctx context.Context, ds hashfs.DataSource, result *rpb.ActionResult, cmdhash []byte, action digest.Digest, updatedTime time.Time) (entries, additionalEntries []hashfs.UpdateEntry) {
 	for _, f := range result.GetOutputFiles() {
 		if f.Digest == nil {
 			continue
 		}
 		fname := filepath.ToSlash(filepath.Join(c.Dir, f.Path))
 		d := digest.FromProto(f.Digest)
-		if !c.outfiles[fname] {
-			additionalEntries = append(additionalEntries, merkletree.Entry{
+		mode := fs.FileMode(0644)
+		if f.IsExecutable {
+			mode |= 0111
+		}
+		ent := hashfs.UpdateEntry{
+			Name: fname,
+			Entry: &merkletree.Entry{
 				Name:         fname,
 				Data:         digest.NewData(ds.Source(ctx, d, fname), d),
 				IsExecutable: f.IsExecutable,
-			})
+			},
+			Mode:        mode,
+			ModTime:     updatedTime,
+			Action:      action,
+			UpdatedTime: updatedTime,
+			IsChanged:   true,
+		}
+		if !c.outfiles[fname] {
+			// don't set cmdhash
+			additionalEntries = append(additionalEntries, ent)
 			continue
 		}
-		entries = append(entries, merkletree.Entry{
-			Name:         fname,
-			Data:         digest.NewData(ds.Source(ctx, d, fname), d),
-			IsExecutable: f.IsExecutable,
-		})
+		ent.CmdHash = cmdhash
+		entries = append(entries, ent)
 	}
 	for _, s := range result.GetOutputSymlinks() {
 		if s.Target == "" {
 			continue
 		}
 		fname := filepath.ToSlash(filepath.Join(c.Dir, s.Path))
-		entries = append(entries, merkletree.Entry{
-			Name:   fname,
-			Target: s.Target,
+		mode := fs.FileMode(0644) | fs.ModeSymlink
+		entries = append(entries, hashfs.UpdateEntry{
+			Name: fname,
+			Entry: &merkletree.Entry{
+				Name:   fname,
+				Target: s.Target,
+			},
+			Mode:        mode,
+			ModTime:     updatedTime,
+			CmdHash:     cmdhash,
+			Action:      action,
+			UpdatedTime: updatedTime,
+			IsChanged:   true,
 		})
 	}
 	for _, d := range result.GetOutputDirectories() {
 		// It just needs to add the directories here because it assumes that they have already been expanded by ninja State.
 		dname := filepath.ToSlash(filepath.Join(c.Dir, d.Path))
-		entries = append(entries, merkletree.Entry{
+		mode := fs.FileMode(0755) | fs.ModeDir
+		entries = append(entries, hashfs.UpdateEntry{
 			Name: dname,
-		})
-	}
-	return entries, additionalEntries
-}
-
-func hashfsUpdate(ctx context.Context, hfs *hashfs.HashFS, execRoot string, entries []merkletree.Entry, mtime time.Time, cmdhash []byte, action digest.Digest) error {
-	ents := make([]hashfs.UpdateEntry, 0, len(entries))
-	for _, ent := range entries {
-		ent := ent // loop var per iteration
-		mode := fs.FileMode(0644)
-		switch {
-		case !ent.Data.IsZero():
-			if ent.IsExecutable {
-				mode |= 0111
-			}
-		case ent.Target != "":
-			mode = 0644 | fs.ModeSymlink
-		default: // directory
-			mode = 0755 | fs.ModeDir
-		}
-
-		ents = append(ents, hashfs.UpdateEntry{
-			Name:        ent.Name,
-			Entry:       &ent,
+			Entry: &merkletree.Entry{
+				Name: dname,
+			},
 			Mode:        mode,
-			ModTime:     mtime,
+			ModTime:     updatedTime,
 			CmdHash:     cmdhash,
 			Action:      action,
-			UpdatedTime: mtime,
+			UpdatedTime: updatedTime,
 			IsChanged:   true,
 		})
 	}
-	return hfs.Update(ctx, execRoot, ents)
+	return entries, additionalEntries
 }
 
 // RecordPreOutputs records output entries before running command.
@@ -765,16 +773,18 @@ func (c *Cmd) RecordPreOutputs(ctx context.Context) {
 
 // RecordOutputs records cmd's outputs from action result in hashfs.
 func (c *Cmd) RecordOutputs(ctx context.Context, ds hashfs.DataSource, now time.Time) error {
-	entries, additionalEntries := c.entriesFromResult(ctx, ds, c.actionResult)
+	entries, additionalEntries := c.entriesFromResult(ctx, ds, c.actionResult, c.CmdHash, c.actionDigest, now)
 	clog.Infof(ctx, "output entries %d+%d", len(entries), len(additionalEntries))
-	err := hashfsUpdate(ctx, c.HashFS, c.ExecRoot, entries, now, c.CmdHash, c.actionDigest)
+	entries = c.computeOutputEntries(ctx, entries, now, c.CmdHash)
+	err := c.HashFS.Update(ctx, c.ExecRoot, entries)
 	if err != nil {
 		return fmt.Errorf("failed to update hashfs from remote: %w", err)
 	}
 	if len(additionalEntries) == 0 {
 		return nil
 	}
-	err = hashfsUpdate(ctx, c.HashFS, c.ExecRoot, additionalEntries, now, nil, c.actionDigest)
+	additionalEntries = c.computeOutputEntries(ctx, additionalEntries, now, nil)
+	err = c.HashFS.Update(ctx, c.ExecRoot, additionalEntries)
 	if err != nil {
 		return fmt.Errorf("failed to update hashfs from remote[additional]: %w", err)
 	}
@@ -835,12 +845,12 @@ func updateLocalOutputDir(ctx context.Context, hfs *hashfs.HashFS, root, dir str
 }
 
 // computeOutputEntries computes output entries to have updatedTime and cmdhash.
-// if restat is true, it checks preOutputEntries recorded by
-// RecordPreOutputs and don't update mtime/is_changed
-// if all entries are the same as before.
-func (c *Cmd) computeOutputEntries(ctx context.Context, entries []hashfs.UpdateEntry, restat bool, updatedTime time.Time, cmdhash []byte) []hashfs.UpdateEntry {
+// if c.Restat or c.ResetContent is true, it checks preOutputEntries recorded
+// by RecordPreOutputs and don't update mtime/is_changed
+// if entry is the same as before.
+func (c *Cmd) computeOutputEntries(ctx context.Context, entries []hashfs.UpdateEntry, updatedTime time.Time, cmdhash []byte) []hashfs.UpdateEntry {
 	pre := make(map[string]hashfs.UpdateEntry)
-	if restat {
+	if c.Restat || c.RestatContent {
 		// check with previous content recorded by
 		// RecordPreOutputs before execution.
 		for _, ent := range c.preOutputEntries {
@@ -854,13 +864,24 @@ func (c *Cmd) computeOutputEntries(ctx context.Context, entries []hashfs.UpdateE
 	for _, ent := range entries {
 		ent.CmdHash = cmdhash
 		ent.UpdatedTime = updatedTime
-		ent.IsLocal = true
 		pent := pre[ent.Name]
-		if !restat {
-			ent.ModTime = updatedTime
+		switch {
+		case c.RestatContent:
 			ent.IsChanged = true
-		} else if !pent.ModTime.Equal(ent.ModTime) {
-			// TODO: check digest too?
+			if pent.Entry != nil && !pent.Entry.Data.IsZero() && ent.Entry != nil && !ent.Entry.Data.IsZero() {
+				// empty file (e.g. stamp file) always
+				// considered as changed
+				ent.IsChanged = !(pent.Entry.Data.Digest() == ent.Entry.Data.Digest() && ent.Entry.Data.Digest().SizeBytes > 0)
+			}
+			if ent.IsChanged {
+				ent.ModTime = updatedTime
+			} else {
+				ent.ModTime = pent.ModTime
+			}
+		case c.Restat:
+			ent.IsChanged = !pent.ModTime.Equal(ent.ModTime)
+		default:
+			ent.ModTime = updatedTime
 			ent.IsChanged = true
 		}
 		ret = append(ret, ent)
@@ -885,7 +906,7 @@ func (c *Cmd) RecordOutputsFromLocal(ctx context.Context, now time.Time) error {
 	if len(additionalFiles) > 0 {
 		sort.Strings(additionalFiles)
 		entries := retrieveLocalOutputEntries(ctx, c.HashFS, c.ExecRoot, additionalFiles)
-		entries = c.computeOutputEntries(ctx, entries, c.Restat, now, nil)
+		entries = c.computeOutputEntries(ctx, entries, now, nil)
 		err := c.HashFS.Update(ctx, c.ExecRoot, entries)
 		if err != nil {
 			return fmt.Errorf("failed to update hashfs from local[additional]: %w", err)
@@ -897,7 +918,7 @@ func (c *Cmd) RecordOutputsFromLocal(ctx context.Context, now time.Time) error {
 	}
 	sort.Strings(outs)
 	entries := retrieveLocalOutputEntries(ctx, c.HashFS, c.ExecRoot, outs)
-	entries = c.computeOutputEntries(ctx, entries, c.Restat, now, c.CmdHash)
+	entries = c.computeOutputEntries(ctx, entries, now, c.CmdHash)
 	err := c.HashFS.Update(ctx, c.ExecRoot, entries)
 	if err != nil {
 		return fmt.Errorf("failed to update hashfs from local: %w", err)

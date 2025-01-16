@@ -176,7 +176,10 @@ to register handlers and step configs.
                * `platform`: additional platform properties
                * `platform_ref`: overrides reference to platform properties
           * `restat`: true if step cmd reads output file and not write it
-            (when no update needed)
+            (when no update needed), and considers output is clean if
+             mtime is not changed (same as ninja's restat).
+          * `restat_content`: true if step cmd considers output is clean if
+             content is not changed (like ninja's restat, but not use mtime).
           * `platform_ref`: reference to platform properties
           * `platform`: additional platform properties
           * `remote`: use remote exec or not

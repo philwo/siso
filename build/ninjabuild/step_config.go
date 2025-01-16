@@ -158,8 +158,14 @@ type StepRule struct {
 
 	// Restat means the step command will read its output
 	// and may not write output when no update needed.
+	// Output will be considered as clean if output mtime
+	// is not changed by the command execution.
 	// https://ninja-build.org/manual.html#ref_rule:~:text=appears%20in%20commands.-,restat,-if%20present%2C%20causes
 	Restat bool `json:"restat,omitempty"`
+
+	// RestatContent means output will be considered as clean
+	// if output content is the same as before.
+	RestatContent bool `json:"restat_content,omitempty"`
 
 	// PlatformRef is reference to platform properties.
 	PlatformRef string `json:"platform_ref,omitempty"`

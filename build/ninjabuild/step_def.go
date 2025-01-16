@@ -270,6 +270,11 @@ func (s *StepDef) Binding(name string) string {
 			return "true"
 		}
 		return s.edge.Binding(name)
+	case "restat_content":
+		if s.rule.RestatContent {
+			return "true"
+		}
+		return ""
 	case "impure":
 		if s.rule.Impure {
 			return "true"

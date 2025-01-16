@@ -421,7 +421,9 @@ func newCmd(ctx context.Context, b *Builder, stepDef StepDef) *execute.Cmd {
 		// UseSystemInput: stepDef.Binding("use_system_input") != "",
 		Deps:    stepDef.Binding("deps"),
 		Depfile: stepDef.Depfile(ctx),
-		Restat:  stepDef.Binding("restat") != "",
+
+		Restat:        stepDef.Binding("restat") != "",
+		RestatContent: stepDef.Binding("restat_content") != "",
 
 		Pure: stepDef.Pure(),
 
