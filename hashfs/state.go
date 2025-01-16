@@ -394,6 +394,7 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 	}
 	hfs.setStateCh = make(chan error, 1)
 	clean := nnew.Load() == 0 && nnotexist.Load() == 0 && nfail.Load() == 0 && ninvalidate.Load() == 0
+	hfs.clean.Store(clean)
 	// store in background.
 	go func() {
 		defer close(hfs.setStateCh)
@@ -411,6 +412,7 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 			}
 			_, err := hfs.directory.store(ctx, ent.Name, e)
 			if err != nil {
+				hfs.clean.Store(false)
 				hfs.setStateCh <- fmt.Errorf("failed to store dir %s: %w", ent.Name, err)
 				return
 			}
@@ -422,11 +424,11 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 			}
 			_, err := hfs.directory.store(ctx, ent.Name, e)
 			if err != nil {
+				hfs.clean.Store(false)
 				hfs.setStateCh <- fmt.Errorf("failed to store file %s: %w", ent.Name, err)
 				return
 			}
 		}
-		hfs.clean.Store(clean)
 		hfs.loaded.Store(true)
 		clog.Infof(ctx, "set state done: clean:%t loaded:true: %s", hfs.clean.Load(), time.Since(start))
 		hfs.setStateCh <- nil
