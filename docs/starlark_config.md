@@ -236,6 +236,7 @@ All inputs should be ready to use (via `ctx.fs`).
       * `tool_inputs`: input pathnames (not modified by deps)
       * `outputs`: output pathnames. note: ignored in `cleandead`.
       * `args`: args for the step
+      * `rspfile_content`: rspfile_content for the step.
       * `reproxy_config`: [`REProxyConfig`](../execute/cmd.go) in json-encoded format.
       * `reconcile_outputdirs`: reconcile directories to detect file removals in dirs after local step executions.
     * `write`: write file

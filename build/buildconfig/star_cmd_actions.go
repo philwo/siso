@@ -71,6 +71,7 @@ func starActionsFix(thread *starlark.Thread, fn *starlark.Builtin, args starlark
 	}
 	var inputsValue, toolInputsValue, outputsValue starlark.Value
 	var cmdArgsValue starlark.Value
+	var rspfileContentValue starlark.Value
 	var reproxyConfigValue starlark.Value
 	var reconcileOutputdirsValue starlark.Value
 	err := starlark.UnpackArgs("fix", args, kwargs,
@@ -78,6 +79,7 @@ func starActionsFix(thread *starlark.Thread, fn *starlark.Builtin, args starlark
 		"tool_inputs?", &toolInputsValue,
 		"outputs?", &outputsValue,
 		"args?", &cmdArgsValue,
+		"rspfile_content?", &rspfileContentValue,
 		"reproxy_config?", &reproxyConfigValue,
 		"reconcile_outputdirs?", &reconcileOutputdirsValue)
 	if err != nil {
@@ -109,6 +111,17 @@ func starActionsFix(thread *starlark.Thread, fn *starlark.Builtin, args starlark
 			return starlark.None, err
 		}
 	}
+	var rspfileContent starlark.Bytes
+	if rspfileContentValue != nil && rspfileContentValue != starlark.None {
+		rspfileContent, ok = rspfileContentValue.(starlark.Bytes)
+		if !ok {
+			v, ok := starlark.AsString(rspfileContentValue)
+			if !ok {
+				return starlark.None, fmt.Errorf("rspfile_content is not bytes nor a string")
+			}
+			rspfileContent = starlark.Bytes(v)
+		}
+	}
 	var reproxyConfigJSON string
 	if reproxyConfigValue != nil && reproxyConfigValue != starlark.None {
 		reproxyConfigJSON, ok = starlark.AsString(reproxyConfigValue)
@@ -134,6 +147,9 @@ func starActionsFix(thread *starlark.Thread, fn *starlark.Builtin, args starlark
 	}
 	if cmdArgsValue != nil {
 		c.cmd.Args = cmdArgs
+	}
+	if rspfileContentValue != nil {
+		c.cmd.RSPFileContent = []byte(rspfileContent)
 	}
 	if reproxyConfigValue != nil {
 		err := json.Unmarshal([]byte(reproxyConfigJSON), &c.cmd.REProxyConfig)
