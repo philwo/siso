@@ -1052,6 +1052,11 @@ func (e UpdateEntry) String() string {
 func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []UpdateEntry) error {
 	ctx, span := trace.NewSpan(ctx, "fs-update")
 	defer span.Close(nil)
+	select {
+	case <-ctx.Done():
+		return context.Cause(ctx)
+	default:
+	}
 	hfs.clean.Store(false)
 
 	// sort inputs, so update dir containing files first. b/300385880

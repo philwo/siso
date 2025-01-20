@@ -103,6 +103,12 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 		b.stats.update(ctx, &step.metrics, true)
 		return nil
 	}
+	select {
+	case <-ctx.Done():
+		// interrupt during needToRun.
+		return context.Cause(ctx)
+	default:
+	}
 
 	step.init(ctx, b)
 	description := stepDescription(step.def)
