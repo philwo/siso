@@ -357,7 +357,6 @@ func (c *Cmd) SetActionDigest(d digest.Digest) {
 
 // Digest computes action digest of the cmd.
 // If ds is nil, then it will reuse the previous calculated digest if any.
-// TODO(b/267576561): Integrate with Cloud Trace.
 func (c *Cmd) Digest(ctx context.Context, ds *digest.Store) (digest.Digest, error) {
 	if !c.Pure {
 		return digest.Digest{}, fmt.Errorf("unable to create digest for impure cmd %s", c.ID)
