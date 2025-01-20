@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
 	log "github.com/golang/glog"
@@ -48,7 +49,17 @@ const (
 
 	// batchBlobUploadLimit is max number of blobs in BatchUpdateBlobs.
 	batchBlobUploadLimit = 1000
+
+	bytestreamSlowThroughputPerSec = 1 * 1024 * 1024
 )
+
+func contextWithTimeoutForBytestream(ctx context.Context, d digest.Digest) (context.Context, context.CancelFunc) {
+	timeout := max(time.Duration(d.SizeBytes/bytestreamSlowThroughputPerSec)*time.Second, 10*time.Minute)
+	if timeout > 10*time.Minute {
+		clog.Infof(ctx, "bytestream timeout for %s: %s", d, timeout)
+	}
+	return context.WithTimeout(ctx, timeout)
+}
 
 func (c *Client) useCompressedBlob(d digest.Digest) bool {
 	if c.opt.CompressedBlob <= 0 {
@@ -159,6 +170,8 @@ func (c *Client) getWithByteStream(ctx context.Context, d digest.Digest) ([]byte
 	}
 	var buf []byte
 	err := retry.Do(ctx, func() error {
+		ctx, cancel := contextWithTimeoutForBytestream(ctx, d)
+		defer cancel()
 		r, err := bytestreamio.Open(ctx, bpb.NewByteStreamClient(c.conn), resourceName)
 		if err != nil {
 			c.m.ReadDone(0, err)
@@ -505,6 +518,8 @@ func (c *Client) uploadWithByteStream(ctx context.Context, digests []digest.Dige
 		key := fmt.Sprintf("%s/%d", d.Hash, d.SizeBytes)
 		_, err, shared := c.bytestreamSingleflight.Do(key, func() (any, error) {
 			err := retry.Do(ctx, func() error {
+				ctx, cancel := contextWithTimeoutForBytestream(ctx, d)
+				defer cancel()
 				rd, err := data.Open(ctx)
 				if err != nil {
 					return err

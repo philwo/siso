@@ -136,8 +136,7 @@ var serviceConfig = `
 	  {
 		"name": [
                   { "service": "build.bazel.remote.execution.v2.ContentAddressableStorage" },
-                  { "service": "build.bazel.remote.execution.v2.Capabilities" },
-                  { "service": "google.bytestream.ByteStream" }
+                  { "service": "build.bazel.remote.execution.v2.Capabilities" }
                 ],
 		"timeout": "600s",
 		"retryPolicy": {
