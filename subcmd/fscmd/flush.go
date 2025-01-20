@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/maruel/subcommands"
@@ -31,8 +32,9 @@ import (
 const flushUsage = `flush recorded files to the disk.
 
  $ siso fs flush -project <projectID> -C <dir> [<files>...]
+ $ siso fs flush -project <projectID> -C <dir> -file_list <file>
 
-It will fetch content for <files> recorded in .siso_fs_state.
+It will fetch the specified files recorded in .siso_fs_state.
 `
 
 func cmdFSFlush(authOpts cred.Options) *subcommands.Command {
@@ -53,13 +55,14 @@ func cmdFSFlush(authOpts cred.Options) *subcommands.Command {
 type flushRun struct {
 	subcommands.CommandRunBase
 
-	authOpts  cred.Options
-	dir       string
-	stateFile string
-	projectID string
-	reopt     *reapi.Option
-	force     bool
-	recursive bool
+	authOpts     cred.Options
+	dir          string
+	stateFile    string
+	projectID    string
+	reopt        *reapi.Option
+	force        bool
+	recursive    bool
+	fileListPath string
 }
 
 func (c *flushRun) init() {
@@ -74,6 +77,7 @@ func (c *flushRun) init() {
 	c.reopt.RegisterFlags(&c.Flags, envs)
 	c.Flags.BoolVar(&c.force, "f", false, "force to fetch")
 	c.Flags.BoolVar(&c.recursive, "recursive", true, "flush recursively")
+	c.Flags.StringVar(&c.fileListPath, "file_list", "", "path to a file containing a list of files to flush, one per line")
 }
 
 func (c *flushRun) Run(a subcommands.Application, args []string, env subcommands.Env) int {
@@ -97,8 +101,21 @@ func (c *flushRun) run(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer signals.HandleInterrupt(cancel)()
 
-	if c.Flags.NArg() == 0 {
+	if c.Flags.NArg() == 0 && c.fileListPath == "" {
 		return fmt.Errorf("no files to flush: %w", flag.ErrHelp)
+	}
+	if c.Flags.NArg() != 0 && c.fileListPath != "" {
+		return fmt.Errorf("can not use file arguments and -file_list at the same time")
+	}
+	var fnames []string
+	if c.Flags.NArg() > 0 {
+		fnames = c.Flags.Args()
+	} else {
+		fileList, err := os.ReadFile(c.fileListPath)
+		if err != nil {
+			return fmt.Errorf("failed to read %q: %w", c.fileListPath, err)
+		}
+		fnames = strings.Split(string(fileList), "\n")
 	}
 
 	projectID := c.reopt.UpdateProjectID(c.projectID)
@@ -134,7 +151,8 @@ func (c *flushRun) run(ctx context.Context) error {
 		return fmt.Errorf("failed to load %s: %w", c.stateFile, err)
 	}
 	stm := hashfs.StateMap(st)
-	for _, fname := range c.Flags.Args() {
+
+	for _, fname := range fnames {
 		fmt.Printf("%s ...", fname)
 		_ = os.Stdout.Sync() // to print not ended by newline immediately.
 
