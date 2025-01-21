@@ -56,6 +56,9 @@ func depsFastStep(ctx context.Context, b *Builder, step *Step) (*Step, error) {
 	if b.hashFS.OnCog() {
 		return nil, errors.New("no fast-deps (on Cog)")
 	}
+	if step.def.Binding("no_fast_deps") != "" {
+		return nil, errors.New("no fast-deps (siso config no_fast_deps=true)")
+	}
 	if ui.IsTerminal() && !experiments.Enabled("fast-deps", "") {
 		return nil, errors.New("no fast-deps (interactive. no SISO_EXPERIMENTS=fast-deps)")
 	}

@@ -216,6 +216,9 @@ type StepRule struct {
 	//   deps="none": ignore deps of the step.
 	Deps string `json:"deps,omitempty"`
 
+	// NoFastDeps disables fast-deps.
+	NoFastDeps bool `json:"no_fast_deps,omitempty"`
+
 	// OutputLocal indicates to force to write output files to local disk
 	// for subsequent steps.
 	// TODO: better to have `require_local_inputs`=[<globs>] to reduce unnecessary downloads?

@@ -205,6 +205,7 @@ to register handlers and step configs.
              * `msvc`: use `clang-cl /showIncludes`
              * `depfile`: depfile variable of the step
              * `none`: ignore deps variable in ninja
+          * `no_fast_deps`: disable fast-deps.
           * `output_local`: force download/outputs to local disk
           * `ignore_extra_input_pattern`: regexp to allow if it is used,
              but not listed in inputs.

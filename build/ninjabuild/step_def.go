@@ -237,6 +237,11 @@ func (s *StepDef) Binding(name string) string {
 			return s.rule.Deps
 		}
 		return s.edge.Binding(name)
+	case "no_fast_deps":
+		if s.rule.NoFastDeps {
+			return "true"
+		}
+		return ""
 	case "remote_wrapper":
 		return s.rule.RemoteWrapper
 	case "remote_command":
