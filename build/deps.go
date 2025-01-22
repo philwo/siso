@@ -21,7 +21,6 @@ import (
 	"infra/build/siso/o11y/clog"
 	"infra/build/siso/o11y/trace"
 	"infra/build/siso/toolsupport/makeutil"
-	"infra/build/siso/ui"
 )
 
 type depsProcessor interface {
@@ -44,26 +43,17 @@ var depsProcessors = map[string]depsProcessor{
 }
 
 func depsFastStep(ctx context.Context, b *Builder, step *Step) (*Step, error) {
-	if b.reapiclient == nil {
-		return nil, errors.New("no fast-deps (reapi is not configured)")
-	}
 	if step.useReclient() {
 		return nil, fmt.Errorf("no fast-deps (use reclient)")
 	}
 	if len(step.cmd.Platform) == 0 || step.cmd.Platform["container-image"] == "" {
 		return nil, errors.New("no fast-deps (no remote step)")
 	}
-	if b.hashFS.OnCog() {
-		return nil, errors.New("no fast-deps (on Cog)")
-	}
 	if step.def.Binding("no_fast_deps") != "" {
 		return nil, errors.New("no fast-deps (siso config no_fast_deps=true)")
 	}
-	if ui.IsTerminal() && !experiments.Enabled("fast-deps", "") {
-		return nil, errors.New("no fast-deps (interactive. no SISO_EXPERIMENTS=fast-deps)")
-	}
-	if experiments.Enabled("no-fast-deps", "disable fast-deps and force scandeps") {
-		return nil, errors.New("no fast-deps (SISO_EXPERIMENTS=no-fast-deps)")
+	if reason, ok := b.disableFastDeps.Load().(string); ok && reason != "" {
+		return nil, fmt.Errorf("no fast-deps (%s)", reason)
 	}
 	ds, found := depsProcessors[step.cmd.Deps]
 	if !found {

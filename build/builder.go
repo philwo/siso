@@ -23,6 +23,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"cloud.google.com/go/logging"
@@ -203,6 +204,8 @@ type Builder struct {
 	pprofUploader        *sisopprof.Uploader
 	resultstoreUploader  *resultstore.Uploader
 
+	disableFastDeps atomic.Value // string
+
 	clobber         bool
 	prepare         bool
 	verbose         bool
@@ -287,7 +290,7 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 	if opts.Limits.FastLocal > 0 {
 		fastLocalSema = semaphore.New("fastlocal", opts.Limits.FastLocal)
 	}
-	return &Builder{
+	b := &Builder{
 		jobID:     opts.JobID,
 		id:        opts.ID,
 		projectID: opts.ProjectID,
@@ -338,7 +341,23 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 		failuresAllowed:      opts.FailuresAllowed,
 		keepRSP:              opts.KeepRSP,
 		rebuildManifest:      opts.RebuildManifest,
-	}, nil
+	}
+	var disableReason string
+	switch {
+	case b.reapiclient == nil:
+		disableReason = "reapi is not configured"
+	case b.hashFS.OnCog():
+		disableReason = "on Cog"
+	case ui.IsTerminal() && !experiments.Enabled("fast-deps", ""):
+		disableReason = "interactive. no SISO_EXPERIMENT=fast-deps"
+	case experiments.Enabled("no-fast-deps", "disable fast-deps and force scandeps"):
+		disableReason = "SISO_EXPERIMENT=no-fast-deps"
+	}
+	if disableReason != "" {
+		clog.Infof(ctx, "disable fast-deps: %s", disableReason)
+		b.disableFastDeps.Store(disableReason)
+	}
+	return b, nil
 }
 
 // Close cleans up the builder.

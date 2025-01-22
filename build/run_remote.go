@@ -142,6 +142,15 @@ func (b *Builder) tryFastStep(ctx context.Context, step, fastStep *Step, cacheCh
 		return err
 	}
 	step.metrics.DepsLogErr = true
+	stats := b.stats.stats()
+	nFastDeps := stats.FastDepsSuccess + stats.FastDepsFailed + 1
+	if nFastDeps > 100 && (stats.FastDepsFailed+1)*100 > nFastDeps {
+		// many fast-deps failure.
+		// better to use scandeps to reduce retry by fast-deps failure.
+		clog.Infof(ctx, "too many fast-deps failure detected %d/%d", stats.FastDepsFailed+1, stats.FastDepsSuccess)
+		b.disableFastDeps.CompareAndSwap(nil, "too many fast-deps failure")
+	}
+
 	if experiments.Enabled("no-fast-deps-fallback", "fast-deps %s failed", step) {
 		return fmt.Errorf("fast-deps failed: %w", err)
 	}
