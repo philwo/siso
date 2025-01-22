@@ -57,11 +57,10 @@ func (s *stats) update(ctx context.Context, m *StepMetric, pure bool) {
 	s.s.RemoteRetry += m.RemoteRetry
 
 	if m.DepsLog {
-		if !m.DepsLogErr {
-			s.s.FastDepsSuccess++
-		} else {
-			s.s.FastDepsFailed++
-		}
+		s.s.FastDepsSuccess++
+	}
+	if m.DepsLogErr {
+		s.s.FastDepsFailed++
 	}
 	if m.ScandepsErr {
 		s.s.ScanDepsFailed++
