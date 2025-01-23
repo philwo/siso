@@ -343,7 +343,7 @@ func TestBuild_DepsMSVC_InstallerRC(t *testing.T) {
 			t.Fatal(err)
 		}
 		m := hashfs.StateMap(st)
-		_, ok := m[filepath.Join(dir, fname)]
+		_, ok := m[filepath.ToSlash(filepath.Join(dir, fname))]
 		return ok
 	}
 

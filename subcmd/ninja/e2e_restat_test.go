@@ -266,7 +266,7 @@ func TestBuild_RestatMultiout(t *testing.T) {
 	}
 	nstmap := hashfs.StateMap(nst)
 
-	fname := filepath.Join(dir, "out/siso/foo.out")
+	fname := filepath.ToSlash(filepath.Join(dir, "out/siso/foo.out"))
 	first := stmap[fname]
 	second := nstmap[fname]
 	if x, y := first.GetId().GetModTime(), second.GetId().GetModTime(); x == y {
@@ -275,7 +275,7 @@ func TestBuild_RestatMultiout(t *testing.T) {
 	if x, y := first.GetUpdatedTime(), second.GetUpdatedTime(); x >= y {
 		t.Errorf("foo.out updated time %d; want < %d", x, y)
 	}
-	fname = filepath.Join(dir, "out/siso/foo.out2")
+	fname = filepath.ToSlash(filepath.Join(dir, "out/siso/foo.out2"))
 	first = stmap[fname]
 	second = nstmap[fname]
 	if x, y := first.GetId().GetModTime(), second.GetId().GetModTime(); x >= y {
@@ -284,7 +284,7 @@ func TestBuild_RestatMultiout(t *testing.T) {
 	if x, y := first.GetUpdatedTime(), second.GetUpdatedTime(); x >= y {
 		t.Errorf("foo.out2 updated time %d; want < %d", x, y)
 	}
-	fname = filepath.Join(dir, "out/siso/bar.out")
+	fname = filepath.ToSlash(filepath.Join(dir, "out/siso/bar.out"))
 	first = stmap[fname]
 	second = nstmap[fname]
 	if x, y := first.GetId().GetModTime(), second.GetId().GetModTime(); x >= y {

@@ -595,7 +595,7 @@ func TestUpdate_FromLocal(t *testing.T) {
 	}()
 
 	fname := "out/siso/gen/foo.stamp"
-	fullname := filepath.Join(dir, fname)
+	fullname := filepath.ToSlash(filepath.Join(dir, fname))
 	_, err = hfs.Stat(ctx, dir, fname)
 	if !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("Stat(ctx, %q,%q)=%v; want %v", dir, fname, err, fs.ErrNotExist)
@@ -691,7 +691,7 @@ func TestUpdate_FromLocal_update(t *testing.T) {
 	setupFiles(t, dir, map[string]string{
 		fname: "0",
 	})
-	fullname := filepath.Join(dir, fname)
+	fullname := filepath.ToSlash(filepath.Join(dir, fname))
 	_, err = hfs.Stat(ctx, dir, fname)
 	if err != nil {
 		t.Fatalf("Stat(ctx, %q,%q)=%v; want nil", dir, fname, err)
@@ -804,7 +804,7 @@ func TestUpdate_FromLocal_Restat_update(t *testing.T) {
 	}()
 
 	fname := "out/siso/gen/foo.stamp"
-	fullname := filepath.Join(dir, fname)
+	fullname := filepath.ToSlash(filepath.Join(dir, fname))
 	_, err = hfs.Stat(ctx, dir, fname)
 	if !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("Stat(ctx, %q,%q)=%v; want %v", dir, fname, err, fs.ErrNotExist)
@@ -897,7 +897,7 @@ func TestUpdate_FromLocal_Restat_noupdate(t *testing.T) {
 	}()
 
 	fname := "out/siso/gen/foo.stamp"
-	fullname := filepath.Join(dir, fname)
+	fullname := filepath.ToSlash(filepath.Join(dir, fname))
 	setupFiles(t, dir, map[string]string{
 		fname: "",
 	})
@@ -1019,7 +1019,7 @@ func TestUpdate_FromLocal_Dir(t *testing.T) {
 	}
 	m := hashfs.StateMap(hfs.State(ctx))
 	hfs = nil
-	fullname := filepath.Join(dir, outname)
+	fullname := filepath.ToSlash(filepath.Join(dir, outname))
 	e, ok := m[fullname]
 	if !ok {
 		var keys []string

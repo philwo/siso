@@ -284,7 +284,7 @@ func TestState(t *testing.T) {
 
 	st := hashFS.State(ctx)
 	m := hashfs.StateMap(st)
-	_, ok := m[filepath.Join(dir, "stamp")]
+	_, ok := m[filepath.ToSlash(filepath.Join(dir, "stamp"))]
 	if !ok {
 		names := make([]string, 0, len(m))
 		for k := range m {
@@ -339,7 +339,7 @@ func TestState_Dir(t *testing.T) {
 
 	st := hashFS.State(ctx)
 	m := hashfs.StateMap(st)
-	ent, ok := m[filepath.Join(dir, "gen/generate_all")]
+	ent, ok := m[filepath.ToSlash(filepath.Join(dir, "gen/generate_all"))]
 	if !ok {
 		t.Errorf("gen/generate_all entry not exists?")
 	}
@@ -418,7 +418,7 @@ func TestState_Symlink(t *testing.T) {
 		t.Fatalf("load %v", err)
 	}
 	m := hashfs.StateMap(st)
-	e, ok := m[filepath.Join(dir, "symlink")]
+	e, ok := m[filepath.ToSlash(filepath.Join(dir, "symlink"))]
 	if !ok {
 		t.Errorf("no symlnk: %v", m)
 	}

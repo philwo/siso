@@ -650,7 +650,7 @@ func (hfs *HashFS) State(ctx context.Context) *pb.State {
 		}
 		// TODO(b/254182269): need mutex here?
 		dir.dir.m.Range(func(k, _ any) bool {
-			name := filepath.Join(dir.name, k.(string))
+			name := filepath.ToSlash(filepath.Join(dir.name, k.(string)))
 			names = append(names, name)
 			return true
 		})
@@ -672,9 +672,9 @@ func (hfs *HashFS) State(ctx context.Context) *pb.State {
 				continue
 			}
 			if runtime.GOOS == "windows" {
-				name = strings.TrimPrefix(name, `\`)
+				name = strings.TrimPrefix(name, "/")
 				if len(name) == 2 && name[1] == ':' {
-					name += `\`
+					name += `/`
 				}
 			}
 			if e.directory != nil {

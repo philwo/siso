@@ -114,7 +114,7 @@ func TestBuild_MultiOut_Remote(t *testing.T) {
 		t.Errorf("hashfs.Load=%v; want nil err", err)
 	}
 	m := hashfs.StateMap(st)
-	e1, ok := m[filepath.Join(dir, "out/siso/out1")]
+	e1, ok := m[filepath.ToSlash(filepath.Join(dir, "out/siso/out1"))]
 	if !ok {
 		t.Errorf("out1 not found: %v", m)
 	} else {
@@ -123,7 +123,7 @@ func TestBuild_MultiOut_Remote(t *testing.T) {
 			t.Errorf("out1=%s; want=%s", d1, out1)
 		}
 	}
-	e2, ok := m[filepath.Join(dir, "out/siso/out2")]
+	e2, ok := m[filepath.ToSlash(filepath.Join(dir, "out/siso/out2"))]
 	if !ok {
 		t.Errorf("out2 not found: %v", m)
 	} else {

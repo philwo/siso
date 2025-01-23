@@ -38,14 +38,14 @@ func TestBuild_Copy(t *testing.T) {
 	checkFSStat := func(dir string, m map[string]*pb.Entry, wants []string, notWants []string) error {
 		var mismatches []string
 		for _, fname := range wants {
-			fullname := filepath.Join(dir, fname)
+			fullname := filepath.ToSlash(filepath.Join(dir, fname))
 			_, ok := m[fullname]
 			if !ok {
 				mismatches = append(mismatches, fmt.Sprintf("missing %q in fs state", fname))
 			}
 		}
 		for _, fname := range notWants {
-			fullname := filepath.Join(dir, fname)
+			fullname := filepath.ToSlash(filepath.Join(dir, fname))
 			_, ok := m[fullname]
 			if ok {
 				mismatches = append(mismatches, fmt.Sprintf("exists %q in fs state", fname))
