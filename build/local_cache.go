@@ -13,6 +13,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
+	"time"
 
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
 	"golang.org/x/sync/singleflight"
@@ -24,6 +26,7 @@ import (
 	"infra/build/siso/o11y/iometrics"
 	"infra/build/siso/o11y/trace"
 	"infra/build/siso/reapi/digest"
+	"infra/build/siso/ui"
 )
 
 // LocalCache implements CacheStore interface with local files.
@@ -32,7 +35,13 @@ type LocalCache struct {
 
 	singleflight singleflight.Group
 	m            *iometrics.IOMetrics
+	timestamp    time.Time
 }
+
+// There is an upper bound on lifespan of 2 * TTL, since something that's
+// expired may not actually be picked up again until the next garbage
+// collection, which may not be for TTL.
+const localCacheTTL = 7 * 24 * time.Hour
 
 // NewLocalCache returns new local cache.
 func NewLocalCache(dir string) (*LocalCache, error) {
@@ -42,6 +51,8 @@ func NewLocalCache(dir string) (*LocalCache, error) {
 	return &LocalCache{
 		dir: dir,
 		m:   iometrics.New("local-cache"),
+		// Use the same timestamp throughout the build. Makes things simpler.
+		timestamp: time.Now(),
 	}, nil
 }
 
@@ -81,6 +92,10 @@ func (c *LocalCache) GetActionResult(ctx context.Context, d digest.Digest) (*rpb
 	err = proto.Unmarshal(b, result)
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal %s: %w", fname, err)
+	}
+
+	if err := os.Chtimes(fname, c.timestamp, c.timestamp); err != nil {
+		clog.Warningf(ctx, "Failed to update mtime for %s: %v", fname, err)
 	}
 	return result, nil
 }
@@ -144,6 +159,11 @@ func (c *LocalCache) GetContent(ctx context.Context, d digest.Digest, _ string) 
 	buf, err := io.ReadAll(gr)
 	// TODO(b/274060507): local cache metric: iometrics uses compressed size or uncompressed size?
 	c.m.ReadDone(len(buf), err)
+	if err == nil {
+		if err := os.Chtimes(cname, c.timestamp, c.timestamp); err != nil {
+			clog.Warningf(ctx, "Failed to update mtime for %s: %v", cname, err)
+		}
+	}
 	return buf, err
 }
 
@@ -194,6 +214,89 @@ func (c *LocalCache) HasContent(ctx context.Context, d digest.Digest) bool {
 	_, err := os.Stat(cname)
 	c.m.OpsDone(err)
 	return err == nil
+}
+
+func garbageCollect(ctx context.Context, dir string, threshold time.Time) (nFiles int, spaceReclaimed int64) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		clog.Warningf(ctx, "Failed to read %s: %v", dir, err)
+		return 0, 0
+	}
+
+	for _, entry := range entries {
+		path := filepath.Join(dir, entry.Name())
+		if entry.IsDir() {
+			n, s := garbageCollect(ctx, path, threshold)
+			nFiles += n
+			spaceReclaimed += s
+		} else {
+			// There's no OS-independent way to use atime, so we just use mtime and
+			// ensure that when we read a file we also update the mtime.
+			info, err := os.Stat(path)
+			if err != nil {
+				clog.Warningf(ctx, "Failed to stat file %s: %v", path, err)
+				continue
+			}
+			if info.ModTime().Before(threshold) {
+				if err := os.Remove(filepath.Join(dir, entry.Name())); err != nil {
+					clog.Warningf(ctx, "Failed to delete %s: %v", filepath.Join(dir, entry.Name()), err)
+				}
+				nFiles += 1
+				spaceReclaimed += info.Size()
+			}
+		}
+	}
+	return nFiles, spaceReclaimed
+}
+
+func (c *LocalCache) needsGarbageCollection(ttl time.Duration) bool {
+	if c == nil {
+		return false
+	}
+	bytes, err := os.ReadFile(filepath.Join(c.dir, "lastgc"))
+	if err != nil {
+		if _, err := os.Stat(c.dir); os.IsNotExist(err) {
+			return false
+		}
+		return true
+	}
+	lastgc, err := strconv.ParseInt(string(bytes), 10, 64)
+	if err != nil {
+		return true
+	}
+	return c.timestamp.After(time.Unix(0, lastgc).Add(ttl))
+}
+
+func (c *LocalCache) garbageCollect(ctx context.Context, ttl time.Duration) {
+	if c == nil {
+		return
+	}
+	spin := ui.Default.NewSpinner()
+	spin.Start("Performing garbage collection on the local cache")
+
+	clog.Infof(ctx, "Performing garbage collection on the local cache")
+	// God this is gross. time.Sub only takes in times, and time.Add only takes
+	// in durations.
+	threshold := c.timestamp.Add(-ttl)
+	nFiles, spaceReclaimed := garbageCollect(ctx, filepath.Join(c.dir, "contents"), threshold)
+	nActions, sActions := garbageCollect(ctx, filepath.Join(c.dir, "actions"), threshold)
+	nFiles += nActions
+	spaceReclaimed += sActions
+	if nFiles > 0 {
+		clog.Infof(ctx, "Garbage collected local cache: Removed %d files totalling %d MB", nFiles, spaceReclaimed/1000000)
+	}
+
+	if err := os.WriteFile(filepath.Join(c.dir, "lastgc"), []byte(fmt.Sprint(c.timestamp.UnixNano())), 0644); err != nil {
+		clog.Warningf(ctx, "Failed to record last garbage collection event: %v", err)
+	}
+	spin.Stop(nil)
+}
+
+// GarbageCollectIfRequired performs garbage collection if it has not been performed within localCacheTTL.
+func (c *LocalCache) GarbageCollectIfRequired(ctx context.Context) {
+	if c.needsGarbageCollection(localCacheTTL) {
+		c.garbageCollect(ctx, localCacheTTL)
+	}
 }
 
 // Source returns digest source for fname identified by the digest.
