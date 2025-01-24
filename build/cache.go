@@ -193,10 +193,14 @@ func needOutputUpdate(ctx context.Context, cmd *execute.Cmd, action digest.Diges
 		return false
 	}
 	switch cmd.Deps {
-	case "gcc", "msvc":
-		// deps=gcc, msvc loads deps into deps log and remove,
+	case "gcc":
+		// deps=gcc loads deps into deps log and remove,
 		// so no need to check depfile.
 		return false
+	case "msvc":
+		// deps=msvc needs to parse stdout/stderr for deps log
+		// TODO: skip update deps when no update needed?
+		return true
 	}
 	// check depfile is up-to-date or not (i.e. need to update)
 	out := cmd.Depfile
