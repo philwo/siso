@@ -602,3 +602,18 @@ func (d *DepsLog) recordDeps(ctx context.Context, i int, mtime time.Time, inputs
 	_, err := d.w.Write(buf.Bytes())
 	return err
 }
+
+// RecordedTargets returns a list of targets that have deps log.
+func (d *DepsLog) RecordedTargets() []string {
+	var targets []string
+	for i, target := range d.rPaths {
+		if i >= len(d.rDeps) {
+			break
+		}
+		if d.rDeps[i] == nil {
+			continue
+		}
+		targets = append(targets, target)
+	}
+	return targets
+}

@@ -60,6 +60,7 @@ type depsRun struct {
 	fname       string
 	fsopt       *hashfs.Option
 	depsLogFile string
+	raw         bool
 }
 
 func (c *depsRun) init() {
@@ -69,6 +70,7 @@ func (c *depsRun) init() {
 	c.fsopt.StateFile = ".siso_fs_state"
 	c.fsopt.RegisterFlags(&c.Flags)
 	c.Flags.StringVar(&c.depsLogFile, "deps_log", ".siso_deps", "deps log filename (relative to -C)")
+	c.Flags.BoolVar(&c.raw, "raw", false, "just check deps log. (no build.ninja nor .siso_fs_state needed)")
 }
 
 func (c *depsRun) Run(a subcommands.Application, args []string, env subcommands.Env) int {
@@ -87,8 +89,6 @@ func (c *depsRun) Run(a subcommands.Application, args []string, env subcommands.
 }
 
 func (c *depsRun) run(ctx context.Context, args []string) error {
-	state := ninjautil.NewState()
-	p := ninjautil.NewManifestParser(state)
 	err := os.Chdir(c.dir)
 	if err != nil {
 		return err
@@ -102,30 +102,42 @@ func (c *depsRun) run(ctx context.Context, args []string) error {
 		return err
 	}
 
-	hashFS, err := hashfs.New(ctx, hashfs.Option{})
-	if err != nil {
-		return err
-	}
-	fsstate, err := hashfs.Load(ctx, hashfs.Option{StateFile: c.fsopt.StateFile})
-	if err != nil {
-		return err
-	}
-	err = hashFS.SetState(ctx, fsstate)
-	if err != nil {
-		return err
-	}
-
 	depsLog, err := ninjautil.NewDepsLog(ctx, c.depsLogFile)
 	if err != nil {
 		return err
 	}
-	err = p.Load(ctx, c.fname)
-	if err != nil {
-		return err
-	}
-	targets, err := depsTargets(ctx, state, depsLog, args)
-	if err != nil {
-		return err
+
+	var hashFS *hashfs.HashFS
+	targets := args
+	if c.raw {
+		if len(targets) == 0 {
+			targets = depsLog.RecordedTargets()
+		}
+	} else {
+		var err error
+		hashFS, err = hashfs.New(ctx, hashfs.Option{})
+		if err != nil {
+			return err
+		}
+		fsstate, err := hashfs.Load(ctx, hashfs.Option{StateFile: c.fsopt.StateFile})
+		if err != nil {
+			return err
+		}
+		err = hashFS.SetState(ctx, fsstate)
+		if err != nil {
+			return err
+		}
+
+		state := ninjautil.NewState()
+		p := ninjautil.NewManifestParser(state)
+		err = p.Load(ctx, c.fname)
+		if err != nil {
+			return err
+		}
+		targets, err = depsTargets(ctx, state, depsLog, args)
+		if err != nil {
+			return err
+		}
 	}
 	w := bufio.NewWriter(os.Stdout)
 	for _, target := range targets {
@@ -137,15 +149,18 @@ func (c *depsRun) run(ctx context.Context, args []string) error {
 			fmt.Fprintf(w, "%s: deps log error: %v\n", target, err)
 			continue
 		}
-		state := "STALE"
-		fi, err := hashFS.Stat(ctx, wd, target)
-		if err != nil {
-			clog.Errorf(ctx, "%v", err)
-			// log and ignore stat error
-		} else {
-			mtime := fi.ModTime()
-			if !mtime.After(depsTime) {
-				state = "VALID"
+		state := "UNKNOWN"
+		if !c.raw {
+			state = "STALE"
+			fi, err := hashFS.Stat(ctx, wd, target)
+			if err != nil {
+				clog.Warningf(ctx, "%v", err)
+				// log and ignore stat error
+			} else {
+				mtime := fi.ModTime()
+				if !mtime.After(depsTime) {
+					state = "VALID"
+				}
 			}
 		}
 		var buf bytes.Buffer
