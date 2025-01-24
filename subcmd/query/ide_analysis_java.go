@@ -145,6 +145,25 @@ func (a *ideAnalyzer) appendIndirectJavaBuildableUnits(ctx context.Context, edge
 			// TODO(b/337982520): need special handling for other steps?
 			args = cmdArgs
 		}
+		// b/391878665: compiler_arguments doesn't need to have
+		// - compiler binary path (i.e. javac) in args[0]
+		// - `-d` flag and its argument
+		// - `classpath` flag and its argument
+		var compilerArgs []string
+		var skipArg bool
+		for _, arg := range args[1:] {
+			if skipArg {
+				skipArg = false
+				continue
+			}
+			switch arg {
+			case "-d", "-classpath":
+				skipArg = true
+				continue
+			}
+			compilerArgs = append(compilerArgs, arg)
+		}
+		args = compilerArgs
 
 		// no generated files needed for the final step.
 	} else {
