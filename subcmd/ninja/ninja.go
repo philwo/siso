@@ -1860,6 +1860,7 @@ func (c *ninjaCmdRun) initDataSource(ctx context.Context, credential cred.Cred) 
 			clog.Warningf(ctx, "failed to create local cache - no local cache enabled: %v", err)
 		} else {
 			layeredCache.AddLayer(cache)
+			cache.GarbageCollectIfRequired(ctx)
 		}
 	} else {
 		c.cacheDir = ""
