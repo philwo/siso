@@ -189,9 +189,6 @@ func needOutputUpdate(ctx context.Context, cmd *execute.Cmd, action digest.Diges
 	if updateMtime(outs, cmd.CmdHash) {
 		return true
 	}
-	if cmd.Depfile == "" {
-		return false
-	}
 	switch cmd.Deps {
 	case "gcc":
 		// deps=gcc loads deps into deps log and remove,
@@ -201,6 +198,9 @@ func needOutputUpdate(ctx context.Context, cmd *execute.Cmd, action digest.Diges
 		// deps=msvc needs to parse stdout/stderr for deps log
 		// TODO: skip update deps when no update needed?
 		return true
+	}
+	if cmd.Depfile == "" {
+		return false
 	}
 	// check depfile is up-to-date or not (i.e. need to update)
 	out := cmd.Depfile
