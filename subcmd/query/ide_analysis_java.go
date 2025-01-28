@@ -148,7 +148,10 @@ func (a *ideAnalyzer) appendIndirectJavaBuildableUnits(ctx context.Context, edge
 		// b/391878665: compiler_arguments doesn't need to have
 		// - compiler binary path (i.e. javac) in args[0]
 		// - `-d` flag and its argument
-		// - `classpath` flag and its argument
+		// - `-classpath` flag and its argument
+		// - `-encoding` flag and its argument
+		// - `-J-XX:+PerfDisableSharedMem` flag
+		// - last argument, @**/files_list.txt
 		var compilerArgs []string
 		var skipArg bool
 		for _, arg := range args[1:] {
@@ -157,11 +160,16 @@ func (a *ideAnalyzer) appendIndirectJavaBuildableUnits(ctx context.Context, edge
 				continue
 			}
 			switch arg {
-			case "-d", "-classpath":
+			case "-d", "-classpath", "-encoding":
 				skipArg = true
+				continue
+			case "-J-XX:+PerfDisableSharedMem":
 				continue
 			}
 			compilerArgs = append(compilerArgs, arg)
+		}
+		if lastArg := compilerArgs[len(compilerArgs)-1]; strings.HasPrefix(lastArg, "@") && filepath.Base(lastArg) == "files_list.txt" {
+			compilerArgs = compilerArgs[:len(compilerArgs)-1]
 		}
 		args = compilerArgs
 
