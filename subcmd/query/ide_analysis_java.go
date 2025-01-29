@@ -173,7 +173,22 @@ func (a *ideAnalyzer) appendIndirectJavaBuildableUnits(ctx context.Context, edge
 		}
 		args = compilerArgs
 
-		// no generated files needed for the final step.
+		// need generated jar files. b/392972300
+		for _, out := range edge.Outputs() {
+			path := out.Path()
+			switch filepath.Ext(path) {
+			case ".jar":
+				buf, err := a.hashFS.ReadFile(ctx, a.path.ExecRoot, a.path.MaybeFromWD(ctx, path))
+				if err != nil {
+					clog.Warningf(ctx, "not exist generated file %q: %v", path, err)
+					continue
+				}
+				generatedFiles = append(generatedFiles, &pb.GeneratedFile{
+					Path:     path,
+					Contents: buf,
+				})
+			}
+		}
 	} else {
 		// no command line is needed for non-final step.
 		// just add generated files (.java/.jar/.class).
