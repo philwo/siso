@@ -131,7 +131,7 @@ Use "siso help -advanced" to display all commands.
 	if h, ok := os.LookupEnv("SISO_CREDENTIAL_HELPER"); ok {
 		credHelper = h
 	}
-	flag.StringVar(&credHelper, "credential_helper", credHelper, "path to a credential helper. see https://github.com/bazelbuild/proposals/blob/main/designs/2022-06-07-bazel-credential-helpers.md")
+	flag.StringVar(&credHelper, "credential_helper", credHelper, "path to a credential helper. see https://github.com/EngFlow/credential-helper-spec/blob/main/spec.md")
 
 	var printVersion bool
 	flag.BoolVar(&printVersion, "version", false, "print version")

@@ -96,7 +96,7 @@ func New(ctx context.Context, opts Options) (Cred, error) {
 			return Cred{}, err
 		}
 		t, _ := tok.Extra("x-token-source").(string)
-		email := tok.Extra("x-token-email").(string)
+		email, _ := tok.Extra("x-token-email").(string)
 		clog.Infof(ctx, "use auth %v email: %s", t, email)
 		ts := oauth2.ReuseTokenSource(tok, opts.TokenSource)
 		return Cred{
