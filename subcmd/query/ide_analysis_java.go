@@ -62,6 +62,7 @@ func (a *ideAnalyzer) appendIndirectJavaBuildableUnits(ctx context.Context, edge
 	clog.Infof(ctx, "check edge for %q", edge.Outputs()[0].Path())
 	isFinalCommand := len(buildableUnits) == 0
 	var nextEdges []*ninjautil.Edge
+	depIDseen := map[string]bool{}
 	for _, in := range edge.Inputs() {
 		if _, ok := buildableUnits[in.Path()]; ok {
 			continue
@@ -69,9 +70,22 @@ func (a *ideAnalyzer) appendIndirectJavaBuildableUnits(ctx context.Context, edge
 		edge, ok := in.InEdge()
 		if ok {
 			nextEdges = append(nextEdges, edge)
+			continue
 		}
+		// move precomputed jar file to dedicated buildable unit
+		// to reduce the size of the computed index b/392977625
+		switch filepath.Ext(in.Path()) {
+		case ".jar":
+			bu := &pb.BuildableUnit{
+				Id:              in.Path(),
+				Language:        pb.Language_LANGUAGE_JAVA,
+				SourceFilePaths: []string{in.Path()},
+			}
+			buildableUnits[in.Path()] = bu
+			depIDseen[in.Path()] = true
+		}
+
 	}
-	depIDseen := map[string]bool{}
 	for _, edge := range nextEdges {
 		deps, err := a.appendIndirectJavaBuildableUnits(ctx, edge, buildableUnits, seen)
 		if err != nil {
@@ -211,6 +225,7 @@ func (a *ideAnalyzer) appendIndirectJavaBuildableUnits(ctx context.Context, edge
 	}
 	buildableUnit := a.buildableUnit(ctx, edge, pb.Language_LANGUAGE_JAVA, args, generatedFiles, depIDs)
 	buildableUnits[buildableUnit.Id] = buildableUnit
+
 	return []string{buildableUnit.Id}, nil
 }
 

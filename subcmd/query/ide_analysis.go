@@ -463,7 +463,12 @@ func (a *ideAnalyzer) buildableUnit(ctx context.Context, edge *ninjautil.Edge, l
 		switch language {
 		case pb.Language_LANGUAGE_JAVA:
 			switch filepath.Ext(in.Path()) {
-			case ".java", ".jar", ".class":
+			case ".java", ".class":
+			case ".jar":
+				// precomputed jar files are represented
+				// as a buildable unit to reduce the size
+				// of computed index b/392977625
+				continue
 			default:
 				clog.Infof(ctx, "ignore non java source: %s", in.Path())
 				continue
