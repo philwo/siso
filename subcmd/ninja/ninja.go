@@ -407,7 +407,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	if c.ninjaLoadLimit >= 0 {
 		fmt.Fprintf(os.Stderr, "-l is not supported.\n")
 	}
-	if c.failuresAllowed == 0 {
+	if c.failuresAllowed <= 0 {
 		c.failuresAllowed = math.MaxInt
 	}
 	if c.failuresAllowed > 1 {
