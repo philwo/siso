@@ -220,8 +220,9 @@ func TestBuild_Fail_Remote(t *testing.T) {
 	if err == nil {
 		t.Fatalf("ninja succeeded, but want err; stats=%#v", stats)
 	}
-	if stats.Done != 1 || stats.Fail != 1 || stats.Remote != 0 {
-		t.Fatalf("ninja stats done=%d Fail=%d Remote=%d; want done=1 Fail=1 Remote=0 %#v", stats.Done, stats.Fail, stats.Remote, stats)
+	// no fail fallback, so remote=1 local=0 fail=1, not remote=0 local=1 fail=1
+	if stats.Done != 1 || stats.Fail != 1 || stats.Remote != 1 || stats.Local != 0 {
+		t.Fatalf("ninja stats done=%d Fail=%d Remote=%d Local=%d; want done=1 Fail=1 Remote=1 Local=0 %#v", stats.Done, stats.Fail, stats.Remote, stats.Local, stats)
 	}
 	if len(failureSummary.Bytes()) == 0 {
 		t.Errorf("ninja failure=%q; want empty (fallback)", failureSummary.String())
@@ -237,8 +238,8 @@ func TestBuild_Fail_Remote(t *testing.T) {
 	if err == nil {
 		t.Fatalf("ninja succeeded, but want err; stats=%#v", stats)
 	}
-	if stats.Done != 1 || stats.Fail != 1 || stats.Remote != 0 {
-		t.Fatalf("ninja stats done=%d Fail=%d Remote=%d; want done=1 Fail=1 Remote=0", stats.Done, stats.Fail, stats.Remote)
+	if stats.Done != 1 || stats.Fail != 1 || stats.Remote != 1 || stats.Local != 0 {
+		t.Fatalf("ninja stats done=%d Fail=%d Remote=%d Local=%d; want done=1 Fail=1 Remote=1 Local=0", stats.Done, stats.Fail, stats.Remote, stats.Local)
 	}
 	if len(failureSummary.Bytes()) == 0 {
 		t.Errorf("ninja failure=%q; want empty (fallback)", failureSummary.String())

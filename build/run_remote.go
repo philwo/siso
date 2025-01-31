@@ -16,7 +16,6 @@ import (
 	"infra/build/siso/o11y/clog"
 	"infra/build/siso/o11y/trace"
 	"infra/build/siso/reapi"
-	"infra/build/siso/ui"
 )
 
 var errDepsLog = errors.New("failed to exec with deps log")
@@ -101,7 +100,7 @@ func (b *Builder) runRemote(ctx context.Context, step *Step) error {
 			return err
 		}
 		var eerr execute.ExitError
-		if ui.IsTerminal() && errors.As(err, &eerr) && len(step.cmd.Stdout())+len(step.cmd.Stderr()) > 0 && b.failuresAllowed == 1 {
+		if errors.As(err, &eerr) && len(step.cmd.Stdout())+len(step.cmd.Stderr()) > 0 && b.failuresAllowed == 1 {
 			// report compile fail early to developers.
 			// If user runs on non-terminal or user sets a
 			// non-default -k, then it implies that they want to
