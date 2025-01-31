@@ -708,6 +708,7 @@ loop:
 			err = b.runStep(ctx, step)
 			select {
 			case <-ctx.Done():
+				clog.Infof(ctx, "context done")
 				return
 			default:
 			}
@@ -716,6 +717,7 @@ loop:
 	clog.Infof(ctx, "all pendings becomes ready")
 	errdone := make(chan error)
 	go func() {
+		var canceled bool
 		for e := range errch {
 			if nerrs >= b.failuresAllowed {
 				continue
@@ -726,11 +728,18 @@ loop:
 				}
 				nerrs++
 			}
+			if errors.Is(e, context.Canceled) {
+				canceled = true
+			}
 		}
 		// step error is already reported in run_step.
 		// report errStuck if it coulddn't progress.
 		// otherwise, report just number of errors.
 		if nerrs == 0 {
+			if canceled {
+				errdone <- context.Cause(ctx)
+				return
+			}
 			errdone <- nil
 			return
 		}
