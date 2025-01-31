@@ -841,14 +841,15 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 			clog.Errorf(ctx, "close hashfs: %v", err)
 		}
 	}()
-	if err := hashFS.LoadErr(); err != nil {
-		fmt.Fprintln(os.Stderr, ui.SGR(ui.BackgroundRed, fmt.Sprintf("unable to do incremental build as fs state is corrupted: %v", err)))
+	hashFSErr := hashFS.LoadErr()
+	if hashFSErr != nil {
+		fmt.Fprintln(os.Stderr, ui.SGR(ui.BackgroundRed, fmt.Sprintf("unable to do incremental build as fs state is corrupted: %v", hashFSErr)))
 	}
 
 	_, err = os.Stat(failedTargetsFilename)
 	lastFailed := err == nil
-	clog.Infof(ctx, "sameTargets: %t hashfs clean: %t last failed: %t", sameTargets, hashFS.IsClean(), lastFailed)
-	if !c.clobber && !c.dryRun && !c.debugMode.Explain && c.subtool != "cleandead" && sameTargets && hashFS.IsClean() && !lastFailed {
+	clog.Infof(ctx, "sameTargets: %t hashfs loaderr: %v clean: %t last failed: %t", sameTargets, hashFSErr, hashFS.IsClean(), lastFailed)
+	if !c.clobber && !c.batch && !c.dryRun && !c.debugMode.Explain && c.subtool != "cleandead" && sameTargets && hashFSErr == nil && hashFS.IsClean() && !lastFailed {
 		// TODO: better to check digest of .siso_fs_state?
 		return stats, errNothingToDo
 	}
