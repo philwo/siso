@@ -348,10 +348,10 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 		disableReason = "reapi is not configured"
 	case b.hashFS.OnCog():
 		disableReason = "on Cog"
-	case ui.IsTerminal() && !experiments.Enabled("fast-deps", ""):
-		disableReason = "interactive. no SISO_EXPERIMENT=fast-deps"
 	case experiments.Enabled("no-fast-deps", "disable fast-deps and force scandeps"):
 		disableReason = "SISO_EXPERIMENT=no-fast-deps"
+	case !experiments.Enabled("fast-deps", ""):
+		disableReason = "no SISO_EXPERIMENT=fast-deps"
 	}
 	if disableReason != "" {
 		clog.Infof(ctx, "disable fast-deps: %s", disableReason)
