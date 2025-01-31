@@ -570,6 +570,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	clog.Infof(ctx, "build id: %q", c.buildID)
 	clog.Infof(ctx, "project id: %q", projectID)
 	clog.Infof(ctx, "commandline %q", os.Args)
+	clog.Infof(ctx, "is_terminal=%t batch=%t", ui.IsTerminal(), c.batch)
 
 	spin := ui.Default.NewSpinner()
 
