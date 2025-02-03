@@ -107,11 +107,6 @@ func (c *Cache) GetActionResult(ctx context.Context, cmd *execute.Cmd) error {
 	return nil
 }
 
-// SetActionResult places the action result of the cmd into the action cache.
-func (c *Cache) SetActionResult(ctx context.Context, cmd *execute.Cmd, result *rpb.ActionResult) error {
-	return c.store.SetActionResult(ctx, cmd.ActionDigest(), result)
-}
-
 func (c *Cache) setActionResultStdout(ctx context.Context, cmd *execute.Cmd, result *rpb.ActionResult) {
 	w := cmd.StdoutWriter()
 	if len(result.StdoutRaw) > 0 {

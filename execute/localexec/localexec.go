@@ -60,6 +60,7 @@ func (LocalExec) Run(ctx context.Context, cmd *execute.Cmd) (err error) {
 	if cmd.HashFS == nil {
 		return nil
 	}
+	// TODO(b/254158307): calculate action digest if cmd is pure?
 	now := time.Now()
 	return cmd.RecordOutputsFromLocal(ctx, now)
 }

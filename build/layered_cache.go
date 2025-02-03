@@ -56,7 +56,7 @@ func (lc *LayeredCache) GetActionResult(ctx context.Context, d digest.Digest) (a
 		// Don't cache invalid action results.
 		// However, the cache still needs to be returned, in order to set
 		// SkipCacheLookup=true to execute the remote action forcibly.
-		if !validateActionResult(ar) {
+		if !validateRemoteActionResult(ar) {
 			return ar, err
 		}
 		// If a valid cache exists in a slow cache, write it to all faster caches.
