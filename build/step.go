@@ -516,7 +516,7 @@ func calculateCmdHash(cmdline, rspfileContent string) []byte {
 	return h.Sum(nil)
 }
 
-func validateRemoteActionResult(result *rpb.ActionResult) bool {
+func validateActionResult(result *rpb.ActionResult) bool {
 	if result == nil {
 		return false
 	}

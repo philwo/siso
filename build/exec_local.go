@@ -85,16 +85,37 @@ func (b *Builder) execLocal(ctx context.Context, step *Step) error {
 		if step.metrics.ActionStartTime == 0 {
 			step.metrics.ActionStartTime = IntervalMetric(started.Sub(b.start))
 		}
-		err := b.localExec.Run(ctx, step.cmd)
+
+		var result *rpb.ActionResult
+		cached := false
+		if step.cmd.Pure {
+			err := b.cache.GetActionResult(ctx, step.cmd)
+			if err == nil {
+				result, cached = step.cmd.ActionResult()
+			} else if !isNotExist(err) {
+				clog.Warningf(ctx, "Unable to read from action cache: %v", err)
+			}
+		}
+
+		if !cached {
+			err = b.localExec.Run(ctx, step.cmd)
+			result, cached = step.cmd.ActionResult()
+			if err != nil && validateActionResult(result) {
+				if err := b.cache.SetActionResult(ctx, step.cmd, result); err != nil {
+					clog.Warningf(ctx, "Unable to write to action cache: %v", err)
+				}
+			}
+		}
+
 		dur = time.Since(started)
 		step.setPhase(stepOutput)
 		if step.cmd.Console {
 			b.progress.finishConsoleCmd()
 		}
-		step.metrics.IsLocal = true
-		result, cached := step.cmd.ActionResult()
 		if cached {
 			step.metrics.Cached = true
+		} else {
+			step.metrics.IsLocal = true
 		}
 		if result != nil {
 			if result.ExecutionMetadata == nil {
