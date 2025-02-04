@@ -22,6 +22,7 @@ var knownExperiments = map[string]string{
 	"check-deps":                  "",
 	"fail-on-stdouterr":           "",
 	"fail-on-bad-deps":            "",
+	"fallback-on-exec-error":      "",
 	"fast-deps":                   "",
 	"file-access-trace":           "",
 	"gvisor":                      "",

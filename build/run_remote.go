@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -101,12 +102,23 @@ func (b *Builder) runRemote(ctx context.Context, step *Step) error {
 		}
 		var eerr execute.ExitError
 		if errors.As(err, &eerr) && len(step.cmd.Stdout())+len(step.cmd.Stderr()) > 0 && b.failuresAllowed == 1 {
-			// report compile fail early to developers.
-			// If user runs on non-terminal or user sets a
-			// non-default -k, then it implies that they want to
-			// keep going as much as possible and
-			// correct result, rather than fast feedback.
-			return fmt.Errorf("remote-exec %s failed: %w", step.cmd.ActionDigest(), err)
+			var output string
+			if len(step.cmd.Outputs) > 0 {
+				output = step.cmd.Outputs[0]
+			}
+			switch {
+			case experiments.Enabled("fallback-on-exec-error", "remote exec %s failed: %v", step.cmd.ActionDigest(), err):
+				clog.Warningf(ctx, "fallback-on-exec-error: remote exec %s failed: output=%q siso_config=%q, gn_target=%q: %v", step.cmd.ActionDigest(), output, step.def.RuleName(), step.def.Binding("gn_target"), err)
+			case os.Getenv("AUTONINJA_BUILD_ID") == "": // TODO(b/377426017): remove this chrome infra specific logic once we set SISO_EXPERIMENTS=fallback-on-exec-error on problematic builders.
+				clog.Warningf(ctx, "fallback-on-exec-error on builder (no AUTONINJA_BUILD_ID): remote exec %s failed: output=%q siso_config=%q gn_target=%q: %v", step.cmd.ActionDigest(), output, step.def.RuleName(), step.def.Binding("gn_target"), err)
+			default:
+				// report compile fail early to developers.
+				// If user runs on non-terminal or user sets a
+				// non-default -k, then it implies that they want to
+				// keep going as much as possible and
+				// correct result, rather than fast feedback.
+				return fmt.Errorf("remote-exec %s failed: %w", step.cmd.ActionDigest(), err)
+			}
 		}
 		if !b.localFallbackEnabled() {
 			return fmt.Errorf("remote-exec %s failed no-fallback: %w", step.cmd.ActionDigest(), err)
