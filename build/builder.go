@@ -1015,17 +1015,6 @@ func (b *Builder) outputs(ctx context.Context, step *Step) error {
 	// need to check against step.cmd.Outputs, not step.def.Outputs, since
 	// handler may add to step.cmd.Outputs.
 	for _, out := range outputs {
-		// force to output local for inputs
-		// .h,/.hxx/.hpp/.inc/.c/.cc/.cxx/.cpp/.m/.mm for gcc deps or msvc showIncludes
-		// .json/.js/.ts for tsconfig.json, .js for grit etc.
-		switch filepath.Ext(out) {
-		case ".h", ".hxx", ".hpp", ".inc", ".c", ".cc", "cxx", ".cpp", ".m", ".mm", ".json", ".js", ".ts":
-			if seen[out] {
-				continue
-			}
-			localOutputs = append(localOutputs, out)
-			seen[out] = true
-		}
 		if b.outputLocal != nil && b.outputLocal(ctx, out) {
 			if seen[out] {
 				continue

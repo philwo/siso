@@ -1964,7 +1964,17 @@ func (c *ninjaCmdRun) initOutputLocal() (func(context.Context, string) bool, err
 			return true
 		}, nil
 	case "minimum":
-		return func(context.Context, string) bool { return false }, nil
+		return func(ctx context.Context, fname string) bool {
+			// force to output local for inputs
+			// .h,/.hxx/.hpp/.inc/.c/.cc/.cxx/.cpp/.m/.mm for gcc deps or msvc showIncludes
+			// .json/.js/.ts for tsconfig.json, .js for grit etc.
+			// .py for protobuf py etc.
+			switch filepath.Ext(fname) {
+			case ".h", ".hxx", ".hpp", ".inc", ".c", ".cc", "cxx", ".cpp", ".m", ".mm", ".json", ".js", ".ts", ".py":
+				return true
+			}
+			return false
+		}, nil
 	default:
 		return nil, fmt.Errorf("unknown output local strategy: %q. should be full/greedy/minimum", c.outputLocalStrategy)
 	}
