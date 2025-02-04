@@ -111,6 +111,7 @@ func (b *Builder) runRemote(ctx context.Context, step *Step) error {
 		if !b.localFallbackEnabled() {
 			return fmt.Errorf("remote-exec %s failed no-fallback: %w", step.cmd.ActionDigest(), err)
 		}
+		clog.Warningf(ctx, "remote-exec %s failed, fallback to local: %v", step.cmd.ActionDigest(), err)
 		b.progressStepFallback(ctx, step)
 		step.metrics.IsRemote = false
 		step.metrics.Fallback = true
