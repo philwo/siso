@@ -482,6 +482,11 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		}
 	}
 
+	err = c.initLogDir(ctx)
+	if err != nil {
+		return stats, err
+	}
+
 	resetCrashOutput, err := c.setupCrashOutput(ctx)
 	if err != nil {
 		return stats, err
@@ -650,11 +655,6 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		defer traceExporter.Close(ctx)
 	}
 	// upload build pprof
-
-	err = c.initLogDir(ctx)
-	if err != nil {
-		return stats, err
-	}
 
 	lastTargetsFilename := c.logFilename(lastTargetsFile, "")
 	failedTargetsFilename := c.logFilename(failedTargetsFile, "")
