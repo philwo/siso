@@ -70,7 +70,7 @@ func DefaultLimits(ctx context.Context) Limits {
 			Preproc:   stepLimit,
 			ScanDeps:  scanDepsLimitFactor * numCPU,
 			Local:     numCPU,
-			FastLocal: limitForFastLocal(ctx, numCPU),
+			FastLocal: limitForFastLocal(numCPU),
 			Remote:    limitForRemote(ctx, numCPU),
 			REWrap:    limitForREWrapper(ctx, numCPU),
 			Cache:     stepLimitFactor * numCPU,
@@ -176,14 +176,7 @@ func limitForRemote(ctx context.Context, numCPU int) int {
 	return limit
 }
 
-func limitForFastLocal(ctx context.Context, numCPU int) int {
-	if !isLocalFilesystem(ctx) {
-		// If it is not on local filesystem (e.g. Cog),
-		// local execution may be slow as it is not fast to
-		// access file locally.
-		// Prefer remote than local on non local filesystem.
-		return 0
-	}
+func limitForFastLocal(numCPU int) int {
 	// We want to use local resources on powerful machine (but not so
 	// many, as it needs to run local only steps too),
 	// but not want to use on cheap machine (*-standard-8 etc).
