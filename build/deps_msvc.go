@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -67,18 +68,24 @@ func (msvc depsMSVC) fixCmdInputs(ctx context.Context, b *Builder, cmd *execute.
 	inputs = append(inputs, params.Sysroots...)
 	inputs = b.expandInputs(ctx, inputs)
 
-	var expandFn func(context.Context, []string) []string
+	var fixFn func(context.Context, []string) []string
 	if cmd.Platform["OSFamily"] != "Windows" {
 		clog.Infof(ctx, "expand case sensitive includes")
-		expandFn = func(ctx context.Context, files []string) []string {
+		fixFn = func(ctx context.Context, files []string) []string {
 			return expandCPPCaseSensitiveIncludes(ctx, b, files)
 		}
 	} else {
 		clog.Infof(ctx, "cmd platform=%q", cmd.Platform)
+		// filegroups may contain case sensitive filenames,
+		// but if we use it with OSFamily=Windows, need to
+		// deduplicate such case sensitive filenames.
+		fixFn = func(ctx context.Context, files []string) []string {
+			return fixCaseSensitiveIncludes(ctx, b, files)
+		}
 	}
 
 	fn := func(ctx context.Context, dir string) (merkletree.TreeEntry, error) {
-		return b.treeInput(ctx, dir, ":headers", expandFn)
+		return b.treeInput(ctx, dir, ":headers", fixFn)
 	}
 	if msvc.treeInput != nil {
 		fn = msvc.treeInput
@@ -246,6 +253,24 @@ func (depsMSVC) scandeps(ctx context.Context, b *Builder, step *Step) ([]string,
 		ins[i] = b.path.Intern(ins[i])
 	}
 	return ins, nil
+}
+
+func fixCaseSensitiveIncludes(ctx context.Context, b *Builder, files []string) []string {
+	m := make(map[string]bool)
+	newFiles := make([]string, 0, len(files))
+	for _, f := range files {
+		fn := strings.ToLower(f)
+		if m[fn] {
+			continue
+		}
+		m[fn] = true
+		newFiles = append(newFiles, f)
+	}
+	if len(files) == len(newFiles) {
+		return files
+	}
+	clog.Infof(ctx, "fix cs %d -> %d", len(files), len(newFiles))
+	return slices.Clip(newFiles)
 }
 
 func expandCPPCaseSensitiveIncludes(ctx context.Context, b *Builder, files []string) []string {

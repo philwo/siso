@@ -85,7 +85,7 @@ func (b *Builder) resolveSymlinkForInputDeps(ctx context.Context, dir, labelSuff
 	return "", nil, fmt.Errorf("not in input_deps %s: %w", dir, syscall.ELOOP)
 }
 
-func (b *Builder) treeInput(ctx context.Context, dir, labelSuffix string, expandFn func(context.Context, []string) []string) (merkletree.TreeEntry, error) {
+func (b *Builder) treeInput(ctx context.Context, dir, labelSuffix string, fixFn func(context.Context, []string) []string) (merkletree.TreeEntry, error) {
 	if b.reapiclient == nil {
 		return merkletree.TreeEntry{}, errors.New("reapi is not configured")
 	}
@@ -97,7 +97,7 @@ func (b *Builder) treeInput(ctx context.Context, dir, labelSuffix string, expand
 	st := &subtree{}
 	v, _ := b.trees.LoadOrStore(dir, st)
 	st = v.(*subtree)
-	err = st.init(ctx, b, dir, files, expandFn)
+	err = st.init(ctx, b, dir, files, fixFn)
 	if err != nil {
 		return merkletree.TreeEntry{}, err
 	}
@@ -115,11 +115,11 @@ type subtree struct {
 	err error
 }
 
-func (st *subtree) init(ctx context.Context, b *Builder, dir string, files []string, expandFn func(context.Context, []string) []string) error {
+func (st *subtree) init(ctx context.Context, b *Builder, dir string, files []string, fixFn func(context.Context, []string) []string) error {
 	st.once.Do(func() {
 		files = b.expandInputs(ctx, files)
-		if expandFn != nil {
-			files = expandFn(ctx, files)
+		if fixFn != nil {
+			files = fixFn(ctx, files)
 		}
 		var inputs []string
 		for _, f := range files {
