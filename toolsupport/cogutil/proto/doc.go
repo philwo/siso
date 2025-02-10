@@ -5,5 +5,4 @@
 // Package proto provides protocol buffer message for cog system.
 package proto
 
-//go:generate ../../../scripts/install-protoc-gen-go
-//go:generate protoc -I. --go_out=. --go_opt=paths=source_relative --go-grpc_out=. --go-grpc_opt=paths=source_relative local_rpc_service.proto
+//go:generate ../../../scripts/install-protoc-gen-go protoc -I. --go_out=. --go_opt=paths=source_relative --go-grpc_out=. --go-grpc_opt=paths=source_relative local_rpc_service.proto

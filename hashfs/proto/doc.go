@@ -5,5 +5,4 @@
 // Package proto provides protocol buffer message for hashfs.
 package proto
 
-//go:generate ../../scripts/install-protoc-gen-go
-//go:generate protoc -I. --go_out=. --go_opt=paths=source_relative state.proto
+//go:generate ../../scripts/install-protoc-gen-go protoc -I. --go_out=. --go_opt=paths=source_relative state.proto

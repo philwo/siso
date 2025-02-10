@@ -5,5 +5,4 @@
 // Package manifest provides protocol buffer message for artfs manifest.
 package manifest
 
-//go:generate ../../../../scripts/install-protoc-gen-go
-//go:generate protoc -I. --go_out=. --go_opt=paths=source_relative --go-grpc_out=. --go-grpc_opt=paths=source_relative manifest.proto
+//go:generate ../../../../scripts/install-protoc-gen-go protoc -I. --go_out=. --go_opt=paths=source_relative --go-grpc_out=. --go-grpc_opt=paths=source_relative manifest.proto
