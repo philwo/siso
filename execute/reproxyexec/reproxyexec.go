@@ -128,10 +128,14 @@ func (re *REProxyExec) Run(ctx context.Context, cmd *execute.Cmd) error {
 		return fmt.Errorf("REProxy config has no platform")
 	}
 	execTimeout := defaultExecTimeout
-	if cmd.REProxyConfig.ExecTimeout != "" {
-		parsed, err := time.ParseDuration(cmd.REProxyConfig.ExecTimeout)
+	execTimeoutStr := cmd.REProxyConfig.ExecTimeout
+	if v := os.Getenv("RBE_exec_timeout"); v != "" {
+		execTimeoutStr = v
+	}
+	if execTimeoutStr != "" {
+		parsed, err := time.ParseDuration(execTimeoutStr)
 		if err != nil {
-			return fmt.Errorf("failed to parse exec_timeout %q: %w", cmd.REProxyConfig.ExecTimeout, err)
+			return fmt.Errorf("failed to parse exec_timeout %q: %w", execTimeoutStr, err)
 		}
 		if parsed == 0 {
 			return fmt.Errorf("0 is not a valid REProxy exec_timeout")
@@ -139,10 +143,14 @@ func (re *REProxyExec) Run(ctx context.Context, cmd *execute.Cmd) error {
 		execTimeout = parsed
 	}
 	reclientTimeout := defaultReclientTimeout
-	if cmd.REProxyConfig.ReclientTimeout != "" {
-		parsed, err := time.ParseDuration(cmd.REProxyConfig.ReclientTimeout)
+	reclientTimeoutStr := cmd.REProxyConfig.ReclientTimeout
+	if v := os.Getenv("RBE_reclient_timeout"); v != "" {
+		reclientTimeoutStr = v
+	}
+	if reclientTimeoutStr != "" {
+		parsed, err := time.ParseDuration(reclientTimeoutStr)
 		if err != nil {
-			return fmt.Errorf("failed to parse reclient_timeout %q: %w", cmd.REProxyConfig.ReclientTimeout, err)
+			return fmt.Errorf("failed to parse reclient_timeout %q: %w", reclientTimeoutStr, err)
 		}
 		if parsed == 0 {
 			return fmt.Errorf("0 is not a valid REProxy reclient_timeout")
