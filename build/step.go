@@ -5,6 +5,7 @@
 package build
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
@@ -42,9 +43,6 @@ type StepDef interface {
 
 	// Args returns command line arguments of the step.
 	Args(context.Context) []string
-
-	// TODO(b/266518906): add Env for environment variables for the step
-	// i.e. envfile support when `ninja -t msvc -e envfile` is used.
 
 	// IsPhony returns true if the step is phony.
 	IsPhony() bool
@@ -404,11 +402,10 @@ func newCmd(ctx context.Context, b *Builder, stepDef StepDef) *execute.Cmd {
 	}
 
 	cmd := &execute.Cmd{
-		ID:         stepDef.String(),
-		Desc:       stepDescription(stepDef),
-		ActionName: stepDef.ActionName(),
-		Args:       b.argTab.InternSlice(stepDef.Args(ctx)),
-		// we don't pass environment variables.
+		ID:             stepDef.String(),
+		Desc:           stepDescription(stepDef),
+		ActionName:     stepDef.ActionName(),
+		Args:           b.argTab.InternSlice(stepDef.Args(ctx)),
 		RSPFile:        stepDef.Rspfile(ctx),
 		RSPFileContent: []byte(rspfileContent),
 		CmdHash:        calculateCmdHash(cmdline, rspfileContent),
@@ -442,6 +439,9 @@ func newCmd(ctx context.Context, b *Builder, stepDef StepDef) *execute.Cmd {
 		SkipCacheLookup: !b.reCacheEnableRead,
 		Timeout:         stepTimeout(ctx, stepDef.Binding("timeout")),
 		ActionSalt:      b.actionSalt,
+	}
+	if envfile := stepDef.Binding("envfile"); envfile != "" {
+		cmd.Env = b.loadEnvfile(ctx, envfile)
 	}
 	if stepDef.Binding("pool") == "console" {
 		// pool=console needs to attach stdin/stdout/stderr
@@ -532,4 +532,41 @@ func validateRemoteActionResult(result *rpb.ActionResult) bool {
 		return false
 	}
 	return true
+}
+
+type envfile struct {
+	once sync.Once
+	envs []string
+}
+
+func (b *Builder) loadEnvfile(ctx context.Context, fname string) []string {
+	env := &envfile{}
+	v, loaded := b.envFiles.LoadOrStore(fname, env)
+	if loaded {
+		env = v.(*envfile)
+	}
+	env.once.Do(func() {
+		// https://ninja-build.org/manual.html#_extra_tools
+		// ninja -t msvc -e ENVFILE -- cl.exe <arguments>
+		//  Where ENVFILE is a binary file that contains an environment block suitable for CreateProcessA() on Windows (i.e. a series of zero-terminated strings that look like NAME=VALUE, followed by an extra zero terminator).
+		buf, err := b.hashFS.ReadFile(ctx, b.path.ExecRoot, fname)
+		if err != nil {
+			clog.Warningf(ctx, "failed to load envfile %q: %v", fname, err)
+			return
+		}
+		for len(buf) > 0 {
+			i := bytes.IndexByte(buf, '\000')
+			if i < 0 {
+				env.envs = append(env.envs, string(buf))
+				break
+			}
+			e := string(buf[:i])
+			buf = buf[i+1:]
+			if e != "" {
+				env.envs = append(env.envs, e)
+			}
+		}
+		clog.Infof(ctx, "load envfile %q: %d", fname, len(env.envs))
+	})
+	return env.envs
 }

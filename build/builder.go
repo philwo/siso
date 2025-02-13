@@ -204,6 +204,9 @@ type Builder struct {
 	pprofUploader        *sisopprof.Uploader
 	resultstoreUploader  *resultstore.Uploader
 
+	// envfiles: filename -> *envfile
+	envFiles sync.Map
+
 	disableFastDeps atomic.Value // string
 
 	clobber         bool
