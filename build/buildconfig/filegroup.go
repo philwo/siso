@@ -65,15 +65,16 @@ func (g globSpec) Update(ctx context.Context, fsys fs.FS, fg filegroup) (filegro
 	if fg.etag == hash {
 		return fg, nil
 	}
+	fg.etag = hash
 	if !fs.ValidPath(g.dir) {
-		return filegroup{}, fmt.Errorf("filegroup dir is out of exec root %q. unable to use for remote execution", g.dir)
+		clog.Warningf(ctx, "filegroup dir is out of exec root %q. unable to use for remote execution", g.dir)
+		return fg, nil
 	}
 	fsys, err := fs.Sub(fsys, g.dir)
 	if err != nil {
 		return filegroup{}, err
 	}
 	m := g.matcher()
-	fg.etag = hash
 	var files []string
 	err = fs.WalkDir(fsys, ".", func(pathname string, d fs.DirEntry, err error) error {
 		if log.V(1) {
