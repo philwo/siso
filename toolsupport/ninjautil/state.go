@@ -217,7 +217,6 @@ func (s *State) Targets(args []string) ([]*Node, error) {
 // for header file, try to find one of the source file which has
 // a direct #include for the header.
 // i.e. "foo.h^" will be equivalent with "foo.cc^"
-// TODO(b/336185923): document this.
 func (s *State) hatTarget(t string) (*Node, bool) {
 	ctx := context.Background() // TODO: take from caller.
 	t = strings.TrimSuffix(t, "^")
