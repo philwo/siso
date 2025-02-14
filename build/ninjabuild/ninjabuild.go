@@ -402,9 +402,12 @@ func (g *Graph) Targets(ctx context.Context, args ...string) ([]build.Target, er
 		return nil, err
 	}
 	targets := make([]build.Target, 0, len(nodes))
+	names := make([]string, 0, len(nodes))
 	for _, n := range nodes {
 		targets = append(targets, build.Target(n.ID()))
+		names = append(names, n.Path())
 	}
+	clog.Infof(ctx, "targets %q -> %q", args, names)
 	return targets, nil
 }
 

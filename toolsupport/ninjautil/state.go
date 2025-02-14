@@ -179,7 +179,6 @@ func (s *State) Targets(args []string) ([]*Node, error) {
 	nodes := make([]*Node, 0, len(args))
 	for _, t := range args {
 		t := filepath.ToSlash(filepath.Clean(t))
-		var node *Node
 		if strings.HasSuffix(t, "^") {
 			n, ok := s.hatTarget(t)
 			if !ok {
@@ -190,20 +189,26 @@ func (s *State) Targets(args []string) ([]*Node, error) {
 				// TODO(b/289309062): deps log first reverse deps node?
 				return nil, fmt.Errorf("no outs for %q", t)
 			}
-			edge := outs[0]
-			outputs := edge.Outputs()
-			if len(outputs) == 0 {
-				return nil, fmt.Errorf("out edge of %q has no output", t)
+			// incompatible with ninja
+			// - https://ninja-build.org/manual.html#_running_ninja
+			//   ninja just uses the first output of some rule
+			//   containing the source
+			// siso uses all outputs.
+			// b/396522989
+			for _, edge := range outs {
+				outputs := edge.Outputs()
+				if len(outputs) == 0 {
+					return nil, fmt.Errorf("out edge of %q has no output", t)
+				}
+				nodes = append(nodes, outputs[0])
 			}
-			node = outputs[0]
-		} else {
-			n, ok := s.LookupNodeByPath(t)
-			if !ok {
-				return nil, fmt.Errorf("unknown target %q", t)
-			}
-			node = n
+			continue
 		}
-		nodes = append(nodes, node)
+		n, ok := s.LookupNodeByPath(t)
+		if !ok {
+			return nil, fmt.Errorf("unknown target %q", t)
+		}
+		nodes = append(nodes, n)
 	}
 	return nodes, nil
 }
