@@ -16,7 +16,7 @@ type gcloudTokenSource struct{}
 
 func (gcloudTokenSource) Token() (*oauth2.Token, error) {
 	cmd := exec.Command("gcloud", "auth", "print-access-token")
-	out, err := cmd.CombinedOutput()
+	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get token %s: %w", string(out), err)
 	}
