@@ -549,7 +549,7 @@ func (b *Builder) loadEnvfile(ctx context.Context, fname string) []string {
 		// https://ninja-build.org/manual.html#_extra_tools
 		// ninja -t msvc -e ENVFILE -- cl.exe <arguments>
 		//  Where ENVFILE is a binary file that contains an environment block suitable for CreateProcessA() on Windows (i.e. a series of zero-terminated strings that look like NAME=VALUE, followed by an extra zero terminator).
-		buf, err := b.hashFS.ReadFile(ctx, b.path.ExecRoot, fname)
+		buf, err := b.hashFS.ReadFile(ctx, b.path.ExecRoot, b.path.MaybeFromWD(ctx, fname))
 		if err != nil {
 			clog.Warningf(ctx, "failed to load envfile %q: %v", fname, err)
 			return
