@@ -43,3 +43,34 @@ fatal error: 'functional' not found
 		t.Errorf("msvcutil.ParseShowIncludes(...) got:\n%q\nwant:\n%q", out, wantOut)
 	}
 }
+
+func TestParseShowIncludes_filename(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		stdout     []byte
+		wantInputs []string
+		wantOut    []byte
+	}{
+		{
+			name:    "filterFilename",
+			stdout:  []byte("foo.cc\r\ncl: warning\r\n"),
+			wantOut: []byte("cl: warning\r\n"),
+		},
+		{
+			name:       "keepFilenameAfterShowIncludes",
+			stdout:     []byte("foo.cc\r\nNote: including file: foo.h\r\nsomething something foo.cc\r\n"),
+			wantInputs: []string{"foo.h"},
+			wantOut:    []byte("something something foo.cc\r\n"),
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			inputs, out := msvcutil.ParseShowIncludes(tc.stdout)
+			if diff := cmp.Diff(tc.wantInputs, inputs); diff != "" {
+				t.Errorf("msvcutil.ParseShowIncludes(...); inputs diff -want +got:\n%s", diff)
+			}
+			if !bytes.Equal(tc.wantOut, out) {
+				t.Errorf("msvcutil.ParseShowIncludes(...) got:\n%q\nwant:\n%q", out, tc.wantOut)
+			}
+		})
+	}
+}

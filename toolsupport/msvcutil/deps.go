@@ -19,6 +19,7 @@ func ParseShowIncludes(b []byte) ([]string, []byte) {
 	// other lines will be normal stdout/stderr (e.g. compiler error message)
 	var deps []string
 	var outs []byte
+	var seenShowIncludes bool
 	s := b
 	for len(s) > 0 {
 		line := s
@@ -30,9 +31,19 @@ func ParseShowIncludes(b []byte) ([]string, []byte) {
 			s = nil
 		}
 		if bytes.HasPrefix(line, []byte(depsPrefix)) {
+			seenShowIncludes = true
 			line = bytes.TrimPrefix(line, []byte(depsPrefix))
 			line = bytes.TrimSpace(line)
 			deps = append(deps, string(line))
+			if bytes.HasPrefix(s, []byte("\r")) {
+				s = s[1:]
+			}
+			if bytes.HasPrefix(s, []byte("\n")) {
+				s = s[1:]
+			}
+			continue
+		} else if !seenShowIncludes && filterInputFilename(line) {
+			// drop it.
 			if bytes.HasPrefix(s, []byte("\r")) {
 				s = s[1:]
 			}
@@ -52,4 +63,16 @@ func ParseShowIncludes(b []byte) ([]string, []byte) {
 		}
 	}
 	return deps, outs
+}
+
+func filterInputFilename(line []byte) bool {
+	i := bytes.LastIndexByte(line, '.')
+	if i < 0 {
+		return false
+	}
+	switch ext := string(bytes.ToLower(line[i:])); ext {
+	case ".c", ".cc", ".cxx", ".cpp", ".c++":
+		return true
+	}
+	return false
 }
