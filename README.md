@@ -61,6 +61,11 @@ Siso is a build tool that aims to significantly speed up Chromium's build.
     * **Ninja:** Ignores a depfile parse error.
     * **Siso:** Fails for a depfile parse error.
 
+1. **Unsupported features**
+
+   Siso may not support Ninja features if they are not used for Chromium
+   builds. e.g. dynamic dependencies, `ninja -t browse` etc
+
 ## FAQ
 
 Please check [go/siso-faq](http://go/siso-faq).
