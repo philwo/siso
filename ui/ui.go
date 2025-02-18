@@ -71,6 +71,7 @@ func IsTerminal() bool {
 func writeLinesMaxWidth(buf *bytes.Buffer, msgs []string, width int) {
 	for i, msg := range msgs {
 		if msg == "" {
+			fmt.Fprintln(buf)
 			continue
 		}
 		// Truncate in middle if too long, unless terminated with newline.
@@ -83,6 +84,7 @@ func writeLinesMaxWidth(buf *bytes.Buffer, msgs []string, width int) {
 		if i > 0 {
 			fmt.Fprintln(buf)
 		}
+		msg = strings.TrimSuffix(msg, "\n")
 		fmt.Fprint(buf, msg)
 	}
 }

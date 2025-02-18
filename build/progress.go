@@ -291,15 +291,17 @@ func (p *progress) step(ctx context.Context, b *Builder, step *Step, s string) {
 		if stat.RemoteRetry > 0 {
 			retry = "retry:" + ui.SGR(ui.BackgroundRed, fmt.Sprintf("%d", stat.RemoteRetry)) + " "
 		}
-		lines = append(lines, fmt.Sprintf("pre:%s local:%s remote:%s %s%s%s%s",
-			preprocProgress,
-			localProgress,
-			remoteProgress,
-			stepsPerSec,
-			cacheHitRatio,
-			fallback,
-			retry,
-		))
+		if outputResult == "" {
+			lines = append(lines, fmt.Sprintf("pre:%s local:%s remote:%s %s%s%s%s",
+				preprocProgress,
+				localProgress,
+				remoteProgress,
+				stepsPerSec,
+				cacheHitRatio,
+				fallback,
+				retry,
+			))
+		}
 		fallthrough
 	default:
 		if step != nil {
@@ -318,7 +320,7 @@ func (p *progress) step(ctx context.Context, b *Builder, step *Step, s string) {
 			if ui.IsTerminal() {
 				// 2 more lines, so outputResult won't
 				// be overwritten by next progress report.
-				lines = append(lines, outputResult+"\n", "", "")
+				lines = append(lines, "\n"+outputResult+"\n", "", "")
 			} else {
 				lines = append(lines, outputResult+"\n")
 			}

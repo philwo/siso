@@ -679,7 +679,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	})
 
 	if c.reopt.IsValid() {
-		ui.Default.PrintLines(fmt.Sprintf("reapi instance: %s\n", c.reopt.Instance))
+		ui.Default.PrintLines(fmt.Sprintf("reapi instance: %s\n\n", c.reopt.Instance))
 	}
 	ds, err := c.initDataSource(ctx, credential)
 	if err != nil {
@@ -1147,7 +1147,7 @@ func (c *ninjaCmdRun) initWorkdirs(ctx context.Context) (string, error) {
 	// Don't print this if a tool is being used, so that tool output
 	// can be piped into a file without this string showing up.
 	if c.subtool == "" && c.dir != "." {
-		ui.Default.PrintLines(fmt.Sprintf("ninja: Entering directory `%s'\n", c.dir))
+		ui.Default.PrintLines(fmt.Sprintf("ninja: Entering directory `%s'\n\n", c.dir))
 	}
 	err = os.Chdir(c.dir)
 	if err != nil {

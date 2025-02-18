@@ -91,15 +91,24 @@ func (t *TermUI) Width() int {
 }
 
 // PrintLines implements the ui.ui interface.
+// msg not including \n will fit on one terminal line, by eliding
+// middle for long msg.
+// msg including \n will print as is.
 // If msgs starts with \n, it will print from the current line.
-// Otherwise, it will replace the last N lines, where N is len(msgs).
+// Otherwise, it will replace the last N lines, where N is number of msgs
+// that don't start with \n.
 func (t *TermUI) PrintLines(msgs ...string) {
 	var buf bytes.Buffer
 	if len(msgs) > 0 && msgs[0] == "\n" {
 		msgs = msgs[1:]
 	} else {
-		// Clear the last N lines, where N is len(msgs).
+		// Clear the last N lines, where N is number of msgs
+		// that don't start with \n.
 		for i := 0; i < len(msgs)-1; i++ {
+			if msgs[i][0] == '\n' {
+				msgs[i] = msgs[i][1:]
+				break
+			}
 			fmt.Fprintf(&buf, "\r\033[K\033[A")
 		}
 		fmt.Fprintf(&buf, "\r\033[K")

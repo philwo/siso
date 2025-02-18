@@ -104,12 +104,35 @@ func (c *cmdOutputLog) Msg(width int, console, verboseFailure bool) string {
 		return ""
 	}
 	var sb strings.Builder
+	cmdStdoutStderr := func() {
+		if console {
+			// for console action, stdout/stderr already printed out.
+			return
+		}
+		if len(c.stdout) > 0 {
+			fmt.Fprintf(&sb, "stdout:\n%s", string(c.stdout))
+			if c.stdout[len(c.stdout)-1] != '\n' {
+				fmt.Fprintf(&sb, "\n")
+			}
+		}
+		if len(c.stderr) > 0 {
+			fmt.Fprintf(&sb, "stderr:\n%s", string(c.stderr))
+			if c.stderr[len(c.stderr)-1] != '\n' {
+				fmt.Fprintf(&sb, "\n")
+			}
+		}
+	}
+
+	if c.result == cmdOutputResultSUCCESS {
+		// just print stdout/stderr for success result
+		cmdStdoutStderr()
+		return sb.String()
+	}
+
 	result := fmt.Sprintf("%s%s: %s %q %s\n", c.result, c.phaseText(), c.cmd, c.output, c.cmd.Desc)
 	switch c.result {
 	case cmdOutputResultFAILED:
 		fmt.Fprint(&sb, ui.SGR(ui.Red, result))
-	case cmdOutputResultSUCCESS:
-		fmt.Fprint(&sb, ui.SGR(ui.Green, result))
 	default:
 		fmt.Fprint(&sb, result)
 	}
@@ -137,20 +160,7 @@ func (c *cmdOutputLog) Msg(width int, console, verboseFailure bool) string {
 	if c.sisoRule != "" {
 		fmt.Fprintf(&sb, "siso_rule: %s\n", c.sisoRule)
 	}
-	if !console {
-		if len(c.stdout) > 0 {
-			fmt.Fprintf(&sb, "stdout:\n%s", string(c.stdout))
-			if c.stdout[len(c.stdout)-1] != '\n' {
-				fmt.Fprintf(&sb, "\n")
-			}
-		}
-		if len(c.stderr) > 0 {
-			fmt.Fprintf(&sb, "stderr:\n%s", string(c.stderr))
-			if c.stderr[len(c.stderr)-1] != '\n' {
-				fmt.Fprintf(&sb, "\n")
-			}
-		}
-	}
+	cmdStdoutStderr()
 	return sb.String()
 }
 
