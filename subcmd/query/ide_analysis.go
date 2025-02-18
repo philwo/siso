@@ -240,10 +240,10 @@ func (a *ideAnalyzer) analyzeTarget(ctx context.Context, target string) (*pb.Ana
 		}
 		return result, nil
 	}
-	if len(nodes) != 1 {
+	if len(nodes) == 0 {
 		result.Status = &pb.AnalysisResult_Status{
 			Code:          pb.AnalysisResult_Status_CODE_NOT_FOUND,
-			StatusMessage: proto.String(fmt.Sprintf("target=%q expands to %d nodes", target, len(nodes))),
+			StatusMessage: proto.String(fmt.Sprintf("missing target=%q", target)),
 		}
 		return result, nil
 	}
