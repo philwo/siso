@@ -190,27 +190,27 @@ func (re *RemoteExec) processResult(ctx context.Context, action digest.Digest, c
 	result.OutputSymlinks = symlinks
 	result.OutputDirectories = dirs
 	cmd.SetActionResult(result, cached)
-	if err != nil {
-		// Even when err was not nil, the outputs were populated to ActionResult for investigation.
-		return err
-	}
-	cmdErr := resultErr(result)
 	if len(result.GetStdoutRaw()) > 0 {
 		cmd.StdoutWriter().Write(result.GetStdoutRaw())
 	} else {
-		err = setStdout(ctx, re.client, result.GetStdoutDigest(), cmd)
-		if cmdErr == nil && err != nil {
-			return err
+		stdoutErr := setStdout(ctx, re.client, result.GetStdoutDigest(), cmd)
+		if err == nil {
+			err = stdoutErr
 		}
 	}
 	if len(result.GetStderrRaw()) > 0 {
 		cmd.StderrWriter().Write(result.GetStderrRaw())
 	} else {
-		err = setStderr(ctx, re.client, result.GetStderrDigest(), cmd)
-		if cmdErr == nil && err != nil {
-			return err
+		stderrErr := setStderr(ctx, re.client, result.GetStderrDigest(), cmd)
+		if err == nil {
+			err = stderrErr
 		}
 	}
+	if err != nil {
+		// Even when err was not nil, the outputs/stdout/stderr were populated to ActionResult for investigation.
+		return err
+	}
+	cmdErr := resultErr(result)
 	if cmdErr != nil {
 		return cmdErr
 	}
