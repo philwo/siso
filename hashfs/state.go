@@ -299,6 +299,10 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 				dirty.Store(true)
 				return nil
 			}
+			if now := time.Now(); fi.ModTime().After(now) {
+				clog.Warningf(gctx, "future timestamp on %s: mtime=%s now=%s", ent.Name, fi.ModTime(), now)
+				return fmt.Errorf("future timestamp on %s: mtime=%s now=%s", ent.Name, fi.ModTime(), now)
+			}
 			e, et := newStateEntry(ctx, ent, fi.ModTime(), hfs.opt.DataSource, hfs.OS)
 			e.cmdhash = h
 			e.action = toDigest(ent.Action)

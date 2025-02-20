@@ -364,6 +364,10 @@ func (hfs *HashFS) Stat(ctx context.Context, root, fname string) (FileInfo, erro
 				return FileInfo{}, err
 			default:
 				mtime := lfi.ModTime()
+				if now := time.Now(); mtime.After(now) {
+					clog.Warningf(ctx, "future timestamp on %s: mtime=%s now=%s", fullname, mtime, now)
+					return FileInfo{}, fmt.Errorf("future timestamp on %s: mtime=%s now=%s", fullname, mtime, now)
+				}
 				e.mu.Lock()
 				e.mtime = mtime
 				if e.updatedTime.Before(mtime) {
@@ -1514,6 +1518,11 @@ func (e *entry) init(ctx context.Context, fname string, executables map[string]b
 	if err != nil {
 		clog.Warningf(ctx, "failed to lstat %s: %v", fname, err)
 		e.err = err
+		return
+	}
+	if now := time.Now(); fi.ModTime().After(now) {
+		clog.Warningf(ctx, "future timestamp on %s: mtime=%s now=%s", fname, fi.ModTime(), now)
+		e.err = fmt.Errorf("future timestamp on %s: mtime=%s now=%s", fname, fi.ModTime(), now)
 		return
 	}
 	switch {
