@@ -261,9 +261,8 @@ func (p *progress) step(ctx context.Context, b *Builder, step *Step, s string) {
 		}
 		// no wait for fastLocalSema since it only use TryAcquire,
 		// so no need to count b.fastLocalSema.NumWaits.
-		if b.fastLocalSema != nil {
-			localServs += b.fastLocalSema.NumServs()
-		}
+		// fastLocal step also acquires localSema,
+		// so no need to count b.fastLocalSema.NumServ.
 		p.numLocal.Store(int32(localWaits + localServs))
 		localProgress := runProgress(localWaits, localServs)
 
