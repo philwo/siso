@@ -271,7 +271,7 @@ func (r *StepRule) Init() error {
 	}
 	if r.ActionName == "" && len(r.ActionOuts) == 0 && r.CommandPrefix == "" {
 		buf, err := json.Marshal(r)
-		return fmt.Errorf("no selector in rule %s: %v", buf, err)
+		return fmt.Errorf("no selector in rule %s: %w", buf, err)
 	}
 	sort.Strings(r.Inputs)
 	return nil
@@ -323,11 +323,11 @@ func (sc StepConfig) Init(ctx context.Context) error {
 		}
 		if rule.Name == "" {
 			buf, err := json.Marshal(rule)
-			return fmt.Errorf("no name in rule: %s: %v", buf, err)
+			return fmt.Errorf("no name in rule: %s: %w", buf, err)
 		}
 		if seen[rule.Name] {
 			buf, err := json.Marshal(rule)
-			return fmt.Errorf("duplicate name in rule %s: %v", buf, err)
+			return fmt.Errorf("duplicate name in rule %s: %w", buf, err)
 		}
 		seen[rule.Name] = true
 		err := rule.Init()

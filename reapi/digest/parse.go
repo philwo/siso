@@ -47,5 +47,5 @@ func Parse(s string) (Digest, error) {
 		d = FromProto(msg)
 		return d, nil
 	}
-	return d, fmt.Errorf("failed to unmarshal %T json:%v proto:%v", msg, err, perr)
+	return d, fmt.Errorf("failed to unmarshal %T json:%w proto:%w", msg, err, perr)
 }

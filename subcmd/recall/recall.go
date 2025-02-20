@@ -406,7 +406,7 @@ func loadTextProto(fname string, p proto.Message) error {
 	}
 	err = prototext.Unmarshal(b, p)
 	if err != nil {
-		return fmt.Errorf("failed to unmarshal %s: %v", fname, err)
+		return fmt.Errorf("failed to unmarshal %s: %w", fname, err)
 	}
 	return nil
 }

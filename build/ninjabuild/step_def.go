@@ -403,7 +403,7 @@ func depInputs(ctx context.Context, s *StepDef) (func(yield func(string) bool), 
 		out := outputs[0].Path()
 		deps, _, err = s.globals.depsLog.Get(ctx, out)
 		if err != nil {
-			return nil, fmt.Errorf("%w: failed to lookup deps log %s: %v", build.ErrMissingDeps, out, err)
+			return nil, fmt.Errorf("%w: failed to lookup deps log %s: %w", build.ErrMissingDeps, out, err)
 		}
 		if log.V(1) {
 			clog.Infof(ctx, "depslog %s: %d", out, len(deps))
@@ -424,12 +424,12 @@ func depInputs(ctx context.Context, s *StepDef) (func(yield func(string) bool), 
 		}
 		_, err := s.globals.hashFS.Stat(ctx, s.globals.path.ExecRoot, df)
 		if err != nil {
-			return nil, fmt.Errorf("%w: no depfile %s: %v", build.ErrMissingDeps, depfile, err)
+			return nil, fmt.Errorf("%w: no depfile %s: %w", build.ErrMissingDeps, depfile, err)
 		}
 		fsys := s.globals.hashFS.FileSystem(ctx, s.globals.path.ExecRoot)
 		deps, err = makeutil.ParseDepsFile(ctx, fsys, df)
 		if err != nil {
-			return nil, fmt.Errorf("%w: failed to load depfile %s: %v", build.ErrMissingDeps, df, err)
+			return nil, fmt.Errorf("%w: failed to load depfile %s: %w", build.ErrMissingDeps, df, err)
 		}
 		if log.V(1) {
 			clog.Infof(ctx, "depfile %s: %d", depfile, len(deps))

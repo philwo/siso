@@ -428,7 +428,7 @@ func (m *MerkleTree) buildTree(ctx context.Context, curdir *rpb.Directory, dirna
 
 	data, err := digest.FromProtoMessage(curdir)
 	if err != nil {
-		return nil, fmt.Errorf("directory digest %s: %v", dirname, err)
+		return nil, fmt.Errorf("directory digest %s: %w", dirname, err)
 	}
 	if m.store != nil {
 		m.store.Set(data)

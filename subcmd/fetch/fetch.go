@@ -181,7 +181,7 @@ func (c *run) run(ctx context.Context) error {
 		pmsg := &rpb.Directory{}
 		err = c.protoUnmarshal(b, pmsg)
 		if err != nil {
-			return fmt.Errorf("failed to unmarshal %s as %T: %v", d, pmsg, err)
+			return fmt.Errorf("failed to unmarshal %s as %T: %w", d, pmsg, err)
 		}
 		exporter := exporter.New(client)
 		err = exporter.Export(ctx, dir, d, w)
@@ -208,7 +208,7 @@ func (c *run) run(ctx context.Context) error {
 	}
 	err = c.protoUnmarshal(b, pmsg)
 	if err != nil {
-		return fmt.Errorf("failed to unmarshal %s as %T: %v", d, pmsg, err)
+		return fmt.Errorf("failed to unmarshal %s as %T: %w", d, pmsg, err)
 	}
 	fmt.Println(pmsg)
 	return nil

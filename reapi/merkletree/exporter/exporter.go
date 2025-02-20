@@ -71,7 +71,7 @@ func (e *Exporter) exportDir(ctx context.Context, dir string, d digest.Digest, w
 	curdir := &rpb.Directory{}
 	err = proto.Unmarshal(b, curdir)
 	if err != nil {
-		return fmt.Errorf("failed to unmarshal dir for %s from %s: %v", dir, d, err)
+		return fmt.Errorf("failed to unmarshal dir for %s from %s: %w", dir, d, err)
 	}
 	for _, f := range curdir.Files {
 		f := f
