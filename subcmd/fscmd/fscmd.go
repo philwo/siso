@@ -10,7 +10,7 @@ import (
 
 	"github.com/maruel/subcommands"
 
-	"infra/build/siso/auth/cred"
+	"go.chromium.org/infra/build/siso/auth/cred"
 )
 
 const stateFile = ".siso_fs_state"

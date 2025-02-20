@@ -18,11 +18,11 @@ import (
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
 	log "github.com/golang/glog"
 
-	"infra/build/siso/execute"
-	"infra/build/siso/execute/reproxyexec"
-	"infra/build/siso/o11y/clog"
-	"infra/build/siso/o11y/trace"
-	"infra/build/siso/reapi"
+	"go.chromium.org/infra/build/siso/execute"
+	"go.chromium.org/infra/build/siso/execute/reproxyexec"
+	"go.chromium.org/infra/build/siso/o11y/clog"
+	"go.chromium.org/infra/build/siso/o11y/trace"
+	"go.chromium.org/infra/build/siso/reapi"
 )
 
 func (b *Builder) execReproxy(ctx context.Context, step *Step) error {

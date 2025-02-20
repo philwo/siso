@@ -17,7 +17,7 @@ import (
 	log "github.com/golang/glog"
 	"go.starlark.net/starlark"
 
-	"infra/build/siso/o11y/clog"
+	"go.chromium.org/infra/build/siso/o11y/clog"
 )
 
 const (

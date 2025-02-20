@@ -18,12 +18,12 @@ import (
 
 	"github.com/pkg/xattr"
 
-	"infra/build/siso/o11y/clog"
-	"infra/build/siso/o11y/iometrics"
-	"infra/build/siso/reapi/digest"
-	"infra/build/siso/reapi/retry"
-	"infra/build/siso/runtimex"
-	"infra/build/siso/sync/semaphore"
+	"go.chromium.org/infra/build/siso/o11y/clog"
+	"go.chromium.org/infra/build/siso/o11y/iometrics"
+	"go.chromium.org/infra/build/siso/reapi/digest"
+	"go.chromium.org/infra/build/siso/reapi/retry"
+	"go.chromium.org/infra/build/siso/runtimex"
+	"go.chromium.org/infra/build/siso/sync/semaphore"
 )
 
 // LstatSemaphore is a semaphore to control concurrent lstat,

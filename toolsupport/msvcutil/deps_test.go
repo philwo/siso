@@ -10,7 +10,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
-	"infra/build/siso/toolsupport/msvcutil"
+	"go.chromium.org/infra/build/siso/toolsupport/msvcutil"
 )
 
 func TestParseShowIncludes(t *testing.T) {

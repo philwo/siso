@@ -6,7 +6,7 @@ syntax = "proto3";
 
 package siso.hashfs;
 
-option go_package = "infra/build/siso/hashfs/proto";
+option go_package = "go.chromium.org/infra/build/siso/hashfs/proto";
 
 message FileID {
   int64 mod_time = 1;  // unix nano sec.

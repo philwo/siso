@@ -10,10 +10,10 @@ import (
 
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
 
-	"infra/build/siso/build"
-	"infra/build/siso/hashfs"
-	"infra/build/siso/reapi/digest"
-	"infra/build/siso/reapi/reapitest"
+	"go.chromium.org/infra/build/siso/build"
+	"go.chromium.org/infra/build/siso/hashfs"
+	"go.chromium.org/infra/build/siso/reapi/digest"
+	"go.chromium.org/infra/build/siso/reapi/reapitest"
 )
 
 func TestBuild_ScanDeps_ClangCL_FI(t *testing.T) {

@@ -14,8 +14,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"infra/build/siso/build"
-	"infra/build/siso/hashfs"
+	"go.chromium.org/infra/build/siso/build"
+	"go.chromium.org/infra/build/siso/hashfs"
 )
 
 // Test rebuild build.ninja (gn gen) behavior.

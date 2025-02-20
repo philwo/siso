@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"infra/build/siso/execute"
+	"go.chromium.org/infra/build/siso/execute"
 )
 
 type fakeStepDef struct {

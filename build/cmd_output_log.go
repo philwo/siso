@@ -9,9 +9,9 @@ import (
 	"fmt"
 	"strings"
 
-	"infra/build/siso/execute"
-	"infra/build/siso/toolsupport/msvcutil"
-	"infra/build/siso/ui"
+	"go.chromium.org/infra/build/siso/execute"
+	"go.chromium.org/infra/build/siso/toolsupport/msvcutil"
+	"go.chromium.org/infra/build/siso/ui"
 )
 
 type cmdOutputResult int

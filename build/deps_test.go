@@ -12,8 +12,8 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
-	"infra/build/siso/execute"
-	"infra/build/siso/hashfs"
+	"go.chromium.org/infra/build/siso/execute"
+	"go.chromium.org/infra/build/siso/hashfs"
 )
 
 func TestDepsExpandInputs(t *testing.T) {

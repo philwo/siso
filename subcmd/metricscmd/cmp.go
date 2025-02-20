@@ -18,7 +18,7 @@ import (
 
 	"go.chromium.org/luci/common/cli"
 
-	"infra/build/siso/build"
+	"go.chromium.org/infra/build/siso/build"
 )
 
 const cmpUsage = `compare siso_metrics.json.

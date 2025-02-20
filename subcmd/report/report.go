@@ -23,10 +23,10 @@ import (
 	"go.chromium.org/luci/common/cli"
 	"go.chromium.org/luci/common/system/signals"
 
-	"infra/build/siso/hashfs/osfs"
-	"infra/build/siso/o11y/clog"
-	"infra/build/siso/reapi/digest"
-	"infra/build/siso/ui"
+	"go.chromium.org/infra/build/siso/hashfs/osfs"
+	"go.chromium.org/infra/build/siso/o11y/clog"
+	"go.chromium.org/infra/build/siso/reapi/digest"
+	"go.chromium.org/infra/build/siso/ui"
 )
 
 const usage = `report siso logs

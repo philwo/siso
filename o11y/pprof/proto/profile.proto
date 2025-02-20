@@ -42,7 +42,7 @@ package perftools.profiles;
 
 option java_package = "com.google.perftools.profiles";
 option java_outer_classname = "ProfileProto";
-option go_package = "infra/build/siso/o11y/pprof/proto";
+option go_package = "go.chromium.org/infra/build/siso/o11y/pprof/proto";
 
 message Profile {
   // A description of the samples associated with each Sample.value.

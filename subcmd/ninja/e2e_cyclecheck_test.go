@@ -11,8 +11,8 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
-	"infra/build/siso/build"
-	"infra/build/siso/hashfs"
+	"go.chromium.org/infra/build/siso/build"
+	"go.chromium.org/infra/build/siso/hashfs"
 )
 
 func TestBuild_CycleCheck(t *testing.T) {

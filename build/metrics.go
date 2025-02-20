@@ -10,8 +10,8 @@ import (
 	"encoding/json"
 	"time"
 
-	epb "infra/build/siso/execute/proto"
-	"infra/build/siso/o11y/clog"
+	epb "go.chromium.org/infra/build/siso/execute/proto"
+	"go.chromium.org/infra/build/siso/o11y/clog"
 )
 
 // IntervalMetric is a time duration, but serialized as seconds in JSON.

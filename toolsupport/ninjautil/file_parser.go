@@ -15,7 +15,7 @@ import (
 	log "github.com/golang/glog"
 	"golang.org/x/sync/errgroup"
 
-	"infra/build/siso/o11y/clog"
+	"go.chromium.org/infra/build/siso/o11y/clog"
 )
 
 // fileState stores per-file states.

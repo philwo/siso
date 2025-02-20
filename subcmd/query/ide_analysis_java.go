@@ -17,11 +17,11 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	"infra/build/siso/o11y/clog"
-	pb "infra/build/siso/toolsupport/ciderutil/proto"
-	"infra/build/siso/toolsupport/ninjautil"
-	"infra/build/siso/toolsupport/shutil"
-	"infra/build/siso/ui"
+	"go.chromium.org/infra/build/siso/o11y/clog"
+	pb "go.chromium.org/infra/build/siso/toolsupport/ciderutil/proto"
+	"go.chromium.org/infra/build/siso/toolsupport/ninjautil"
+	"go.chromium.org/infra/build/siso/toolsupport/shutil"
+	"go.chromium.org/infra/build/siso/ui"
 )
 
 func (a *ideAnalyzer) analyzeJava(ctx context.Context, edge *ninjautil.Edge, result *pb.AnalysisResult) (*pb.AnalysisResult, map[string]*pb.BuildableUnit) {

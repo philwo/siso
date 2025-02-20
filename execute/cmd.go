@@ -23,10 +23,10 @@ import (
 	log "github.com/golang/glog"
 	"google.golang.org/protobuf/types/known/durationpb"
 
-	"infra/build/siso/hashfs"
-	"infra/build/siso/o11y/clog"
-	"infra/build/siso/reapi/digest"
-	"infra/build/siso/reapi/merkletree"
+	"go.chromium.org/infra/build/siso/hashfs"
+	"go.chromium.org/infra/build/siso/o11y/clog"
+	"go.chromium.org/infra/build/siso/reapi/digest"
+	"go.chromium.org/infra/build/siso/reapi/merkletree"
 )
 
 // Executor is an interface to run the cmd.

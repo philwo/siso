@@ -12,7 +12,7 @@ import (
 	log "github.com/golang/glog"
 	"golang.org/x/sync/singleflight"
 
-	"infra/build/siso/o11y/clog"
+	"go.chromium.org/infra/build/siso/o11y/clog"
 )
 
 // fscache is a cache of contents from fs (hashfs).

@@ -8,10 +8,10 @@ package artfs
 
 import (
 	context "context"
+	manifest "go.chromium.org/infra/build/siso/toolsupport/artfsutil/proto/manifest"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
-	manifest "infra/build/siso/toolsupport/artfsutil/proto/manifest"
 )
 
 // This is a compile-time assertion to ensure that this generated file

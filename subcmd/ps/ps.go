@@ -18,8 +18,8 @@ import (
 	"go.chromium.org/luci/common/cli"
 	"go.chromium.org/luci/common/system/signals"
 
-	"infra/build/siso/build"
-	"infra/build/siso/ui"
+	"go.chromium.org/infra/build/siso/build"
+	"go.chromium.org/infra/build/siso/ui"
 )
 
 func Cmd() *subcommands.Command {

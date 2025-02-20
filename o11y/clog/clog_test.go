@@ -13,7 +13,7 @@ import (
 
 	"cloud.google.com/go/logging"
 
-	"infra/build/siso/o11y/clog"
+	"go.chromium.org/infra/build/siso/o11y/clog"
 )
 
 func testFormater(e logging.Entry) string {

@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"infra/build/siso/build"
-	"infra/build/siso/hashfs"
+	"go.chromium.org/infra/build/siso/build"
+	"go.chromium.org/infra/build/siso/hashfs"
 )
 
 // Test symlink won't modify mtime of symlink's target.

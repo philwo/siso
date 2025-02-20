@@ -15,7 +15,7 @@ import (
 	"go.starlark.net/starlark"
 	"go.starlark.net/starlarkstruct"
 
-	"infra/build/siso/build"
+	"go.chromium.org/infra/build/siso/build"
 )
 
 // starFS returns fs module.

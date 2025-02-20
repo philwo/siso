@@ -20,9 +20,9 @@ import (
 
 	"go.chromium.org/luci/common/cli"
 
-	"infra/build/siso/hashfs"
-	"infra/build/siso/o11y/clog"
-	"infra/build/siso/toolsupport/ninjautil"
+	"go.chromium.org/infra/build/siso/hashfs"
+	"go.chromium.org/infra/build/siso/o11y/clog"
+	"go.chromium.org/infra/build/siso/toolsupport/ninjautil"
 )
 
 const depsUsage = `show dependencies stored in the deps log

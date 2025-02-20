@@ -11,7 +11,7 @@ import (
 	"sort"
 	"strconv"
 
-	"infra/build/siso/runtimex"
+	"go.chromium.org/infra/build/siso/runtimex"
 )
 
 // Metadata contains structured metadata for the build.

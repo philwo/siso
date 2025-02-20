@@ -22,10 +22,10 @@ import (
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"infra/build/siso/hashfs"
-	"infra/build/siso/o11y/clog"
-	"infra/build/siso/reapi"
-	"infra/build/siso/reapi/digest"
+	"go.chromium.org/infra/build/siso/hashfs"
+	"go.chromium.org/infra/build/siso/o11y/clog"
+	"go.chromium.org/infra/build/siso/reapi"
+	"go.chromium.org/infra/build/siso/reapi/digest"
 )
 
 // Options is options for resultstore uploader.

@@ -171,7 +171,7 @@ func parseInfraSuperprojectDEPS(ctx context.Context, rev string) (string, error)
 	var revision string
 	for s.Scan() {
 		line := s.Bytes()
-		if !bytes.Contains(line, []byte("infra/infra.git@")) {
+		if !bytes.Contains(line, []byte("go.chromium.org/infra/infra.git@")) {
 			continue
 		}
 		i := bytes.IndexByte(line, '@')
@@ -189,7 +189,7 @@ func parseInfraSuperprojectDEPS(ctx context.Context, rev string) (string, error)
 		return "", err
 	}
 	if revision == "" {
-		return "", fmt.Errorf("infra/infra.git not found in %s", depsURL)
+		return "", fmt.Errorf("go.chromium.org/infra/infra.git not found in %s", depsURL)
 	}
 	return revision, nil
 }

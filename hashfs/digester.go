@@ -9,11 +9,11 @@ import (
 	"sync"
 	"time"
 
-	"infra/build/siso/o11y/clog"
-	"infra/build/siso/o11y/trace"
-	"infra/build/siso/reapi/digest"
-	"infra/build/siso/runtimex"
-	"infra/build/siso/sync/semaphore"
+	"go.chromium.org/infra/build/siso/o11y/clog"
+	"go.chromium.org/infra/build/siso/o11y/trace"
+	"go.chromium.org/infra/build/siso/reapi/digest"
+	"go.chromium.org/infra/build/siso/runtimex"
+	"go.chromium.org/infra/build/siso/sync/semaphore"
 )
 
 // DigestSemaphore is a semaphore to control concurrent digest calculation.

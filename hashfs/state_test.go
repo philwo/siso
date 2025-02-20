@@ -23,10 +23,10 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/testing/protocmp"
 
-	"infra/build/siso/hashfs"
-	pb "infra/build/siso/hashfs/proto"
-	"infra/build/siso/reapi/digest"
-	"infra/build/siso/reapi/merkletree"
+	"go.chromium.org/infra/build/siso/hashfs"
+	pb "go.chromium.org/infra/build/siso/hashfs/proto"
+	"go.chromium.org/infra/build/siso/reapi/digest"
+	"go.chromium.org/infra/build/siso/reapi/merkletree"
 )
 
 // mockState returns a mock hashfs state with two entries for testing.

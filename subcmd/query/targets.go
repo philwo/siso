@@ -17,7 +17,7 @@ import (
 
 	"go.chromium.org/luci/common/cli"
 
-	"infra/build/siso/toolsupport/ninjautil"
+	"go.chromium.org/infra/build/siso/toolsupport/ninjautil"
 )
 
 const targetsUsage = `list targets by their rule or depth in the DAG

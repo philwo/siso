@@ -16,11 +16,11 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	"infra/build/siso/build"
-	"infra/build/siso/build/buildconfig"
-	"infra/build/siso/hashfs"
-	"infra/build/siso/o11y/clog"
-	"infra/build/siso/toolsupport/ninjautil"
+	"go.chromium.org/infra/build/siso/build"
+	"go.chromium.org/infra/build/siso/build/buildconfig"
+	"go.chromium.org/infra/build/siso/hashfs"
+	"go.chromium.org/infra/build/siso/o11y/clog"
+	"go.chromium.org/infra/build/siso/toolsupport/ninjautil"
 )
 
 // Graph holds build graph, i.e. all step defs described in build.ninja.

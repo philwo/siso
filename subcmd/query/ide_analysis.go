@@ -23,17 +23,17 @@ import (
 
 	"go.chromium.org/luci/common/cli"
 
-	"infra/build/siso/build"
-	"infra/build/siso/hashfs"
-	fspb "infra/build/siso/hashfs/proto"
-	"infra/build/siso/o11y/clog"
-	"infra/build/siso/scandeps"
-	pb "infra/build/siso/toolsupport/ciderutil/proto"
-	"infra/build/siso/toolsupport/gccutil"
-	"infra/build/siso/toolsupport/makeutil"
-	"infra/build/siso/toolsupport/ninjautil"
-	"infra/build/siso/toolsupport/shutil"
-	"infra/build/siso/ui"
+	"go.chromium.org/infra/build/siso/build"
+	"go.chromium.org/infra/build/siso/hashfs"
+	fspb "go.chromium.org/infra/build/siso/hashfs/proto"
+	"go.chromium.org/infra/build/siso/o11y/clog"
+	"go.chromium.org/infra/build/siso/scandeps"
+	pb "go.chromium.org/infra/build/siso/toolsupport/ciderutil/proto"
+	"go.chromium.org/infra/build/siso/toolsupport/gccutil"
+	"go.chromium.org/infra/build/siso/toolsupport/makeutil"
+	"go.chromium.org/infra/build/siso/toolsupport/ninjautil"
+	"go.chromium.org/infra/build/siso/toolsupport/shutil"
+	"go.chromium.org/infra/build/siso/ui"
 )
 
 // go/reqs-for-peep

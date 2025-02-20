@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"sync"
 
-	"infra/build/siso/o11y/clog"
+	"go.chromium.org/infra/build/siso/o11y/clog"
 )
 
 // Path manages paths used by the build.

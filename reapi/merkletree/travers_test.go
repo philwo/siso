@@ -14,8 +14,8 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/protobuf/testing/protocmp"
 
-	"infra/build/siso/reapi/digest"
-	"infra/build/siso/reapi/merkletree"
+	"go.chromium.org/infra/build/siso/reapi/digest"
+	"go.chromium.org/infra/build/siso/reapi/merkletree"
 )
 
 func TestTraverse(t *testing.T) {

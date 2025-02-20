@@ -20,11 +20,11 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"infra/build/siso/execute"
-	"infra/build/siso/execute/reproxyexec/reproxytest"
-	"infra/build/siso/hashfs"
-	"infra/build/siso/o11y/iometrics"
-	"infra/build/siso/reapi/digest"
+	"go.chromium.org/infra/build/siso/execute"
+	"go.chromium.org/infra/build/siso/execute/reproxyexec/reproxytest"
+	"go.chromium.org/infra/build/siso/hashfs"
+	"go.chromium.org/infra/build/siso/o11y/iometrics"
+	"go.chromium.org/infra/build/siso/reapi/digest"
 )
 
 func setupDir(t *testing.T, root, dname string) {

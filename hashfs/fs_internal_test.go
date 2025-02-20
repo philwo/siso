@@ -11,7 +11,7 @@ import (
 	"runtime"
 	"testing"
 
-	"infra/build/siso/hashfs/osfs"
+	"go.chromium.org/infra/build/siso/hashfs/osfs"
 )
 
 func TestDirectoryLookup_Symlink(t *testing.T) {

@@ -10,7 +10,7 @@ import (
 	"hash/maphash"
 	"sync/atomic"
 
-	"infra/build/siso/o11y/clog"
+	"go.chromium.org/infra/build/siso/o11y/clog"
 )
 
 const nodeMapArraySize = 1 << 25

@@ -10,7 +10,7 @@ import (
 	"context"
 	"os/user"
 
-	"infra/build/siso/o11y/clog"
+	"go.chromium.org/infra/build/siso/o11y/clog"
 )
 
 func lookupUser(ctx context.Context) string {

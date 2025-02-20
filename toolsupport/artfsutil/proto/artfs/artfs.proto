@@ -4,7 +4,7 @@ import "manifest/manifest.proto";
 
 package artfs;
 
-option go_package = "infra/build/siso/toolsupport/artfsutil/proto/artfs";
+option go_package = "go.chromium.org/infra/build/siso/toolsupport/artfsutil/proto/artfs";
 
 service Artfs {
 

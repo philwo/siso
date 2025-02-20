@@ -15,10 +15,10 @@ import (
 	log "github.com/golang/glog"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"infra/build/siso/execute"
-	"infra/build/siso/execute/localexec"
-	"infra/build/siso/o11y/clog"
-	"infra/build/siso/o11y/trace"
+	"go.chromium.org/infra/build/siso/execute"
+	"go.chromium.org/infra/build/siso/execute/localexec"
+	"go.chromium.org/infra/build/siso/o11y/clog"
+	"go.chromium.org/infra/build/siso/o11y/trace"
 )
 
 func (b *Builder) execLocal(ctx context.Context, step *Step) error {

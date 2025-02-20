@@ -12,7 +12,7 @@ import (
 
 	"github.com/maruel/subcommands"
 
-	"infra/build/siso/webui"
+	"go.chromium.org/infra/build/siso/webui"
 )
 
 func Cmd(version string) *subcommands.Command {

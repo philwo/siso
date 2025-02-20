@@ -14,8 +14,8 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/durationpb"
 
-	"infra/build/siso/build/metadata"
-	"infra/build/siso/o11y/clog"
+	"go.chromium.org/infra/build/siso/build/metadata"
+	"go.chromium.org/infra/build/siso/o11y/clog"
 )
 
 // Options is a profile uploader option.

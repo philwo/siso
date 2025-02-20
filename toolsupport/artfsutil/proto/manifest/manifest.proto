@@ -5,7 +5,7 @@ package manifest;
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/wrappers.proto";
 
-option go_package = "infra/build/siso/toolsupport/artfsutil/proto/manifest";
+option go_package = "go.chromium.org/infra/build/siso/toolsupport/artfsutil/proto/manifest";
 
 message Manifest {
 	// Map of all files from filepath to FileManifest.

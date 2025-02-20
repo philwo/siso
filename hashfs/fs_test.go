@@ -26,11 +26,11 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"golang.org/x/sync/errgroup"
 
-	"infra/build/siso/hashfs"
-	"infra/build/siso/hashfs/osfs"
-	"infra/build/siso/reapi/digest"
-	"infra/build/siso/reapi/merkletree"
-	"infra/build/siso/runtimex"
+	"go.chromium.org/infra/build/siso/hashfs"
+	"go.chromium.org/infra/build/siso/hashfs/osfs"
+	"go.chromium.org/infra/build/siso/reapi/digest"
+	"go.chromium.org/infra/build/siso/reapi/merkletree"
+	"go.chromium.org/infra/build/siso/runtimex"
 )
 
 func TestStamp(t *testing.T) {

@@ -14,15 +14,15 @@ import (
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
 	log "github.com/golang/glog"
 
-	"infra/build/siso/execute"
-	"infra/build/siso/o11y/clog"
-	"infra/build/siso/o11y/trace"
-	"infra/build/siso/reapi"
-	"infra/build/siso/reapi/digest"
-	"infra/build/siso/reapi/merkletree"
-	_ "infra/build/siso/reapi/proto" // for auxiliary metadata
-	"infra/build/siso/runtimex"
-	"infra/build/siso/sync/semaphore"
+	"go.chromium.org/infra/build/siso/execute"
+	"go.chromium.org/infra/build/siso/o11y/clog"
+	"go.chromium.org/infra/build/siso/o11y/trace"
+	"go.chromium.org/infra/build/siso/reapi"
+	"go.chromium.org/infra/build/siso/reapi/digest"
+	"go.chromium.org/infra/build/siso/reapi/merkletree"
+	_ "go.chromium.org/infra/build/siso/reapi/proto" // for auxiliary metadata
+	"go.chromium.org/infra/build/siso/runtimex"
+	"go.chromium.org/infra/build/siso/sync/semaphore"
 )
 
 // Semaphore enforces a limit on parallel digest calculations to prevent an OOM.

@@ -22,11 +22,11 @@ import (
 	"go.chromium.org/luci/common/cli"
 	"go.chromium.org/luci/common/system/signals"
 
-	"infra/build/siso/auth/cred"
-	"infra/build/siso/hashfs"
-	pb "infra/build/siso/hashfs/proto"
-	"infra/build/siso/reapi"
-	"infra/build/siso/reapi/digest"
+	"go.chromium.org/infra/build/siso/auth/cred"
+	"go.chromium.org/infra/build/siso/hashfs"
+	pb "go.chromium.org/infra/build/siso/hashfs/proto"
+	"go.chromium.org/infra/build/siso/reapi"
+	"go.chromium.org/infra/build/siso/reapi/digest"
 )
 
 const flushUsage = `flush recorded files to the disk.

@@ -17,12 +17,12 @@ import (
 	"go.starlark.net/starlark"
 	"go.starlark.net/starlarkstruct"
 
-	"infra/build/siso/build"
-	"infra/build/siso/build/metadata"
-	"infra/build/siso/execute"
-	"infra/build/siso/hashfs"
-	"infra/build/siso/o11y/clog"
-	"infra/build/siso/o11y/trace"
+	"go.chromium.org/infra/build/siso/build"
+	"go.chromium.org/infra/build/siso/build/metadata"
+	"go.chromium.org/infra/build/siso/execute"
+	"go.chromium.org/infra/build/siso/hashfs"
+	"go.chromium.org/infra/build/siso/o11y/clog"
+	"go.chromium.org/infra/build/siso/o11y/trace"
 )
 
 const configEntryPoint = "init"

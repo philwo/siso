@@ -15,7 +15,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 
-	"infra/build/siso/hashfs"
+	"go.chromium.org/infra/build/siso/hashfs"
 )
 
 func TestScanDeps(t *testing.T) {

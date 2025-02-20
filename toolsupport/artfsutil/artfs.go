@@ -12,10 +12,10 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	"infra/build/siso/o11y/clog"
-	"infra/build/siso/reapi/merkletree"
-	artfspb "infra/build/siso/toolsupport/artfsutil/proto/artfs"
-	manifestpb "infra/build/siso/toolsupport/artfsutil/proto/manifest"
+	"go.chromium.org/infra/build/siso/o11y/clog"
+	"go.chromium.org/infra/build/siso/reapi/merkletree"
+	artfspb "go.chromium.org/infra/build/siso/toolsupport/artfsutil/proto/artfs"
+	manifestpb "go.chromium.org/infra/build/siso/toolsupport/artfsutil/proto/manifest"
 )
 
 // Client is artfs client.

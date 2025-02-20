@@ -11,7 +11,7 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	"infra/build/siso/runtimex"
+	"go.chromium.org/infra/build/siso/runtimex"
 )
 
 // multipleRulesError is an error that multiple rules generates the same output.

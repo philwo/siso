@@ -14,9 +14,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"infra/build/siso/hashfs"
-	pb "infra/build/siso/hashfs/proto"
-	"infra/build/siso/o11y/clog"
+	"go.chromium.org/infra/build/siso/hashfs"
+	pb "go.chromium.org/infra/build/siso/hashfs/proto"
+	"go.chromium.org/infra/build/siso/o11y/clog"
 )
 
 // Watchman interacts with watchman.

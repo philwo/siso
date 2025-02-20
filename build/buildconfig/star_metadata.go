@@ -10,7 +10,7 @@ import (
 
 	"go.starlark.net/starlark"
 
-	"infra/build/siso/build/metadata"
+	"go.chromium.org/infra/build/siso/build/metadata"
 )
 
 type starMDReceiver struct {

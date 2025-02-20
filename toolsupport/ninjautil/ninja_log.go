@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"infra/build/siso/o11y/clog"
+	"go.chromium.org/infra/build/siso/o11y/clog"
 )
 
 // File name of ninja log.

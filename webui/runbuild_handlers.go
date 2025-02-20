@@ -19,7 +19,7 @@ import (
 	"sync"
 	"time"
 
-	"infra/build/siso/ui"
+	"go.chromium.org/infra/build/siso/ui"
 )
 
 var ninjaStepRe = regexp.MustCompile(`\[(?P<stepNum>[0-9]+?)/(?P<totalSteps>[0-9]+?)\] (?P<time>[^\s]+?) (?P<status>[SF]) (?P<type>[^\s]+?) (?P<out>.+)`)

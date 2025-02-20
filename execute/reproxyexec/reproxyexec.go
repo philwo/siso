@@ -26,12 +26,12 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"infra/build/siso/execute"
-	"infra/build/siso/hashfs/osfs"
-	"infra/build/siso/o11y/clog"
-	"infra/build/siso/o11y/trace"
-	"infra/build/siso/reapi"
-	"infra/build/siso/reapi/digest"
+	"go.chromium.org/infra/build/siso/execute"
+	"go.chromium.org/infra/build/siso/hashfs/osfs"
+	"go.chromium.org/infra/build/siso/o11y/clog"
+	"go.chromium.org/infra/build/siso/o11y/trace"
+	"go.chromium.org/infra/build/siso/reapi"
+	"go.chromium.org/infra/build/siso/reapi/digest"
 )
 
 const (

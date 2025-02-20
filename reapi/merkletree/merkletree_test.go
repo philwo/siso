@@ -18,7 +18,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/protobuf/proto"
 
-	"infra/build/siso/reapi/digest"
+	"go.chromium.org/infra/build/siso/reapi/digest"
 )
 
 func TestSet(t *testing.T) {

@@ -19,9 +19,9 @@ import (
 
 	log "github.com/golang/glog"
 
-	"infra/build/siso/o11y/clog"
-	"infra/build/siso/reapi/digest"
-	"infra/build/siso/reapi/merkletree"
+	"go.chromium.org/infra/build/siso/o11y/clog"
+	"go.chromium.org/infra/build/siso/reapi/digest"
+	"go.chromium.org/infra/build/siso/reapi/merkletree"
 )
 
 func treeInputs(ctx context.Context, fn func(context.Context, string) (merkletree.TreeEntry, error), precomputedDirs, dirs []string) []merkletree.TreeEntry {

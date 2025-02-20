@@ -8,7 +8,7 @@ syntax = "proto3";
 
 package ide_query;
 
-option go_package = "infra/build/siso/toolsupport/ciderutil/proto";
+option go_package = "go.chromium.org/infra/build/siso/toolsupport/ciderutil/proto";
 
 // Indicates the success/failure for analysis.
 message Status {

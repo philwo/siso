@@ -13,9 +13,9 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
-	"infra/build/siso/build"
-	"infra/build/siso/hashfs"
-	"infra/build/siso/toolsupport/ninjautil"
+	"go.chromium.org/infra/build/siso/build"
+	"go.chromium.org/infra/build/siso/hashfs"
+	"go.chromium.org/infra/build/siso/toolsupport/ninjautil"
 )
 
 func TestStepExpandLabels(t *testing.T) {

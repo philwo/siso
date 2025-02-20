@@ -12,9 +12,9 @@ import (
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
 	bpb "google.golang.org/genproto/googleapis/bytestream"
 
-	"infra/build/siso/o11y/clog"
-	"infra/build/siso/reapi/bytestreamio"
-	"infra/build/siso/reapi/digest"
+	"go.chromium.org/infra/build/siso/o11y/clog"
+	"go.chromium.org/infra/build/siso/reapi/bytestreamio"
+	"go.chromium.org/infra/build/siso/reapi/digest"
 )
 
 // CacheStore provides a thin wrapper around REAPI client that gets and uploads blobs and action results.

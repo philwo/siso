@@ -15,7 +15,7 @@ import (
 
 	"go.chromium.org/luci/common/cli"
 
-	"infra/build/siso/toolsupport/ninjautil"
+	"go.chromium.org/infra/build/siso/toolsupport/ninjautil"
 )
 
 const commandsUsage = `list all commands required to rebuild given targets

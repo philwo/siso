@@ -26,10 +26,10 @@ import (
 
 	"go.chromium.org/luci/cipd/version"
 
-	"infra/build/siso/auth/cred"
-	"infra/build/siso/o11y/clog"
-	"infra/build/siso/o11y/iometrics"
-	"infra/build/siso/reapi/digest"
+	"go.chromium.org/infra/build/siso/auth/cred"
+	"go.chromium.org/infra/build/siso/o11y/clog"
+	"go.chromium.org/infra/build/siso/o11y/iometrics"
+	"go.chromium.org/infra/build/siso/reapi/digest"
 )
 
 // Option contains options of remote exec API.

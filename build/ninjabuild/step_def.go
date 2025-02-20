@@ -23,14 +23,14 @@ import (
 	log "github.com/golang/glog"
 	"github.com/google/uuid"
 
-	"infra/build/siso/build"
-	"infra/build/siso/execute"
-	"infra/build/siso/o11y/clog"
-	"infra/build/siso/o11y/trace"
-	"infra/build/siso/toolsupport/cmdutil"
-	"infra/build/siso/toolsupport/makeutil"
-	"infra/build/siso/toolsupport/ninjautil"
-	"infra/build/siso/toolsupport/shutil"
+	"go.chromium.org/infra/build/siso/build"
+	"go.chromium.org/infra/build/siso/execute"
+	"go.chromium.org/infra/build/siso/o11y/clog"
+	"go.chromium.org/infra/build/siso/o11y/trace"
+	"go.chromium.org/infra/build/siso/toolsupport/cmdutil"
+	"go.chromium.org/infra/build/siso/toolsupport/makeutil"
+	"go.chromium.org/infra/build/siso/toolsupport/ninjautil"
+	"go.chromium.org/infra/build/siso/toolsupport/shutil"
 )
 
 // StepDef is a ninja build step definition.

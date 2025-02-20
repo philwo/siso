@@ -12,7 +12,7 @@ import (
 
 	durationpb "google.golang.org/protobuf/types/known/durationpb"
 
-	epb "infra/build/siso/execute/proto"
+	epb "go.chromium.org/infra/build/siso/execute/proto"
 )
 
 func rusage(cmd *exec.Cmd) *epb.Rusage {

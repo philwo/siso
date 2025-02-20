@@ -17,7 +17,7 @@ import (
 	"go.starlark.net/starlark"
 	"go.starlark.net/starlarkstruct"
 
-	"infra/build/siso/execute"
+	"go.chromium.org/infra/build/siso/execute"
 )
 
 // starCmdActions returns actions, which contains

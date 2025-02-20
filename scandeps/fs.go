@@ -14,8 +14,8 @@ import (
 
 	log "github.com/golang/glog"
 
-	"infra/build/siso/hashfs"
-	"infra/build/siso/o11y/clog"
+	"go.chromium.org/infra/build/siso/hashfs"
+	"go.chromium.org/infra/build/siso/o11y/clog"
 )
 
 // filesystem is mirror of hashfs to optimize for scandeps access pattern.

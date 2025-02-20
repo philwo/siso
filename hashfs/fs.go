@@ -26,14 +26,14 @@ import (
 	log "github.com/golang/glog"
 	"golang.org/x/sync/errgroup"
 
-	"infra/build/siso/hashfs/osfs"
-	pb "infra/build/siso/hashfs/proto"
-	"infra/build/siso/o11y/clog"
-	"infra/build/siso/o11y/trace"
-	"infra/build/siso/reapi/digest"
-	"infra/build/siso/reapi/merkletree"
-	"infra/build/siso/runtimex"
-	"infra/build/siso/sync/semaphore"
+	"go.chromium.org/infra/build/siso/hashfs/osfs"
+	pb "go.chromium.org/infra/build/siso/hashfs/proto"
+	"go.chromium.org/infra/build/siso/o11y/clog"
+	"go.chromium.org/infra/build/siso/o11y/trace"
+	"go.chromium.org/infra/build/siso/reapi/digest"
+	"go.chromium.org/infra/build/siso/reapi/merkletree"
+	"go.chromium.org/infra/build/siso/runtimex"
+	"go.chromium.org/infra/build/siso/sync/semaphore"
 )
 
 // Linux imposes a limit of at most 40 symlinks in any one path lookup.

@@ -19,7 +19,7 @@ import (
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
 	"google.golang.org/protobuf/proto"
 
-	"infra/build/siso/reapi/retry"
+	"go.chromium.org/infra/build/siso/reapi/retry"
 )
 
 // Empty is a digest of empty content.

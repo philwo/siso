@@ -22,11 +22,11 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 
-	"infra/build/siso/o11y/clog"
-	"infra/build/siso/o11y/iometrics"
-	"infra/build/siso/o11y/trace"
-	"infra/build/siso/reapi/digest"
-	"infra/build/siso/ui"
+	"go.chromium.org/infra/build/siso/o11y/clog"
+	"go.chromium.org/infra/build/siso/o11y/iometrics"
+	"go.chromium.org/infra/build/siso/o11y/trace"
+	"go.chromium.org/infra/build/siso/reapi/digest"
+	"go.chromium.org/infra/build/siso/ui"
 )
 
 // LocalCache implements CacheStore interface with local files.

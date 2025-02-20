@@ -13,7 +13,7 @@ import (
 	"strings"
 	"sync"
 
-	"infra/build/siso/scandeps"
+	"go.chromium.org/infra/build/siso/scandeps"
 )
 
 var (

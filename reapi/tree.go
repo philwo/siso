@@ -10,8 +10,8 @@ import (
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
 	"google.golang.org/protobuf/proto"
 
-	"infra/build/siso/o11y/clog"
-	"infra/build/siso/reapi/digest"
+	"go.chromium.org/infra/build/siso/o11y/clog"
+	"go.chromium.org/infra/build/siso/reapi/digest"
 )
 
 // FetchTree fetches trees at dirname identified by digest into digest store and returns its root directory.

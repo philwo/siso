@@ -14,8 +14,8 @@ import (
 
 	"google.golang.org/grpc/status"
 
-	"infra/build/siso/o11y/clog"
-	"infra/build/siso/o11y/trace"
+	"go.chromium.org/infra/build/siso/o11y/clog"
+	"go.chromium.org/infra/build/siso/o11y/trace"
 )
 
 // Semaphore is a semaphore.

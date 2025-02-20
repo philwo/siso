@@ -15,7 +15,7 @@ import (
 	log "github.com/golang/glog"
 	"google.golang.org/api/option"
 
-	"infra/build/siso/o11y/clog"
+	"go.chromium.org/infra/build/siso/o11y/clog"
 )
 
 // Options is options for trace exporter.

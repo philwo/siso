@@ -16,11 +16,11 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/proto"
 
-	"infra/build/siso/o11y/clog"
-	"infra/build/siso/reapi"
-	"infra/build/siso/reapi/digest"
-	"infra/build/siso/reapi/merkletree"
-	pb "infra/build/siso/toolsupport/cogutil/proto"
+	"go.chromium.org/infra/build/siso/o11y/clog"
+	"go.chromium.org/infra/build/siso/reapi"
+	"go.chromium.org/infra/build/siso/reapi/digest"
+	"go.chromium.org/infra/build/siso/reapi/merkletree"
+	pb "go.chromium.org/infra/build/siso/toolsupport/cogutil/proto"
 )
 
 // Client is cogfs client.

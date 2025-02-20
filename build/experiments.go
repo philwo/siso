@@ -13,7 +13,7 @@ import (
 
 	log "github.com/golang/glog"
 
-	"infra/build/siso/ui"
+	"go.chromium.org/infra/build/siso/ui"
 )
 
 // experiment id -> hint for the experiment (to check more details).

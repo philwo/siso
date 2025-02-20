@@ -11,7 +11,7 @@ import (
 
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
 
-	"infra/build/siso/reapi/digest"
+	"go.chromium.org/infra/build/siso/reapi/digest"
 )
 
 // CacheStore is an interface of cache store.

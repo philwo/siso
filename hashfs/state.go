@@ -29,13 +29,13 @@ import (
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/protobuf/proto"
 
-	"infra/build/siso/hashfs/osfs"
-	pb "infra/build/siso/hashfs/proto"
-	"infra/build/siso/o11y/clog"
-	"infra/build/siso/reapi/digest"
-	"infra/build/siso/runtimex"
-	"infra/build/siso/toolsupport/artfsutil"
-	"infra/build/siso/toolsupport/cogutil"
+	"go.chromium.org/infra/build/siso/hashfs/osfs"
+	pb "go.chromium.org/infra/build/siso/hashfs/proto"
+	"go.chromium.org/infra/build/siso/o11y/clog"
+	"go.chromium.org/infra/build/siso/reapi/digest"
+	"go.chromium.org/infra/build/siso/runtimex"
+	"go.chromium.org/infra/build/siso/toolsupport/artfsutil"
+	"go.chromium.org/infra/build/siso/toolsupport/cogutil"
 )
 
 const defaultStateFile = ".siso_fs_state"

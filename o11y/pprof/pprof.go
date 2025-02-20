@@ -16,7 +16,7 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	pb "infra/build/siso/o11y/pprof/proto"
+	pb "go.chromium.org/infra/build/siso/o11y/pprof/proto"
 )
 
 // Profile is a profile entry.

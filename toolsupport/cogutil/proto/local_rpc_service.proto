@@ -8,7 +8,7 @@ edition = "2023";
 
 package devtools_srcfs;
 
-option go_package = "infra/build/siso/toolsupport/cogutil/proto";
+option go_package = "go.chromium.org/infra/build/siso/toolsupport/cogutil/proto";
 option features.utf8_validation = NONE;
 
 service CogLocalRpcService {

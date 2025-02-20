@@ -16,9 +16,9 @@ import (
 	"testing"
 	"time"
 
-	"infra/build/siso/build"
-	"infra/build/siso/hashfs"
-	pb "infra/build/siso/hashfs/proto"
+	"go.chromium.org/infra/build/siso/build"
+	"go.chromium.org/infra/build/siso/hashfs"
+	pb "go.chromium.org/infra/build/siso/hashfs/proto"
 )
 
 func TestBuild_Copy(t *testing.T) {

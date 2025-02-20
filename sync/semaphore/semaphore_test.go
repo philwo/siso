@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"infra/build/siso/sync/semaphore"
+	"go.chromium.org/infra/build/siso/sync/semaphore"
 )
 
 func TestWaitAcquire(t *testing.T) {

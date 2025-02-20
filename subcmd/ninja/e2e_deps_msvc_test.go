@@ -16,11 +16,11 @@ import (
 	cpb "github.com/bazelbuild/remote-apis-sdks/go/api/command"
 	"github.com/google/go-cmp/cmp"
 
-	"infra/build/siso/build"
-	"infra/build/siso/execute/reproxyexec/reproxytest"
-	"infra/build/siso/hashfs"
-	"infra/build/siso/reapi"
-	"infra/build/siso/toolsupport/ninjautil"
+	"go.chromium.org/infra/build/siso/build"
+	"go.chromium.org/infra/build/siso/execute/reproxyexec/reproxytest"
+	"go.chromium.org/infra/build/siso/hashfs"
+	"go.chromium.org/infra/build/siso/reapi"
+	"go.chromium.org/infra/build/siso/toolsupport/ninjautil"
 )
 
 func TestBuild_DepsMSVC(t *testing.T) {

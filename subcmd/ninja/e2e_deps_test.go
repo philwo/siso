@@ -15,11 +15,11 @@ import (
 
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
 
-	"infra/build/siso/build"
-	"infra/build/siso/hashfs"
-	"infra/build/siso/reapi/reapitest"
-	"infra/build/siso/toolsupport/makeutil"
-	"infra/build/siso/toolsupport/ninjautil"
+	"go.chromium.org/infra/build/siso/build"
+	"go.chromium.org/infra/build/siso/hashfs"
+	"go.chromium.org/infra/build/siso/reapi/reapitest"
+	"go.chromium.org/infra/build/siso/toolsupport/makeutil"
+	"go.chromium.org/infra/build/siso/toolsupport/ninjautil"
 )
 
 func TestBuild_Deps_Incremental(t *testing.T) {

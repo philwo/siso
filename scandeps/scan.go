@@ -16,7 +16,7 @@ import (
 
 	log "github.com/golang/glog"
 
-	"infra/build/siso/o11y/clog"
+	"go.chromium.org/infra/build/siso/o11y/clog"
 )
 
 // scanner is a C++ dependency scanner per request.

@@ -16,11 +16,11 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/testing/protocmp"
 
-	"infra/build/siso/hashfs"
-	fspb "infra/build/siso/hashfs/proto"
-	"infra/build/siso/reapi/digest"
-	pb "infra/build/siso/toolsupport/ciderutil/proto"
-	"infra/build/siso/toolsupport/ninjautil"
+	"go.chromium.org/infra/build/siso/hashfs"
+	fspb "go.chromium.org/infra/build/siso/hashfs/proto"
+	"go.chromium.org/infra/build/siso/reapi/digest"
+	pb "go.chromium.org/infra/build/siso/toolsupport/ciderutil/proto"
+	"go.chromium.org/infra/build/siso/toolsupport/ninjautil"
 )
 
 func TestIDEAnalysis(t *testing.T) {

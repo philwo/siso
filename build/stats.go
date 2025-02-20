@@ -8,7 +8,7 @@ import (
 	"context"
 	"sync"
 
-	"infra/build/siso/o11y/clog"
+	"go.chromium.org/infra/build/siso/o11y/clog"
 )
 
 type stats struct {

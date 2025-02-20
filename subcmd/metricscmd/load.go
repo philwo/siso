@@ -11,7 +11,7 @@ import (
 	"io"
 	"os"
 
-	"infra/build/siso/build"
+	"go.chromium.org/infra/build/siso/build"
 )
 
 func loadMetrics(ctx context.Context, fname string) ([]build.StepMetric, error) {

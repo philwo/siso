@@ -17,10 +17,10 @@ import (
 
 	log "github.com/golang/glog"
 
-	"infra/build/siso/execute"
-	"infra/build/siso/o11y/clog"
-	"infra/build/siso/o11y/trace"
-	"infra/build/siso/toolsupport/makeutil"
+	"go.chromium.org/infra/build/siso/execute"
+	"go.chromium.org/infra/build/siso/o11y/clog"
+	"go.chromium.org/infra/build/siso/o11y/trace"
+	"go.chromium.org/infra/build/siso/toolsupport/makeutil"
 )
 
 type depsProcessor interface {

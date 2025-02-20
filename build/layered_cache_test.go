@@ -12,8 +12,8 @@ import (
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
 	"google.golang.org/protobuf/proto"
 
-	"infra/build/siso/build/cachestore"
-	"infra/build/siso/reapi/digest"
+	"go.chromium.org/infra/build/siso/build/cachestore"
+	"go.chromium.org/infra/build/siso/reapi/digest"
 )
 
 const FirstOnly = "firstonly"

@@ -17,11 +17,11 @@ import (
 	"sync"
 	"time"
 
-	"infra/build/siso/build/metadata"
-	"infra/build/siso/o11y/clog"
-	"infra/build/siso/o11y/iometrics"
-	"infra/build/siso/o11y/trace"
-	"infra/build/siso/sync/semaphore"
+	"go.chromium.org/infra/build/siso/build/metadata"
+	"go.chromium.org/infra/build/siso/o11y/clog"
+	"go.chromium.org/infra/build/siso/o11y/iometrics"
+	"go.chromium.org/infra/build/siso/o11y/trace"
+	"go.chromium.org/infra/build/siso/sync/semaphore"
 )
 
 type traceEvents struct {

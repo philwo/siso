@@ -10,10 +10,10 @@ import (
 	"os"
 	"strings"
 
-	"infra/build/siso/build/metadata"
-	"infra/build/siso/o11y/clog"
-	"infra/build/siso/o11y/pprof"
-	"infra/build/siso/o11y/trace"
+	"go.chromium.org/infra/build/siso/build/metadata"
+	"go.chromium.org/infra/build/siso/o11y/clog"
+	"go.chromium.org/infra/build/siso/o11y/pprof"
+	"go.chromium.org/infra/build/siso/o11y/trace"
 )
 
 type tracePprof struct {

@@ -22,13 +22,13 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"infra/build/siso/execute"
-	epb "infra/build/siso/execute/proto"
-	"infra/build/siso/o11y/clog"
-	"infra/build/siso/runtimex"
-	"infra/build/siso/sync/semaphore"
-	"infra/build/siso/toolsupport/straceutil"
-	"infra/build/siso/ui"
+	"go.chromium.org/infra/build/siso/execute"
+	epb "go.chromium.org/infra/build/siso/execute/proto"
+	"go.chromium.org/infra/build/siso/o11y/clog"
+	"go.chromium.org/infra/build/siso/runtimex"
+	"go.chromium.org/infra/build/siso/sync/semaphore"
+	"go.chromium.org/infra/build/siso/toolsupport/straceutil"
+	"go.chromium.org/infra/build/siso/ui"
 )
 
 // TODO(b/270886586): Compare local execution with/without local execution server.

@@ -9,8 +9,8 @@ import (
 	"errors"
 	"testing"
 
-	"infra/build/siso/execute"
-	"infra/build/siso/ui"
+	"go.chromium.org/infra/build/siso/execute"
+	"go.chromium.org/infra/build/siso/ui"
 )
 
 func TestCmdOutput(t *testing.T) {

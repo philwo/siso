@@ -13,11 +13,11 @@ import (
 	"testing"
 	"time"
 
-	"infra/build/siso/build"
-	"infra/build/siso/build/buildconfig"
-	"infra/build/siso/build/ninjabuild"
-	"infra/build/siso/hashfs"
-	"infra/build/siso/toolsupport/ninjautil"
+	"go.chromium.org/infra/build/siso/build"
+	"go.chromium.org/infra/build/siso/build/buildconfig"
+	"go.chromium.org/infra/build/siso/build/ninjabuild"
+	"go.chromium.org/infra/build/siso/hashfs"
+	"go.chromium.org/infra/build/siso/toolsupport/ninjautil"
 )
 
 func setupFiles(t *testing.T, dir, name string, deletes []string) {

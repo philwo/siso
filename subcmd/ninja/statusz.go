@@ -12,8 +12,8 @@ import (
 	"net/http"
 	"os"
 
-	"infra/build/siso/build"
-	"infra/build/siso/o11y/clog"
+	"go.chromium.org/infra/build/siso/build"
+	"go.chromium.org/infra/build/siso/o11y/clog"
 )
 
 func newStatuszServer(ctx context.Context, b *build.Builder) error {

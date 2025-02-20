@@ -9,7 +9,7 @@ import (
 	"io/fs"
 	"os"
 
-	pb "infra/build/siso/hashfs/proto"
+	pb "go.chromium.org/infra/build/siso/hashfs/proto"
 )
 
 // FSMonitor provides a way to access file info on the disk for the entry.

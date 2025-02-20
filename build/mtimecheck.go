@@ -14,8 +14,8 @@ import (
 
 	log "github.com/golang/glog"
 
-	"infra/build/siso/o11y/clog"
-	"infra/build/siso/o11y/trace"
+	"go.chromium.org/infra/build/siso/o11y/clog"
+	"go.chromium.org/infra/build/siso/o11y/trace"
 )
 
 type phonyState struct {

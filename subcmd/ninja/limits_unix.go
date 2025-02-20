@@ -12,9 +12,9 @@ import (
 
 	"golang.org/x/sys/unix"
 
-	"infra/build/siso/build"
-	"infra/build/siso/o11y/clog"
-	"infra/build/siso/ui"
+	"go.chromium.org/infra/build/siso/build"
+	"go.chromium.org/infra/build/siso/o11y/clog"
+	"go.chromium.org/infra/build/siso/ui"
 )
 
 func (c *ninjaCmdRun) checkResourceLimits(ctx context.Context) {

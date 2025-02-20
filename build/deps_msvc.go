@@ -17,12 +17,12 @@ import (
 
 	log "github.com/golang/glog"
 
-	"infra/build/siso/execute"
-	"infra/build/siso/o11y/clog"
-	"infra/build/siso/o11y/trace"
-	"infra/build/siso/reapi/merkletree"
-	"infra/build/siso/scandeps"
-	"infra/build/siso/toolsupport/msvcutil"
+	"go.chromium.org/infra/build/siso/execute"
+	"go.chromium.org/infra/build/siso/o11y/clog"
+	"go.chromium.org/infra/build/siso/o11y/trace"
+	"go.chromium.org/infra/build/siso/reapi/merkletree"
+	"go.chromium.org/infra/build/siso/scandeps"
+	"go.chromium.org/infra/build/siso/toolsupport/msvcutil"
 )
 
 type depsMSVC struct {

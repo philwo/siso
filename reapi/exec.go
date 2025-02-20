@@ -22,7 +22,7 @@ import (
 
 	"go.chromium.org/luci/common/retry"
 
-	"infra/build/siso/o11y/clog"
+	"go.chromium.org/infra/build/siso/o11y/clog"
 )
 
 // ErrBadPlatformContainerImage is an error if the request used bad platform container image.

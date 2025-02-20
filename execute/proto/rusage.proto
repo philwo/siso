@@ -8,7 +8,7 @@ package siso.execute;
 
 import "google/protobuf/duration.proto";
 
-option go_package = "infra/build/siso/execute/proto";
+option go_package = "go.chromium.org/infra/build/siso/execute/proto";
 
 // resource usage of command execution to be stored
 // in ActionResult.execution_metadata.auxiliary_metatada.

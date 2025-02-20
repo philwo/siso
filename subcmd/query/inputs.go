@@ -16,8 +16,8 @@ import (
 
 	"go.chromium.org/luci/common/cli"
 
-	"infra/build/siso/o11y/clog"
-	"infra/build/siso/toolsupport/ninjautil"
+	"go.chromium.org/infra/build/siso/o11y/clog"
+	"go.chromium.org/infra/build/siso/toolsupport/ninjautil"
 )
 
 const inputsUsage = `list all inputs required to rebuild given targets
