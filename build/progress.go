@@ -319,7 +319,7 @@ func (p *progress) step(ctx context.Context, b *Builder, step *Step, s string) {
 			if ui.IsTerminal() {
 				// 2 more lines, so outputResult won't
 				// be overwritten by next progress report.
-				lines = append(lines, "\n"+outputResult+"\n", "", "")
+				lines = append(lines, "\n"+outputResult+"\n", "\n", "\n")
 			} else {
 				lines = append(lines, outputResult+"\n")
 			}
