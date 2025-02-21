@@ -213,7 +213,7 @@ type Cmd struct {
 	Console bool
 
 	// ConsoleOut indicates the command outputs to the console.
-	ConsoleOut atomic.Bool
+	ConsoleOut *atomic.Bool
 
 	// outfiles is outputs of the step in build graph.
 	// These outputs will be recorded with cmdhash.

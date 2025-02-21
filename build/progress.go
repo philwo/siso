@@ -69,6 +69,7 @@ func (p *progress) start(ctx context.Context, b *Builder) {
 func (p *progress) startConsoleCmd(cmd *execute.Cmd) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	cmd.ConsoleOut = new(atomic.Bool)
 	p.consoleCmd = cmd
 }
 
@@ -112,7 +113,7 @@ func (p *progress) update(ctx context.Context, b *Builder) {
 					s.step.addWeightedDuration(wd)
 				}
 			}
-			consoleOut := p.consoleCmd != nil && p.consoleCmd.ConsoleOut.Load()
+			consoleOut := p.consoleCmd != nil && p.consoleCmd.ConsoleOut != nil && p.consoleCmd.ConsoleOut.Load()
 			p.mu.Unlock()
 			if !ui.IsTerminal() || b.verbose || consoleOut {
 				continue
