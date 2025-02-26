@@ -1895,8 +1895,7 @@ type pathElements struct {
 
 func (d *directory) lookup(ctx context.Context, fname string) (*entry, *directory, bool) {
 	// expect d.isRoot == true
-	var i int
-	for i = 0; i < maxSymlinks; i++ {
+	for range maxSymlinks {
 		e, dir, resolved, ok := d.lookupEntry(ctx, fname)
 		if e != nil || dir != nil {
 			return e, dir, ok
@@ -1950,8 +1949,7 @@ func (d *directory) lookupEntry(ctx context.Context, fname string) (*entry, *dir
 var errRootSymlink = errors.New("symlink resolved from root")
 
 func (d *directory) store(ctx context.Context, fname string, e *entry) (*entry, error) {
-	var i int
-	for i = 0; i < maxSymlinks; i++ {
+	for range maxSymlinks {
 		ent, resolved, err := d.storeEntry(ctx, fname, e)
 		if resolved != "" {
 			if !d.isRoot {
@@ -2123,8 +2121,7 @@ func (d *directory) storeEntry(ctx context.Context, fname string, e *entry) (*en
 // resolveNextDir returns directory if resolved `elem` is directory.
 // resolveNextDir returns resolved path name as string if resolved `elem` is symlink.
 func resolveNextDir(ctx context.Context, d *directory, next func(context.Context, *directory, pathElements, string) (*directory, string, bool), pe pathElements, elem, rest string) (*directory, string, bool) {
-	var i int
-	for i = 0; i < maxSymlinks; i++ {
+	for i := range maxSymlinks {
 		nextDir, target, ok := next(ctx, d, pe, elem)
 		if target != "" {
 			if len(pe.elems) != pe.n {

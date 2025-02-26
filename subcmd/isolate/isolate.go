@@ -350,8 +350,8 @@ func upload(ctx context.Context, execRoot, buildDir string, hashFS *hashfs.HashF
 	}
 	ds := digest.NewStore()
 	tree := merkletree.New(ds)
-	for i := 0; i < len(fnames); i++ {
-		pathname := filepath.ToSlash(filepath.Join(buildDir, fnames[i]))
+	for _, fname := range fnames {
+		pathname := filepath.ToSlash(filepath.Join(buildDir, fname))
 		// To match with the implementation of `isolate` command,
 		// exclude only *.pyc file, while keeping an empty __pycache__/ dir.
 		if strings.HasSuffix(pathname, ".pyc") {
