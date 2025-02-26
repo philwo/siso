@@ -285,11 +285,11 @@ func parseFlagsFully(flagSet *flag.FlagSet) error {
 		if len(args) == 0 {
 			break
 		}
-		var i int
-		for i = 0; i < len(args); i++ {
-			arg := args[i]
+		argsRemaining := len(args)
+		for i, arg := range args {
 			if !strings.HasPrefix(arg, "-") {
 				targets = append(targets, arg)
+				argsRemaining--
 				continue
 			}
 			err := flagSet.Parse(args[i:])
@@ -298,7 +298,7 @@ func parseFlagsFully(flagSet *flag.FlagSet) error {
 			}
 			break
 		}
-		if i == len(args) {
+		if argsRemaining == 0 {
 			break
 		}
 	}
