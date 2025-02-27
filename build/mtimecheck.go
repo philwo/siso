@@ -19,19 +19,19 @@ import (
 )
 
 type phonyState struct {
-	dirty bool
-	mtime time.Time
+	dirtyErr error
+	mtime    time.Time
 }
 
 // needToRun checks whether step needs to run or not.
 func (b *Builder) needToRun(ctx context.Context, stepDef StepDef, outputs []Target) bool {
 	if stepDef.IsPhony() {
-		dirty := false
+		var dirtyErr error
 		_, mtime, err := inputMtime(ctx, b, stepDef)
 
 		if errors.Is(err, errDirty) {
 			// if phony's inputs are dirty, mark this phony's output as dirty.
-			dirty = true
+			dirtyErr = err
 		}
 		for _, out := range outputs {
 			outpath, err := b.graph.TargetPath(ctx, out)
@@ -40,10 +40,10 @@ func (b *Builder) needToRun(ctx context.Context, stepDef StepDef, outputs []Targ
 				continue
 			}
 			b.phony.Store(outpath, phonyState{
-				dirty: dirty,
-				mtime: mtime,
+				dirtyErr: dirtyErr,
+				mtime:    mtime,
 			})
-			clog.Infof(ctx, "phony output %s dirty=%t mtime=%v", outpath, dirty, mtime)
+			clog.Infof(ctx, "phony output %s dirty=%v mtime=%v", outpath, dirtyErr, mtime)
 		}
 		// nothing to run for phony target.
 		return false
@@ -247,8 +247,8 @@ func inputMtime(ctx context.Context, b *Builder, stepDef StepDef) (string, time.
 				retErr = fmt.Errorf("unexpected value in dirtyPhony for %s: %T", in, v)
 				return false
 			}
-			if ps.dirty {
-				retErr = fmt.Errorf("input %s (phony): %w", in, errDirty)
+			if ps.dirtyErr != nil {
+				retErr = fmt.Errorf("input %s (phony): %w", in, ps.dirtyErr)
 				return false
 			}
 			mtime = ps.mtime
