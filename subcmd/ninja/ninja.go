@@ -988,9 +988,9 @@ func runNinja(ctx context.Context, fname string, graph *ninjabuild.Graph, bopts 
 				}
 				nopts.checkFailedTargets = false
 				if err != nil {
-					ui.Default.PrintLines(fmt.Sprintf(" %s: %s: %v\n", ui.SGR(ui.Yellow, "err in last failed targets, rebuild again"), failedTargets, err))
+					ui.Default.PrintLines(fmt.Sprintf(" %s: %s: %v\n\n", ui.SGR(ui.Yellow, "err in last failed targets, rebuild again"), failedTargets, err))
 				} else {
-					ui.Default.PrintLines(fmt.Sprintf(" %s: %s\n", ui.SGR(ui.Green, "last failed targets fixed"), failedTargets))
+					ui.Default.PrintLines(fmt.Sprintf(" %s: %s\n\n", ui.SGR(ui.Green, "last failed targets fixed"), failedTargets))
 				}
 				err = graph.Reset(ctx)
 				if err != nil {
