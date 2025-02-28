@@ -87,11 +87,11 @@ func (re *RemoteExec) Run(ctx context.Context, cmd *execute.Cmd) error {
 		clog.Warningf(ctx, "digest: %s, err: %v", actionDigest, err)
 	}
 	result := resp.GetResult()
-	re.recordExecuteMetadata(ctx, cmd, result, resp.GetCachedResult(), span)
-	return re.processResult(ctx, actionDigest, cmd, result, resp.GetCachedResult(), err)
+	re.recordExecuteMetadata(ctx, result, resp.GetCachedResult(), span)
+	return re.processResult(ctx, cmd, result, resp.GetCachedResult(), err)
 }
 
-func (re *RemoteExec) recordExecuteMetadata(ctx context.Context, cmd *execute.Cmd, result *rpb.ActionResult, cached bool, span *trace.Span) {
+func (re *RemoteExec) recordExecuteMetadata(ctx context.Context, result *rpb.ActionResult, cached bool, span *trace.Span) {
 	md := result.GetExecutionMetadata()
 	queue := trace.SpanData{
 		Name:  "rbe:queue",
@@ -158,7 +158,7 @@ func (re *RemoteExec) recordExecuteMetadata(ctx context.Context, cmd *execute.Cm
 	}
 }
 
-func (re *RemoteExec) processResult(ctx context.Context, action digest.Digest, cmd *execute.Cmd, result *rpb.ActionResult, cached bool, err error) error {
+func (re *RemoteExec) processResult(ctx context.Context, cmd *execute.Cmd, result *rpb.ActionResult, cached bool, err error) error {
 	if result.GetExitCode() == 0 && err == nil {
 		clog.Infof(ctx, "exit=%d cache=%t", result.GetExitCode(), cached)
 	} else {
