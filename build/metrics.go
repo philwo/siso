@@ -116,9 +116,18 @@ type StepMetric struct {
 	// ExecStartTime is set if the action was not cached, containing the time
 	// measured when the execution strategy started the process.
 	ExecStartTime IntervalMetric `json:"exec_start,omitempty"`
+	// InputFetchTime is the time spent on downloading action inputs to the remote
+	// worker.
+	// It is set only when using remoteexec strategy and no cache.
+	// TODO: Measure input fetch time for localexec.
+	InputFetchTime IntervalMetric `json:"input_fetch,omitempty"`
 	// ExecTime is the time measured from the execution strategy starting
 	// the process until the process exited.
 	ExecTime IntervalMetric `json:"exec,omitempty"`
+	// OutputUploadTime is the time spent on uploading action outputs from
+	// the remote worker.
+	// It is set only when using remoteexec strategy and no cache.
+	OutputUploadTime IntervalMetric `json:"output_upload,omitempty"`
 	// ActionEndTime is the time it took since build start until
 	// the action completes.
 	ActionEndTime IntervalMetric `json:"action_end,omitempty"`
@@ -164,6 +173,8 @@ func (m *StepMetric) done(ctx context.Context, step *Step, buildStart time.Time)
 	if !m.Cached {
 		m.QueueTime = IntervalMetric(md.GetWorkerStartTimestamp().AsTime().Sub(md.GetQueuedTimestamp().AsTime()))
 		m.ExecStartTime = IntervalMetric(md.GetExecutionStartTimestamp().AsTime().Sub(buildStart))
+		m.InputFetchTime = IntervalMetric(md.GetInputFetchCompletedTimestamp().AsTime().Sub(md.GetInputFetchStartTimestamp().AsTime()))
+		m.OutputUploadTime = IntervalMetric(md.GetOutputUploadCompletedTimestamp().AsTime().Sub(md.GetOutputUploadStartTimestamp().AsTime()))
 	}
 	m.ExecTime = IntervalMetric(md.GetExecutionCompletedTimestamp().AsTime().Sub(md.GetExecutionStartTimestamp().AsTime()))
 	for _, any := range md.GetAuxiliaryMetadata() {

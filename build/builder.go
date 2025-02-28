@@ -928,6 +928,12 @@ func stepLogEntry(ctx context.Context, logger *clog.Logger, step *Step, duration
 	if step.metrics.MaxRSS > 0 {
 		logEntry.Labels["max_rss"] = strconv.FormatInt(step.metrics.MaxRSS, 10)
 	}
+	if step.metrics.InputFetchTime > 0 {
+		logEntry.Labels["input_fetch_secs"] = fmt.Sprintf("%.02f", time.Duration(step.metrics.InputFetchTime).Seconds())
+	}
+	if step.metrics.OutputUploadTime > 0 {
+		logEntry.Labels["output_upload_secs"] = fmt.Sprintf("%.02f", time.Duration(step.metrics.OutputUploadTime).Seconds())
+	}
 	// TODO: record more useful metrics
 	logger.Log(logEntry)
 }
