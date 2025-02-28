@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 
 	log "github.com/golang/glog"
 
@@ -133,10 +134,50 @@ func (fsys *filesystem) ReadDir(ctx context.Context, execRoot, dname string) (*s
 	dc := dv.(*dircache)
 	if !loaded {
 		go func() {
-			dents, err := fsys.hashfs.ReadDir(ctx, execRoot, dname)
+			if log.V(1) {
+				clog.Infof(ctx, "fsys readdir %s", dname)
+			}
+			symlinkErr := fmt.Errorf("readdir %s: %w", dname, syscall.ELOOP)
+			const maxSymlinks = 40
+			var dents []hashfs.DirEntry
+			var err error
+			for range maxSymlinks {
+				dents, err = fsys.hashfs.ReadDir(ctx, execRoot, dname)
+				if err == nil {
+					break
+				}
+				// may be symlink?
+				fi, serr := fsys.hashfs.Stat(ctx, execRoot, dname)
+				if serr != nil {
+					clog.Warningf(ctx, "stat %s: %v", dname, serr)
+					break
+				}
+				if fi.Target() == "" {
+					clog.Warningf(ctx, "not symlink? %s", dname)
+					break
+				}
+				target := filepath.Join(filepath.Dir(dname), fi.Target())
+				// target may escape exec root.
+				if !filepath.IsLocal(target) {
+					dname = filepath.Join(execRoot, target)
+					execRoot = ""
+				}
+				clog.Infof(ctx, "symlink dir: %s -> %s", dname, target)
+				err = symlinkErr
+			}
 			dc.err = err
 			for _, de := range dents {
+				if log.V(1) {
+					clog.Infof(ctx, "dirent %q %q", fullpath, de.Name())
+				}
 				dc.m.Store(fsys.pathIntern(de.Name()), true)
+			}
+			dname = fullpath
+			for !strings.HasSuffix(dname, "/") {
+				if fsys.markDirExists(dname) {
+					break
+				}
+				dname = filepath.ToSlash(filepath.Dir(dname))
 			}
 			close(dc.ready)
 		}()

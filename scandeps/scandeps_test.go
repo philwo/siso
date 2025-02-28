@@ -425,3 +425,87 @@ func TestScanDeps_AbsPath(t *testing.T) {
 		t.Errorf("scandeps diff -want +got:\n%s", diff)
 	}
 }
+
+func TestScanDeps_SymlinkDir(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+
+	for fname, content := range map[string]string{
+		"x/logging.cc": `
+#include "base/logging.h"
+`,
+		"src/base/logging.h": `
+#ifndef BASE_LOGGING_H_
+#define BASE_LOGGING_H_
+
+#include <stddef.h>
+
+#endif
+`,
+	} {
+		fname := filepath.Join(dir, fname)
+		err := os.MkdirAll(filepath.Dir(fname), 0755)
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = os.WriteFile(fname, []byte(content), 0644)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	err := os.Symlink("../x", filepath.Join(dir, "src/symlink_to_code"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	inputDeps := map[string][]string{
+		"build/linux/debian_bullseye_amd64-sysroot:headers": {
+			"build/linux/debian_bullseye_amd64-sysroot/usr/include/unistd.h",
+		},
+		"build/third_party/libc++/trunk/include:headers": {
+			"build/third_party/libc++/trunk/include/__config",
+			"build/third_party/libc++/trunk/include/atomic",
+			"build/third_party/libc++/trunk/include/string",
+			"build/third_party/libc++/trunk/include/vector",
+		},
+		"build/third_party/libc++:headers": {
+			"build/third_party/libc++/trunk/__config_site",
+			"build/third_party/libc++/trunk/include:headers",
+		},
+	}
+
+	hashFS, err := hashfs.New(ctx, hashfs.Option{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	scanDeps := New(hashFS, inputDeps)
+
+	req := Request{
+		Sources: []string{
+			"symlink_to_code/logging.cc",
+		},
+		Dirs: []string{
+			"",
+			"build/third_party/libc++",
+			"build/third_party/libc++/trunk/include",
+		},
+		Sysroots: []string{
+			"build/linux/debian_bullseye_amd64-sysroot",
+		},
+	}
+
+	got, err := scanDeps.Scan(ctx, filepath.Join(dir, "src"), req)
+	if err != nil {
+		t.Errorf("scandeps()=%v, %v; want nil err", got, err)
+	}
+
+	want := []string{
+		"base",
+		"base/logging.h",
+		"symlink_to_code",
+		"symlink_to_code/logging.cc",
+	}
+	if diff := cmp.Diff(want, got, cmpopts.SortSlices(func(a, b string) bool { return a < b })); diff != "" {
+		t.Errorf("scandeps diff -want +got:\n%s", diff)
+	}
+}

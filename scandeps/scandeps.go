@@ -161,5 +161,8 @@ func (s *ScanDeps) Scan(ctx context.Context, execRoot string, req Request) ([]st
 		}
 	}
 	results := scanner.results()
+	if log.V(1) {
+		clog.Infof(ctx, "results=%q", results)
+	}
 	return results, nil
 }

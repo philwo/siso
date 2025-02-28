@@ -162,6 +162,9 @@ func (fv *fsview) get(ctx context.Context, dir, name string) (string, *scanResul
 	}
 	incpath = fv.fs.pathIntern(incpath)
 	sr, err := fv.scanFile(ctx, incpath)
+	if log.V(1) {
+		clog.Infof(ctx, "scanFile %q %v: %v", incpath, sr, err)
+	}
 	if err != nil {
 		fv.visited[incpath] = false
 		return "", nil, err
@@ -184,6 +187,9 @@ func (fv *fsview) scanFile(ctx context.Context, fname string) (*scanResult, erro
 	defer span.Close(nil)
 
 	buf, err := fv.fs.hashfs.ReadFile(ctx, fv.execRoot, fname)
+	if log.V(1) {
+		clog.Infof(ctx, "scanFile readfile: %s %v", fname, err)
+	}
 	if err != nil {
 		return sr, sr.err
 	}
@@ -215,6 +221,9 @@ func (fv *fsview) scanFile(ctx context.Context, fname string) (*scanResult, erro
 func (fv *fsview) scanResult(ctx context.Context, incpath string) (*scanResult, error) {
 	sr, ok := fv.getFile(incpath)
 	if ok {
+		if log.V(1) {
+			clog.Infof(ctx, "scanResult getFile %q %v", incpath, sr)
+		}
 		if sr == nil {
 			return nil, fs.ErrNotExist
 		}
@@ -247,6 +256,9 @@ func (fv *fsview) scanResult(ctx context.Context, incpath string) (*scanResult, 
 		fv.setDir(dirname, true)
 	}
 	fi, err := fv.fs.hashfs.Stat(ctx, fv.execRoot, incpath)
+	if log.V(1) {
+		clog.Infof(ctx, "scanResult stat %q: %v", incpath, err)
+	}
 	if err != nil {
 		fv.setFile(incpath, nil)
 		return nil, fs.ErrNotExist
