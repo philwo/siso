@@ -132,11 +132,12 @@ func (c *Client) Get(ctx context.Context, d digest.Digest, name string) ([]byte,
 	if d.SizeBytes < bytestreamReadThreshold {
 		return c.getWithBatchReadBlobs(ctx, d, name)
 	}
-	return c.getWithByteStream(ctx, d)
+	return c.getWithByteStream(ctx, d, name)
 }
 
 // getWithBatchReadBlobs fetches the content of blob using BatchReadBlobs rpc of CAS.
 func (c *Client) getWithBatchReadBlobs(ctx context.Context, d digest.Digest, name string) ([]byte, error) {
+	started := time.Now()
 	casClient := rpb.NewContentAddressableStorageClient(c.conn)
 	var resp *rpb.BatchReadBlobsResponse
 	err := retry.Do(ctx, func() error {
@@ -149,21 +150,22 @@ func (c *Client) getWithBatchReadBlobs(ctx context.Context, d digest.Digest, nam
 	})
 	if err != nil {
 		c.m.ReadDone(0, err)
-		return nil, fmt.Errorf("failed to read blobs %s for %s: %w", d, name, err)
+		return nil, fmt.Errorf("failed to read blobs %s for %s in %s: %w", d, name, time.Since(started), err)
 	}
 	if len(resp.Responses) != 1 {
 		c.m.ReadDone(0, err)
-		return nil, fmt.Errorf("failed to read blobs %s for %s: responses=%d", d, name, len(resp.Responses))
+		return nil, fmt.Errorf("failed to read blobs %s for %s in %s: responses=%d", d, name, time.Since(started), len(resp.Responses))
 	}
 	c.m.ReadDone(len(resp.Responses[0].Data), err)
 	if int64(len(resp.Responses[0].Data)) != d.SizeBytes {
-		return nil, fmt.Errorf("failed to read blobs %s for %s: size mismatch got=%d", d, name, len(resp.Responses[0].Data))
+		return nil, fmt.Errorf("failed to read blobs %s for %s in %s: size mismatch got=%d", d, name, time.Since(started), len(resp.Responses[0].Data))
 	}
 	return resp.Responses[0].Data, nil
 }
 
 // getWithByteStream fetches the content of blob using the ByteStream API
-func (c *Client) getWithByteStream(ctx context.Context, d digest.Digest) ([]byte, error) {
+func (c *Client) getWithByteStream(ctx context.Context, d digest.Digest, name string) ([]byte, error) {
+	started := time.Now()
 	resourceName := c.resourceName(d)
 	if log.V(1) {
 		clog.Infof(ctx, "get %s", resourceName)
@@ -191,7 +193,10 @@ func (c *Client) getWithByteStream(ctx context.Context, d digest.Digest) ([]byte
 		}
 		return nil
 	})
-	return buf, err
+	if err != nil {
+		return buf, fmt.Errorf("failed to read stream %s for %s in %s: %w", d, name, time.Since(started), err)
+	}
+	return buf, nil
 }
 
 // Missing returns digests of missing blobs.
