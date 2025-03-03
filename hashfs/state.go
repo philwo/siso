@@ -70,8 +70,6 @@ type Option struct {
 	Ignore      IgnoreFunc
 	CogFS       *cogutil.Client
 	ArtFS       *artfsutil.Client
-
-	SetStateLogger io.Writer // capture SetState log for test
 }
 
 // RegisterFlags registers flags for the option.
@@ -231,11 +229,6 @@ func fromDigest(d digest.Digest) *pb.Digest {
 // SetState sets states to the HashFS.
 func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 	start := time.Now()
-	logw := hfs.opt.SetStateLogger
-	if logw != nil {
-		fmt.Fprintf(logw, "hashfs.SetState\n")
-		defer fmt.Fprintf(logw, "hashfs.SetState done\n")
-	}
 	var fsm FileInfoer = osfsInfoer{}
 	if hfs.opt.FSMonitor != nil && state.LastChecked != "" {
 		f, err := hfs.opt.FSMonitor.Scan(ctx, state.LastChecked)
@@ -243,9 +236,6 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 			clog.Warningf(ctx, "failed to fsmonitor scan %q: %v", state.LastChecked, err)
 		} else {
 			clog.Infof(ctx, "use fsmonitor scan %q", state.LastChecked)
-			if logw != nil {
-				fmt.Fprintf(logw, "use fsmonitor scan %q\n", state.LastChecked)
-			}
 			fsm = f
 		}
 	}
@@ -278,55 +268,40 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 			}
 			ent.Name = filepath.ToSlash(ent.Name)
 			if hfs.opt.Ignore(ctx, ent.Name) {
-				clog.Infof(ctx, "ignore %q", ent.Name)
-				if logw != nil {
-					fmt.Fprintf(logw, "ignore %q\n", ent.Name)
-				}
+				clog.Infof(ctx, "ignore %s", ent.Name)
 				return nil
 			}
 			fi, err := fsm.FileInfo(ctx, ent)
 			if errors.Is(err, fs.ErrNotExist) {
 				if log.V(1) {
-					clog.Infof(gctx, "not exist %q", ent.Name)
+					clog.Infof(gctx, "not exist %s", ent.Name)
 				}
 				nnotexist.Add(1)
 				if len(h) == 0 {
-					clog.Infof(gctx, "not exist with no cmdhash: %q", ent.Name)
-					if logw != nil {
-						fmt.Fprintf(logw, "not exist with no cmd hash: %q\n", ent.Name)
-					}
+					clog.Infof(gctx, "not exist with no cmdhash: %s", ent.Name)
 					return nil
 				}
 				if outputLocal(ctx, ent.Name) {
 					// command output file that is needed on the disk doesn't exist on the disk.
 					// need to forget to trigger steps for the output. b/298523549
-					clog.Warningf(gctx, "not exist output-needed file: %q", ent.Name)
-					if logw != nil {
-						fmt.Fprintf(logw, "not exist output-needed file: %q\n", ent.Name)
-					}
+					clog.Warningf(gctx, "not exist output-needed file: %s", ent.Name)
 					return nil
 				}
 				e, _ := newStateEntry(ctx, ent, time.Time{}, hfs.opt.DataSource, hfs.OS)
 				e.cmdhash = h
 				e.action = toDigest(ent.Action)
 				entries[i] = e
-				if logw != nil {
-					fmt.Fprintf(logw, "not exist with cmd hash: %q\n", ent.Name)
-				}
 				return nil
 			}
 			if err != nil {
-				clog.Warningf(gctx, "Failed to stat %q: %v", ent.Name, err)
+				clog.Warningf(gctx, "Failed to stat %s: %v", ent.Name, err)
 				nfail.Add(1)
 				dirty.Store(true)
-				if logw != nil {
-					fmt.Fprintf(logw, "failed to stat %q: %v\n", ent.Name, err)
-				}
 				return nil
 			}
 			if now := time.Now(); fi.ModTime().After(now) {
-				clog.Warningf(gctx, "future timestamp on %q: mtime=%s now=%s", ent.Name, fi.ModTime(), now)
-				return fmt.Errorf("future timestamp on %q: mtime=%s now=%s", ent.Name, fi.ModTime(), now)
+				clog.Warningf(gctx, "future timestamp on %s: mtime=%s now=%s", ent.Name, fi.ModTime(), now)
+				return fmt.Errorf("future timestamp on %s: mtime=%s now=%s", ent.Name, fi.ModTime(), now)
 			}
 			e, et := newStateEntry(ctx, ent, fi.ModTime(), hfs.opt.DataSource, hfs.OS)
 			e.cmdhash = h
@@ -335,10 +310,7 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 			if e.d.IsZero() && e.target == "" {
 				ftype = "dir"
 				if len(e.cmdhash) == 0 {
-					clog.Infof(gctx, "ignore %s %q", ftype, ent.Name)
-					if logw != nil {
-						fmt.Fprintf(logw, "ignore dir no cmd hash: %q\n", ent.Name)
-					}
+					clog.Infof(gctx, "ignore %s %s", ftype, ent.Name)
 					return nil
 				}
 			} else if e.d.IsZero() && e.target != "" {
@@ -348,18 +320,12 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 					clog.Warningf(gctx, "failed to readlink %q: %v", ent.Name, err)
 					nfail.Add(1)
 					dirty.Store(true)
-					if logw != nil {
-						fmt.Fprintf(logw, "failed to readlink %q: %v\n", ent.Name, err)
-					}
 					return nil
 				}
 				if t != e.target {
-					clog.Warningf(gctx, "invalidate %s %q: target:%q->%q", ftype, ent.Name, e.target, t)
+					clog.Warningf(gctx, "invalidate %s %s: target:%q->%q", ftype, ent.Name, e.target, t)
 					ninvalidate.Add(1)
 					dirty.Store(true)
-					if logw != nil {
-						fmt.Fprintf(logw, "invalidate symlink %q: target: %q->%q\n", ent.Name, e.target, t)
-					}
 					return nil
 				}
 			} else if !e.d.IsZero() && len(h) > 0 && et != entryEqLocal && !dirty.Load() {
@@ -372,15 +338,9 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 				if err == nil && data.Digest() == e.d {
 					et = entryEqLocal
 					err = hfs.OS.Chtimes(ctx, ent.Name, time.Now(), e.mtime)
-					clog.Infof(ctx, "reconcile mtime %q %v -> %v: %v", ent.Name, fi.ModTime(), e.mtime, err)
-					if logw != nil {
-						fmt.Fprintf(logw, "reconcile mtime %q %v -> %v: %v\n", ent.Name, fi.ModTime(), e.mtime, err)
-					}
+					clog.Infof(ctx, "reconcile mtime %s %v -> %v: %v", ent.Name, fi.ModTime(), e.mtime, err)
 				} else {
-					clog.Warningf(ctx, "failed to reconcile mtime %q digest %s(state) != %s(local) err: %v", ent.Name, e.d, data.Digest(), err)
-					if logw != nil {
-						fmt.Fprintf(logw, "failed to reconcile mtime %q digest mismatch\n", ent.Name)
-					}
+					clog.Warningf(ctx, "failed to reconcile mtime %s digest %s(state) != %s(local) err: %v", ent.Name, e.d, data.Digest(), err)
 				}
 			}
 			switch et {
@@ -390,37 +350,22 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 				dirty.Store(true)
 				if len(h) == 0 {
 					// file is a source input, not generated
-					if logw != nil {
-						fmt.Fprintf(logw, "no local entry source: %q\n", ent.Name)
-					}
 					return nil
 				}
 				if outputLocal(ctx, ent.Name) {
 					// file is a output file and needed on the disk
-					if logw != nil {
-						fmt.Fprintf(logw, "no local output local: %s %q\n", ftype, ent.Name)
-					}
 					return nil
 				}
 
-				clog.Infof(gctx, "not exist %s %q cmdhash:%s", ftype, ent.Name, base64.StdEncoding.EncodeToString(e.cmdhash))
-				if logw != nil {
-					fmt.Fprintf(logw, "no local output: %s %q\n", ftype, ent.Name)
-				}
+				clog.Infof(gctx, "not exist %s %s cmdhash:%s", ftype, ent.Name, base64.StdEncoding.EncodeToString(e.cmdhash))
 			case entryBeforeLocal:
 				ninvalidate.Add(1)
 				dirty.Store(true)
-				clog.Warningf(gctx, "invalidate %s %q: state:%s disk:%s", ftype, ent.Name, e.mtime, fi.ModTime())
+				clog.Warningf(gctx, "invalidate %s %s: state:%s disk:%s", ftype, ent.Name, e.mtime, fi.ModTime())
 				if h == nil || !hfs.opt.KeepTainted {
-					if logw != nil {
-						fmt.Fprintf(logw, "invalidate %s %q: state:%s disk:%s\n", ftype, ent.Name, e.mtime, fi.ModTime())
-					}
 					return nil
 				}
 				tainted[i] = true
-				if logw != nil {
-					fmt.Fprintf(logw, "keep tainted %s %q: state:%s disk:%s\n", ftype, ent.Name, e.mtime, fi.ModTime())
-				}
 				// keep this entry to preserve cmdhash
 				// but use mtime of actual file.
 				le := newLocalEntry()
@@ -431,27 +376,18 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 			case entryEqLocal:
 				neq.Add(1)
 				if log.V(1) {
-					clog.Infof(gctx, "equal local %s %q: %s", ftype, ent.Name, e.mtime)
-				}
-				if logw != nil {
-					fmt.Fprintf(logw, "equal local %s %q: %s\n", ftype, ent.Name, e.mtime)
+					clog.Infof(gctx, "equal local %s %s: %s", ftype, ent.Name, e.mtime)
 				}
 			case entryAfterLocal:
 				nnew.Add(1)
 				dirty.Store(true)
 				if len(h) == 0 {
-					if logw != nil {
-						fmt.Fprintf(logw, "old local source %s %q: state:%s disk:%s\n", ftype, ent.Name, e.mtime, fi.ModTime())
-					}
 					return nil
 				}
-				clog.Infof(gctx, "old local %s %q: state:%s disk:%s cmdhash:%s", ftype, ent.Name, e.mtime, fi.ModTime(), base64.StdEncoding.EncodeToString(e.cmdhash))
-				if logw != nil {
-					fmt.Fprintf(logw, "old local %s %q: state:%s disk:%s cmdhash:%s\n", ftype, ent.Name, e.mtime, fi.ModTime(), base64.StdEncoding.EncodeToString(e.cmdhash))
-				}
+				clog.Infof(gctx, "old local %s %s: state:%s disk:%s cmdhash:%s", ftype, ent.Name, e.mtime, fi.ModTime(), base64.StdEncoding.EncodeToString(e.cmdhash))
 			}
 			if log.V(1) {
-				clog.Infof(gctx, "set state %q: d:%s %s s:%s m:%s cmdhash:%s action:%s", ent.Name, e.d, e.mode, e.target, e.mtime, base64.StdEncoding.EncodeToString(e.cmdhash), e.action)
+				clog.Infof(gctx, "set state %s: d:%s %s s:%s m:%s cmdhash:%s action:%s", ent.Name, e.d, e.mode, e.target, e.mtime, base64.StdEncoding.EncodeToString(e.cmdhash), e.action)
 			}
 			if ftype == "dir" {
 				dirs[i] = e
