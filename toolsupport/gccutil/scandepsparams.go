@@ -90,6 +90,15 @@ func ExtractScanDepsParams(ctx context.Context, args, env []string) ScanDepsPara
 			res.Dirs = append(res.Dirs, strings.TrimPrefix(arg, "-isystem"))
 		case strings.HasPrefix(arg, "-F"):
 			res.Frameworks = append(res.Frameworks, strings.TrimPrefix(arg, "-F"))
+		case strings.HasPrefix(arg, "-fmodule-file="):
+			moduleFile := strings.TrimPrefix(arg, "-fmodule-file=")
+			if _, after, found := strings.Cut(moduleFile, "="); found {
+				res.Files = append(res.Files, after)
+			} else {
+				res.Files = append(res.Files, moduleFile)
+			}
+		case strings.HasPrefix(arg, "-fmodule-map-file="):
+			res.Files = append(res.Files, strings.TrimPrefix(arg, "-fmodule-map-file="))
 		case strings.HasPrefix(arg, "-fprofile-use="):
 			res.Files = append(res.Files, strings.TrimPrefix(arg, "-fprofile-use="))
 		case strings.HasPrefix(arg, "-fprofile-sample-use="):

@@ -253,6 +253,44 @@ func TestScanDepsParams(t *testing.T) {
 				Defines: map[string]string{},
 			},
 		},
+		{
+			name: "clang-module-file",
+			args: []string{
+				"../../third_party/llvm-build/Release+Asserts/bin/clang++",
+				"-MMD",
+				"-MF",
+				"obj/third_party/boringssl/boringssl/a_object.o.d",
+				"-fmodules",
+				"-fmodule-map-file=../../third_party/libc++/src/include/module.modulemap",
+				"-fno-implicit-module-maps",
+				"--sysroot=../../build/linux/debian_bullseye_amd64-sysroot",
+				"-fmodule-file=obj/buildtools/third_party/libc++/_Builtin_limits/module.pcm",
+				"-fmodule-file=obj/buildtools/third_party/libc++/_Builtin_stdarg/module.pcm",
+				"-fmodule-file=obj/buildtools/third_party/libc++/_Builtin_stddef/module.pcm",
+				"-fmodule-file=std=obj/buildtools/third_party/libc++/std/module.pcm",
+				"-c",
+				"../../third_party/boringssl/src/crypto/asn1/a_object.cc",
+				"-o",
+				"obj/third_party/boringssl/boringssl/a_object.o",
+			},
+			want: ScanDepsParams{
+				Sources: []string{
+					"../../third_party/boringssl/src/crypto/asn1/a_object.cc",
+				},
+				Files: []string{
+					"../../third_party/libc++/src/include/module.modulemap",
+					"obj/buildtools/third_party/libc++/_Builtin_limits/module.pcm",
+					"obj/buildtools/third_party/libc++/_Builtin_stdarg/module.pcm",
+					"obj/buildtools/third_party/libc++/_Builtin_stddef/module.pcm",
+					"obj/buildtools/third_party/libc++/std/module.pcm",
+				},
+				Sysroots: []string{
+					"../../third_party/llvm-build/Release+Asserts",
+					"../../build/linux/debian_bullseye_amd64-sysroot",
+				},
+				Defines: map[string]string{},
+			},
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got := ExtractScanDepsParams(ctx, tc.args, tc.env)
