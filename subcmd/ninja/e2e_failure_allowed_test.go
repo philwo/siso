@@ -73,7 +73,7 @@ func TestBuild_KeepGoing(t *testing.T) {
 	opt, graph, cleanup := setupBuild(ctx, t, dir, hashfs.Option{})
 	t.Cleanup(cleanup)
 	opt.FailuresAllowed = 11
-	var metricsBuffer bytes.Buffer
+	var metricsBuffer syncBuffer
 	opt.MetricsJSONWriter = &metricsBuffer
 
 	b, err := build.New(ctx, graph, opt)
@@ -94,7 +94,7 @@ func TestBuild_KeepGoing(t *testing.T) {
 	if got, want := stats.Done, 10; got != want {
 		t.Errorf("stats.Done=%d; want=%d", got, want)
 	}
-	dec := json.NewDecoder(bytes.NewReader(metricsBuffer.Bytes()))
+	dec := json.NewDecoder(bytes.NewReader(metricsBuffer.buf.Bytes()))
 	for dec.More() {
 		var m build.StepMetric
 		err := dec.Decode(&m)

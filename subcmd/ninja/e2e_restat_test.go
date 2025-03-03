@@ -74,7 +74,7 @@ func TestBuild_Restat(t *testing.T) {
 		touchFile(t, dir, "base/foo.in")
 		opt, graph, cleanup := setupBuild(ctx, t, dir, hashfsOpts)
 		defer cleanup()
-		var metricsBuffer bytes.Buffer
+		var metricsBuffer syncBuffer
 		opt.MetricsJSONWriter = &metricsBuffer
 
 		b, err := build.New(ctx, graph, opt)
@@ -96,7 +96,7 @@ func TestBuild_Restat(t *testing.T) {
 		if stat.Skipped != 2 { // all(phony) and bar.out
 			t.Errorf("Skipped=%d; want 2", stat.Skipped)
 		}
-		dec := json.NewDecoder(bytes.NewReader(metricsBuffer.Bytes()))
+		dec := json.NewDecoder(bytes.NewReader(metricsBuffer.buf.Bytes()))
 		for dec.More() {
 			var m build.StepMetric
 			err := dec.Decode(&m)
@@ -124,7 +124,7 @@ func TestBuild_Restat(t *testing.T) {
 		})
 		opt, graph, cleanup := setupBuild(ctx, t, dir, hashfsOpts)
 		defer cleanup()
-		var metricsBuffer bytes.Buffer
+		var metricsBuffer syncBuffer
 		opt.MetricsJSONWriter = &metricsBuffer
 
 		b, err := build.New(ctx, graph, opt)
@@ -158,7 +158,7 @@ func TestBuild_Restat(t *testing.T) {
 				}
 			}
 		}
-		dec := json.NewDecoder(bytes.NewReader(metricsBuffer.Bytes()))
+		dec := json.NewDecoder(bytes.NewReader(metricsBuffer.buf.Bytes()))
 		for dec.More() {
 			var m build.StepMetric
 			err := dec.Decode(&m)

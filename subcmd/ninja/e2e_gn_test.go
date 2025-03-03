@@ -56,7 +56,7 @@ func TestBuild_GNGen(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		var metricsBuffer bytes.Buffer
+		var metricsBuffer syncBuffer
 		opt.MetricsJSONWriter = &metricsBuffer
 
 		b, err := build.New(ctx, graph, opt)
@@ -67,7 +67,7 @@ func TestBuild_GNGen(t *testing.T) {
 		err = b.Build(ctx, "build", "all")
 		stats = b.Stats()
 		var metrics []build.StepMetric
-		dec := json.NewDecoder(bytes.NewReader(metricsBuffer.Bytes()))
+		dec := json.NewDecoder(bytes.NewReader(metricsBuffer.buf.Bytes()))
 		for dec.More() {
 			var m build.StepMetric
 			derr := dec.Decode(&m)
