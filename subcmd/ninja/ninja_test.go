@@ -5,11 +5,13 @@
 package ninja
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -127,6 +129,17 @@ func touchFile(t *testing.T, dir, name string) {
 	}
 }
 
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (w *syncBuffer) Write(data []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.buf.Write(data)
+}
+
 func setupBuild(ctx context.Context, t *testing.T, dir string, fsopt hashfs.Option) (build.Options, *ninjabuild.Graph, func()) {
 	t.Helper()
 	var cleanups []func()
@@ -152,6 +165,8 @@ func setupBuild(ctx context.Context, t *testing.T, dir string, fsopt hashfs.Opti
 	if err != nil {
 		t.Fatal(err)
 	}
+	var hashfsSetStateLog syncBuffer
+	fsopt.SetStateLogger = &hashfsSetStateLog
 	hashFS, err := hashfs.New(ctx, fsopt)
 	if err != nil {
 		t.Fatal(err)
@@ -160,6 +175,9 @@ func setupBuild(ctx context.Context, t *testing.T, dir string, fsopt hashfs.Opti
 		err := hashFS.Close(ctx)
 		if err != nil {
 			t.Fatal(err)
+		}
+		if s := hashfsSetStateLog.buf.String(); s != "" {
+			t.Log(s)
 		}
 	})
 	config, err := buildconfig.New(ctx, "@config//main.star", map[string]string{}, map[string]fs.FS{
