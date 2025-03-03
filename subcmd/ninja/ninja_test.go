@@ -5,6 +5,7 @@
 package ninja
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io/fs"
@@ -152,6 +153,8 @@ func setupBuild(ctx context.Context, t *testing.T, dir string, fsopt hashfs.Opti
 	if err != nil {
 		t.Fatal(err)
 	}
+	var hashfsSetStateLog bytes.Buffer
+	fsopt.SetStateLogger = &hashfsSetStateLog
 	hashFS, err := hashfs.New(ctx, fsopt)
 	if err != nil {
 		t.Fatal(err)
@@ -160,6 +163,9 @@ func setupBuild(ctx context.Context, t *testing.T, dir string, fsopt hashfs.Opti
 		err := hashFS.Close(ctx)
 		if err != nil {
 			t.Fatal(err)
+		}
+		if s := hashfsSetStateLog.String(); s != "" {
+			t.Log(s)
 		}
 	})
 	config, err := buildconfig.New(ctx, "@config//main.star", map[string]string{}, map[string]fs.FS{
