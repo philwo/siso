@@ -61,11 +61,6 @@ func (re *RemoteExec) prepareInputs(ctx context.Context, cmd *execute.Cmd) (dige
 
 // Run runs a cmd.
 func (re *RemoteExec) Run(ctx context.Context, cmd *execute.Cmd) error {
-	if cmd.Timeout > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeoutCause(ctx, cmd.Timeout, fmt.Errorf("remote exec timeout=%v: %w", cmd.Timeout, context.DeadlineExceeded))
-		defer cancel()
-	}
 	ctx, span := trace.NewSpan(ctx, "remote-exec")
 	defer span.Close(nil)
 	actionDigest, err := re.prepareInputs(ctx, cmd)
@@ -74,6 +69,11 @@ func (re *RemoteExec) Run(ctx context.Context, cmd *execute.Cmd) error {
 	}
 
 	cctx, cspan := trace.NewSpan(ctx, "execute-and-wait")
+	if cmd.Timeout > 0 {
+		var cancel context.CancelFunc
+		cctx, cancel = context.WithTimeoutCause(cctx, cmd.Timeout, fmt.Errorf("remote exec timeout=%v: %w", cmd.Timeout, context.DeadlineExceeded))
+		defer cancel()
+	}
 	opName, resp, err := re.client.ExecuteAndWait(cctx, &rpb.ExecuteRequest{
 		ActionDigest:    actionDigest.Proto(),
 		SkipCacheLookup: cmd.SkipCacheLookup,
