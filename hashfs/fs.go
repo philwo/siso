@@ -624,7 +624,7 @@ func (hfs *HashFS) Copy(ctx context.Context, root, src, dst string, mtime time.T
 	if subdir != nil {
 		return fmt.Errorf("is a directory: %s", srcfname)
 	}
-	if e.target == "" && e.d.IsZero() {
+	if e.target == "" {
 		hfs.digester.compute(ctx, srcfname, e)
 	}
 	lready := make(chan bool, 1)
