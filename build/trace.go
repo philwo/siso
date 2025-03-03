@@ -78,6 +78,7 @@ func (te *traceEvents) Start(ctx context.Context, semas []*semaphore.Semaphore, 
 	te.semaReqs = make([]int, len(semas))
 	te.ioms = ioms
 	te.iostats = make([]iometrics.Stats, len(ioms))
+	te.start = time.Now()
 	go te.loop(ctx)
 }
 
@@ -111,7 +112,6 @@ func (te *traceEvents) loop(ctx context.Context) {
 		}()
 	}
 	fmt.Fprintf(w, "[\n")
-	te.start = time.Now()
 	te.rusage.start = te.start
 	te.sys.start = te.start
 	te.write(ctx, w, traceEventObject{
