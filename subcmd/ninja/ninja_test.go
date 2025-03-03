@@ -90,6 +90,7 @@ func modifyFile(t *testing.T, dir, name string, gen func([]byte) []byte) {
 			time.Sleep(1 * time.Millisecond)
 			continue
 		}
+		t.Logf("-- modified %s %s", name, nfi.ModTime())
 		return
 	}
 }
@@ -121,6 +122,7 @@ func touchFile(t *testing.T, dir, name string) {
 			time.Sleep(1 * time.Millisecond)
 			continue
 		}
+		t.Logf("-- touched %s %s", name, nfi.ModTime())
 		return
 	}
 }
