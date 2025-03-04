@@ -205,7 +205,6 @@ func TestDo(t *testing.T) {
 	const count = 50
 	var wg sync.WaitGroup
 	for i := 0; i < count; i++ {
-		i := i
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -273,7 +272,6 @@ func TestDo_timeout(t *testing.T) {
 	}
 	var wg sync.WaitGroup
 	for i := 0; i < count; i++ {
-		i := i
 		wg.Add(1)
 		go func() {
 			defer wg.Done()

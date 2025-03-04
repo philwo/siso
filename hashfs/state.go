@@ -259,7 +259,6 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 	prevGenerated := make([]bool, len(state.Entries))
 	tainted := make([]bool, len(state.Entries))
 	for i, ent := range state.Entries {
-		i, ent := i, ent
 		eg.Go(func() error {
 			if i%1000 == 0 {
 				select {

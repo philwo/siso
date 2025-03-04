@@ -42,7 +42,6 @@ func TestParse(t *testing.T) {
 			input: "/0",
 		},
 	} {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			d, err := Parse(tc.input)

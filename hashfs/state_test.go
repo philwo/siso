@@ -134,7 +134,6 @@ func TestLoadSave(t *testing.T) {
 		"zstd": true,
 	}
 	for name, useZstd := range tests {
-		useZstd := useZstd
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
@@ -214,7 +213,6 @@ func TestBgzfCompatibility(t *testing.T) {
 		"save_gzip_load_bgzf": false,
 	}
 	for name, saveWithBgzf := range tests {
-		saveWithBgzf := saveWithBgzf
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 

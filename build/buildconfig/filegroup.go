@@ -110,7 +110,6 @@ func (g globSpec) hash() string {
 func (g globSpec) matcher() func(string) bool {
 	var inc, exc []func(string) bool
 	for _, p := range g.includes {
-		p := p
 		if strings.Contains(p, "/") {
 			inc = append(inc, func(s string) bool {
 				ok, _ := path.Match(p, s)
@@ -124,7 +123,6 @@ func (g globSpec) matcher() func(string) bool {
 		})
 	}
 	for _, p := range g.excludes {
-		p := p
 		if strings.Contains(p, "/") {
 			exc = append(exc, func(s string) bool {
 				ok, _ := path.Match(p, s)

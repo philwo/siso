@@ -90,7 +90,6 @@ func (p *ManifestParser) loadFile(ctx context.Context, fname string) error {
 		return err
 	}
 	for _, fname := range fp.fileState.subninjas {
-		fname := fname
 		scope := &fp.scope
 		p.eg.Go(func() error {
 			p.sema <- struct{}{}

@@ -74,7 +74,6 @@ func (e *Exporter) exportDir(ctx context.Context, dir string, d digest.Digest, w
 		return fmt.Errorf("failed to unmarshal dir for %s from %s: %w", dir, d, err)
 	}
 	for _, f := range curdir.Files {
-		f := f
 		e.eg.Go(func() error {
 			return e.sema.Do(ctx, func(ctx context.Context) error {
 				return e.exportFile(ctx, filepath.Join(dir, f.Name), digest.FromProto(f.Digest), f.IsExecutable, w)
@@ -82,7 +81,6 @@ func (e *Exporter) exportDir(ctx context.Context, dir string, d digest.Digest, w
 		})
 	}
 	for _, subdir := range curdir.Directories {
-		subdir := subdir
 		e.eg.Go(func() error {
 			return e.sema.Do(ctx, func(ctx context.Context) error {
 				return e.exportDir(ctx, filepath.Join(dir, subdir.Name), digest.FromProto(subdir.Digest), w)

@@ -1283,7 +1283,6 @@ func (hfs *HashFS) RetrieveUpdateEntries(ctx context.Context, root string, fname
 	}
 	entries := make([]UpdateEntry, 0, len(ents))
 	for _, ent := range ents {
-		ent := ent // loop var per iteration
 		fi, err := hfs.Stat(ctx, root, ent.Name)
 		if err != nil {
 			clog.Warningf(ctx, "failed to stat %s: %v", ent.Name, err)
