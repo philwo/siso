@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"strconv"
 	"time"
 
 	epb "go.chromium.org/infra/build/siso/execute/proto"
@@ -20,8 +21,9 @@ type IntervalMetric time.Duration
 // MarshalJSON marshals the IntervalMetric as float64 of seconds.
 func (i IntervalMetric) MarshalJSON() ([]byte, error) {
 	d := time.Duration(i)
-	secs := d.Seconds()
-	return json.Marshal(secs)
+	// Reduce precesion to make siso_metrics.json smaller.
+	sec := strconv.FormatFloat(d.Seconds(), 'f', 2, 64)
+	return []byte(sec), nil
 }
 
 // UnmarshalJSON unmarshals float64 of seconds as an IntervalMetric.
