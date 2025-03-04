@@ -117,7 +117,7 @@ func ParseHeaderMap(ctx context.Context, buf []byte) (map[string]string, error) 
 	}
 	p.strs = p.hmap[stringOffset:]
 	m := make(map[string]string)
-	for i := 0; i < int(hashCapacity); i++ {
+	for i := range hashCapacity {
 		key := p.Str("key")
 		prefix := p.Str("prefix")
 		suffix := p.Str("suffix")

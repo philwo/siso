@@ -104,7 +104,7 @@ func (t *TermUI) PrintLines(msgs ...string) {
 	} else {
 		// Clear the last N lines, where N is number of msgs
 		// that don't start with \n.
-		for i := 0; i < len(msgs)-1; i++ {
+		for i := range len(msgs) - 1 {
 			if msgs[i][0] == '\n' {
 				msgs[i] = msgs[i][1:]
 				break

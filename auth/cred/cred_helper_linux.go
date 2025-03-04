@@ -22,7 +22,7 @@ const googleCredHelper = "/google/src/head/depot/google3/devtools/blaze/bazel/cr
 func DefaultCredentialHelper() string {
 	// workaround for b/360055934
 	ch := make(chan string, 3)
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		go func() {
 			if fi, err := os.Stat(googleCredHelper); (err == nil && fi.Mode()&0111 != 0) || errors.Is(err, syscall.ENOKEY) {
 				ch <- googleCredHelper

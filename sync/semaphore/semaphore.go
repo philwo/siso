@@ -33,7 +33,7 @@ type Semaphore struct {
 // New creates a new semaphore with name and capacity.
 func New(name string, n int) *Semaphore {
 	ch := make(chan int, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		ch <- i + 1 // tid
 	}
 	s := &Semaphore{

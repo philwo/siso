@@ -957,7 +957,7 @@ func (hfs *HashFS) Entries(ctx context.Context, root string, inputs []string) ([
 			var tname string
 			name := filepath.Join(root, fname)
 			elink := e
-			for j := 0; j < maxSymlinks; j++ {
+			for range maxSymlinks {
 				if filepath.IsAbs(elink.target) {
 					tname = elink.target
 				} else {
@@ -2130,7 +2130,7 @@ func resolveNextDir(ctx context.Context, d *directory, next func(context.Context
 					pe.elems = append(pe.elems, "/")
 				}
 				s := pe.origFname
-				for j := 0; j < pe.n-1; j++ {
+				for range pe.n - 1 {
 					s = strings.TrimPrefix(s, "/")
 					elem, rest, _ := strings.Cut(s, "/")
 					pe.elems = append(pe.elems, elem)

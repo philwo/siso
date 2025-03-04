@@ -127,7 +127,7 @@ func elideMiddle(msg string, width int) string {
 	}
 	sgr = ""
 	var sb strings.Builder
-	for i := 0; i < n; i++ {
+	for i := range n {
 		if sgrs[i] != sgr {
 			sb.WriteString(escapeSeq)
 			sb.WriteString(sgrs[i])

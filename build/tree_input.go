@@ -64,7 +64,7 @@ func (b *Builder) resolveSymlinkForInputDeps(ctx context.Context, dir, labelSuff
 	// Linux imposes a limit of at most 40 symlinks in any one path lookup.
 	// see: https://lwn.net/Articles/650786/
 	const maxSymlinks = 40
-	for i := 0; i < maxSymlinks; i++ {
+	for range maxSymlinks {
 		files, ok := inputDeps[dir+labelSuffix]
 		if ok {
 			return dir, files, nil

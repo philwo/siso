@@ -127,7 +127,7 @@ func evaluateAppend(env evalEnv, buf *bytes.Buffer, val evalString, lookups [][]
 				varname = val.v[i+1 : i+1+j]
 				i = i + 1 + j
 			} else if simpleVarnameChar.contains(val.v[i]) {
-				for j := 0; j < len(val.v[i:]); j++ {
+				for j := range len(val.v[i:]) {
 					if !simpleVarnameChar.contains(val.v[i+j]) {
 						varname = val.v[i : i+j]
 						i = i + j - 1

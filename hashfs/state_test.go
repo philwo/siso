@@ -40,7 +40,7 @@ func mockState(t *testing.T) *pb.State {
 	if _, err := rand.Read(randomBytes); err != nil {
 		t.Fatalf("rand.Read(...)=%v; want nil error", err)
 	}
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		state.Entries = append(state.Entries, &pb.Entry{
 			Id: &pb.FileID{
 				ModTime: int64(i),
@@ -462,7 +462,7 @@ func TestState_Symlink(t *testing.T) {
 }
 
 func createBenchmarkState(tb testing.TB, dir string) *pb.State {
-	for i := 0; i < 60000; i++ {
+	for i := range 60000 {
 		err := os.WriteFile(filepath.Join(dir, fmt.Sprintf("%d.txt", i)), nil, 0644)
 		if err != nil {
 			tb.Fatal(err)
@@ -497,7 +497,7 @@ func BenchmarkSetState(b *testing.B) {
 
 	b.ReportAllocs()
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		hashFS, err := hashfs.New(ctx, hashfs.Option{})
 		if err != nil {
 			b.Fatal(err)
@@ -529,7 +529,7 @@ func BenchmarkLoadState(b *testing.B) {
 	origState := st
 	b.ReportAllocs()
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		st, err := hashfs.Load(ctx, opts)
 		if err != nil {
 			b.Fatal(err)

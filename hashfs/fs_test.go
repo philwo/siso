@@ -58,7 +58,7 @@ func TestStamp(t *testing.T) {
 		}()
 	}()
 	// `go test -count=1000` would easily catch the race.
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		fname := filepath.ToSlash(filepath.Join("obj/components", fmt.Sprintf("%d.stamp", i)))
 		wg.Add(1)
 		t.Run(fname, func(t *testing.T) {
@@ -193,7 +193,7 @@ func TestReadDir(t *testing.T) {
 	if err != nil {
 		t.Errorf("mkdir %s/out/siso/gen/base: %v", dir, err)
 	}
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		err = os.WriteFile(filepath.Join(dir, "out/siso/gen/base", fmt.Sprintf("buildflag-%d.h", i)), nil, 0644)
 		if err != nil {
 			t.Errorf("writefile %s/out/siso/gen/base/buildflag-%d.h: %v", dir, i, err)
@@ -324,7 +324,7 @@ func TestStat_Race(t *testing.T) {
 	// keep most cpus busy
 	var count atomic.Int64
 	const n = 1000
-	for i := 0; i < runtimex.NumCPU()-1; i++ {
+	for range runtimex.NumCPU() - 1 {
 		eg.Go(func() error {
 			for {
 				if count.Load() == n {
@@ -334,7 +334,7 @@ func TestStat_Race(t *testing.T) {
 			return nil
 		})
 	}
-	for i := 0; i < n; i++ {
+	for range n {
 		eg.Go(func() error {
 			defer count.Add(1)
 			fi, err := hashFS.Stat(ctx, dir, fname)
@@ -371,7 +371,7 @@ func BenchmarkStat(b *testing.B) {
 	b.Run("not_exist", func(b *testing.B) {
 		b.ReportAllocs()
 		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			_, err := hfs.Stat(ctx, dir, fname)
 			if !errors.Is(err, fs.ErrNotExist) {
 				b.Fatalf("hfs.Stat(ctx,%q,%q)=%v; want %v", dir, fname, err, fs.ErrNotExist)
@@ -387,7 +387,7 @@ func BenchmarkStat(b *testing.B) {
 	b.Run("emptyfile", func(b *testing.B) {
 		b.ReportAllocs()
 		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			_, err := hfs.Stat(ctx, dir, fname)
 			if err != nil {
 				b.Fatalf("hfs.Stat(ctx,%q,%q)=%v; want nil", dir, fname, err)

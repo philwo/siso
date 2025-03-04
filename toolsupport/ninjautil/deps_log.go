@@ -151,7 +151,7 @@ func readPathRecord(ctx context.Context, buf []byte, size int, numDepsLogPaths i
 	//  one's complement of the expected index of the record
 	//  checksum (4 bytes)
 	pathSize := size - 4
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		if pathSize-1 < 0 || pathSize-1 >= len(buf) {
 			return "", fmt.Errorf("path size is corrupted? size=%d buf_size=%d", size, len(buf))
 		}
@@ -331,7 +331,7 @@ func (d *DepsLog) Recompact(ctx context.Context) error {
 	}
 
 	// write out all deps again.
-	for i := 0; i < len(d.rDeps); i++ {
+	for i := range len(d.rDeps) {
 		deps := d.rDeps[i]
 		if deps == nil {
 			continue

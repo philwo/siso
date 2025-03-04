@@ -178,7 +178,7 @@ func (fsys FileSystem) Stat(name string) (fs.FileInfo, error) {
 // Sub returns an FS corresponding to the subtree rooted at dir.
 func (fsys FileSystem) Sub(dir string) (fs.FS, error) {
 	origDir := dir
-	for i := 0; i < maxSymlinks; i++ {
+	for range maxSymlinks {
 		fi, err := fsys.Stat(dir)
 		if err != nil {
 			return nil, err

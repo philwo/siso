@@ -29,7 +29,7 @@ func TestWaitAcquire(t *testing.T) {
 	}
 
 	var dones []func(error)
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		_, done, err := sema.WaitAcquire(ctx)
 		if err != nil {
 			t.Fatalf("WaitAcquire %d: %v", i, err)
@@ -115,7 +115,7 @@ func TestTryAcquire(t *testing.T) {
 	}
 
 	var dones []func(error)
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		_, done, err := sema.TryAcquire(ctx)
 		if err != nil {
 			t.Fatalf("TryAcquire %d: %v", i, err)
@@ -183,6 +183,7 @@ func TestTryAcquire(t *testing.T) {
 	}
 }
 
+// TestDo tests the Do function.
 func TestDo(t *testing.T) {
 	ctx := context.Background()
 	sema := semaphore.New(t.Name(), 3)
@@ -204,7 +205,7 @@ func TestDo(t *testing.T) {
 
 	const count = 50
 	var wg sync.WaitGroup
-	for i := 0; i < count; i++ {
+	for i := range count {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -271,7 +272,7 @@ func TestDo_timeout(t *testing.T) {
 		return ctx.Err()
 	}
 	var wg sync.WaitGroup
-	for i := 0; i < count; i++ {
+	for i := range count {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
