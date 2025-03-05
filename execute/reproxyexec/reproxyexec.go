@@ -291,6 +291,10 @@ func createRequest(ctx context.Context, cmd *execute.Cmd, execTimeout, reclientT
 	}}
 	md.Environment = os.Environ()
 
+	wrapper := cmd.REProxyConfig.RemoteWrapper
+	if cmd.RemoteWrapper != "" {
+		wrapper = cmd.RemoteWrapper
+	}
 	return &ppb.RunRequest{
 		Command: c,
 		Labels:  cmd.REProxyConfig.Labels,
@@ -304,7 +308,7 @@ func createRequest(ctx context.Context, cmd *execute.Cmd, execTimeout, reclientT
 				AcceptCached:                 !cmd.SkipCacheLookup,
 				DoNotCache:                   cmd.DoNotCache,
 				DownloadOutputs:              cmd.REProxyConfig.DownloadOutputs,
-				Wrapper:                      cmd.REProxyConfig.RemoteWrapper,
+				Wrapper:                      wrapper,
 				CanonicalizeWorkingDir:       cmd.REProxyConfig.CanonicalizeWorkingDir,
 				PreserveUnchangedOutputMtime: false,
 			},
