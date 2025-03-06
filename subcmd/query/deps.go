@@ -72,6 +72,7 @@ type depsRun struct {
 	fsopt       *hashfs.Option
 	depsLogFile string
 	raw         bool
+	depfile     bool
 }
 
 func (c *depsRun) init() {
@@ -82,6 +83,7 @@ func (c *depsRun) init() {
 	c.fsopt.RegisterFlags(&c.Flags)
 	c.Flags.StringVar(&c.depsLogFile, "deps_log", ".siso_deps", "deps log filename (relative to -C)")
 	c.Flags.BoolVar(&c.raw, "raw", false, "just check deps log. (no build.ninja nor .siso_fs_state needed)")
+	c.Flags.BoolVar(&c.depfile, "depfile", false, "check depfile too")
 }
 
 func (c *depsRun) Run(a subcommands.Application, args []string, env subcommands.Env) int {
@@ -150,6 +152,9 @@ func (c *depsRun) run(ctx context.Context, args []string) error {
 		if err != nil {
 			return err
 		}
+	}
+	if !c.depfile {
+		state = nil
 	}
 	w := bufio.NewWriter(os.Stdout)
 	for _, target := range targets {
