@@ -24,8 +24,18 @@ import (
 
 func setupFiles(t *testing.T, dir, name string, deletes []string) {
 	t.Helper()
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		err := os.Chdir(wd)
+		if err != nil {
+			t.Errorf("failed to restore wd %s: %v", wd, err)
+		}
+	})
 	root := filepath.Join("testdata", name)
-	err := filepath.Walk(root, func(pathname string, info fs.FileInfo, err error) error {
+	err = filepath.Walk(root, func(pathname string, info fs.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
