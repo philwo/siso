@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/maruel/subcommands"
 
@@ -22,10 +23,11 @@ import (
 
 	"go.chromium.org/infra/build/siso/hashfs"
 	"go.chromium.org/infra/build/siso/o11y/clog"
+	"go.chromium.org/infra/build/siso/toolsupport/makeutil"
 	"go.chromium.org/infra/build/siso/toolsupport/ninjautil"
 )
 
-const depsUsage = `show dependencies stored in the deps log
+const depsUsage = `show dependencies stored in the deps log or depfile
 
  $ siso query deps -C <dir> [<targets>]
 
@@ -37,6 +39,15 @@ print dependencies for targets stored in the deps log.
   ...
 
 ----
+
+or depfile
+----
+<target>: #depfile=<depfile> <num> deps mtime <mtime> VALID
+  <deps>
+  ...
+
+----
+
 `
 
 // cmdDeps returns the Command for the `deps` subcommand provided by this package.
@@ -108,6 +119,7 @@ func (c *depsRun) run(ctx context.Context, args []string) error {
 	}
 
 	var hashFS *hashfs.HashFS
+	var state *ninjautil.State
 	targets := args
 	if c.raw {
 		if len(targets) == 0 {
@@ -128,7 +140,7 @@ func (c *depsRun) run(ctx context.Context, args []string) error {
 			return err
 		}
 
-		state := ninjautil.NewState()
+		state = ninjautil.NewState()
 		p := ninjautil.NewManifestParser(state)
 		err = p.Load(ctx, c.fname)
 		if err != nil {
@@ -141,7 +153,7 @@ func (c *depsRun) run(ctx context.Context, args []string) error {
 	}
 	w := bufio.NewWriter(os.Stdout)
 	for _, target := range targets {
-		deps, depsTime, err := depsLog.Get(ctx, target)
+		depType, deps, depsTime, depState, err := lookupDeps(ctx, state, hashFS, depsLog, wd, target)
 		if err != nil {
 			if errors.Is(err, ninjautil.ErrNoDepsLog) {
 				continue
@@ -149,29 +161,70 @@ func (c *depsRun) run(ctx context.Context, args []string) error {
 			fmt.Fprintf(w, "%s: deps log error: %v\n", target, err)
 			continue
 		}
-		state := "UNKNOWN"
-		if !c.raw {
-			state = "STALE"
-			fi, err := hashFS.Stat(ctx, wd, target)
-			if err != nil {
-				clog.Warningf(ctx, "%v", err)
-				// log and ignore stat error
-			} else {
-				mtime := fi.ModTime()
-				if !mtime.After(depsTime) {
-					state = "VALID"
-				}
-			}
-		}
 		var buf bytes.Buffer
-		fmt.Fprintf(&buf, "%s: #deps %d, deps mtime %d (%s)\n",
-			target, len(deps), depsTime.Nanosecond(), state)
+		fmt.Fprintf(&buf, "%s: #%s %d, deps mtime %d (%s)\n",
+			target, depType, len(deps), depsTime.Nanosecond(), depState)
 		for _, d := range deps {
 			fmt.Fprintf(&buf, "    %s\n", d)
 		}
 		fmt.Fprintln(w, buf.String())
 	}
 	return w.Flush()
+}
+
+func lookupDeps(ctx context.Context, state *ninjautil.State, hashFS *hashfs.HashFS, depsLog *ninjautil.DepsLog, wd, target string) (string, []string, time.Time, string, error) {
+	depState := "UNKNOWN"
+	deps, depsTime, err := depsLog.Get(ctx, target)
+	if err == nil {
+		depState = "STALE"
+		fi, err := hashFS.Stat(ctx, wd, target)
+		if err != nil {
+			clog.Warningf(ctx, "%v", err)
+			// log and ignore stat error
+		} else {
+			mtime := fi.ModTime()
+			if !mtime.After(depsTime) {
+				depState = "VALID"
+			}
+		}
+		return "deps", deps, depsTime, depState, err
+	}
+	if state == nil {
+		return "", nil, time.Time{}, depState, ninjautil.ErrNoDepsLog
+	}
+	node, ok := state.LookupNodeByPath(target)
+	if !ok {
+		return "", nil, time.Time{}, depState, fmt.Errorf("no such target in build graph: %q", target)
+	}
+	edge, ok := node.InEdge()
+	if !ok {
+		return "", nil, time.Time{}, depState, fmt.Errorf("no rule to build target: %q", target)
+	}
+	depsType := edge.Binding("deps")
+	switch depsType {
+	case "gcc", "msvc":
+		// for deps=gcc|msvc, deps is recorded in deps log.
+		return "", nil, time.Time{}, depState, ninjautil.ErrNoDepsLog
+	case "":
+		// check depfile
+	default:
+		return "", nil, time.Time{}, depState, fmt.Errorf("unknown deps=%q in rule to build target %q", depsType, target)
+	}
+	depfile := edge.UnescapedBinding("depfile")
+	if depfile == "" {
+		// the rule has no deps,depfile.
+		return "", nil, time.Time{}, depState, ninjautil.ErrNoDepsLog
+	}
+	fi, err := hashFS.Stat(ctx, wd, depfile)
+	if err != nil {
+		return "", nil, time.Time{}, depState, fmt.Errorf("no depfile=%q to build target %q: %w", depfile, target, err)
+	}
+	fsys := hashFS.FileSystem(ctx, wd)
+	deps, err = makeutil.ParseDepsFile(ctx, fsys, depfile)
+	if err != nil {
+		return "", nil, time.Time{}, depState, fmt.Errorf("failed to read depfile=%q to build target %q: %w", depfile, target, err)
+	}
+	return fmt.Sprintf("depfile=%q", depfile), deps, fi.ModTime(), "VALID", nil
 }
 
 func depsTargets(ctx context.Context, state *ninjautil.State, depsLog *ninjautil.DepsLog, args []string) ([]string, error) {
