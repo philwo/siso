@@ -72,11 +72,16 @@ func (b *Builder) checkUpToDate(ctx context.Context, stepDef StepDef, outputs []
 	if err != nil {
 		clog.Infof(ctx, "need %v", err)
 		reason := "missing-inputs"
-		if errors.Is(err, errDirty) {
+		switch {
+		case errors.Is(err, ErrMissingDeps):
+			reason = "missing-deps"
+		case errors.Is(err, ErrStaleDeps):
+			reason = "stale-deps"
+		case errors.Is(err, errDirty):
 			reason = "dirty"
 		}
 		span.SetAttr("run-reason", reason)
-		fmt.Fprintf(b.explainWriter, "deps for %s is %s: %v\n", outname, reason, err)
+		fmt.Fprintf(b.explainWriter, "deps for %s %s: %v\n", outname, reason, err)
 		return false
 	}
 	if outmtime.IsZero() {

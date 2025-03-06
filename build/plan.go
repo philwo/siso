@@ -33,6 +33,9 @@ var (
 
 	// ErrMissingDeps is an error when step failed to get deps.
 	ErrMissingDeps = errors.New("missing deps in depfile/depslog")
+
+	// ErrStaleDeps is an error when deps log is stale.
+	ErrStaleDeps = errors.New("stale deps in depslog")
 )
 
 // Target is a build target used in Graph.

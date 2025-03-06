@@ -401,9 +401,17 @@ func depInputs(ctx context.Context, s *StepDef) (func(yield func(string) bool), 
 			return nil, fmt.Errorf("%w: no outputs", build.ErrMissingDeps)
 		}
 		out := outputs[0].Path()
-		deps, _, err = s.globals.depsLog.Get(ctx, out)
+		var depsTime time.Time
+		deps, depsTime, err = s.globals.depsLog.Get(ctx, out)
 		if err != nil {
 			return nil, fmt.Errorf("%w: failed to lookup deps log %s: %w", build.ErrMissingDeps, out, err)
+		}
+		fi, err := s.globals.hashFS.Stat(ctx, s.globals.path.ExecRoot, s.globals.path.MaybeFromWD(ctx, out))
+		if err != nil {
+			return nil, fmt.Errorf("%w: missing deps output %s: %w", build.ErrStaleDeps, out, err)
+		}
+		if fi.ModTime().After(depsTime) {
+			return nil, fmt.Errorf("%w: output mtime %s: fs=%v depslog=%v", build.ErrStaleDeps, out, fi.ModTime(), depsTime)
 		}
 		if log.V(1) {
 			clog.Infof(ctx, "depslog %s: %d", out, len(deps))
