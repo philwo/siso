@@ -176,15 +176,17 @@ func lookupDeps(ctx context.Context, state *ninjautil.State, hashFS *hashfs.Hash
 	depState := "UNKNOWN"
 	deps, depsTime, err := depsLog.Get(ctx, target)
 	if err == nil {
-		depState = "STALE"
-		fi, err := hashFS.Stat(ctx, wd, target)
-		if err != nil {
-			clog.Warningf(ctx, "%v", err)
-			// log and ignore stat error
-		} else {
-			mtime := fi.ModTime()
-			if !mtime.After(depsTime) {
-				depState = "VALID"
+		if hashFS != nil {
+			depState = "STALE"
+			fi, err := hashFS.Stat(ctx, wd, target)
+			if err != nil {
+				clog.Warningf(ctx, "%v", err)
+				// log and ignore stat error
+			} else {
+				mtime := fi.ModTime()
+				if !mtime.After(depsTime) {
+					depState = "VALID"
+				}
 			}
 		}
 		return "deps", deps, depsTime, depState, err
