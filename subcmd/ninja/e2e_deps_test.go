@@ -227,3 +227,94 @@ func TestBuild_Deps_Incremental(t *testing.T) {
 		t.Errorf("checkDeps %v", err)
 	}
 }
+
+// TestBuild_Deps_Stale checks ninja runs step if deps log is stale
+// (foo.o is modified, so newer than mtime recorded in deps log).
+func TestBuild_Deps_Stale(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+
+	gccDeps := []string{"../../base/foo.cc", "../../base/foo.h"}
+
+	checkDeps := func() (err error) {
+		depsLog, err := ninjautil.NewDepsLog(ctx, filepath.Join(dir, "out/siso/.siso_deps"))
+		if err != nil {
+			return fmt.Errorf("NewDepsLog: %w", err)
+		}
+		defer func() {
+			cerr := depsLog.Close()
+			if err == nil && cerr != nil {
+				err = fmt.Errorf("depsLog.Close: %w", cerr)
+			}
+		}()
+		got, gott, err := depsLog.Get(ctx, "foo.o")
+		if err != nil {
+			return fmt.Errorf("deps for foo.o: %w", err)
+		}
+		fi, err := os.Stat(filepath.Join(dir, "out/siso/foo.o"))
+		if err != nil {
+			return fmt.Errorf("deps for foo.o: missing: %w", build.ErrStaleDeps)
+		}
+		if !fi.ModTime().Equal(gott) {
+			return fmt.Errorf("deps for foo.o: stale %v != %v: %w", fi.ModTime(), gott, build.ErrStaleDeps)
+		}
+		if !slices.Equal(got, gccDeps) {
+			return fmt.Errorf("deps for foo.o: got=%q want=%q", got, gccDeps)
+		}
+		return nil
+	}
+
+	ninja := func(t *testing.T) (build.Stats, error) {
+		t.Helper()
+		opt, graph, cleanup := setupBuild(ctx, t, dir, hashfs.Option{
+			StateFile:   ".siso_fs_state",
+			OutputLocal: func(context.Context, string) bool { return true },
+			KeepTainted: true, // avoid recontime mtime of foo.o
+		})
+		defer cleanup()
+		return runNinja(ctx, "build.ninja", graph, opt, nil, runNinjaOpts{})
+	}
+	setupFiles(t, dir, t.Name(), nil)
+
+	t.Logf("-- first build")
+	stats, err := ninja(t)
+	if err != nil {
+		t.Fatalf("ninja err: %v", err)
+	}
+	if stats.Done != stats.Total || stats.Total != 1 {
+		t.Errorf("done=%d total=%d; want done=total=1", stats.Done, stats.Total)
+	}
+	err = checkDeps()
+	if err != nil {
+		t.Errorf("checkDeps %v", err)
+	}
+	t.Logf("-- confirm no-op")
+	stats, err = ninja(t)
+	if err != nil {
+		t.Fatalf("ninja err: %v", err)
+	}
+	if stats.Done != stats.Total || stats.Total != 1 || stats.Skipped != 1 {
+		t.Errorf("done=%d total=%d skipped=%d; want done=total=skipped=1, %#v", stats.Done, stats.Total, stats.Skipped, stats)
+	}
+
+	modifyFile(t, dir, "out/siso/foo.o", func(in []byte) []byte {
+		return append(in, []byte("modified")...)
+	})
+	err = checkDeps()
+	if !errors.Is(err, build.ErrStaleDeps) {
+		t.Errorf("checkDeps %v; want %v", err, build.ErrStaleDeps)
+	}
+
+	t.Logf("-- second build")
+	stats, err = ninja(t)
+	if err != nil {
+		t.Fatalf("ninja err: %v", err)
+	}
+	if stats.Done != stats.Total || stats.Total != 1 || stats.Skipped != 0 {
+		t.Errorf("done=%d total=%d skipped=%d; want done=total=1 skipped=0, %#v", stats.Done, stats.Total, stats.Skipped, stats)
+	}
+	err = checkDeps()
+	if err != nil {
+		t.Errorf("checkDeps %v", err)
+	}
+}
