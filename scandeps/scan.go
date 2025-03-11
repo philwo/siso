@@ -286,6 +286,9 @@ func (s *scanner) find(ctx context.Context, name string) (string, error) {
 				clog.Infof(ctx, "find check %s/%s", dir, name)
 			}
 			incpath, sr, err := s.fsview.get(ctx, dir, name)
+			if log.V(1) {
+				clog.Infof(ctx, "fsview get %s/%s -> %q: %v", dir, name, incpath, err)
+			}
 			if err != nil {
 				continue
 			}
@@ -330,6 +333,9 @@ func (s *scanner) find(ctx context.Context, name string) (string, error) {
 					clog.Infof(ctx, "find check %s/%s", dir, fwname)
 				}
 				incpath, sr, err := s.fsview.get(ctx, dir, fwname)
+				if log.V(1) {
+					clog.Infof(ctx, "fsview get %s/%s -> %q: %v", dir, name, incpath, err)
+				}
 				if err != nil {
 					continue
 				}

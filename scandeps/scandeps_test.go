@@ -306,8 +306,12 @@ func TestScanDeps_Framework(t *testing.T) {
 		"app/app.mm": `
 #import <Foo/Bar.h>
 `,
-		"out/siso/Foo.framework/Headers/Bar.h": `
+		"out/siso/Foo.framework/Versions/A/Headers/Bar.h": `
 // Bar.h
+#import "Baz.h"
+`,
+		"out/siso/Foo.framework/Versions/A/Headers/Baz.h": `
+// Baz.h
 `,
 	} {
 		fname := filepath.Join(dir, fname)
@@ -319,6 +323,14 @@ func TestScanDeps_Framework(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+	}
+	err := os.Symlink("Versions/Current/Headers", filepath.Join(dir, "out/siso/Foo.framework/Headers"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = os.Symlink("A", filepath.Join(dir, "out/siso/Foo.framework/Versions/Current"))
+	if err != nil {
+		t.Fatal(err)
 	}
 	inputDeps := map[string][]string{}
 
@@ -347,8 +359,8 @@ func TestScanDeps_Framework(t *testing.T) {
 		"app",
 		"app/app.mm",
 		"out/siso",
-		"out/siso/Foo.framework/Headers",
 		"out/siso/Foo.framework/Headers/Bar.h",
+		"out/siso/Foo.framework/Headers/Baz.h",
 	}
 	if diff := cmp.Diff(want, got, cmpopts.SortSlices(func(a, b string) bool { return a < b })); diff != "" {
 		t.Errorf("scandeps diff -want +got:\n%s", diff)

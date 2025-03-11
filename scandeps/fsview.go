@@ -127,7 +127,10 @@ func (fv *fsview) addDir(ctx context.Context, dir string, searchPath searchPathT
 
 func (fv *fsview) get(ctx context.Context, dir, name string) (string, *scanResult, error) {
 	top := topElem(name)
-	if top != ".." {
+	// don't check topEnt for framework headers
+	// since it would not work well because framework headers
+	// uses symlinks.
+	if top != ".." && !strings.HasSuffix(dir, ".framework/Headers") {
 		if fv.topEnts[dir] == nil {
 			if log.V(1) {
 				clog.Infof(ctx, "no dir %s for top:%s", dir, top)
@@ -229,31 +232,48 @@ func (fv *fsview) scanResult(ctx context.Context, incpath string) (*scanResult, 
 		}
 		return sr, nil
 	}
-	i := -1
-	for {
-		j := strings.IndexByte(incpath[i+1:], '/')
-		if j < 0 {
-			break
+	if strings.Contains(incpath, ".framework/Headers/") {
+		// framework headers are symlinks to the framework bundle.
+		// so we don't need to check the directory existence.
+		if log.V(1) {
+			clog.Infof(ctx, "scanResult for framework %q", incpath)
 		}
-		i += 1 + j
-		dirname := incpath[:i]
-		exist, ok := fv.checkDir(dirname)
-		if ok {
-			if exist {
-				continue
+	} else {
+		i := -1
+		for {
+			j := strings.IndexByte(incpath[i+1:], '/')
+			if j < 0 {
+				break
 			}
-			return nil, fs.ErrNotExist
+			i += 1 + j
+			dirname := incpath[:i]
+			exist, ok := fv.checkDir(dirname)
+			if ok {
+				if exist {
+					continue
+				}
+				if log.V(1) {
+					clog.Infof(ctx, "scanResult %q checkDir=%q not exist", incpath, dirname)
+				}
+				return nil, fs.ErrNotExist
+			}
+			fi, err := fv.fs.hashfs.Stat(ctx, fv.execRoot, dirname)
+			if err != nil {
+				fv.setDir(dirname, false)
+				if log.V(1) {
+					clog.Infof(ctx, "scanResult %q stat dir=%q not exist", incpath, dirname)
+				}
+				return nil, fs.ErrNotExist
+			}
+			if !fi.IsDir() {
+				fv.setDir(dirname, false)
+				if log.V(1) {
+					clog.Infof(ctx, "scanResult %q dir=%q mode=%s", incpath, dirname, fi.Mode())
+				}
+				return nil, fs.ErrNotExist
+			}
+			fv.setDir(dirname, true)
 		}
-		fi, err := fv.fs.hashfs.Stat(ctx, fv.execRoot, dirname)
-		if err != nil {
-			fv.setDir(dirname, false)
-			return nil, fs.ErrNotExist
-		}
-		if !fi.IsDir() {
-			fv.setDir(dirname, false)
-			return nil, fs.ErrNotExist
-		}
-		fv.setDir(dirname, true)
 	}
 	fi, err := fv.fs.hashfs.Stat(ctx, fv.execRoot, incpath)
 	if log.V(1) {
@@ -274,6 +294,9 @@ func (fv *fsview) scanResult(ctx context.Context, incpath string) (*scanResult, 
 	}
 	sr = &scanResult{}
 	fv.setFile(incpath, sr)
+	if strings.Contains(incpath, ".framework/Headers/") {
+		fv.setDir(path.Dir(incpath), true)
+	}
 	return sr, nil
 }
 
