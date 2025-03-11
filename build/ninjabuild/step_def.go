@@ -25,6 +25,7 @@ import (
 
 	"go.chromium.org/infra/build/siso/build"
 	"go.chromium.org/infra/build/siso/execute"
+	"go.chromium.org/infra/build/siso/hashfs"
 	"go.chromium.org/infra/build/siso/o11y/clog"
 	"go.chromium.org/infra/build/siso/o11y/trace"
 	"go.chromium.org/infra/build/siso/toolsupport/cmdutil"
@@ -389,6 +390,39 @@ func (s *StepDef) DepInputs(ctx context.Context) (func(yield func(string) bool),
 	return s.deps, s.deperr
 }
 
+// DepsLogState is a state of deps log entry.
+type DepsLogState int
+
+const (
+	DepsLogUnknown DepsLogState = iota
+	DepsLogStale
+	DepsLogValid
+)
+
+func (s DepsLogState) String() string {
+	switch s {
+	case DepsLogUnknown:
+		return "UNKNOWN"
+	case DepsLogStale:
+		return "STALE"
+	case DepsLogValid:
+		return "VALID"
+	}
+	return fmt.Sprintf("DepsLogState[%d]", int(s))
+}
+
+// CheckDepsLogState checks deps log state by its output file.
+func CheckDepsLogState(ctx context.Context, hashFS *hashfs.HashFS, bpath *build.Path, target string, depsTime time.Time) (DepsLogState, string) {
+	fi, err := hashFS.Stat(ctx, bpath.ExecRoot, bpath.MaybeFromWD(ctx, target))
+	if err != nil {
+		return DepsLogStale, fmt.Sprintf("not found deps output %q: %v", target, err)
+	}
+	if fi.ModTime().After(depsTime) {
+		return DepsLogStale, fmt.Sprintf("output mtime %q: fs=%v depslog=%v", target, fi.ModTime(), depsTime)
+	}
+	return DepsLogValid, ""
+}
+
 // depInputs returns deps inputs of the step.
 func depInputs(ctx context.Context, s *StepDef) (func(yield func(string) bool), error) {
 	var deps []string
@@ -406,12 +440,14 @@ func depInputs(ctx context.Context, s *StepDef) (func(yield func(string) bool), 
 		if err != nil {
 			return nil, fmt.Errorf("%w: failed to lookup deps log %s: %w", build.ErrMissingDeps, out, err)
 		}
-		fi, err := s.globals.hashFS.Stat(ctx, s.globals.path.ExecRoot, s.globals.path.MaybeFromWD(ctx, out))
-		if err != nil {
-			return nil, fmt.Errorf("%w: missing deps output %s: %w", build.ErrStaleDeps, out, err)
-		}
-		if fi.ModTime().After(depsTime) {
-			return nil, fmt.Errorf("%w: output mtime %s: fs=%v depslog=%v", build.ErrStaleDeps, out, fi.ModTime(), depsTime)
+		state, msg := CheckDepsLogState(ctx, s.globals.hashFS, s.globals.path, out, depsTime)
+		switch state {
+		case DepsLogStale:
+			return nil, fmt.Errorf("%w: %s", build.ErrStaleDeps, msg)
+		case DepsLogValid:
+			// ok
+		default:
+			return nil, fmt.Errorf("wrong deps log state for %q: state=%s %s", out, state, msg)
 		}
 		if log.V(1) {
 			clog.Infof(ctx, "depslog %s: %d", out, len(deps))

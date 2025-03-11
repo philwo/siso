@@ -21,8 +21,9 @@ import (
 
 	"go.chromium.org/luci/common/cli"
 
+	"go.chromium.org/infra/build/siso/build"
+	"go.chromium.org/infra/build/siso/build/ninjabuild"
 	"go.chromium.org/infra/build/siso/hashfs"
-	"go.chromium.org/infra/build/siso/o11y/clog"
 	"go.chromium.org/infra/build/siso/toolsupport/makeutil"
 	"go.chromium.org/infra/build/siso/toolsupport/ninjautil"
 )
@@ -102,15 +103,15 @@ func (c *depsRun) Run(a subcommands.Application, args []string, env subcommands.
 }
 
 func (c *depsRun) run(ctx context.Context, args []string) error {
-	err := os.Chdir(c.dir)
+	execRoot, err := os.Getwd()
 	if err != nil {
 		return err
 	}
-	wd, err := os.Getwd()
+	execRoot, err = filepath.EvalSymlinks(execRoot)
 	if err != nil {
 		return err
 	}
-	wd, err = filepath.EvalSymlinks(wd)
+	err = os.Chdir(c.dir)
 	if err != nil {
 		return err
 	}
@@ -157,8 +158,9 @@ func (c *depsRun) run(ctx context.Context, args []string) error {
 		state = nil
 	}
 	w := bufio.NewWriter(os.Stdout)
+	bpath := build.NewPath(execRoot, c.dir)
 	for _, target := range targets {
-		depType, deps, depsTime, depState, err := lookupDeps(ctx, state, hashFS, depsLog, wd, target)
+		depType, deps, depsTime, depState, err := lookupDeps(ctx, state, hashFS, depsLog, bpath, target)
 		if err != nil {
 			if errors.Is(err, ninjautil.ErrNoDepsLog) {
 				continue
@@ -177,22 +179,12 @@ func (c *depsRun) run(ctx context.Context, args []string) error {
 	return w.Flush()
 }
 
-func lookupDeps(ctx context.Context, state *ninjautil.State, hashFS *hashfs.HashFS, depsLog *ninjautil.DepsLog, wd, target string) (string, []string, time.Time, string, error) {
-	depState := "UNKNOWN"
+func lookupDeps(ctx context.Context, state *ninjautil.State, hashFS *hashfs.HashFS, depsLog *ninjautil.DepsLog, bpath *build.Path, target string) (string, []string, time.Time, ninjabuild.DepsLogState, error) {
+	var depState ninjabuild.DepsLogState
 	deps, depsTime, err := depsLog.Get(ctx, target)
 	if err == nil {
 		if hashFS != nil {
-			depState = "STALE"
-			fi, err := hashFS.Stat(ctx, wd, target)
-			if err != nil {
-				clog.Warningf(ctx, "%v", err)
-				// log and ignore stat error
-			} else {
-				mtime := fi.ModTime()
-				if !mtime.After(depsTime) {
-					depState = "VALID"
-				}
-			}
+			depState, _ = ninjabuild.CheckDepsLogState(ctx, hashFS, bpath, target, depsTime)
 		}
 		return "deps", deps, depsTime, depState, err
 	}
@@ -222,16 +214,17 @@ func lookupDeps(ctx context.Context, state *ninjautil.State, hashFS *hashfs.Hash
 		// the rule has no deps,depfile.
 		return "", nil, time.Time{}, depState, ninjautil.ErrNoDepsLog
 	}
-	fi, err := hashFS.Stat(ctx, wd, depfile)
+	df := bpath.MaybeFromWD(ctx, depfile)
+	fi, err := hashFS.Stat(ctx, bpath.ExecRoot, df)
 	if err != nil {
 		return "", nil, time.Time{}, depState, fmt.Errorf("no depfile=%q to build target %q: %w", depfile, target, err)
 	}
-	fsys := hashFS.FileSystem(ctx, wd)
-	deps, err = makeutil.ParseDepsFile(ctx, fsys, depfile)
+	fsys := hashFS.FileSystem(ctx, bpath.ExecRoot)
+	deps, err = makeutil.ParseDepsFile(ctx, fsys, df)
 	if err != nil {
 		return "", nil, time.Time{}, depState, fmt.Errorf("failed to read depfile=%q to build target %q: %w", depfile, target, err)
 	}
-	return fmt.Sprintf("depfile=%q", depfile), deps, fi.ModTime(), "VALID", nil
+	return fmt.Sprintf("depfile=%q", depfile), deps, fi.ModTime(), ninjabuild.DepsLogValid, nil
 }
 
 func depsTargets(ctx context.Context, state *ninjautil.State, depsLog *ninjautil.DepsLog, args []string) ([]string, error) {
