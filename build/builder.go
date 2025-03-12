@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"net/url"
 	"os"
@@ -19,6 +20,7 @@ import (
 	"runtime"
 	"runtime/debug"
 	"runtime/pprof"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -1024,14 +1026,16 @@ func (b *Builder) outputs(ctx context.Context, step *Step) error {
 	// need to check against step.cmd.Outputs, not step.def.Outputs, since
 	// handler may add to step.cmd.Outputs.
 	for _, out := range outputs {
+		var local bool
 		if b.outputLocal != nil && b.outputLocal(ctx, out) {
 			if seen[out] {
 				continue
 			}
 			localOutputs = append(localOutputs, out)
 			seen[out] = true
+			local = true
 		}
-		_, err := b.hashFS.Stat(ctx, step.cmd.ExecRoot, out)
+		fi, err := b.hashFS.Stat(ctx, step.cmd.ExecRoot, out)
 		if err != nil {
 			reqOut := false
 			for _, o := range defOutputs {
@@ -1040,20 +1044,38 @@ func (b *Builder) outputs(ctx context.Context, step *Step) error {
 					break
 				}
 			}
-			if !reqOut {
-				clog.Warningf(ctx, "missing outputs %s: %v", out, err)
-				outs := make([]string, 0, len(localOutputs))
-				for _, f := range localOutputs {
-					if f == out {
-						continue
-					}
-					outs = append(outs, f)
-				}
-				localOutputs = outs
-				continue
+			if reqOut {
+				return fmt.Errorf("missing outputs %s: %w", out, err)
 			}
-			return fmt.Errorf("missing outputs %s: %w", out, err)
+			clog.Warningf(ctx, "missing outputs %s: %v", out, err)
+			// make sure it doesn't exist on disk, too
+			err = b.hashFS.OS.Remove(ctx, filepath.Join(step.cmd.ExecRoot, out))
+			if !errors.Is(err, fs.ErrNotExist) {
+				clog.Infof(ctx, "remove missing output %q: %v", out, err)
+			}
+			if local {
+				// out is not set in hashfs, so don't flush
+				localOutputs = slices.DeleteFunc(localOutputs, func(s string) bool { return s == out })
+			}
+			continue
 		}
+		if local {
+			// local output will be flushed
+			continue
+		}
+		lfi, err := b.hashFS.OS.Lstat(ctx, filepath.Join(step.cmd.ExecRoot, out))
+		if errors.Is(err, fs.ErrNotExist) {
+			// not exist on disk
+			continue
+		}
+		if fi.ModTime().Equal(lfi.ModTime()) {
+			// same mtime
+			// TODO: check digest?
+			continue
+		}
+		// mtime differs. remove stale output
+		err = b.hashFS.OS.Remove(ctx, filepath.Join(step.cmd.ExecRoot, out))
+		clog.Infof(ctx, "remove stale output %q: %v", out, err)
 	}
 	if len(localOutputs) > 0 {
 		err := b.hashFS.Flush(ctx, step.cmd.ExecRoot, localOutputs)
