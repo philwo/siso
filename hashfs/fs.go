@@ -1629,28 +1629,47 @@ func (e *entry) updateDir(ctx context.Context, hfs *HashFS, dname string) []stri
 		clog.Warningf(ctx, "updateDir %s: readdirnames %v", dname, err)
 		return nil
 	}
-	var wg sync.WaitGroup
-	for _, name := range names {
-		// don't scan temporary file by readdir.
-		// it may cause race on windows.
-		// b/294318963
-		if strings.HasSuffix(name, ".tmp") {
-			continue
+	if hfs.OnCog() {
+		var wg sync.WaitGroup
+		for _, name := range names {
+			// don't scan temporary file by readdir.
+			// it may cause race on windows.
+			// b/294318963
+			if strings.HasSuffix(name, ".tmp") {
+				continue
+			}
+			if hfs.opt.Ignore(ctx, filepath.Join(dname, name)) {
+				continue
+			}
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				// update entry in e.directory.
+				_, err := hfs.Stat(ctx, dname, name)
+				if err != nil {
+					clog.Warningf(ctx, "updateDir stat %s: %v", name, err)
+				}
+			}()
 		}
-		if hfs.opt.Ignore(ctx, filepath.Join(dname, name)) {
-			continue
-		}
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Wait()
+	} else {
+		for _, name := range names {
+			// don't scan temporary file by readdir.
+			// it may cause race on windows.
+			// b/294318963
+			if strings.HasSuffix(name, ".tmp") {
+				continue
+			}
+			if hfs.opt.Ignore(ctx, filepath.Join(dname, name)) {
+				continue
+			}
 			// update entry in e.directory.
-			_, err = hfs.Stat(ctx, dname, name)
+			_, err := hfs.Stat(ctx, dname, name)
 			if err != nil {
 				clog.Warningf(ctx, "updateDir stat %s: %v", name, err)
 			}
-		}()
+		}
 	}
-	wg.Wait()
 	clog.Infof(ctx, "updateDir mtime %s %d %s -> %s", dname, len(names), e.mtime, fi.ModTime())
 	e.directory.mtime = fi.ModTime()
 	// if local dir is updated after hashfs update, update hashfs mtime.
