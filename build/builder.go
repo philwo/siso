@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"net/url"
 	"os"
@@ -1024,12 +1025,24 @@ func (b *Builder) outputs(ctx context.Context, step *Step) error {
 	// need to check against step.cmd.Outputs, not step.def.Outputs, since
 	// handler may add to step.cmd.Outputs.
 	for _, out := range outputs {
+		if seen[out] {
+			continue
+		}
+		seen[out] = true
+		var local bool
 		if b.outputLocal != nil && b.outputLocal(ctx, out) {
-			if seen[out] {
-				continue
-			}
 			localOutputs = append(localOutputs, out)
-			seen[out] = true
+			local = true
+		} else {
+			// check if it already exists on local.
+			// if so, better to flush to the disk
+			// as other future step would access it locally.
+			_, err := b.hashFS.OS.Lstat(ctx, filepath.Join(step.cmd.ExecRoot, out))
+			if err == nil {
+				clog.Infof(ctx, "output_local=false but local exists: %q", out)
+				localOutputs = append(localOutputs, out)
+				local = true
+			}
 		}
 		_, err := b.hashFS.Stat(ctx, step.cmd.ExecRoot, out)
 		if err != nil {
@@ -1040,19 +1053,19 @@ func (b *Builder) outputs(ctx context.Context, step *Step) error {
 					break
 				}
 			}
-			if !reqOut {
-				clog.Warningf(ctx, "missing outputs %s: %v", out, err)
-				outs := make([]string, 0, len(localOutputs))
-				for _, f := range localOutputs {
-					if f == out {
-						continue
-					}
-					outs = append(outs, f)
-				}
-				localOutputs = outs
-				continue
+			if reqOut {
+				return fmt.Errorf("missing outputs %s: %w", out, err)
 			}
-			return fmt.Errorf("missing outputs %s: %w", out, err)
+			clog.Warningf(ctx, "missing outputs %s: %v", out, err)
+			if !local {
+				// need to make sure it doesn't exist on disk too
+				// for local=true, Flush will remove.
+				err = b.hashFS.OS.Remove(ctx, filepath.Join(step.cmd.ExecRoot, out))
+				if err != nil && !errors.Is(err, fs.ErrNotExist) {
+					clog.Warningf(ctx, "remove missing outputs %q: %v", out, err)
+				}
+			}
+			continue
 		}
 	}
 	if len(localOutputs) > 0 {
