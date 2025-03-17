@@ -88,6 +88,9 @@ func New(ctx context.Context, opts Options) (Cred, error) {
 		}
 		tok, err := opts.TokenSource.Token()
 		if err != nil {
+			if ctx.Err() != nil {
+				return Cred{}, err
+			}
 			return Cred{}, fmt.Errorf("need to run `siso login`: %w", err)
 		}
 		t, _ := tok.Extra("x-token-source").(string)
