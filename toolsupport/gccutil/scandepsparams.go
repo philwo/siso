@@ -107,6 +107,8 @@ func ExtractScanDepsParams(ctx context.Context, args, env []string) ScanDepsPara
 			res.Files = append(res.Files, strings.TrimPrefix(arg, "-fsanitize-ignorelist="))
 		case strings.HasPrefix(arg, "-iframework"):
 			res.Frameworks = append(res.Frameworks, strings.TrimPrefix(arg, "-iframework"))
+		case strings.HasPrefix(arg, "--gcc-toolchain="):
+			res.Sysroots = append(res.Sysroots, strings.TrimPrefix(arg, "--gcc-toolchain="))
 		case strings.HasPrefix(arg, "--sysroot="):
 			res.Sysroots = append(res.Sysroots, strings.TrimPrefix(arg, "--sysroot="))
 		case strings.HasPrefix(arg, "-D"):
