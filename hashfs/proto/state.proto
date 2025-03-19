@@ -33,9 +33,20 @@ message Entry {
   int64 updated_time = 8; // unix nano sec.
 }
 
+message BuildTargets {
+  repeated string targets = 1;
+}
+
 message State {
   repeated Entry entries = 1;
 
   // last checked token for fsmonitor (e.g. watchman)
   string last_checked = 2;
+
+  // build targets that are used to update fs entries.
+  // only set when the build was succeeded.
+  // It is used to check no-op build.
+  // i.e. if all entries are clean and build_targets are the same,
+  // everything is up-to-date.
+  BuildTargets build_targets = 3;
 }

@@ -16,6 +16,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -74,6 +75,12 @@ type HashFS struct {
 
 	// clean if loaded state is matched with local disk's state.
 	clean atomic.Bool
+
+	// buildTargets is build targets stored in state file.
+	// nil vs []string{} differs.
+	// nil is not set (last build failed).
+	// []string{} is set (last build succeeded without explicit target requested).
+	buildTargets []string
 
 	// loaded if state is loaded.
 	loaded atomic.Bool
@@ -204,6 +211,18 @@ func (hfs *HashFS) SetExecutables(m map[string]bool) {
 	hfs.executables = m
 }
 
+// SetBuildTargets sets build targets.
+func (hfs *HashFS) SetBuildTargets(ctx context.Context, buildTargets []string, success bool) {
+	if !success {
+		hfs.buildTargets = nil
+		clog.Infof(ctx, "set no build targets")
+		return
+	}
+	hfs.buildTargets = make([]string, len(buildTargets))
+	copy(hfs.buildTargets, buildTargets)
+	clog.Infof(ctx, "set build targets=%q", hfs.buildTargets)
+}
+
 // Close closes the HashFS.
 // Persists current state in opt.StateFile.
 func (hfs *HashFS) Close(ctx context.Context) error {
@@ -239,9 +258,16 @@ func (hfs *HashFS) Close(ctx context.Context) error {
 	return nil
 }
 
-// IsClean returns whether hashfs is clean (i.e. sync with local disk).
-func (hfs *HashFS) IsClean() bool {
-	return hfs.clean.Load()
+// IsClean returns whether hashfs is clean for buildTargets (i.e. sync with local disk).
+func (hfs *HashFS) IsClean(buildTargets []string) bool {
+	if !hfs.clean.Load() {
+		return false
+	}
+	// we distinguish nil vs []string{}.
+	if hfs.buildTargets == nil {
+		return false
+	}
+	return slices.Equal(hfs.buildTargets, buildTargets)
 }
 
 // PreviouslyGeneratedFiles returns a list of generated files

@@ -354,7 +354,6 @@ func (errInterrupted) Is(target error) bool { return target == context.Canceled 
 
 const (
 	// relative to -log_dir
-	lastTargetsFile   = ".siso_last_targets"
 	failedTargetsFile = ".siso_failed_targets"
 )
 
@@ -664,10 +663,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		return stats, err
 	}
 
-	lastTargetsFilename := c.logFilename(lastTargetsFile, "")
 	failedTargetsFilename := c.logFilename(failedTargetsFile, "")
-
-	_, sameTargets := checkTargets(ctx, lastTargetsFilename, targets)
 
 	var eg errgroup.Group
 	var localDepsLog *ninjautil.DepsLog
@@ -824,20 +820,15 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 				clog.Warningf(ctx, "failed to save failed targets: %v", serr)
 				return
 			}
-			// when write failedTargetsFile, need to write lastTargetsFile too.
 		} else {
 			rerr := os.Remove(c.logFilename(c.failedCommandsFile, ""))
 			if rerr != nil {
 				clog.Warningf(ctx, "failed to remove failed command file: %v", rerr)
 			}
 		}
-		clog.Infof(ctx, "save targets to %s...", lastTargetsFilename)
-		serr := saveTargets(ctx, lastTargetsFilename, targets, nil)
-		if serr != nil {
-			clog.Warningf(ctx, "failed to save last targets: %v", serr)
-		}
 	}()
 	defer func() {
+		hashFS.SetBuildTargets(ctx, targets, !c.dryRun && c.subtool == "" && !c.prepare && err == nil)
 		err := hashFS.Close(ctx)
 		if err != nil {
 			clog.Errorf(ctx, "close hashfs: %v", err)
@@ -850,16 +841,16 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 
 	_, err = os.Stat(failedTargetsFilename)
 	lastFailed := err == nil
-	clog.Infof(ctx, "sameTargets: %t hashfs loaderr: %v clean: %t last failed: %t", sameTargets, hashFSErr, hashFS.IsClean(), lastFailed)
+	isClean := hashFS.IsClean(targets)
+	clog.Infof(ctx, "hashfs loaderr: %v clean: %t (%q) last failed: %t", hashFSErr, isClean, targets, lastFailed)
 	// if not using non-default log_dir, it would see different
 	// .siso_last_targets, which won't match with .siso_fs_state.
 	// in this case, don't shortcut noop build, but better to check
 	// build graph again.
-	if !c.clobber && !c.batch && !c.dryRun && !c.debugMode.Explain && c.subtool != "cleandead" && isLogDirDefault && sameTargets && hashFSErr == nil && hashFS.IsClean() && !lastFailed {
+	if !c.clobber && !c.batch && !c.dryRun && !c.debugMode.Explain && c.subtool != "cleandead" && isLogDirDefault && hashFSErr == nil && isClean && !lastFailed {
 		// TODO: better to check digest of .siso_fs_state?
 		return stats, errNothingToDo
 	}
-	os.Remove(lastTargetsFilename)
 
 	if c.resultstoreUploader != nil {
 		defer func() {

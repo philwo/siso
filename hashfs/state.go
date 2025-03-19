@@ -193,7 +193,6 @@ func Load(ctx context.Context, opts Option) (*pb.State, error) {
 		return nil, err
 	}
 	durUnmarshal := time.Since(start)
-
 	clog.Infof(ctx, "Load fs state from %s: read/uncompress %s + unmarshal %s = total %s", opts.StateFile, durUncompress, durUnmarshal, durUncompress+durUnmarshal)
 
 	return state, nil
@@ -235,6 +234,14 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 	if logw != nil {
 		fmt.Fprintf(logw, "hashfs.SetState\n")
 		defer fmt.Fprintf(logw, "hashfs.SetState done\n")
+	}
+	if state.BuildTargets != nil {
+		hfs.buildTargets = make([]string, len(state.BuildTargets.Targets))
+		copy(hfs.buildTargets, state.BuildTargets.Targets)
+		clog.Infof(ctx, "build targets=%q", hfs.buildTargets)
+	} else {
+		hfs.buildTargets = nil
+		clog.Infof(ctx, "no build targets")
 	}
 	var fsm FileInfoer = osfsInfoer{}
 	if hfs.opt.FSMonitor != nil && state.LastChecked != "" {
@@ -812,7 +819,12 @@ func (hfs *HashFS) State(ctx context.Context) *pb.State {
 			state.LastChecked = token
 		}
 	}
-	clog.Infof(ctx, "state %d entries token:%q: %s", len(state.Entries), state.LastChecked, time.Since(started))
+	if hfs.buildTargets != nil {
+		state.BuildTargets = &pb.BuildTargets{
+			Targets: hfs.buildTargets,
+		}
+	}
+	clog.Infof(ctx, "state %d entries token:%q buildTargets:%v: %s", len(state.Entries), state.LastChecked, state.BuildTargets, time.Since(started))
 	return state
 }
 
