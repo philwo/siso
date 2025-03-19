@@ -11,7 +11,6 @@ import (
 	"errors"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"testing"
 
 	"go.chromium.org/infra/build/siso/build"
@@ -173,13 +172,13 @@ func TestBuild_GNGen(t *testing.T) {
 	})
 
 	t.Run("failure_regen", func(t *testing.T) {
-		ninja := func(s string) (build.Stats, error) {
+		ninja := func(s string, lastFailedTargets []string) (build.Stats, error) {
 			opt, graph, cleanup := setupBuild(ctx, t, dir, hashfs.Option{
 				StateFile: ".siso_fs_state",
 			})
 			defer cleanup()
 			return runNinja(ctx, "build.ninja", graph, opt, nil, runNinjaOpts{
-				checkFailedTargets: true,
+				checkFailedTargets: lastFailedTargets,
 			})
 		}
 		setupFiles(t, dir, testName, nil)
@@ -188,21 +187,16 @@ func TestBuild_GNGen(t *testing.T) {
 			t.Fatalf("gn gen failed: %v", err)
 		}
 
-		stats, err := ninja("first")
+		stats, err := ninja("first", nil)
 		if err != nil {
 			t.Fatalf("first build  %v, want nil err", err)
-		}
-		// mark base.stamp failed
-		err = saveTargets(ctx, filepath.Join(dir, "out/siso", failedTargetsFile), []string{"base.stamp"})
-		if err != nil {
-			t.Fatalf("failed to save failed targets: %v", err)
 		}
 
 		modifyFile(t, dir, "BUILD.gn", func(buf []byte) []byte {
 			return append(buf, []byte("!!!")...)
 		})
 
-		stats, err = ninja("fix")
+		stats, err = ninja("fix", []string{"base.stamp"})
 		if err != nil {
 			t.Errorf("build err: %v", err)
 		}
@@ -218,13 +212,13 @@ func TestBuild_GNGen(t *testing.T) {
 	})
 
 	t.Run("failure_missing_targets", func(t *testing.T) {
-		ninja := func(s string) (build.Stats, error) {
+		ninja := func(s string, lastFailedTargets []string) (build.Stats, error) {
 			opt, graph, cleanup := setupBuild(ctx, t, dir, hashfs.Option{
 				StateFile: ".siso_fs_state",
 			})
 			defer cleanup()
 			return runNinja(ctx, "build.ninja", graph, opt, nil, runNinjaOpts{
-				checkFailedTargets: true,
+				checkFailedTargets: lastFailedTargets,
 			})
 		}
 		setupFiles(t, dir, testName, nil)
@@ -233,21 +227,16 @@ func TestBuild_GNGen(t *testing.T) {
 			t.Fatalf("gn gen failed: %v", err)
 		}
 
-		stats, err := ninja("first")
+		stats, err := ninja("first", nil)
 		if err != nil {
 			t.Fatalf("first build  %v, want nil err", err)
 		}
-		// mark deprecated.stamp failed to simulate missing last failed targets in next build
-		err = saveTargets(ctx, filepath.Join(dir, "out/siso", failedTargetsFile), []string{"deprecated.stamp"})
-		if err != nil {
-			t.Fatalf("failed to save failed targets: %v", err)
-		}
-
 		modifyFile(t, dir, "BUILD.gn", func(buf []byte) []byte {
 			return append(buf, []byte("!!!")...)
 		})
 
-		stats, err = ninja("fix")
+		// mark deprecated.stamp failed to simulate missing last failed targets in next build
+		stats, err = ninja("fix", []string{"deprecated.stamp"})
 		if err != nil {
 			t.Errorf("build err: %v", err)
 		}

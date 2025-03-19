@@ -482,10 +482,12 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		}
 	}
 
+	isLogDirDefault := c.logDir == "."
 	err = c.initLogDir(ctx)
 	if err != nil {
 		return stats, err
 	}
+	clog.Infof(ctx, "siso log dir=%s default=%t", c.logDir, isLogDirDefault)
 
 	resetCrashOutput, err := c.setupCrashOutput(ctx)
 	if err != nil {
@@ -656,16 +658,16 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	}
 	// upload build pprof
 
-	lastTargetsFilename := c.logFilename(lastTargetsFile, "")
-	failedTargetsFilename := c.logFilename(failedTargetsFile, "")
-
 	targets := c.Flags.Args()
 	config, err := c.initConfig(ctx, execRoot, targets)
 	if err != nil {
 		return stats, err
 	}
 
-	sameTargets := checkTargets(ctx, lastTargetsFilename, targets)
+	lastTargetsFilename := c.logFilename(lastTargetsFile, "")
+	failedTargetsFilename := c.logFilename(failedTargetsFile, "")
+
+	_, sameTargets := checkTargets(ctx, lastTargetsFilename, targets)
 
 	var eg errgroup.Group
 	var localDepsLog *ninjautil.DepsLog
@@ -817,7 +819,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 			// store failed targets only when build steps failed.
 			// i.e., don't store with error like context canceled, etc.
 			clog.Infof(ctx, "record failed targets: %q", stepError.Target)
-			serr := saveTargets(ctx, failedTargetsFilename, []string{stepError.Target})
+			serr := saveTargets(ctx, failedTargetsFilename, targets, []string{stepError.Target})
 			if serr != nil {
 				clog.Warningf(ctx, "failed to save failed targets: %v", serr)
 				return
@@ -830,7 +832,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 			}
 		}
 		clog.Infof(ctx, "save targets to %s...", lastTargetsFilename)
-		serr := saveTargets(ctx, lastTargetsFilename, targets)
+		serr := saveTargets(ctx, lastTargetsFilename, targets, nil)
 		if serr != nil {
 			clog.Warningf(ctx, "failed to save last targets: %v", serr)
 		}
@@ -849,7 +851,11 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	_, err = os.Stat(failedTargetsFilename)
 	lastFailed := err == nil
 	clog.Infof(ctx, "sameTargets: %t hashfs loaderr: %v clean: %t last failed: %t", sameTargets, hashFSErr, hashFS.IsClean(), lastFailed)
-	if !c.clobber && !c.batch && !c.dryRun && !c.debugMode.Explain && c.subtool != "cleandead" && sameTargets && hashFSErr == nil && hashFS.IsClean() && !lastFailed {
+	// if not using non-default log_dir, it would see different
+	// .siso_last_targets, which won't match with .siso_fs_state.
+	// in this case, don't shortcut noop build, but better to check
+	// build graph again.
+	if !c.clobber && !c.batch && !c.dryRun && !c.debugMode.Explain && c.subtool != "cleandead" && isLogDirDefault && sameTargets && hashFSErr == nil && hashFS.IsClean() && !lastFailed {
 		// TODO: better to check digest of .siso_fs_state?
 		return stats, errNothingToDo
 	}
@@ -924,19 +930,25 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 
 	graph := ninjabuild.NewGraph(ctx, c.fname, nstate, config, buildPath, hashFS, stepConfig, localDepsLog)
 
+	var lastFailedTargets []string
+	if !c.batch && !c.clobber {
+		lastFailedTargets, _ = checkTargets(ctx, failedTargetsFilename, targets)
+	}
+	err = os.Remove(failedTargetsFilename)
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		clog.Warningf(ctx, "failed to remove %s: %v", failedTargetsFilename, err)
+	}
 	return runNinja(ctx, c.fname, graph, bopts, targets, runNinjaOpts{
-		checkFailedTargets:    !c.batch && sameTargets && !c.clobber,
-		failedTargetsFilename: failedTargetsFilename,
-		cleandead:             c.cleandead,
-		subtool:               c.subtool,
-		enableStatusz:         true,
+		checkFailedTargets: lastFailedTargets,
+		cleandead:          c.cleandead,
+		subtool:            c.subtool,
+		enableStatusz:      true,
 	})
 }
 
 type runNinjaOpts struct {
-	// whether to check .siso_failed_targets or not.
-	checkFailedTargets    bool
-	failedTargetsFilename string
+	// build the last failed targets first.
+	checkFailedTargets []string
 
 	// whether to perform cleandead or not.
 	cleandead bool
@@ -955,52 +967,45 @@ func runNinja(ctx context.Context, fname string, graph *ninjabuild.Graph, bopts 
 
 	for {
 		clog.Infof(ctx, "build starts")
-		if nopts.checkFailedTargets {
-			failedTargets, err := loadTargets(ctx, nopts.failedTargetsFilename)
-			if err != nil {
-				clog.Infof(ctx, "no failed targets: %v", err)
-			} else {
-				ui.Default.PrintLines(fmt.Sprintf("Building last failed targets: %s...\n", failedTargets))
-				stats, err = doBuild(ctx, graph, bopts, nopts, failedTargets...)
-				if errors.Is(err, build.ErrManifestModified) {
-					if bopts.DryRun {
-						return stats, nil
-					}
-					clog.Infof(ctx, "%s modified.", fname)
-					spin.Start("reloading")
-					err := graph.Reload(ctx)
-					if err != nil {
-						spin.Stop(err)
-						return stats, err
-					}
-					spin.Stop(nil)
-					ui.Default.PrintLines("\n", "\n")
-					clog.Infof(ctx, "reload done. build retry")
-					continue
+		if len(nopts.checkFailedTargets) > 0 {
+			failedTargets := nopts.checkFailedTargets
+			ui.Default.PrintLines(fmt.Sprintf("Building last failed targets: %s...\n", failedTargets))
+			var err error
+			stats, err = doBuild(ctx, graph, bopts, nopts, failedTargets...)
+			if errors.Is(err, build.ErrManifestModified) {
+				if bopts.DryRun {
+					return stats, nil
 				}
-				var errBuild buildError
-				if errors.As(err, &errBuild) {
-					var stepError build.StepError
-					if errors.As(errBuild.err, &stepError) {
-						// last failed is not fixed yet.
-						return stats, err
-					}
-				}
-				nopts.checkFailedTargets = false
+				clog.Infof(ctx, "%s modified.", fname)
+				spin.Start("reloading")
+				err := graph.Reload(ctx)
 				if err != nil {
-					ui.Default.PrintLines(fmt.Sprintf(" %s: %s: %v\n\n", ui.SGR(ui.Yellow, "err in last failed targets, rebuild again"), failedTargets, err))
-				} else {
-					ui.Default.PrintLines(fmt.Sprintf(" %s: %s\n\n", ui.SGR(ui.Green, "last failed targets fixed"), failedTargets))
+					spin.Stop(err)
+					return stats, err
 				}
-				err = graph.Reset(ctx)
-				if err != nil {
+				spin.Stop(nil)
+				ui.Default.PrintLines("\n", "\n")
+				clog.Infof(ctx, "reload done. build retry")
+				continue
+			}
+			var errBuild buildError
+			if errors.As(err, &errBuild) {
+				var stepError build.StepError
+				if errors.As(errBuild.err, &stepError) {
+					// last failed is not fixed yet.
 					return stats, err
 				}
 			}
-		}
-		err := os.Remove(nopts.failedTargetsFilename)
-		if err != nil && !errors.Is(err, fs.ErrNotExist) {
-			clog.Warningf(ctx, "failed to remove %s: %v", nopts.failedTargetsFilename, err)
+			nopts.checkFailedTargets = nil
+			if err != nil {
+				ui.Default.PrintLines(fmt.Sprintf(" %s: %s: %v\n\n", ui.SGR(ui.Yellow, "err in last failed targets, rebuild again"), failedTargets, err))
+			} else {
+				ui.Default.PrintLines(fmt.Sprintf(" %s: %s\n\n", ui.SGR(ui.Green, "last failed targets fixed"), failedTargets))
+			}
+			err = graph.Reset(ctx)
+			if err != nil {
+				return stats, err
+			}
 		}
 		stats, err := doBuild(ctx, graph, bopts, nopts, targets...)
 		if errors.Is(err, build.ErrManifestModified) {
@@ -1982,24 +1987,26 @@ func (c *ninjaCmdRun) initOutputLocal() (func(context.Context, string) bool, err
 
 type lastTargets struct {
 	Targets []string `json:"targets,omitempty"`
+	Failed  []string `json:"failed,omitempty"`
 }
 
-func loadTargets(ctx context.Context, targetsFile string) ([]string, error) {
+func loadTargets(ctx context.Context, targetsFile string) ([]string, []string, error) {
 	buf, err := os.ReadFile(targetsFile)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	var last lastTargets
 	err = json.Unmarshal(buf, &last)
 	if err != nil {
-		return nil, fmt.Errorf("parse error %s: %w", targetsFile, err)
+		return nil, nil, fmt.Errorf("parse error %s: %w", targetsFile, err)
 	}
-	return last.Targets, nil
+	return last.Targets, last.Failed, nil
 }
 
-func saveTargets(ctx context.Context, targetsFile string, targets []string) error {
+func saveTargets(ctx context.Context, targetsFile string, targets, failed []string) error {
 	v := lastTargets{
 		Targets: targets,
+		Failed:  failed,
 	}
 	buf, err := json.Marshal(v)
 	if err != nil {
@@ -2012,23 +2019,23 @@ func saveTargets(ctx context.Context, targetsFile string, targets []string) erro
 	return nil
 }
 
-func checkTargets(ctx context.Context, lastTargetsFilename string, targets []string) bool {
-	lastTargets, err := loadTargets(ctx, lastTargetsFilename)
+func checkTargets(ctx context.Context, lastTargetsFilename string, targets []string) ([]string, bool) {
+	lastTargets, failed, err := loadTargets(ctx, lastTargetsFilename)
 	if err != nil {
 		clog.Warningf(ctx, "checkTargets: %v", err)
-		return false
+		return nil, false
 	}
 	if len(targets) != len(lastTargets) {
-		return false
+		return nil, false
 	}
 	sort.Strings(targets)
 	sort.Strings(lastTargets)
 	for i := range targets {
 		if targets[i] != lastTargets[i] {
-			return false
+			return nil, false
 		}
 	}
-	return true
+	return failed, true
 }
 
 func argsGN(args, key string) string {
