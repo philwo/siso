@@ -14,10 +14,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	log "github.com/golang/glog"
+	"github.com/golang/glog"
 	"go.starlark.net/starlark"
-
-	"go.chromium.org/infra/build/siso/o11y/clog"
 )
 
 const (
@@ -42,7 +40,7 @@ type repoLoader struct {
 // A module may be `@<repo>//` prefix to select repository.
 func (r *repoLoader) Load(thread *starlark.Thread, module string) (starlark.StringDict, error) {
 	curname := thread.Local("modulename").(string)
-	log.V(1).Infof("load %s from %s", module, curname)
+	glog.V(1).Infof("load %s from %s", module, curname)
 	var curModule string
 	if m, n, ok := strings.Cut(curname, "//"); ok {
 		curModule = m[1:]
@@ -71,7 +69,7 @@ func (r *repoLoader) Load(thread *starlark.Thread, module string) (starlark.Stri
 	} else {
 		fullname = fname
 	}
-	log.V(1).Infof("module=%q fname=%q fullname=%q", moduleName, fname, fullname)
+	glog.V(1).Infof("module=%q fname=%q fullname=%q", moduleName, fname, fullname)
 	var buf []byte
 	var err error
 	if moduleName != "" {
@@ -85,7 +83,7 @@ func (r *repoLoader) Load(thread *starlark.Thread, module string) (starlark.Stri
 	}
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) && moduleName == configOverridesRepo {
-			clog.Warningf(r.ctx, "no @%s//%s: %v", configOverridesRepo, fname, err)
+			glog.Warningf("no @%s//%s: %v", configOverridesRepo, fname, err)
 			name := strings.TrimSuffix(fname, filepath.Ext(fname))
 			return starlark.StringDict(map[string]starlark.Value{
 				name: starlark.None,
@@ -96,7 +94,7 @@ func (r *repoLoader) Load(thread *starlark.Thread, module string) (starlark.Stri
 	t := &starlark.Thread{
 		Name: "module " + module + "(fullname: " + fullname + ")",
 		Print: func(thread *starlark.Thread, msg string) {
-			log.Infof("thread:%s %s", thread.Name, msg)
+			glog.Infof("thread:%s %s", thread.Name, msg)
 		},
 		Load: r.Load,
 	}

@@ -12,12 +12,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	log "github.com/golang/glog"
+	"github.com/golang/glog"
 	"go.starlark.net/starlark"
 
 	"go.chromium.org/infra/build/siso/build"
 	"go.chromium.org/infra/build/siso/hashfs"
-	"go.chromium.org/infra/build/siso/o11y/clog"
 )
 
 func parseFilegroups(ctx context.Context, v starlark.Value) (map[string]filegroupUpdater, error) {
@@ -121,7 +120,7 @@ func (cfg *Config) UpdateFilegroups(ctx context.Context, hashFS *hashfs.HashFS, 
 		Filegroups: make(map[string][]string),
 	}
 	for k, g := range cfg.filegroups {
-		clog.Infof(ctx, "filegroup %s", k)
+		glog.Infof("filegroup %s", k)
 		v := filegroup{
 			etag:  filegroups.ETags[k],
 			files: filegroups.Filegroups[k],
@@ -133,8 +132,8 @@ func (cfg *Config) UpdateFilegroups(ctx context.Context, hashFS *hashfs.HashFS, 
 		v, err := g.Update(ctx, fsys, v)
 		if errors.Is(err, fs.ErrNotExist) {
 			// ignore the filegroup. b/283203079
-			if log.V(1) {
-				clog.Warningf(ctx, "failed to update filegroup %q: %v", k, err)
+			if glog.V(1) {
+				glog.Warningf("failed to update filegroup %q: %v", k, err)
 			}
 			continue
 		}

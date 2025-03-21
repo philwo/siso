@@ -18,13 +18,10 @@ import (
 	"sync"
 	"time"
 
-	"cloud.google.com/go/logging"
-	log "github.com/golang/glog"
+	"github.com/golang/glog"
 	"github.com/google/uuid"
 	"github.com/maruel/subcommands"
 	"golang.org/x/sync/errgroup"
-	mrpb "google.golang.org/genproto/googleapis/api/monitoredres"
-	"google.golang.org/grpc/grpclog"
 
 	"go.chromium.org/luci/auth"
 	"go.chromium.org/luci/common/cli"
@@ -33,7 +30,6 @@ import (
 
 	"go.chromium.org/infra/build/siso/auth/cred"
 	"go.chromium.org/infra/build/siso/hashfs"
-	"go.chromium.org/infra/build/siso/o11y/clog"
 	"go.chromium.org/infra/build/siso/reapi"
 	"go.chromium.org/infra/build/siso/reapi/digest"
 	"go.chromium.org/infra/build/siso/reapi/merkletree"
@@ -152,20 +148,6 @@ func (c *run) run(ctx context.Context) error {
 		return err
 	}
 	spin.Stop(nil)
-	if c.enableCloudLogging {
-		logCtx, loggerURL, done, err := c.initCloudLogging(ctx, projectID, execRoot, credential)
-		if err != nil {
-			// b/335295396 Compile step hitting write requests quota
-			// rather than build fails, fallback to glog.
-			fmt.Fprintf(os.Stderr, "cloud logging: %v\n", err)
-			fmt.Fprintln(os.Stderr, "fallback to glog")
-			c.enableCloudLogging = false
-		} else {
-			fmt.Fprintln(os.Stderr, loggerURL)
-			defer done()
-			ctx = logCtx
-		}
-	}
 
 	ui.Default.Infof(fmt.Sprintf("use %s\n", c.reopt))
 	client, err := reapi.New(ctx, credential, *c.reopt)
@@ -175,7 +157,7 @@ func (c *run) run(ctx context.Context) error {
 	defer func() {
 		err := client.Close()
 		if err != nil {
-			clog.Errorf(ctx, "close reapi client: %v", err)
+			glog.Errorf("close reapi client: %v", err)
 		}
 	}()
 	artifactStore := client.CacheStore()
@@ -193,7 +175,7 @@ func (c *run) run(ctx context.Context) error {
 	defer func() {
 		err := casClient.Close()
 		if err != nil {
-			clog.Errorf(ctx, "close cas client: %v", err)
+			glog.Errorf("close cas client: %v", err)
 		}
 	}()
 
@@ -234,7 +216,7 @@ func (c *run) run(ctx context.Context) error {
 			mu.Lock()
 			result[target] = d.String()
 			mu.Unlock()
-			clog.Infof(ectx, "uploaded digest for %s: %s in %s", target, d, duration)
+			glog.Infof("uploaded digest for %s: %s in %s", target, d, duration)
 			ui.Default.PrintLines(fmt.Sprintf("uploaded digest for %s: %s in %s\n", target, d, duration))
 			return nil
 		})
@@ -270,17 +252,17 @@ func (c *run) initWorkdirs(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	clog.Infof(ctx, "wd: %s", execRoot)
+	glog.Infof("wd: %s", execRoot)
 	err = os.Chdir(c.dir)
 	if err != nil {
 		return "", err
 	}
-	clog.Infof(ctx, "change dir to %s", c.dir)
+	glog.Infof("change dir to %s", c.dir)
 	cwd, err := os.Getwd()
 	if err != nil {
 		return "", err
 	}
-	clog.Infof(ctx, "exec_root: %s", execRoot)
+	glog.Infof("exec_root: %s", execRoot)
 
 	// recalculate dir as relative to exec_root.
 	// recipe may use absolute path for -C.
@@ -292,7 +274,7 @@ func (c *run) initWorkdirs(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("dir %q is out of exec root %q", cwd, execRoot)
 	}
 	c.dir = rdir
-	clog.Infof(ctx, "working_directory in exec_root: %s", c.dir)
+	glog.Infof("working_directory in exec_root: %s", c.dir)
 	return execRoot, err
 }
 
@@ -353,7 +335,7 @@ func upload(ctx context.Context, execRoot, buildDir string, hashFS *hashfs.HashF
 			fnames = append(fnames, fname)
 			continue
 		}
-		clog.Infof(ctx, "expand dir %s", pathname)
+		glog.Infof("expand dir %s", pathname)
 		fsys := hashFS.FileSystem(ctx, filepath.Join(execRoot, pathname))
 		err = fs.WalkDir(fsys, ".", func(path string, d fs.DirEntry, err error) error {
 			if err != nil {
@@ -401,64 +383,12 @@ func upload(ctx context.Context, execRoot, buildDir string, hashFS *hashfs.HashF
 	if err != nil {
 		return digest.Digest{}, err
 	}
-	clog.Infof(ctx, "upload %s for %s", d, target)
+	glog.Infof("upload %s for %s", d, target)
 	started := time.Now()
 	n, err := casClient.UploadAll(ctx, ds)
 	if err != nil {
 		return digest.Digest{}, err
 	}
-	clog.Infof(ctx, "uploaded %d for %s in %s", n, target, time.Since(started))
+	glog.Infof("uploaded %d for %s in %s", n, target, time.Since(started))
 	return d, nil
-}
-
-func (c *run) initCloudLogging(ctx context.Context, projectID, execRoot string, credential cred.Cred) (context.Context, string, func(), error) {
-	taskID := uuid.New().String()
-	log.Infof("enable cloud logging project=%s id=%s", projectID, taskID)
-
-	// log_id: "siso.log" and "siso.step"
-	// use generic_task resource
-	// https://cloud.google.com/logging/docs/api/v2/resource-list
-	// https://cloud.google.com/monitoring/api/resources#tag_generic_task
-	client, err := logging.NewClient(ctx, projectID, credential.ClientOptions()...)
-	if err != nil {
-		return ctx, "", func() {}, err
-	}
-	hostname, err := os.Hostname()
-	if err != nil {
-		return ctx, "", func() {}, err
-	}
-	logger, err := clog.New(ctx, client, "siso.log", "siso.step", &mrpb.MonitoredResource{
-		Type: "generic_task",
-		// should set labels for generic_task.
-		// see https://cloud.google.com/logging/docs/api/v2/resource-list
-		Labels: map[string]string{
-			"project_id": projectID,
-			"job":        c.jobID,
-			"task_id":    taskID,
-			"location":   hostname,
-			"namespace":  execRoot,
-		},
-	})
-	if err != nil {
-		return ctx, "", func() {}, err
-	}
-	ctx = clog.NewContext(ctx, logger)
-	grpclog.SetLoggerV2(logger)
-	return ctx, logger.URL(), func() {
-		errch := make(chan error, 1)
-		go func() {
-			errch <- logger.Close()
-		}()
-		timeout := 10 * time.Second
-		// Don't use clog as it's closing Cloud logging client.
-		select {
-
-		case <-time.After(timeout):
-			log.Warningf("close not finished in %s", timeout)
-		case err := <-errch:
-			if err != nil {
-				log.Warningf("falied to close Cloud logger: %v", err)
-			}
-		}
-	}, nil
 }

@@ -17,9 +17,7 @@ import (
 	"strings"
 	"sync"
 
-	log "github.com/golang/glog"
-
-	"go.chromium.org/infra/build/siso/o11y/clog"
+	"github.com/golang/glog"
 )
 
 var once sync.Once
@@ -35,7 +33,7 @@ func Available(ctx context.Context) bool {
 		var err error
 		path, err = exec.LookPath("strace")
 		if err != nil {
-			clog.Warningf(ctx, "strace is not found: %v", err)
+			glog.Warningf("strace is not found: %v", err)
 			return
 		}
 	})
@@ -71,7 +69,7 @@ func New(ctx context.Context, id string, args []string, dir string) *Strace {
 func (s *Strace) Close(ctx context.Context) {
 	err := os.Remove(s.fname)
 	if err != nil {
-		clog.Warningf(ctx, "failed to remove %s: %v", s.fname, err)
+		glog.Warningf("failed to remove %s: %v", s.fname, err)
 	}
 }
 
@@ -96,14 +94,14 @@ func (s *Strace) PostProcess(ctx context.Context) (inputs, outputs []string, err
 	if err != nil {
 		return nil, nil, err
 	}
-	if log.V(3) {
-		clog.Infof(ctx, "strace for %s\n%s", s.id, b)
+	if glog.V(3) {
+		glog.Infof("strace for %s\n%s", s.id, b)
 	}
 	inputs, outputs = scanStraceData(ctx, b)
 	for i := 0; i < len(inputs); i++ {
 		target, err := os.Readlink(filepath.Join(s.dir, inputs[i]))
 		if err == nil {
-			clog.Infof(ctx, "add symlink from %s -> %s", inputs[i], target)
+			glog.Infof("add symlink from %s -> %s", inputs[i], target)
 			if !filepath.IsAbs(target) {
 				target = filepath.Join(filepath.Dir(inputs[i]), target)
 			}
@@ -124,8 +122,8 @@ func scanStraceData(ctx context.Context, buf []byte) ([]string, []string) {
 		var line []byte
 		line, buf = nextLine(buf)
 		syscall, fnames, wr := parseTraceLine(ctx, line)
-		if log.V(2) {
-			clog.Infof(ctx, "trace %q %q wr:%t", syscall, fnames, wr)
+		if glog.V(2) {
+			glog.Infof("trace %q %q wr:%t", syscall, fnames, wr)
 		}
 		if len(fnames) == 0 {
 			continue
@@ -264,8 +262,8 @@ func parseTraceLine(ctx context.Context, line []byte) (sycall string, fnames []s
 	//   openat(...) = 3
 	//  fail
 	//   syscall(...) = -1 ENOENT (No such file or directory)
-	if log.V(9) {
-		clog.Infof(ctx, "trace line: %q", line)
+	if glog.V(9) {
+		glog.Infof("trace line: %q", line)
 	}
 
 	// workaround for missing --successful-only
@@ -277,8 +275,8 @@ func parseTraceLine(ctx context.Context, line []byte) (sycall string, fnames []s
 	ret := bytes.TrimSpace(line[i+1:])
 	if bytes.HasPrefix(ret, []byte{'-'}) {
 		// ignore error calls. i.e. negative return value
-		if log.V(9) {
-			clog.Infof(ctx, "trace line[error]: %q", line)
+		if glog.V(9) {
+			glog.Infof("trace line[error]: %q", line)
 		}
 		return "", nil, false
 	}
@@ -356,7 +354,7 @@ func parseTraceLine(ctx context.Context, line []byte) (sycall string, fnames []s
 		// <unfinished ...>
 		return syscall, nil, false
 	default:
-		clog.Warningf(ctx, "unknown syscall=%q(%q", syscall, buf)
+		glog.Warningf("unknown syscall=%q(%q", syscall, buf)
 		return syscall, nil, false
 	}
 }

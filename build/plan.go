@@ -15,10 +15,9 @@ import (
 	"sync"
 	"time"
 
-	log "github.com/golang/glog"
+	"github.com/golang/glog"
 
 	"go.chromium.org/infra/build/siso/hashfs"
-	"go.chromium.org/infra/build/siso/o11y/clog"
 	"go.chromium.org/infra/build/siso/ui"
 )
 
@@ -204,7 +203,7 @@ func targetPath(ctx context.Context, g Graph, t Target) string {
 func schedule(ctx context.Context, sched *scheduler, graph Graph, args ...string) error {
 	targets, err := graph.Targets(ctx, args...)
 	started := time.Now()
-	clog.Infof(ctx, "schedule targets: %v [%d]: %v", targets, graph.NumTargets(), err)
+	glog.Infof("schedule targets: %v [%d]: %v", targets, graph.NumTargets(), err)
 	if err != nil {
 		if !experiments.Enabled("ignore-missing-targets", "") {
 			return TargetError{err: err, Suggests: suggestTargets(ctx, sched, graph, args...)}
@@ -280,11 +279,11 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 		defer func() {
 			if ignore {
 				targets[target].scan = scanStateIgnored
-				clog.Infof(ctx, "scan state ignore target %s", targetPath(ctx, graph, target))
+				glog.Infof("scan state ignore target %s", targetPath(ctx, graph, target))
 				return
 			}
-			if log.V(1) {
-				clog.Infof(ctx, "scan state done target %s", targetPath(ctx, graph, target))
+			if glog.V(1) {
+				glog.Infof("scan state done target %s", targetPath(ctx, graph, target))
 			}
 			targets[target].scan = scanStateDone
 		}()
@@ -296,7 +295,7 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 		if ignore {
 			return validationQueue, nil
 		}
-		clog.Infof(ctx, "need to scan ignored target %s", targetPath(ctx, graph, target))
+		glog.Infof("need to scan ignored target %s", targetPath(ctx, graph, target))
 		targets[target].scan = scanStateVisiting
 		defer func() {
 			targets[target].scan = scanStateDone
@@ -306,43 +305,43 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 		return validationQueue, nil
 	}
 	if targets[target].source {
-		if log.V(1) {
-			clog.Infof(ctx, "sched target already marked: %v", targetPath(ctx, graph, target))
+		if glog.V(1) {
+			glog.Infof("sched target already marked: %v", targetPath(ctx, graph, target))
 		}
 		return validationQueue, nil
 	}
-	if log.V(1) {
-		clog.Infof(ctx, "schedule target %v state=%v ignore:%t", targetPath(ctx, graph, target), scanState, ignore)
+	if glog.V(1) {
+		glog.Infof("schedule target %v state=%v ignore:%t", targetPath(ctx, graph, target), scanState, ignore)
 	}
 	newEdge, err := graph.Edge(ctx, target, next)
 	switch {
 	case err == nil:
 		// need to schedule.
 	case errors.Is(err, ErrNoTarget):
-		if log.V(1) {
-			clog.Infof(ctx, "sched target not found? %v", targetPath(ctx, graph, target))
+		if glog.V(1) {
+			glog.Infof("sched target not found? %v", targetPath(ctx, graph, target))
 		}
 		return validationQueue, err
 	case errors.Is(err, ErrTargetIsSource):
-		if log.V(1) {
-			clog.Infof(ctx, "sched target is source? %v", targetPath(ctx, graph, target))
+		if glog.V(1) {
+			glog.Infof("sched target is source? %v", targetPath(ctx, graph, target))
 		}
 		return validationQueue, sched.mark(ctx, graph, target, next)
 	case errors.Is(err, ErrDuplicateStep):
 		if scanState == scanStateIgnored {
 			// need to check again.
 			// It was ignored, but now required to generate *.h
-			clog.Infof(ctx, "need to sched dupliate step for %s", targetPath(ctx, graph, target))
+			glog.Infof("need to sched dupliate step for %s", targetPath(ctx, graph, target))
 			break
 		}
 		// this step is already processed.
-		if log.V(1) {
-			clog.Infof(ctx, "sched duplicate step for %v", targetPath(ctx, graph, target))
+		if glog.V(1) {
+			glog.Infof("sched duplicate step for %v", targetPath(ctx, graph, target))
 		}
 		return validationQueue, nil
 	default:
-		if log.V(1) {
-			clog.Warningf(ctx, "sched error for %v: %v", target, err)
+		if glog.V(1) {
+			glog.Warningf("sched error for %v: %v", target, err)
 		}
 		return validationQueue, err
 	}
@@ -356,8 +355,8 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 			switch targets[out].scan {
 			case scanStateNotVisited:
 				targets[out].scan = nextState
-				if log.V(1) {
-					clog.Infof(ctx, "scan state %v other target %s", nextState, targetPath(ctx, graph, out))
+				if glog.V(1) {
+					glog.Infof("scan state %v other target %s", nextState, targetPath(ctx, graph, out))
 				}
 			}
 		}
@@ -367,8 +366,8 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 	newStep := newEdge.StepDef
 	isPhonyOutput := newStep.Binding("phony_output") != ""
 	targets[target].phonyOutput = isPhonyOutput
-	if log.V(1) {
-		clog.Infof(ctx, "schedule %v inputs:%d outputs:%d", newStep, len(newEdge.Inputs), len(newEdge.Outputs))
+	if glog.V(1) {
+		glog.Infof("schedule %v inputs:%d outputs:%d", newStep, len(newEdge.Inputs), len(newEdge.Outputs))
 	}
 	sched.visited++
 	next = newStep
@@ -379,7 +378,7 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 	}
 
 	if ignore && sched.prepareHeaderOnly {
-		clog.Infof(ctx, "check outputs=%d for %s", len(newEdge.Outputs), targetPath(ctx, graph, target))
+		glog.Infof("check outputs=%d for %s", len(newEdge.Outputs), targetPath(ctx, graph, target))
 		// If this step generates header (even if build dependency
 		// doesn't explicitly depend on the header), don't ignore this.
 		// b/358693473
@@ -391,18 +390,18 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 			}
 			switch filepath.Ext(fname) {
 			case ".h", ".hxx", ".hpp", ".inc":
-				clog.Infof(ctx, "need to schedule for %s", fname)
+				glog.Infof("need to schedule for %s", fname)
 				ignore = false
 				break outCheck
 			}
-			if log.V(1) {
-				clog.Infof(ctx, "schedule %s ignore output=%s", targetPath(ctx, graph, target), fname)
+			if glog.V(1) {
+				glog.Infof("schedule %s ignore output=%s", targetPath(ctx, graph, target), fname)
 			}
 
 		}
 	}
-	if log.V(1) {
-		clog.Infof(ctx, "target=%s ignore=%t prepareHeaderOnly=%t", targetPath(ctx, graph, target), ignore, sched.prepareHeaderOnly)
+	if glog.V(1) {
+		glog.Infof("target=%s ignore=%t prepareHeaderOnly=%t", targetPath(ctx, graph, target), ignore, sched.prepareHeaderOnly)
 	}
 
 	// we might not need to use depfile's dependencies to construct
@@ -437,7 +436,7 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 				switch filepath.Ext(fname) {
 				case ".h", ".hxx", ".hpp", ".inc":
 				default:
-					clog.Infof(ctx, "may ignore schedule for %s", fname)
+					glog.Infof("may ignore schedule for %s", fname)
 					inIgnore = true
 				}
 			}
@@ -477,11 +476,11 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 		}
 	}
 	if ignore {
-		clog.Infof(ctx, "sched: ignore target %s", targetPath(ctx, graph, target))
+		glog.Infof("sched: ignore target %s", targetPath(ctx, graph, target))
 		return validationQueue, nil
 	}
-	if log.V(1) {
-		clog.Infof(ctx, "sched: add target %s: %s", targetPath(ctx, graph, target), newStep)
+	if glog.V(1) {
+		glog.Infof("sched: add target %s: %s", targetPath(ctx, graph, target), newStep)
 	}
 	step.outputs = newEdge.Outputs
 	sched.add(ctx, graph, step)
@@ -492,16 +491,16 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 func newScheduler(ctx context.Context, opt schedulerOption) *scheduler {
 	var prepareHeaderOnly bool
 	if opt.Prepare {
-		clog.Infof(ctx, "schedule: prepare mode")
+		glog.Infof("schedule: prepare mode")
 		if experiments.Enabled("prepare-header-only", "prepare header only") {
-			clog.Infof(ctx, "schedule: prepare header only mode")
+			glog.Infof("schedule: prepare header only mode")
 			prepareHeaderOnly = true
 		}
 	}
 	if opt.EnableTrace {
-		clog.Infof(ctx, "schedule: enable trace")
+		glog.Infof("schedule: enable trace")
 	}
-	clog.Infof(ctx, "schedule: new: targets=%d", opt.NumTargets)
+	glog.Infof("schedule: new: targets=%d", opt.NumTargets)
 	return &scheduler{
 		path:   opt.Path,
 		hashFS: opt.HashFS,
@@ -548,7 +547,7 @@ func (s *scheduler) finish(ctx context.Context, d time.Duration) {
 	defer s.plan.mu.Unlock()
 	nready := len(s.plan.q) + len(s.plan.ready)
 	npendings := s.plan.npendings
-	clog.Infof(ctx, "schedule finish pending:%d+ready:%d (node:%d edge:%d) in %s", npendings, nready, len(s.plan.targets), s.visited, d)
+	glog.Infof("schedule finish pending:%d+ready:%d (node:%d edge:%d) in %s", npendings, nready, len(s.plan.targets), s.visited, d)
 	if d < ui.DurationThreshold {
 		return
 	}
@@ -577,8 +576,8 @@ func (s *scheduler) add(ctx context.Context, graph Graph, step *Step) {
 		}
 	}
 	if step.ReadyToRun("", Target(0)) {
-		if log.V(1) {
-			clog.Infof(ctx, "step state: %s ready to run", step.String())
+		if glog.V(1) {
+			glog.Infof("step state: %s ready to run", step.String())
 		}
 		select {
 		case s.plan.q <- step:
@@ -589,8 +588,8 @@ func (s *scheduler) add(ctx context.Context, graph Graph, step *Step) {
 		}
 		return
 	}
-	if log.V(1) {
-		clog.Infof(ctx, "pending to run: %s (waits: %d)", step, step.NumWaits())
+	if glog.V(1) {
+		glog.Infof("pending to run: %s (waits: %d)", step, step.NumWaits())
 	}
 	s.plan.npendings++
 }
@@ -638,7 +637,7 @@ func (p *plan) done(ctx context.Context, step *Step) {
 	defer p.mu.Unlock()
 
 	if p.closed {
-		clog.Infof(ctx, "build already finished. nothing triggers")
+		glog.Infof("build already finished. nothing triggers")
 		return
 	}
 
@@ -664,8 +663,8 @@ func (p *plan) done(ctx context.Context, step *Step) {
 	nready := 0
 	ready := make([]*Step, 0, len(outs))
 	for _, out := range outs {
-		if log.V(1) {
-			clog.Infof(ctx, "done %v", out)
+		if glog.V(1) {
+			glog.Infof("done %v", out)
 		}
 		i = 0
 		for _, s := range p.targets[out].waits {
@@ -676,8 +675,8 @@ func (p *plan) done(ctx context.Context, step *Step) {
 			if s.ReadyToRun(prevNonPhony, out) {
 				p.npendings--
 				nready++
-				if log.V(1) {
-					clog.Infof(ctx, "step state: %s ready to run %q", s.String(), s.def.Outputs(ctx)[0])
+				if glog.V(1) {
+					glog.Infof("step state: %s ready to run %q", s.String(), s.def.Outputs(ctx)[0])
 				}
 				select {
 				case p.q <- s:
@@ -700,17 +699,17 @@ func (p *plan) done(ctx context.Context, step *Step) {
 		}
 		p.targets[out].waits = p.targets[out].waits[:i]
 	}
-	if log.V(1) {
+	if glog.V(1) {
 		if nready > 0 {
-			clog.Infof(ctx, "trigger %d. pendings %d -> %d", nready, npendings, p.npendings)
+			glog.Infof("trigger %d. pendings %d -> %d", nready, npendings, p.npendings)
 		} else {
-			clog.Infof(ctx, "zero-trigger outs=%v", outs)
+			glog.Infof("zero-trigger outs=%v", outs)
 		}
 	}
 	p.ready = append(p.ready, ready...)
 	if len(p.ready) == 0 && p.npendings == 0 && !p.closed {
 		p.closed = true
-		clog.Infof(ctx, "no step in pending. closing q")
+		glog.Infof("no step in pending. closing q")
 		close(p.q)
 	}
 }
@@ -718,8 +717,8 @@ func (p *plan) done(ctx context.Context, step *Step) {
 func (p *plan) dump(ctx context.Context, graph Graph) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	clog.Infof(ctx, "queue = %d pendings=%d", len(p.q), p.npendings)
-	clog.Infof(ctx, "closed=%t", p.closed)
+	glog.Infof("queue = %d pendings=%d", len(p.q), p.npendings)
+	glog.Infof("closed=%t", p.closed)
 	var steps []*Step
 	seen := make(map[*Step]bool)
 	waits := make(map[string]bool)
@@ -730,7 +729,7 @@ func (p *plan) dump(ctx context.Context, graph Graph) {
 		steps = append(steps, s)
 	}
 	waitTargets := 0
-	clog.Infof(ctx, "ready=%q", ready)
+	glog.Infof("ready=%q", ready)
 	for node, ti := range p.targets {
 		ws := ti.waits
 		if len(ws) > 0 {
@@ -738,7 +737,7 @@ func (p *plan) dump(ctx context.Context, graph Graph) {
 		}
 		path, err := graph.TargetPath(ctx, Target(node))
 		if err != nil {
-			clog.Warningf(ctx, "invalid node %v: %v", node, err)
+			glog.Warningf("invalid node %v: %v", node, err)
 			continue
 		}
 		waits[path] = true
@@ -753,7 +752,7 @@ func (p *plan) dump(ctx context.Context, graph Graph) {
 	for _, s := range steps {
 		for _, o := range s.def.Outputs(ctx) {
 			if !waits[o] {
-				clog.Infof(ctx, "step %s output:%s no trigger", s, o)
+				glog.Infof("step %s output:%s no trigger", s, o)
 				continue
 			}
 			delete(waits, o)
@@ -764,14 +763,14 @@ func (p *plan) dump(ctx context.Context, graph Graph) {
 		outs = append(outs, out)
 	}
 	sort.Strings(outs)
-	clog.Infof(ctx, "waits=%d no-trigger=%d", waitTargets, len(outs))
-	clog.Infof(ctx, "no steps will trigger %q", outs)
+	glog.Infof("waits=%d no-trigger=%d", waitTargets, len(outs))
+	glog.Infof("no steps will trigger %q", outs)
 }
 
 func suggestTargets(ctx context.Context, sched *scheduler, graph Graph, args ...string) []string {
 	rel, err := filepath.Rel(filepath.Join(sched.path.ExecRoot, sched.path.Dir), sched.path.ExecRoot)
 	if err != nil {
-		clog.Warningf(ctx, "failed to get rel to exec root: %v", err)
+		glog.Warningf("failed to get rel to exec root: %v", err)
 		return nil
 	}
 	var suggests []string

@@ -15,8 +15,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/golang/glog"
 	"go.chromium.org/infra/build/siso/build"
-	"go.chromium.org/infra/build/siso/o11y/clog"
 )
 
 type localSource struct {
@@ -60,7 +60,7 @@ func (s *localSource) fetch(ctx context.Context) ([]build.ActiveStepInfo, error)
 	defer func() {
 		err := resp.Body.Close()
 		if err != nil {
-			clog.Warningf(ctx, "close %v", err)
+			glog.Warningf("close %v", err)
 		}
 	}()
 	if resp.StatusCode != http.StatusOK {

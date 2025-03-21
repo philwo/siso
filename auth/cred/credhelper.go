@@ -15,9 +15,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/golang/glog"
 	"golang.org/x/oauth2"
-
-	"go.chromium.org/infra/build/siso/o11y/clog"
 )
 
 var errNoAuthorization = errors.New("no authrozation header")
@@ -123,7 +122,7 @@ func (h *credHelper) get(ctx context.Context, endpoint string) (credHelperPerRPC
 		}
 		cce.cred.expires = expires
 		cce.cred.stdout = resp.stdout
-		clog.Infof(ctx, "cred %s %s valid %s", endpoint, time.Since(started), time.Until(expires))
+		glog.Infof("cred %s %s valid %s", endpoint, time.Since(started), time.Until(expires))
 	}
 	return cce.cred, nil
 }

@@ -6,21 +6,7 @@ package build
 
 import (
 	"bytes"
-	"fmt"
-
-	"cloud.google.com/go/logging"
 )
-
-func logFormat(e logging.Entry) string {
-	stepID := e.Labels[logLabelKeyID]
-	if e.HTTPRequest != nil {
-		return fmt.Sprintf("%s %v %s", stepID, e.Payload, e.HTTPRequest.Latency)
-	}
-	if stepID == "" {
-		return fmt.Sprintf("%v", e.Payload)
-	}
-	return fmt.Sprintf("%s %v", stepID, e.Payload)
-}
 
 // panicLocation returns the first location just before runtime/panic.go
 // from stacktrace buffer.

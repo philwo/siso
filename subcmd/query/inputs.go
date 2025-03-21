@@ -12,11 +12,11 @@ import (
 	"os"
 	"sort"
 
+	"github.com/golang/glog"
 	"github.com/maruel/subcommands"
 
 	"go.chromium.org/luci/common/cli"
 
-	"go.chromium.org/infra/build/siso/o11y/clog"
 	"go.chromium.org/infra/build/siso/toolsupport/ninjautil"
 )
 
@@ -181,7 +181,7 @@ func (g *inputsGraph) Traverse(ctx context.Context, target string) error {
 		err := g.Traverse(ctx, dep)
 		var terr targetNotFoundError
 		if errors.As(err, &terr) {
-			clog.Infof(ctx, "target for deps %q: implicit header?", dep)
+			glog.Infof("target for deps %q: implicit header?", dep)
 			continue
 		}
 		if err != nil {

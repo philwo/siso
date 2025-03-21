@@ -13,9 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"cloud.google.com/go/logging"
-
-	"go.chromium.org/infra/build/siso/o11y/clog"
+	"github.com/golang/glog"
 	"go.chromium.org/infra/build/siso/reapi"
 	"go.chromium.org/infra/build/siso/toolsupport/msvcutil"
 	"go.chromium.org/infra/build/siso/ui"
@@ -48,9 +46,6 @@ func (e StepError) Unwrap() error {
 // can control the flows with the experiment ids, defined in experiments.go.
 func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 	step.startTime = time.Now()
-	spanName := stepSpanName(step.def)
-	logger := clog.FromContext(ctx)
-	logger.Formatter = logFormat
 	defer func() {
 		if r := recover(); r != nil {
 			panic(r) // re-throw panic, handled in *Builder.Build.
@@ -67,7 +62,6 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 			step.metrics.Duration = IntervalMetric(duration)
 			step.metrics.ActionEndTime = IntervalMetric(step.endTime.Sub(b.start))
 			step.metrics.Err = err != nil
-			stepLogEntry(ctx, logger, step, duration, err)
 			b.recordMetrics(ctx, step.metrics)
 			b.recordNinjaLogs(ctx, step)
 			b.stats.update(ctx, &step.metrics, step.cmd.Pure)
@@ -94,9 +88,7 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 	}
 
 	step.init(ctx, b, stepManifest)
-	description := stepDescription(step.def)
 	prevStepOut := b.prevStepOut(ctx, step)
-	stepStartLog(ctx, logger, step, description, spanName)
 	step.metrics.init(ctx, b, step, step.startTime, prevStepOut)
 
 	if b.dryRun {
@@ -121,19 +113,19 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 		if !experiments.Enabled("keep-going-handle-error", "handle %s failed: %v", step, err) {
 			res := cmdOutput(ctx, cmdOutputResultFAILED, "handle", step.cmd, step.def.Binding("command"), step.def.RuleName(), err)
 			step.cmd.SetOutputResult(b.logOutput(ctx, res, step.cmd.Console))
-			clog.Warningf(ctx, "Failed to exec(handle): %v", err)
+			glog.Warningf("Failed to exec(handle): %v", err)
 			return fmt.Errorf("failed to run handler for %s: %w", step, err)
 		}
 	} else if exited {
 		// store handler generated outputs to local disk.
 		// better to upload to CAS, or store in fs_state?
-		clog.Infof(ctx, "outputs[handler] %d", len(step.cmd.Outputs))
+		glog.Infof("outputs[handler] %d", len(step.cmd.Outputs))
 		err = b.hashFS.Flush(ctx, step.cmd.ExecRoot, step.cmd.Outputs)
 		if err == nil {
 			b.plan.done(ctx, step)
 			return nil
 		}
-		clog.Warningf(ctx, "handle step failure: %v", err)
+		glog.Warningf("handle step failure: %v", err)
 	}
 	err = b.setupRSP(ctx, step)
 	if err != nil {
@@ -145,7 +137,7 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 		if err != nil && !errors.Is(err, context.Canceled) {
 			// force flush to disk
 			ferr := b.hashFS.Flush(ctx, step.cmd.ExecRoot, []string{step.cmd.RSPFile})
-			clog.Warningf(ctx, "failed to exec %v: preserve rsp=%s flush:%v", err, step.cmd.RSPFile, ferr)
+			glog.Warningf("failed to exec %v: preserve rsp=%s flush:%v", err, step.cmd.RSPFile, ferr)
 			return
 		}
 		b.teardownRSP(ctx, step)
@@ -157,7 +149,7 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 
 	runCmd := b.runStrategy(ctx, step)
 	err = runCmd(ctx, step)
-	clog.Infof(ctx, "done err=%v", err)
+	glog.Infof("done err=%v", err)
 	if err != nil {
 		if ctx.Err() != nil {
 			err = fmt.Errorf("ctx err: %w: %w", ctx.Err(), err)
@@ -199,23 +191,10 @@ func (b *Builder) prevStepOut(ctx context.Context, step *Step) string {
 	}
 	s, err := b.graph.TargetPath(ctx, step.prevStepOut)
 	if err != nil {
-		clog.Warningf(ctx, "failed to get target path: %v", err)
+		glog.Warningf("failed to get target path: %v", err)
 		return ""
 	}
 	return s
-}
-
-func stepStartLog(ctx context.Context, logger *clog.Logger, step *Step, description, spanName string) {
-	logEntry := logger.Entry(logging.Info, description)
-	logEntry.Labels = map[string]string{
-		"id":          step.def.String(),
-		"command":     step.def.Binding("command"),
-		"description": description,
-		"action":      step.def.ActionName(),
-		"span_name":   spanName,
-		"output0":     step.def.Outputs(ctx)[0],
-	}
-	logger.Log(logEntry)
 }
 
 func (b *Builder) handleStep(ctx context.Context, step *Step) (bool, error) {
@@ -259,7 +238,7 @@ func (b *Builder) outputFailureSummary(ctx context.Context, step *Step, err erro
 	fmt.Fprintf(&buf, "%v\n", err)
 	_, err = b.failureSummaryWriter.Write(buf.Bytes())
 	if err != nil {
-		clog.Warningf(ctx, "failed to write failure_summary: %v", err)
+		glog.Warningf("failed to write failure_summary: %v", err)
 	}
 }
 
@@ -281,6 +260,6 @@ func (b *Builder) outputFailedCommands(ctx context.Context, step *Step, err erro
 	fmt.Fprint(&buf, newline)
 	_, err = b.failedCommandsWriter.Write(buf.Bytes())
 	if err != nil {
-		clog.Warningf(ctx, "failed to write failed commands: %v", err)
+		glog.Warningf("failed to write failed commands: %v", err)
 	}
 }

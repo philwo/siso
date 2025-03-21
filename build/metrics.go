@@ -11,8 +11,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/golang/glog"
 	epb "go.chromium.org/infra/build/siso/execute/proto"
-	"go.chromium.org/infra/build/siso/o11y/clog"
 )
 
 // IntervalMetric is a time duration, but serialized as seconds in JSON.
@@ -39,8 +39,7 @@ func (i *IntervalMetric) UnmarshalJSON(b []byte) error {
 
 // StepMetric contains metrics about a build Step.
 type StepMetric struct {
-	BuildID string `json:"build_id,omitempty"` // the unique id of the current build (trace)
-	StepID  string `json:"step_id,omitempty"`  // the unique id of this step (top span)
+	StepID string `json:"step_id,omitempty"` // the unique id of this step (top span)
 
 	Rule     string `json:"rule,omitempty"`      // the rule name of the step
 	Action   string `json:"action,omitempty"`    // the action name of the step
@@ -171,7 +170,7 @@ func (m *StepMetric) done(ctx context.Context, step *Step, buildStart time.Time)
 
 	result, cached := step.cmd.ActionResult()
 	m.Cached = cached
-	clog.Infof(ctx, "cached=%t", cached)
+	glog.Infof("cached=%t", cached)
 	md := result.GetExecutionMetadata()
 	if !m.Cached {
 		m.QueueTime = IntervalMetric(md.GetWorkerStartTimestamp().AsTime().Sub(md.GetQueuedTimestamp().AsTime()))

@@ -16,9 +16,8 @@ import (
 	"strings"
 	"sync"
 
-	log "github.com/golang/glog"
+	"github.com/golang/glog"
 
-	"go.chromium.org/infra/build/siso/o11y/clog"
 	"go.chromium.org/infra/build/siso/runtimex"
 	"go.chromium.org/infra/build/siso/sync/semaphore"
 )
@@ -86,26 +85,26 @@ func (fv *fsview) addDir(ctx context.Context, dir string, searchPath searchPathT
 		seen := slices.Contains(fv.searchPaths, dir)
 		if !seen {
 			fv.searchPaths = append(fv.searchPaths, dir)
-			if log.V(1) {
-				clog.Infof(ctx, "add dir:%d %s", len(fv.searchPaths), dir)
+			if glog.V(1) {
+				glog.Infof("add dir:%d %s", len(fv.searchPaths), dir)
 			}
 		}
 	case frameworkSearchPath:
 		seen := slices.Contains(fv.frameworkPaths, dir)
 		if !seen {
 			fv.frameworkPaths = append(fv.frameworkPaths, dir)
-			if log.V(1) {
-				clog.Infof(ctx, "add dir[framework]:%d %s", len(fv.frameworkPaths), dir)
+			if glog.V(1) {
+				glog.Infof("add dir[framework]:%d %s", len(fv.frameworkPaths), dir)
 			}
 		}
 	}
-	if log.V(1) {
-		clog.Infof(ctx, "add dir readdir %s", dir)
+	if glog.V(1) {
+		glog.Infof("add dir readdir %s", dir)
 	}
 	dents, err := fv.fs.ReadDir(ctx, fv.execRoot, dir)
 	if err != nil {
 		if !errors.Is(err, fs.ErrNotExist) {
-			clog.Warningf(ctx, "failed in readdir %s: %v", dir, err)
+			glog.Warningf("failed in readdir %s: %v", dir, err)
 		}
 		return
 	}
@@ -120,41 +119,41 @@ func (fv *fsview) get(ctx context.Context, dir, name string) (string, *scanResul
 	// uses symlinks.
 	if top != ".." && !strings.HasSuffix(dir, ".framework/Headers") {
 		if fv.topEnts[dir] == nil {
-			if log.V(1) {
-				clog.Infof(ctx, "no dir %s for top:%s", dir, top)
+			if glog.V(1) {
+				glog.Infof("no dir %s for top:%s", dir, top)
 			}
 			return "", nil, fs.ErrNotExist
 		}
 		if _, ok := fv.topEnts[dir].Load(top); !ok {
-			if log.V(1) {
-				clog.Infof(ctx, "not found in %s for top:%s", dir, top)
+			if glog.V(1) {
+				glog.Infof("not found in %s for top:%s", dir, top)
 			}
 			return "", nil, fs.ErrNotExist
 		}
 	}
 	incpath := fv.pathJoin(dir, name)
-	if log.V(1) {
-		clog.Infof(ctx, "find path %s/%s -> %s", dir, name, incpath)
+	if glog.V(1) {
+		glog.Infof("find path %s/%s -> %s", dir, name, incpath)
 	}
 	if !filepath.IsLocal(incpath) {
 		// out of exxecroot?
-		if log.V(1) {
-			clog.Infof(ctx, "find not local")
+		if glog.V(1) {
+			glog.Infof("find not local")
 		}
 		return "", nil, fs.ErrNotExist
 	}
 	if v, ok := fv.visited[incpath]; ok {
 		if !v {
-			if log.V(1) {
-				clog.Infof(ctx, "find visited not found")
+			if glog.V(1) {
+				glog.Infof("find visited not found")
 			}
 			return "", nil, fs.ErrNotExist
 		}
 	}
 	incpath = fv.fs.pathIntern(incpath)
 	sr, err := fv.scanFile(ctx, incpath)
-	if log.V(1) {
-		clog.Infof(ctx, "scanFile %q %v: %v", incpath, sr, err)
+	if glog.V(1) {
+		glog.Infof("scanFile %q %v: %v", incpath, sr, err)
 	}
 	if err != nil {
 		fv.visited[incpath] = false
@@ -176,8 +175,8 @@ func (fv *fsview) scanFile(ctx context.Context, fname string) (*scanResult, erro
 	}
 
 	buf, err := fv.fs.hashfs.ReadFile(ctx, fv.execRoot, fname)
-	if log.V(1) {
-		clog.Infof(ctx, "scanFile readfile: %s %v", fname, err)
+	if glog.V(1) {
+		glog.Infof("scanFile readfile: %s %v", fname, err)
 	}
 	if err != nil {
 		return sr, sr.err
@@ -210,8 +209,8 @@ func (fv *fsview) scanFile(ctx context.Context, fname string) (*scanResult, erro
 func (fv *fsview) scanResult(ctx context.Context, incpath string) (*scanResult, error) {
 	sr, ok := fv.getFile(incpath)
 	if ok {
-		if log.V(1) {
-			clog.Infof(ctx, "scanResult getFile %q %v", incpath, sr)
+		if glog.V(1) {
+			glog.Infof("scanResult getFile %q %v", incpath, sr)
 		}
 		if sr == nil {
 			return nil, fs.ErrNotExist
@@ -221,8 +220,8 @@ func (fv *fsview) scanResult(ctx context.Context, incpath string) (*scanResult, 
 	if strings.Contains(incpath, ".framework/Headers/") {
 		// framework headers are symlinks to the framework bundle.
 		// so we don't need to check the directory existence.
-		if log.V(1) {
-			clog.Infof(ctx, "scanResult for framework %q", incpath)
+		if glog.V(1) {
+			glog.Infof("scanResult for framework %q", incpath)
 		}
 	} else {
 		i := -1
@@ -238,23 +237,23 @@ func (fv *fsview) scanResult(ctx context.Context, incpath string) (*scanResult, 
 				if exist {
 					continue
 				}
-				if log.V(1) {
-					clog.Infof(ctx, "scanResult %q checkDir=%q not exist", incpath, dirname)
+				if glog.V(1) {
+					glog.Infof("scanResult %q checkDir=%q not exist", incpath, dirname)
 				}
 				return nil, fs.ErrNotExist
 			}
 			fi, err := fv.fs.hashfs.Stat(ctx, fv.execRoot, dirname)
 			if err != nil {
 				fv.setDir(dirname, false)
-				if log.V(1) {
-					clog.Infof(ctx, "scanResult %q stat dir=%q not exist", incpath, dirname)
+				if glog.V(1) {
+					glog.Infof("scanResult %q stat dir=%q not exist", incpath, dirname)
 				}
 				return nil, fs.ErrNotExist
 			}
 			if !fi.IsDir() {
 				fv.setDir(dirname, false)
-				if log.V(1) {
-					clog.Infof(ctx, "scanResult %q dir=%q mode=%s", incpath, dirname, fi.Mode())
+				if glog.V(1) {
+					glog.Infof("scanResult %q dir=%q mode=%s", incpath, dirname, fi.Mode())
 				}
 				return nil, fs.ErrNotExist
 			}
@@ -262,8 +261,8 @@ func (fv *fsview) scanResult(ctx context.Context, incpath string) (*scanResult, 
 		}
 	}
 	fi, err := fv.fs.hashfs.Stat(ctx, fv.execRoot, incpath)
-	if log.V(1) {
-		clog.Infof(ctx, "scanResult stat %q: %v", incpath, err)
+	if glog.V(1) {
+		glog.Infof("scanResult stat %q: %v", incpath, err)
 	}
 	if err != nil {
 		fv.setFile(incpath, nil)
@@ -373,7 +372,7 @@ func (fv *fsview) getHmap(ctx context.Context, hmap string) (map[string]string, 
 		if filepath.IsAbs(v) {
 			rel, err := filepath.Rel(fv.execRoot, v)
 			if err != nil || !filepath.IsLocal(rel) {
-				clog.Warningf(ctx, "unacceptable dir for %s in hmap %s: %s: %v", k, hmap, v, err)
+				glog.Warningf("unacceptable dir for %s in hmap %s: %s: %v", k, hmap, v, err)
 				continue
 			}
 			v = rel

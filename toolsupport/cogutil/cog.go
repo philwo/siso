@@ -12,11 +12,11 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/golang/glog"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/proto"
 
-	"go.chromium.org/infra/build/siso/o11y/clog"
 	"go.chromium.org/infra/build/siso/reapi"
 	"go.chromium.org/infra/build/siso/reapi/digest"
 	"go.chromium.org/infra/build/siso/reapi/merkletree"
@@ -40,18 +40,18 @@ func New(ctx context.Context, dir string, reopt *reapi.Option) (*Client, error) 
 	if err != nil {
 		return nil, err
 	}
-	clog.Infof(ctx, "cog version:\n%s", string(buf))
+	glog.Infof("cog version:\n%s", string(buf))
 	if !reopt.IsValid() {
-		clog.Warningf(ctx, "cog: reapi is not enabled")
+		glog.Warningf("cog: reapi is not enabled")
 		return &Client{}, nil
 	}
 	addr := fmt.Sprintf("unix:///google/cog/status/uds/%d", os.Getuid())
 	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		clog.Warningf(ctx, "cog: failed to dial to cog server %s: %v", addr, err)
+		glog.Warningf("cog: failed to dial to cog server %s: %v", addr, err)
 		return &Client{}, nil
 	}
-	clog.Infof(ctx, "cog connected to %s", addr)
+	glog.Infof("cog connected to %s", addr)
 	c := &Client{
 		reopt:  reopt,
 		conn:   conn,
@@ -64,15 +64,15 @@ func New(ctx context.Context, dir string, reopt *reapi.Option) (*Client, error) 
 		},
 	})
 	if err != nil {
-		clog.Warningf(ctx, "cog: failed to insert .siso_cog_buildfs: %v", err)
+		glog.Warningf("cog: failed to insert .siso_cog_buildfs: %v", err)
 		err = c.Close()
 		if err != nil {
-			clog.Warningf(ctx, "cog: close conn: %v", err)
+			glog.Warningf("cog: close conn: %v", err)
 		}
 		// disable buildfs
 		return &Client{}, nil
 	}
-	clog.Infof(ctx, "cog: buildfs available")
+	glog.Infof("cog: buildfs available")
 	return c, nil
 }
 
@@ -123,6 +123,6 @@ func (c *Client) BuildfsInsert(ctx context.Context, dir string, entries []merkle
 		req.Insertions = append(req.Insertions, ins)
 	}
 	_, err := c.client.BuildfsInsert(ctx, req)
-	clog.Infof(ctx, "buildfs insert %s: %v", req, err)
+	glog.Infof("buildfs insert %s: %v", req, err)
 	return err
 }

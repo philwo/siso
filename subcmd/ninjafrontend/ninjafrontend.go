@@ -16,13 +16,13 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/golang/glog"
 	"github.com/maruel/subcommands"
 	"google.golang.org/protobuf/proto"
 
 	"go.chromium.org/luci/common/cli"
 	"go.chromium.org/luci/common/system/signals"
 
-	"go.chromium.org/infra/build/siso/o11y/clog"
 	pb "go.chromium.org/infra/build/siso/toolsupport/soongutil/proto"
 )
 
@@ -103,7 +103,7 @@ func (c *run) run(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("reading size of %d: %w", n, err)
 		}
-		clog.Infof(ctx, "entry %d size=%d", n, size)
+		glog.Infof("entry %d size=%d", n, size)
 		buf := make([]byte, size)
 		_, err = io.ReadFull(r, buf)
 		if err != nil {

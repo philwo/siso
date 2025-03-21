@@ -12,12 +12,12 @@ import (
 	"os"
 	"strconv"
 
-	"go.chromium.org/infra/build/siso/o11y/clog"
+	"github.com/golang/glog"
 )
 
 func oomScoreAdj(ctx context.Context, pid int, score int) {
 	err := os.WriteFile(fmt.Sprintf("/proc/%d/oom_score_adj", pid), strconv.AppendInt(nil, int64(score), 10), 0644)
 	if err != nil {
-		clog.Warningf(ctx, "failed to set %d/oom_score_adj %d: %v", pid, score, err)
+		glog.Warningf("failed to set %d/oom_score_adj %d: %v", pid, score, err)
 	}
 }

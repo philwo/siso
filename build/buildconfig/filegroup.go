@@ -15,9 +15,7 @@ import (
 	"sort"
 	"strings"
 
-	log "github.com/golang/glog"
-
-	"go.chromium.org/infra/build/siso/o11y/clog"
+	"github.com/golang/glog"
 )
 
 // Filegroups is serialized filegoups information for cache.
@@ -74,7 +72,7 @@ func (g globSpec) Update(ctx context.Context, fsys fs.FS, fg filegroup) (filegro
 		root = "/"
 	}
 	if !fs.ValidPath(g.dir) {
-		clog.Warningf(ctx, "filegroup dir is out of exec root %q. unable to use for remote execution", g.dir)
+		glog.Warningf("filegroup dir is out of exec root %q. unable to use for remote execution", g.dir)
 		return fg, nil
 	}
 	fsys, err := fs.Sub(fsys, g.dir)
@@ -85,13 +83,13 @@ func (g globSpec) Update(ctx context.Context, fsys fs.FS, fg filegroup) (filegro
 	var files []string
 	err = fs.WalkDir(fsys, ".", func(pathname string, d fs.DirEntry, err error) error {
 		if err != nil {
-			if log.V(1) {
-				clog.Infof(ctx, "glob %s: %v", pathname, err)
+			if glog.V(1) {
+				glog.Infof("glob %s: %v", pathname, err)
 			}
 			return err
 		}
-		if log.V(1) {
-			clog.Infof(ctx, "glob %s dir=%t", pathname, d.IsDir())
+		if glog.V(1) {
+			glog.Infof("glob %s dir=%t", pathname, d.IsDir())
 		}
 		if d.IsDir() {
 			return err

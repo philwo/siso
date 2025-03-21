@@ -11,9 +11,8 @@ import (
 	"strconv"
 	"time"
 
-	log "github.com/golang/glog"
+	"github.com/golang/glog"
 
-	"go.chromium.org/infra/build/siso/o11y/clog"
 	"go.chromium.org/infra/build/siso/runtimex"
 )
 
@@ -61,8 +60,8 @@ func splitIntoChunks(ctx context.Context, buf []byte) []chunk {
 		if next < len(buf) {
 			next = nextChunk(buf, next)
 		}
-		if log.V(3) {
-			clog.Infof(ctx, "chunk %d..%d", start, next)
+		if glog.V(3) {
+			glog.Infof("chunk %d..%d", start, next)
 		}
 		chunks = append(chunks, chunk{
 			buf:   buf,
@@ -270,8 +269,8 @@ loop:
 		ch.nvar++
 	}
 
-	if log.V(1) {
-		clog.Infof(ctx, "scan var:%d rule:%d+%d build:%d+%d pool:%d+%d default:%d include:%d subninja:%d comment:%d: %s",
+	if glog.V(1) {
+		glog.Infof("scan var:%d rule:%d+%d build:%d+%d pool:%d+%d default:%d include:%d subninja:%d comment:%d: %s",
 			ch.nvar, ch.nrule, ch.nrulevar,
 			ch.nbuild, ch.nbuildvar,
 			ch.npool, ch.npoolvar,
@@ -401,8 +400,8 @@ func (ch *chunk) includeChunks(ctx context.Context, i int, chunks []chunk) {
 // buildGraphInChunk parses build / default / subninja,
 // which requires path (evalString) evaluation.
 func (ch *chunk) buildGraphInChunk(ctx context.Context, state *State, fileState *fileState, scope *fileScope) error {
-	if log.V(2) {
-		clog.Infof(ctx, "buildGraphInChunk statements=%d", len(ch.statements))
+	if glog.V(2) {
+		glog.Infof("buildGraphInChunk statements=%d", len(ch.statements))
 	}
 	var buf bytes.Buffer
 	buf.Grow(4096)
@@ -640,8 +639,8 @@ func (ch *chunk) parseRule(ctx context.Context, i int, scope *fileScope, rule *r
 		return 0, fmt.Errorf("line:%d invalid rule name %q: %w", lineno(ch.buf, st.s), ch.buf[st.v:st.e], err)
 	}
 	name := string(s)
-	if log.V(3) {
-		clog.Infof(ctx, "rule %q", name)
+	if glog.V(3) {
+		glog.Infof("rule %q", name)
 	}
 	rule.name = name
 	err = scope.setRule(rule)

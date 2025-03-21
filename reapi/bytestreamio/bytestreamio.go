@@ -13,11 +13,10 @@ import (
 	"path"
 	"strconv"
 
+	"github.com/golang/glog"
 	pb "google.golang.org/genproto/googleapis/bytestream"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-
-	"go.chromium.org/infra/build/siso/o11y/clog"
 )
 
 // Open opens a reader on the bytestream for the resourceName.
@@ -125,7 +124,7 @@ func (w *Writer) Write(buf []byte) (int, error) {
 	if err == io.EOF {
 		// the blob already stored in CAS.
 		w.ok = true
-		clog.Infof(w.wr.Context(), "bytestream write %s for %s got EOF at %d: %v", w.resname, w.name, w.offset, err)
+		glog.Infof("bytestream write %s for %s got EOF at %d: %v", w.resname, w.name, w.offset, err)
 		return len(buf), nil
 	}
 	if err != nil {

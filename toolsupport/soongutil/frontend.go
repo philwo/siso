@@ -12,11 +12,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/golang/glog"
 	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
 
 	"go.chromium.org/infra/build/siso/build"
-	"go.chromium.org/infra/build/siso/o11y/clog"
 	pb "go.chromium.org/infra/build/siso/toolsupport/soongutil/proto"
 	"go.chromium.org/infra/build/siso/ui"
 )
@@ -69,7 +69,7 @@ func (f *Frontend) run(ctx context.Context) {
 			// size as Varint without tag.
 			b, err := proto.Marshal(m)
 			if err != nil {
-				clog.Warningf(ctx, "failed to marshal: %v", err)
+				glog.Warningf("failed to marshal: %v", err)
 				continue
 			}
 			n := uint64(len(b))
@@ -78,7 +78,7 @@ func (f *Frontend) run(ctx context.Context) {
 			buf = append(buf, b...)
 			_, err = f.w.Write(buf)
 			if err != nil {
-				clog.Warningf(ctx, "failed to send status: %v", err)
+				glog.Warningf("failed to send status: %v", err)
 				return
 			}
 		}

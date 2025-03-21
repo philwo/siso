@@ -12,9 +12,7 @@ import (
 	"fmt"
 	"time"
 
-	log "github.com/golang/glog"
-
-	"go.chromium.org/infra/build/siso/o11y/clog"
+	"github.com/golang/glog"
 )
 
 type phonyState struct {
@@ -37,8 +35,8 @@ func (b *Builder) needToRun(ctx context.Context, stepDef StepDef, stepManifest *
 				dirtyErr: dirtyErr,
 				mtime:    mtime,
 			})
-			if dirtyErr != nil || log.V(1) {
-				clog.Infof(ctx, "phony output %s dirty=%v mtime=%v", outpath, dirtyErr, mtime)
+			if dirtyErr != nil || glog.V(1) {
+				glog.Infof("phony output %s dirty=%v mtime=%v", outpath, dirtyErr, mtime)
 			}
 		}
 		// nothing to run for phony target.
@@ -60,7 +58,7 @@ func (b *Builder) checkUpToDate(ctx context.Context, stepDef StepDef, stepManife
 	outname := b.path.MaybeToWD(ctx, out0)
 	lastInName := b.path.MaybeToWD(ctx, lastIn)
 	if err != nil {
-		clog.Infof(ctx, "need %v", err)
+		glog.Infof("need %v", err)
 		reason := "missing-inputs"
 		switch {
 		case errors.Is(err, ErrMissingDeps):
@@ -74,12 +72,12 @@ func (b *Builder) checkUpToDate(ctx context.Context, stepDef StepDef, stepManife
 		return false
 	}
 	if outmtime.IsZero() {
-		clog.Infof(ctx, "need: output doesn't exist")
+		glog.Infof("need: output doesn't exist")
 		fmt.Fprintf(b.explainWriter, "output %s doesn't exist\n", outname)
 		return false
 	}
 	if inmtime.After(outmtime) {
-		clog.Infof(ctx, "need: in:%s > out:%s %s: in:%s out:%s", lastIn, out0, inmtime.Sub(outmtime), inmtime, outmtime)
+		glog.Infof("need: in:%s > out:%s %s: in:%s out:%s", lastIn, out0, inmtime.Sub(outmtime), inmtime, outmtime)
 		fmt.Fprintf(b.explainWriter, "output %s older than most recent input %s: out:%s in:+%s\n", outname, lastInName, outmtime.Format(time.RFC3339), inmtime.Sub(outmtime))
 		return false
 	}
@@ -87,7 +85,7 @@ func (b *Builder) checkUpToDate(ctx context.Context, stepDef StepDef, stepManife
 		// TODO: remove old cmdhash support
 		oldCmdHash := calculateOldCmdHash(stepManifest.cmdline, stepManifest.rspfileContent)
 		if !bytes.Equal(cmdhash, oldCmdHash) {
-			clog.Infof(ctx, "need: cmdhash differ %q -> %q", base64.StdEncoding.EncodeToString(cmdhash), base64.StdEncoding.EncodeToString(stepManifest.cmdHash))
+			glog.Infof("need: cmdhash differ %q -> %q", base64.StdEncoding.EncodeToString(cmdhash), base64.StdEncoding.EncodeToString(stepManifest.cmdHash))
 			if len(cmdhash) == 0 {
 				fmt.Fprintf(b.explainWriter, "command line not found in log for %s\n", outname)
 			} else {
@@ -100,14 +98,14 @@ func (b *Builder) checkUpToDate(ctx context.Context, stepDef StepDef, stepManife
 	if len(edgehash) == 0 {
 		// old version of siso didn't record edgehash...
 		// TODO: remove this condition?
-		clog.Warningf(ctx, "missing edgehash in output")
+		glog.Warningf("missing edgehash in output")
 	} else if !bytes.Equal(edgehash, stepManifest.edgeHash) {
-		clog.Infof(ctx, "need: edgehash differ %q -> %q", base64.StdEncoding.EncodeToString(edgehash), base64.StdEncoding.EncodeToString(stepManifest.edgeHash))
+		glog.Infof("need: edgehash differ %q -> %q", base64.StdEncoding.EncodeToString(edgehash), base64.StdEncoding.EncodeToString(stepManifest.edgeHash))
 		fmt.Fprintf(b.explainWriter, "edge changed for %s\n", outname)
 		return false
 	}
 	if b.clobber {
-		clog.Infof(ctx, "need: clobber")
+		glog.Infof("need: clobber")
 		// explain once at the beginning of the build.
 		return false
 	}
@@ -141,18 +139,18 @@ func (b *Builder) checkUpToDate(ctx context.Context, stepDef StepDef, stepManife
 		if len(localOutputs) > 0 {
 			err := b.hashFS.Flush(ctx, b.path.ExecRoot, localOutputs)
 			if err != nil {
-				clog.Infof(ctx, "need: no local outputs %q: %v", localOutputs, err)
+				glog.Infof("need: no local outputs %q: %v", localOutputs, err)
 				fmt.Fprintf(b.explainWriter, "output %s flush error %s: %v", outname, localOutputs, err)
 				return false
 			}
-			if log.V(1) {
-				clog.Infof(ctx, "flush all outputs %s", localOutputs)
+			if glog.V(1) {
+				glog.Infof("flush all outputs %s", localOutputs)
 			}
 		}
 	}
 
-	if log.V(1) {
-		clog.Infof(ctx, "skip: in:%s < out:%s %s", lastIn, out0, outmtime.Sub(inmtime))
+	if glog.V(1) {
+		glog.Infof("skip: in:%s < out:%s %s", lastIn, out0, outmtime.Sub(inmtime))
 	}
 	return true
 }
@@ -174,16 +172,16 @@ func outputMtime(ctx context.Context, b *Builder, outputs []string, restat bool)
 			}
 			continue
 		}
-		if log.V(1) {
-			clog.Infof(ctx, "out-cmdhash %d:%s %s", i, outPath, base64.StdEncoding.EncodeToString(fi.CmdHash()))
+		if glog.V(1) {
+			glog.Infof("out-cmdhash %d:%s %s", i, outPath, base64.StdEncoding.EncodeToString(fi.CmdHash()))
 		}
 		if i == 0 {
 			outcmdhash = fi.CmdHash()
 			edgehash = fi.EdgeHash()
 		}
 		if !bytes.Equal(outcmdhash, fi.CmdHash()) {
-			if log.V(1) {
-				clog.Infof(ctx, "out-cmdhash differ %s %s->%s", outPath, base64.StdEncoding.EncodeToString(outcmdhash), base64.StdEncoding.EncodeToString(fi.CmdHash()))
+			if glog.V(1) {
+				glog.Infof("out-cmdhash differ %s %s->%s", outPath, base64.StdEncoding.EncodeToString(outcmdhash), base64.StdEncoding.EncodeToString(fi.CmdHash()))
 			}
 			outcmdhash = nil
 		}

@@ -20,11 +20,10 @@ import (
 	"time"
 
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
-	log "github.com/golang/glog"
+	"github.com/golang/glog"
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	"go.chromium.org/infra/build/siso/hashfs"
-	"go.chromium.org/infra/build/siso/o11y/clog"
 	"go.chromium.org/infra/build/siso/reapi/digest"
 	"go.chromium.org/infra/build/siso/reapi/merkletree"
 )
@@ -392,7 +391,7 @@ func (c *Cmd) Digest(ctx context.Context, ds *digest.Store) (actionDigest digest
 	var treeDuration time.Duration
 	defer func() {
 		// -2 for command and action message.
-		clog.Infof(ctx, "action: %s {command; %s inputRoot: %s %d %s}: %v", actionDigest, commandDigest, inputRootDigest, ds.Size()-2, treeDuration, err)
+		glog.Infof("action: %s {command; %s inputRoot: %s %d %s}: %v", actionDigest, commandDigest, inputRootDigest, ds.Size()-2, treeDuration, err)
 	}()
 	started := time.Now()
 	ents, err := c.inputTree(ctx)
@@ -447,8 +446,8 @@ func (c *Cmd) Digest(ctx context.Context, ds *digest.Store) (actionDigest digest
 // inputTree returns Merkle tree entries for the cmd.
 func (c *Cmd) inputTree(ctx context.Context) ([]merkletree.Entry, error) {
 	inputs := c.AllInputs()
-	if log.V(1) {
-		clog.Infof(ctx, "tree @%s %s", c.ExecRoot, inputs)
+	if glog.V(1) {
+		glog.Infof("tree @%s %s", c.ExecRoot, inputs)
 	}
 	var rootEnts []merkletree.Entry
 	switch {
@@ -473,7 +472,7 @@ func (c *Cmd) inputTree(ctx context.Context) ([]merkletree.Entry, error) {
 			if err != nil {
 				return nil, err
 			}
-			clog.Infof(ctx, "external inputs %d -> %d", len(rootInputs), len(rootEnts))
+			glog.Infof("external inputs %d -> %d", len(rootInputs), len(rootEnts))
 		}
 		inputs = newInputs
 
@@ -485,7 +484,7 @@ func (c *Cmd) inputTree(ctx context.Context) ([]merkletree.Entry, error) {
 			}
 			newInputs = append(newInputs, input)
 		}
-		clog.Infof(ctx, "drop %d system inputs -> %d", len(inputs)-len(newInputs), len(newInputs))
+		glog.Infof("drop %d system inputs -> %d", len(inputs)-len(newInputs), len(newInputs))
 		inputs = newInputs
 	}
 
@@ -502,8 +501,8 @@ func (c *Cmd) inputTree(ctx context.Context) ([]merkletree.Entry, error) {
 		})
 		return ents, nil
 	}
-	if log.V(1) {
-		clog.Infof(ctx, "remote tree @%s %s", c.ExecRoot, c.RemoteInputs)
+	if glog.V(1) {
+		glog.Infof("remote tree @%s %s", c.ExecRoot, c.RemoteInputs)
 	}
 
 	// Construct a reverse map from local path to remote paths.
@@ -556,15 +555,15 @@ func (c *Cmd) inputTree(ctx context.Context) ([]merkletree.Entry, error) {
 func treeDigest(ctx context.Context, subtrees []merkletree.TreeEntry, entries []merkletree.Entry, ds *digest.Store) (digest.Digest, error) {
 	t := merkletree.New(ds)
 	for _, subtree := range subtrees {
-		if log.V(2) {
-			clog.Infof(ctx, "input subtree: %#v", subtree)
+		if glog.V(2) {
+			glog.Infof("input subtree: %#v", subtree)
 		}
 		err := t.SetTree(subtree)
 		if errors.Is(err, merkletree.ErrPrecomputedSubTree) {
 			// probably wrong TreeInputs are set.
 			// assume upper subtree covers lower subtree,
 			// so ignore ErrPrecomputedSubTree here.
-			clog.Warningf(ctx, "ignore subtree %v: %v", subtree, err)
+			glog.Warningf("ignore subtree %v: %v", subtree, err)
 			continue
 		}
 		if err != nil {
@@ -572,16 +571,16 @@ func treeDigest(ctx context.Context, subtrees []merkletree.TreeEntry, entries []
 		}
 	}
 	for _, ent := range entries {
-		if log.V(2) {
-			clog.Infof(ctx, "input entry: %#v", ent)
+		if glog.V(2) {
+			glog.Infof("input entry: %#v", ent)
 		}
 		err := t.Set(ent)
 		if errors.Is(err, merkletree.ErrPrecomputedSubTree) {
 			// wrong config or deps uses files in subtree.
 			// assume subtree contains the file,
 			// so ignore ErrPrecomputedSubTree here.
-			if log.V(1) {
-				clog.Warningf(ctx, "ignore entry in subtree %v: %v", ent, err)
+			if glog.V(1) {
+				glog.Warningf("ignore entry in subtree %v: %v", ent, err)
 			}
 			continue
 		}
@@ -603,8 +602,8 @@ func (c *Cmd) canonicalizeDir(ctx context.Context, ents []merkletree.Entry, tree
 	if cdir == "" {
 		return ents, treeInputs
 	}
-	if log.V(1) {
-		clog.Infof(ctx, "canonicalize dir: %s -> %s", c.Dir, cdir)
+	if glog.V(1) {
+		glog.Infof("canonicalize dir: %s -> %s", c.Dir, cdir)
 	}
 	ents = c.canonicalizeEntries(ctx, cdir, ents)
 	treeInputs = slices.Clone(treeInputs)
@@ -661,8 +660,8 @@ func canonicalizeDir(fname, dir, cdir string) string {
 // chrootDir converts pathnames in ents and treeInputs from exec root relative to "/" relative.
 func (c *Cmd) chrootDir(ctx context.Context, ents []merkletree.Entry, treeInputs []merkletree.TreeEntry) ([]merkletree.Entry, []merkletree.TreeEntry) {
 	dir := filepath.ToSlash(filepath.Clean(c.ExecRoot))
-	if log.V(1) {
-		clog.Infof(ctx, "chdoor dir: %s", dir)
+	if glog.V(1) {
+		glog.Infof("chdoor dir: %s", dir)
 	}
 	for i := range ents {
 		e := &ents[i]
@@ -706,7 +705,7 @@ func (c *Cmd) commandDigest(ctx context.Context, ds *digest.Store) (digest.Diges
 	for _, out := range outputs {
 		rout, err := filepath.Rel(c.Dir, out)
 		if err != nil {
-			clog.Warningf(ctx, "failed to get rel %s,%s: %v", c.Dir, out, err)
+			glog.Warningf("failed to get rel %s,%s: %v", c.Dir, out, err)
 			rout = out
 		}
 		outs = append(outs, filepath.ToSlash(rout))
@@ -866,7 +865,7 @@ func (c *Cmd) RecordPreOutputs(ctx context.Context) {
 // RecordOutputs records cmd's outputs from action result in hashfs.
 func (c *Cmd) RecordOutputs(ctx context.Context, ds hashfs.DataSource, now time.Time) error {
 	entries, additionalEntries := c.entriesFromResult(ctx, ds, now)
-	clog.Infof(ctx, "output entries %d+%d", len(entries), len(additionalEntries))
+	glog.Infof("output entries %d+%d", len(entries), len(additionalEntries))
 	entries = c.computeOutputEntries(ctx, entries, now, c.CmdHash)
 	err := c.HashFS.Update(ctx, c.ExecRoot, entries)
 	if err != nil {
@@ -891,9 +890,9 @@ func updateLocalOutputDir(ctx context.Context, hfs *hashfs.HashFS, root, dir str
 	started := time.Now()
 	defer func() {
 		if err != nil {
-			clog.Warningf(ctx, "failed to update local output dir %q: %v", dir, err)
+			glog.Warningf("failed to update local output dir %q: %v", dir, err)
 		} else {
-			clog.Infof(ctx, "update local output dir %q: %s", dir, time.Since(started))
+			glog.Infof("update local output dir %q: %s", dir, time.Since(started))
 		}
 	}()
 
@@ -1059,10 +1058,10 @@ func (c *Cmd) RecordOutputsFromLocal(ctx context.Context, now time.Time) error {
 				continue
 			}
 			if d.SizeBytes == 0 {
-				clog.Warningf(ctx, "restat: empty file %q %s->%s", ent.Name, pent.ModTime, ent.ModTime)
+				glog.Warningf("restat: empty file %q %s->%s", ent.Name, pent.ModTime, ent.ModTime)
 				continue
 			}
-			clog.Warningf(ctx, "restat: changed but not modified %q %s %s->%s", ent.Name, ent.Entry.Data.Digest(), pent.ModTime, ent.ModTime)
+			glog.Warningf("restat: changed but not modified %q %s %s->%s", ent.Name, ent.Entry.Data.Digest(), pent.ModTime, ent.ModTime)
 		}
 	}
 	return nil
@@ -1073,7 +1072,7 @@ func ResultFromEntries(ctx context.Context, result *rpb.ActionResult, dir string
 	for _, ent := range entries {
 		name, err := filepath.Rel(dir, ent.Name)
 		if err != nil {
-			clog.Warningf(ctx, "failed to get rel path %q: %v", ent.Name, err)
+			glog.Warningf("failed to get rel path %q: %v", ent.Name, err)
 			continue
 		}
 		name = filepath.ToSlash(name)

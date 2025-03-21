@@ -12,9 +12,7 @@ import (
 	"io/fs"
 	"strings"
 
-	log "github.com/golang/glog"
-
-	"go.chromium.org/infra/build/siso/o11y/clog"
+	"github.com/golang/glog"
 )
 
 // IgnoreMissingOut controls whether to report missing out in depfile as
@@ -31,8 +29,8 @@ func ParseDepsFile(ctx context.Context, fsys fs.FS, fname string) ([]string, err
 		return nil, err
 	}
 	deps, err := ParseDeps(ctx, b)
-	if log.V(1) {
-		clog.Infof(ctx, "deps %s => %s: %v", fname, deps, err)
+	if glog.V(1) {
+		glog.Infof("deps %s => %s: %v", fname, deps, err)
 	}
 	return deps, err
 }
@@ -58,7 +56,7 @@ depLines:
 		out := bytes.TrimSpace(s[:i])
 		if len(out) == 0 {
 			if IgnoreMissingOut {
-				clog.Warningf(ctx, "missing output in deps. depfile should be `<target>: <dependencyList>`")
+				glog.Warningf("missing output in deps. depfile should be `<target>: <dependencyList>`")
 			} else {
 				return nil, fmt.Errorf("missing output in deps. depfile should be `<target>: <dependencyList>`")
 			}

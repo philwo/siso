@@ -14,10 +14,9 @@ import (
 	"strings"
 	"time"
 
-	log "github.com/golang/glog"
+	"github.com/golang/glog"
 
 	"go.chromium.org/infra/build/siso/execute"
-	"go.chromium.org/infra/build/siso/o11y/clog"
 	"go.chromium.org/infra/build/siso/reapi/merkletree"
 	"go.chromium.org/infra/build/siso/scandeps"
 	"go.chromium.org/infra/build/siso/toolsupport/gccutil"
@@ -104,7 +103,7 @@ func (depsGCC) fixForSplitDwarf(ctx context.Context, cmd *execute.Cmd) {
 			continue
 		}
 	}
-	clog.Infof(ctx, "add %s", dwo)
+	glog.Infof("add %s", dwo)
 	cmd.Outputs = uniqueFiles(cmd.Outputs, []string{dwo})
 }
 
@@ -118,7 +117,7 @@ func (depsGCC) DepsAfterRun(ctx context.Context, b *Builder, step *Step) (_ []st
 			return
 		}
 		if err != nil {
-			clog.Warningf(ctx, "preserve depfile=%q: %v", step.cmd.Depfile, err)
+			glog.Warningf("preserve depfile=%q: %v", step.cmd.Depfile, err)
 			return
 		}
 		if b.keepDepfile {
@@ -274,22 +273,22 @@ func (depsGCC) scandeps(ctx context.Context, b *Builder, step *Step) ([]string, 
 			// no-fallback has longer timeout for scandeps
 			req.Timeout = 2 * req.Timeout
 		}
-		if log.V(1) {
+		if glog.V(1) {
 			buf, berr := json.Marshal(req)
 			if berr != nil {
 				return berr
 			}
-			clog.Infof(ctx, "scandeps req=%s", buf)
+			glog.Infof("scandeps req=%s", buf)
 		}
 		started := time.Now()
 		var err error
 		ins, err = b.scanDeps.Scan(ctx, execRoot, req)
-		if log.V(1) {
-			clog.Infof(ctx, "scandeps %d %s: %v", len(ins), time.Since(started), err)
+		if glog.V(1) {
+			glog.Infof("scandeps %d %s: %v", len(ins), time.Since(started), err)
 		}
 		if err != nil {
 			buf, berr := json.Marshal(req)
-			clog.Warningf(ctx, "scandeps failed Request %s %v: %v", buf, berr, err)
+			glog.Warningf("scandeps failed Request %s %v: %v", buf, berr, err)
 			return err
 		}
 		ins = append(ins, params.Files...)

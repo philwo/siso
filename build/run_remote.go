@@ -9,11 +9,11 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/golang/glog"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	"go.chromium.org/infra/build/siso/execute"
-	"go.chromium.org/infra/build/siso/o11y/clog"
 	"go.chromium.org/infra/build/siso/reapi"
 )
 
@@ -43,14 +43,14 @@ func (b *Builder) runRemote(ctx context.Context, step *Step) error {
 	if startLocal {
 		// no cacheCheck as startlocal for incremental build
 		// will build modified code, and not expect cache hit (?)
-		clog.Infof(ctx, "start local %s", step.cmd.Desc)
+		glog.Infof("start local %s", step.cmd.Desc)
 		err := b.execLocal(ctx, step)
 		step.metrics.StartLocal = true
 		return err
 	} else if b.fastLocalSema != nil && int(b.progress.numLocal.Load()) < b.fastLocalSema.Capacity() {
 		// TODO: skip check cache when step is too new and can't expect cache hit?
 		if cacheCheck {
-			clog.Infof(ctx, "check cache before fast local")
+			glog.Infof("check cache before fast local")
 			fastStep, fastOK = fastDepsCmd(ctx, b, step)
 			if fastOK {
 				err := b.execRemoteCache(ctx, fastStep)
@@ -58,7 +58,7 @@ func (b *Builder) runRemote(ctx context.Context, step *Step) error {
 					return b.fastStepDone(ctx, step, fastStep)
 				}
 				fastNeedCheckCache = false
-				clog.Infof(ctx, "cmd fast cache miss: %v", err)
+				glog.Infof("cmd fast cache miss: %v", err)
 			}
 			fastChecked = true
 
@@ -69,13 +69,13 @@ func (b *Builder) runRemote(ctx context.Context, step *Step) error {
 					return nil
 				}
 				needCheckCache = false
-				clog.Infof(ctx, "cmd cache miss: %v", err)
+				glog.Infof("cmd cache miss: %v", err)
 			}
 		}
 		if ctx, done, err := b.fastLocalSema.TryAcquire(ctx); err == nil {
 			var err error
 			defer func() { done(err) }()
-			clog.Infof(ctx, "fast local %s", step.cmd.Desc)
+			glog.Infof("fast local %s", step.cmd.Desc)
 			// TODO: detach remote for future cache hit.
 			err = b.execLocal(ctx, step)
 			step.metrics.FastLocal = true
@@ -112,7 +112,7 @@ func (b *Builder) runRemote(ctx context.Context, step *Step) error {
 			return err
 		}
 		if errors.Is(err, errNotRelocatable) {
-			clog.Errorf(ctx, "not relocatable: %v", err)
+			glog.Errorf("not relocatable: %v", err)
 			return err
 		}
 		var eerr execute.ExitError
@@ -123,9 +123,9 @@ func (b *Builder) runRemote(ctx context.Context, step *Step) error {
 			}
 			switch {
 			case eerr.ExitCode == 137:
-				clog.Warningf(ctx, "Fallback due to potential SIGKILL by docker: remote exec %s failed: output=%q siso_config=%q, gn_target=%q: %v", step.cmd.ActionDigest(), output, step.def.RuleName(), step.def.Binding("gn_target"), err)
+				glog.Warningf("Fallback due to potential SIGKILL by docker: remote exec %s failed: output=%q siso_config=%q, gn_target=%q: %v", step.cmd.ActionDigest(), output, step.def.RuleName(), step.def.Binding("gn_target"), err)
 			case experiments.Enabled("fallback-on-exec-error", "remote exec %s failed: %v", step.cmd.ActionDigest(), err):
-				clog.Warningf(ctx, "fallback-on-exec-error: remote exec %s failed: output=%q siso_config=%q, gn_target=%q: %v", step.cmd.ActionDigest(), output, step.def.RuleName(), step.def.Binding("gn_target"), err)
+				glog.Warningf("fallback-on-exec-error: remote exec %s failed: output=%q siso_config=%q, gn_target=%q: %v", step.cmd.ActionDigest(), output, step.def.RuleName(), step.def.Binding("gn_target"), err)
 			default:
 				// report compile fail early to developers.
 				// If user runs on non-terminal or user sets a
@@ -138,7 +138,7 @@ func (b *Builder) runRemote(ctx context.Context, step *Step) error {
 		if !b.localFallbackEnabled() {
 			return fmt.Errorf("remote-exec %s failed no-fallback: %w", step.cmd.ActionDigest(), err)
 		}
-		clog.Warningf(ctx, "remote-exec %s failed, fallback to local: %v", step.cmd.ActionDigest(), err)
+		glog.Warningf("remote-exec %s failed, fallback to local: %v", step.cmd.ActionDigest(), err)
 		b.progressStepFallback(ctx, step)
 		step.metrics.IsRemote = false
 		step.metrics.Fallback = true
@@ -172,7 +172,7 @@ func (b *Builder) tryFastStep(ctx context.Context, step, fastStep *Step, cacheCh
 	if nFastDeps > 100 && (stats.FastDepsFailed+1)*100 > nFastDeps {
 		// many fast-deps failure.
 		// better to use scandeps to reduce retry by fast-deps failure.
-		clog.Infof(ctx, "too many fast-deps failure detected %d/%d", stats.FastDepsFailed+1, stats.FastDepsSuccess)
+		glog.Infof("too many fast-deps failure detected %d/%d", stats.FastDepsFailed+1, stats.FastDepsSuccess)
 		b.disableFastDeps.CompareAndSwap(nil, "too many fast-deps failure")
 	}
 
@@ -204,7 +204,7 @@ func (b *Builder) runRemoteStep(ctx context.Context, step *Step, cacheCheck bool
 		if err == nil {
 			return nil
 		}
-		clog.Infof(ctx, "cmd cache miss: %v", err)
+		glog.Infof("cmd cache miss: %v", err)
 	}
 	if !b.reExecEnable {
 		return errRemoteExecDisabled
