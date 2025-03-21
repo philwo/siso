@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"go.chromium.org/infra/build/siso/execute"
-	"go.chromium.org/infra/build/siso/o11y/resultstore"
 	"go.chromium.org/infra/build/siso/ui"
 )
 
@@ -26,8 +25,6 @@ type progress struct {
 	mu         sync.Mutex
 	ts         time.Time
 	consoleCmd *execute.Cmd
-
-	resultstoreUploader *resultstore.Uploader
 
 	actives       activeSteps
 	done          chan struct{}
@@ -60,7 +57,6 @@ func (as *activeSteps) Pop() any {
 func (p *progress) start(ctx context.Context, b *Builder) {
 	p.started = time.Now()
 	p.verbose = b.verbose
-	p.resultstoreUploader = b.resultstoreUploader
 	p.done = make(chan struct{})
 	p.updateStopped = make(chan struct{})
 	go p.update(ctx, b)
@@ -153,10 +149,6 @@ func (p *progress) report(format string, args ...any) {
 	t := p.ts
 	p.mu.Unlock()
 	var msg string
-	if p.resultstoreUploader != nil {
-		msg = fmt.Sprintf(format, args...)
-		p.resultstoreUploader.AddBuildLog(msg + "\n")
-	}
 	if ui.IsTerminal() && time.Since(t) < 500*time.Millisecond {
 		return
 	}
@@ -191,19 +183,6 @@ func (p *progress) step(ctx context.Context, b *Builder, step *Step, s string) {
 	p.mu.Unlock()
 	dur := ui.FormatDuration(time.Since(b.start))
 	stat := b.stats.stats()
-	if step != nil && p.resultstoreUploader != nil {
-		switch {
-		case strings.HasPrefix(s, progressPrefixStart),
-			strings.HasPrefix(s, progressPrefixFinish),
-			strings.HasPrefix(s, progressPrefixCacheHit):
-			p.resultstoreUploader.AddBuildLog(fmt.Sprintf("[%d/%d] %s %s\n",
-				stat.Done-stat.Skipped, stat.Total-stat.Skipped,
-				dur,
-				s))
-		default:
-			// message of progress.update
-		}
-	}
 	var outputResult string
 	if strings.HasPrefix(s, progressPrefixFinish) && step != nil {
 		outputResult = step.cmd.OutputResult()
