@@ -2,8 +2,6 @@ module go.chromium.org/infra/build/siso
 
 go 1.24.1
 
-replace go.chromium.org/infra => ../../infra/infra/go/src/infra
-
 require (
 	cloud.google.com/go/compute/metadata v0.6.0
 	cloud.google.com/go/logging v1.13.0
