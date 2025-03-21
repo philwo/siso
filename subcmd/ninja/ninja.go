@@ -135,8 +135,6 @@ type ninjaCmdRun struct {
 	localexecLogFile   string
 	metricsJSON        string
 	traceJSON          string
-	buildPprof         string
-	// uploadBuildPprof bool
 
 	fsopt             *hashfs.Option
 	reopt             *reapi.Option
@@ -570,7 +568,6 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		traceExporter = c.initCloudTrace(ctx, projectID, credential)
 		defer traceExporter.Close(ctx)
 	}
-	// upload build pprof
 
 	targets := c.Flags.Args()
 	config, err := c.initConfig(ctx, execRoot, targets)
@@ -963,7 +960,6 @@ func (c *ninjaCmdRun) init() {
 	c.Flags.StringVar(&c.localexecLogFile, "localexec_log", "siso_localexec", "localexec log filename (relative to -log_dir")
 	c.Flags.StringVar(&c.metricsJSON, "metrics_json", "siso_metrics.json", "metrics JSON filename (relative to -log_dir)")
 	c.Flags.StringVar(&c.traceJSON, "trace_json", "siso_trace.json", "trace JSON filename (relative to -log_dir)")
-	c.Flags.StringVar(&c.buildPprof, "build_pprof", "siso_build.pprof", "build pprof filename (relative to -log_dir)")
 
 	c.fsopt = new(hashfs.Option)
 	c.fsopt.StateFile = ".siso_fs_state"
@@ -1314,9 +1310,6 @@ func (c *ninjaCmdRun) initBuildOpts(ctx context.Context, projectID string, build
 	if !filepath.IsAbs(c.traceJSON) {
 		c.traceJSON = filepath.Join(c.logDir, c.traceJSON)
 	}
-	if !filepath.IsAbs(c.buildPprof) {
-		c.buildPprof = filepath.Join(c.logDir, c.buildPprof)
-	}
 
 	ninjaLogWriter, err := ninjautil.OpenNinjaLog(ctx)
 	if err != nil {
@@ -1367,7 +1360,6 @@ func (c *ninjaCmdRun) initBuildOpts(ctx context.Context, projectID string, build
 		NinjaLogWriter:       ninjaLogWriter,
 		TraceExporter:        traceExporter,
 		TraceJSON:            c.traceJSON,
-		Pprof:                c.buildPprof,
 		Clobber:              c.clobber,
 		Prepare:              c.prepare,
 		Verbose:              c.verbose,
