@@ -10,7 +10,7 @@ import (
 	"context"
 	"os"
 
-	"go.chromium.org/infra/build/siso/o11y/clog"
+	"github.com/golang/glog"
 )
 
 func lookupUser(ctx context.Context) string {
@@ -25,6 +25,6 @@ func lookupUser(ctx context.Context) string {
 	if u != "" {
 		return u
 	}
-	clog.Warningf(ctx, "failed to get username $env:USER or $env:USERNAME")
+	glog.Warningf("failed to get username $env:USER or $env:USERNAME")
 	return "unknownuser"
 }

@@ -12,23 +12,18 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"net/http"
-	"net/url"
 	"os"
-	"path"
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
 	"runtime/pprof"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"cloud.google.com/go/logging"
-	log "github.com/golang/glog"
+	"github.com/golang/glog"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -38,7 +33,6 @@ import (
 	"go.chromium.org/infra/build/siso/execute/remoteexec"
 	"go.chromium.org/infra/build/siso/execute/reproxyexec"
 	"go.chromium.org/infra/build/siso/hashfs"
-	"go.chromium.org/infra/build/siso/o11y/clog"
 	"go.chromium.org/infra/build/siso/reapi"
 	"go.chromium.org/infra/build/siso/reapi/digest"
 	"go.chromium.org/infra/build/siso/reapi/merkletree"
@@ -47,12 +41,6 @@ import (
 	"go.chromium.org/infra/build/siso/sync/semaphore"
 	"go.chromium.org/infra/build/siso/toolsupport/ninjautil"
 	"go.chromium.org/infra/build/siso/ui"
-)
-
-// logging labels's key.
-const (
-	logLabelKeyID        = "id"
-	logLabelKeyBacktrace = "backtrace"
 )
 
 // chromium recipe module expects this string.
@@ -208,10 +196,6 @@ type Builder struct {
 
 // New creates new builder.
 func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
-	logger := clog.FromContext(ctx)
-	if logger != nil {
-		logger.Formatter = logFormat
-	}
 	start := opts.StartTime
 	if start.IsZero() {
 		start = time.Now()
@@ -243,16 +227,16 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 	var re *remoteexec.RemoteExec
 	var pe *reproxyexec.REProxyExec
 	if opts.REAPIClient != nil {
-		logger.Infof("enable built-in remote exec")
+		glog.Infof("enable built-in remote exec")
 		re = remoteexec.New(ctx, opts.REAPIClient)
 	} else {
-		logger.Infof("disable built-in remote exec")
+		glog.Infof("disable built-in remote exec")
 	}
 	pe = reproxyexec.New(ctx, opts.ReproxyAddr)
 	if pe.Enabled() {
-		logger.Infof("enable reclient integration: addr=%s", opts.ReproxyAddr)
+		glog.Infof("enable reclient integration: addr=%s", opts.ReproxyAddr)
 	} else {
-		logger.Infof("disable reclient integration")
+		glog.Infof("disable reclient integration")
 	}
 	experiments.ShowOnce()
 	numCPU := runtimex.NumCPU()
@@ -268,9 +252,9 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 	} else {
 		maxThreads = 10000
 	}
-	logger.Infof("numcpu=%d threads:%d - limits=%#v", numCPU, maxThreads, opts.Limits)
-	logger.Infof("correlated_invocations_id: %s", opts.JobID)
-	logger.Infof("tool_invocation_id: %s", opts.ID)
+	glog.Infof("numcpu=%d threads:%d - limits=%#v", numCPU, maxThreads, opts.Limits)
+	glog.Infof("correlated_invocations_id: %s", opts.JobID)
+	glog.Infof("tool_invocation_id: %s", opts.ID)
 
 	var fastLocalSema *semaphore.Semaphore
 	if opts.Limits.FastLocal > 0 {
@@ -334,7 +318,7 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 		disableReason = "no SISO_EXPERIMENT=fast-deps"
 	}
 	if disableReason != "" {
-		clog.Infof(ctx, "disable fast-deps: %s", disableReason)
+		glog.Infof("disable fast-deps: %s", disableReason)
 		b.disableFastDeps.Store(disableReason)
 	}
 	return b, nil
@@ -394,13 +378,13 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 			buf := make([]byte, size)
 			buf = buf[:runtime.Stack(buf, false)]
 			loc := panicLocation(buf)
-			clog.Errorf(ctx, "panic in build: %v\n%s", r, loc)
-			clog.Warningf(ctx, "%s", buf)
+			glog.Errorf("panic in build: %v\n%s", r, loc)
+			glog.Warningf("%s", buf)
 			if err == nil {
 				err = fmt.Errorf("panic in build: %v", r)
 			}
 		}
-		clog.Infof(ctx, "build %v", err)
+		glog.Infof("build %v", err)
 	}()
 
 	if b.rebuildManifest == "" && b.reapiclient != nil {
@@ -432,7 +416,7 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 
 	stat := b.Stats()
 	if stat.Total == 0 {
-		clog.Infof(ctx, "nothing to build for %q", args)
+		glog.Infof("nothing to build for %q", args)
 		ui.Default.PrintLines(ninjaNoWorkToDo)
 		return nil
 	}
@@ -459,7 +443,7 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 			v = localLimit
 		}
 		b.poolSemas[k] = semaphore.New(name, v)
-		clog.Infof(ctx, "limit %s -> %s=%d", k, name, v)
+		glog.Infof("limit %s -> %s=%d", k, name, v)
 	}
 
 	var mftime time.Time
@@ -467,7 +451,7 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 		fi, err := b.hashFS.Stat(ctx, b.path.ExecRoot, filepath.Join(b.path.Dir, b.rebuildManifest))
 		if err == nil {
 			mftime = fi.ModTime()
-			clog.Infof(ctx, "manifest %s: %s", b.rebuildManifest, mftime)
+			glog.Infof("manifest %s: %s", b.rebuildManifest, mftime)
 		}
 	}
 	defer func() {
@@ -475,13 +459,13 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 		if b.rebuildManifest != "" {
 			fi, mferr := b.hashFS.Stat(ctx, b.path.ExecRoot, filepath.Join(b.path.Dir, b.rebuildManifest))
 			if mferr != nil {
-				clog.Warningf(ctx, "failed to stat %s: %v", b.rebuildManifest, mferr)
+				glog.Warningf("failed to stat %s: %v", b.rebuildManifest, mferr)
 				return
 			}
 			if err != nil {
 				return
 			}
-			clog.Infof(ctx, "rebuild manifest %#v %s: %s->%s: %s", stat, b.rebuildManifest, mftime, fi.ModTime(), time.Since(started))
+			glog.Infof("rebuild manifest %#v %s: %s->%s: %s", stat, b.rebuildManifest, mftime, fi.ModTime(), time.Since(started))
 			if fi.ModTime().After(mftime) || stat.Done != stat.Skipped {
 				ui.Default.PrintLines(fmt.Sprintf("%6s Regenerating ninja files\n\n", ui.FormatDuration(time.Since(started))))
 				err = ErrManifestModified
@@ -489,7 +473,7 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 			}
 			return
 		}
-		clog.Infof(ctx, "build %s %s: %v", time.Since(started), time.Since(b.start), err)
+		glog.Infof("build %s %s: %v", time.Since(started), time.Since(b.start), err)
 		if stat.Skipped == stat.Total {
 			ui.Default.PrintLines(ninjaNoWorkToDo)
 			return
@@ -514,7 +498,7 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 	}()
 	pstat := b.plan.stats()
 	b.progress.report("\nbuild start: Ready %d Pending %d", pstat.nready, pstat.npendings)
-	clog.Infof(ctx, "build pendings=%d ready=%d", pstat.npendings, pstat.nready)
+	glog.Infof("build pendings=%d ready=%d", pstat.npendings, pstat.nready)
 	b.progress.start(ctx, b)
 	defer b.progress.stop(ctx)
 
@@ -528,7 +512,7 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 	// need to check the dir many times and worry about race.
 	err = b.prepareAllOutDirs(ctx)
 	if err != nil {
-		clog.Warningf(ctx, "failed to prepare all out dirs: %v", err)
+		glog.Warningf("failed to prepare all out dirs: %v", err)
 		return err
 	}
 
@@ -541,13 +525,13 @@ loop:
 		t := time.Now()
 		ctx, done, err := b.stepSema.WaitAcquire(ctx)
 		if err != nil {
-			clog.Warningf(ctx, "wait acquire: %v", err)
+			glog.Warningf("wait acquire: %v", err)
 			cancel()
 			return err
 		}
 		dur := time.Since(t)
 		if dur > 1*time.Millisecond {
-			clog.Infof(ctx, "step sema wait %s", dur)
+			glog.Infof("step sema wait %s", dur)
 		}
 
 		var step *Step
@@ -555,7 +539,7 @@ loop:
 		select {
 		case step, ok = <-b.plan.q:
 			if !ok {
-				clog.Infof(ctx, "q is closed")
+				glog.Infof("q is closed")
 				done(nil)
 				break loop
 			}
@@ -563,7 +547,7 @@ loop:
 			done(err)
 			var shouldFail bool
 			if err != nil {
-				clog.Infof(ctx, "err from errch: %v", err)
+				glog.Infof("err from errch: %v", err)
 				shouldFail = b.failures.shouldFail(err)
 			}
 			numServs := b.stepSema.NumServs()
@@ -572,17 +556,17 @@ loop:
 			if !stuck {
 				stuck = numServs == 0 && !hasReady
 			}
-			if log.V(1) {
-				clog.Infof(ctx, "errs=%d numServs=%d hasReady=%t stuck=%t", b.failures.n, numServs, hasReady, stuck)
+			if glog.V(1) {
+				glog.Infof("errs=%d numServs=%d hasReady=%t stuck=%t", b.failures.n, numServs, hasReady, stuck)
 			}
 			if shouldFail || stuck {
-				clog.Infof(ctx, "unable to proceed nerrs=%d numServs=%d hasReady=%t stuck=%t", b.failures.n, numServs, hasReady, stuck)
+				glog.Infof("unable to proceed nerrs=%d numServs=%d hasReady=%t stuck=%t", b.failures.n, numServs, hasReady, stuck)
 				cancel()
 				break loop
 			}
 			continue
 		case <-ctx.Done():
-			clog.Infof(ctx, "context done")
+			glog.Infof("context done")
 			done(context.Cause(ctx))
 			cancel()
 			b.plan.dump(ctx, b.graph)
@@ -612,8 +596,8 @@ loop:
 						out = fmt.Sprintf("%p", step)
 					}
 					loc := panicLocation(buf)
-					clog.Errorf(ctx, "runStep panic: %v\nstep: %s\n%s", r, out, loc)
-					clog.Warningf(ctx, "%s", buf)
+					glog.Errorf("runStep panic: %v\nstep: %s\n%s", r, out, loc)
+					glog.Warningf("%s", buf)
 					err = fmt.Errorf("panic: %v: %s", r, loc)
 				}
 			}()
@@ -622,13 +606,13 @@ loop:
 			err = b.runStep(ctx, step)
 			select {
 			case <-ctx.Done():
-				clog.Infof(ctx, "context done")
+				glog.Infof("context done")
 				return
 			default:
 			}
 		}(step)
 	}
-	clog.Infof(ctx, "all pendings becomes ready")
+	glog.Infof("all pendings becomes ready")
 	errdone := make(chan error)
 	go func() {
 		var canceled bool
@@ -668,11 +652,10 @@ loop:
 	}
 	// metrics for full build session, without step_id etc.
 	var metrics StepMetric
-	metrics.BuildID = b.id
 	metrics.Duration = IntervalMetric(time.Since(b.start))
 	metrics.Err = err != nil
 	b.recordMetrics(ctx, metrics)
-	clog.Infof(ctx, "%s finished: %v", name, err)
+	glog.Infof("%s finished: %v", name, err)
 	if b.rebuildManifest == "" && !ui.IsTerminal() && b.failureSummaryWriter != nil {
 		// non batch mode (ui.IsTerminal) may build last failed command
 		// so should not trigger this check at the end of build.
@@ -707,7 +690,7 @@ func (b *Builder) uploadBuildNinja(ctx context.Context) {
 	inputs = append(inputs, "args.gn")
 	ents, err := b.hashFS.Entries(ctx, filepath.Join(b.path.ExecRoot, b.path.Dir), inputs)
 	if err != nil {
-		clog.Warningf(ctx, "failed to get build files entries: %v", err)
+		glog.Warningf("failed to get build files entries: %v", err)
 		return
 	}
 	ds := digest.NewStore()
@@ -715,26 +698,26 @@ func (b *Builder) uploadBuildNinja(ctx context.Context) {
 	for _, ent := range ents {
 		err := tree.Set(ent)
 		if err != nil {
-			clog.Warningf(ctx, "failed to set %s: %v", ent.Name, err)
+			glog.Warningf("failed to set %s: %v", ent.Name, err)
 		}
 	}
 	d, err := tree.Build(ctx)
 	if err != nil {
-		clog.Warningf(ctx, "failed to calculate tree: %v", err)
+		glog.Warningf("failed to calculate tree: %v", err)
 		return
 	}
 	_, err = b.reapiclient.UploadAll(ctx, ds)
 	if err != nil {
-		clog.Warningf(ctx, "failed to upload build files tree %s: %v", d, err)
+		glog.Warningf("failed to upload build files tree %s: %v", d, err)
 		return
 	}
-	clog.Infof(ctx, "uploaded build files tree %s (%d entries) in %s", d, len(ents), time.Since(started))
+	glog.Infof("uploaded build files tree %s (%d entries) in %s", d, len(ents), time.Since(started))
 }
 
 func (b *Builder) recordMetrics(ctx context.Context, m StepMetric) {
 	mb, err := json.Marshal(m)
 	if err != nil {
-		clog.Warningf(ctx, "metrics marshal err: %v", err)
+		glog.Warningf("metrics marshal err: %v", err)
 		return
 	}
 	fmt.Fprintf(b.metricsJSONWriter, "%s\n", mb)
@@ -752,73 +735,6 @@ func (b *Builder) recordNinjaLogs(ctx context.Context, s *Step) {
 		outputs = append(outputs, strings.TrimPrefix(output, buildDir))
 	}
 	ninjautil.WriteNinjaLogEntries(ctx, b.ninjaLogWriter, start, end, s.endTime, outputs, s.cmd.Args)
-}
-
-// stepLogEntry logs step in parent access log of the step.
-func stepLogEntry(ctx context.Context, logger *clog.Logger, step *Step, duration time.Duration, err error) {
-	httpStatus := http.StatusOK
-	logEntry := logger.Entry(logging.Info, fmt.Sprintf("%s -> %v", stepDescription(step.def), err))
-	if isCanceled(ctx, err) {
-		logEntry.Severity = logging.Warning
-		// https://cloud.google.com/apis/design/errors#handling_errors
-		httpStatus = 499 // Client closed request
-	} else if err != nil {
-		logEntry.Severity = logging.Warning
-		httpStatus = http.StatusBadRequest
-	}
-	logEntry.HTTPRequest = &logging.HTTPRequest{
-		Request: &http.Request{
-			Method: http.MethodPost,
-			URL: &url.URL{
-				Path: path.Join("/step", step.def.ActionName(), filepath.ToSlash(step.def.Outputs(ctx)[0])),
-			},
-		},
-		Status: httpStatus,
-		// RequestSize
-		// ResponseSize
-		Latency: duration,
-		// CacheHit
-	}
-	logEntry.Labels = map[string]string{
-		"id":        step.def.String(),
-		"siso_rule": step.metrics.Rule,
-		"action":    step.metrics.Action,
-		"output":    step.metrics.Output,
-		"gn_target": step.metrics.GNTarget,
-		"cmdhash":   step.metrics.CmdHash,
-		"digest":    step.metrics.Digest,
-		"run_secs":  fmt.Sprintf("%.02f", time.Duration(step.metrics.RunTime).Seconds()),
-		"exec_secs": fmt.Sprintf("%.02f", time.Duration(step.metrics.ExecTime).Seconds()),
-	}
-	if step.metrics.NoExec {
-		logEntry.Labels["no_exec"] = "true"
-	}
-	if step.metrics.IsRemote {
-		logEntry.Labels["is_remote"] = "true"
-	}
-	if step.metrics.IsLocal {
-		logEntry.Labels["is_local"] = "true"
-	}
-	if step.metrics.FastLocal {
-		logEntry.Labels["fast_local"] = "true"
-	}
-	if step.metrics.Cached {
-		logEntry.Labels["cached"] = "true"
-	}
-	if step.metrics.Fallback {
-		logEntry.Labels["fallback"] = "true"
-	}
-	if step.metrics.MaxRSS > 0 {
-		logEntry.Labels["max_rss"] = strconv.FormatInt(step.metrics.MaxRSS, 10)
-	}
-	if step.metrics.InputFetchTime > 0 {
-		logEntry.Labels["input_fetch_secs"] = fmt.Sprintf("%.02f", time.Duration(step.metrics.InputFetchTime).Seconds())
-	}
-	if step.metrics.OutputUploadTime > 0 {
-		logEntry.Labels["output_upload_secs"] = fmt.Sprintf("%.02f", time.Duration(step.metrics.OutputUploadTime).Seconds())
-	}
-	// TODO: record more useful metrics
-	logger.Log(logEntry)
 }
 
 func isCanceled(ctx context.Context, err error) bool {
@@ -854,8 +770,8 @@ func dedupInputs(ctx context.Context, cmd *execute.Cmd) {
 			key = strings.ToLower(input)
 		}
 		if s, found := m[key]; found {
-			if log.V(1) {
-				clog.Infof(ctx, "dedup input %s (%s)", input, s)
+			if glog.V(1) {
+				glog.Infof("dedup input %s (%s)", input, s)
 			}
 			continue
 		}
@@ -874,7 +790,7 @@ func dedupInputs(ctx context.Context, cmd *execute.Cmd) {
 func (b *Builder) outputs(ctx context.Context, step *Step) error {
 	outputs := step.cmd.Outputs
 	if step.def.Binding("phony_outputs") != "" {
-		clog.Infof(ctx, "phony_outputs. no check output files %q", outputs)
+		glog.Infof("phony_outputs. no check output files %q", outputs)
 		return nil
 	}
 
@@ -897,7 +813,7 @@ func (b *Builder) outputs(ctx context.Context, step *Step) error {
 		seen[o] = true
 	}
 
-	clog.Infof(ctx, "outputs %d->%d", len(outputs), len(localOutputs))
+	glog.Infof("outputs %d->%d", len(outputs), len(localOutputs))
 	defOutputs := step.def.Outputs(ctx)
 	// need to check against step.cmd.Outputs, not step.def.Outputs, since
 	// handler may add to step.cmd.Outputs.
@@ -916,7 +832,7 @@ func (b *Builder) outputs(ctx context.Context, step *Step) error {
 			// as other future step would access it locally.
 			_, err := b.hashFS.OS.Lstat(ctx, filepath.Join(step.cmd.ExecRoot, out))
 			if err == nil {
-				clog.Infof(ctx, "output_local=false but local exists: %q", out)
+				glog.Infof("output_local=false but local exists: %q", out)
 				localOutputs = append(localOutputs, out)
 				local = true
 			}
@@ -933,13 +849,13 @@ func (b *Builder) outputs(ctx context.Context, step *Step) error {
 			if reqOut {
 				return fmt.Errorf("missing outputs %s: %w", out, err)
 			}
-			clog.Warningf(ctx, "missing outputs %s: %v", out, err)
+			glog.Warningf("missing outputs %s: %v", out, err)
 			if !local {
 				// need to make sure it doesn't exist on disk too
 				// for local=true, Flush will remove.
 				err = b.hashFS.OS.Remove(ctx, filepath.Join(step.cmd.ExecRoot, out))
 				if err != nil && !errors.Is(err, fs.ErrNotExist) {
-					clog.Warningf(ctx, "remove missing outputs %q: %v", out, err)
+					glog.Warningf("remove missing outputs %q: %v", out, err)
 				}
 			}
 			continue
@@ -985,17 +901,17 @@ var errNotRelocatable = errors.New("request is not relocatable")
 
 func (b *Builder) updateDeps(ctx context.Context, step *Step) error {
 	if len(step.cmd.Outputs) == 0 {
-		clog.Warningf(ctx, "update deps: no outputs")
+		glog.Warningf("update deps: no outputs")
 		return nil
 	}
 	output, err := filepath.Rel(step.cmd.Dir, step.cmd.Outputs[0])
 	if err != nil {
-		clog.Warningf(ctx, "update deps: failed to get rel %s,%s: %v", step.cmd.Dir, step.cmd.Outputs[0], err)
+		glog.Warningf("update deps: failed to get rel %s,%s: %v", step.cmd.Dir, step.cmd.Outputs[0], err)
 		return nil
 	}
 	fi, err := b.hashFS.Stat(ctx, step.cmd.ExecRoot, step.cmd.Outputs[0])
 	if err != nil {
-		clog.Warningf(ctx, "update deps: missing outputs %s: %v", step.cmd.Outputs[0], err)
+		glog.Warningf("update deps: missing outputs %s: %v", step.cmd.Outputs[0], err)
 		return nil
 	}
 	deps, err := depsAfterRun(ctx, b, step)
@@ -1004,9 +920,9 @@ func (b *Builder) updateDeps(ctx context.Context, step *Step) error {
 	}
 	updated, err := step.def.RecordDeps(ctx, output, fi.ModTime(), deps)
 	if err != nil {
-		clog.Warningf(ctx, "update deps: failed to record deps %s, %s, %s, %s: %v", output, base64.StdEncoding.EncodeToString(step.cmd.CmdHash), fi.ModTime(), deps, err)
+		glog.Warningf("update deps: failed to record deps %s, %s, %s, %s: %v", output, base64.StdEncoding.EncodeToString(step.cmd.CmdHash), fi.ModTime(), deps, err)
 	}
-	clog.Infof(ctx, "update deps=%s: %s %s %d updated:%t pure:%t/%t->true", step.cmd.Deps, output, base64.StdEncoding.EncodeToString(step.cmd.CmdHash), len(deps), updated, step.cmd.Pure, step.cmd.Pure)
+	glog.Infof("update deps=%s: %s %s %d updated:%t pure:%t/%t->true", step.cmd.Deps, output, base64.StdEncoding.EncodeToString(step.cmd.CmdHash), len(deps), updated, step.cmd.Pure, step.cmd.Pure)
 	canonicalizedDeps := make([]string, 0, len(deps))
 	for _, dep := range deps {
 		canonicalizedDeps = append(canonicalizedDeps, b.path.MaybeFromWD(ctx, dep))
@@ -1053,7 +969,7 @@ func (b *Builder) prepareAllOutDirs(ctx context.Context) error {
 		dirs = append(dirs, dir)
 	}
 	sort.Strings(dirs)
-	clog.Infof(ctx, "prepare out dirs: targets:%d -> %d -> %d ", len(b.plan.targets), ndirs, len(dirs))
+	glog.Infof("prepare out dirs: targets:%d -> %d -> %d ", len(b.plan.targets), ndirs, len(dirs))
 	for _, dir := range dirs {
 		// we don't use hashfs here for performance.
 		// just create dirs on local disk, so reproxy and local process
@@ -1063,7 +979,7 @@ func (b *Builder) prepareAllOutDirs(ctx context.Context) error {
 			return err
 		}
 	}
-	clog.Infof(ctx, "prepare out dirs %d in %s", len(dirs), time.Since(started))
+	glog.Infof("prepare out dirs %d in %s", len(dirs), time.Since(started))
 	return nil
 }
 

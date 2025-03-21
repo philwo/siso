@@ -18,7 +18,7 @@ import (
 	"time"
 
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
-	log "github.com/golang/glog"
+	"github.com/golang/glog"
 	"github.com/google/uuid"
 	"github.com/klauspost/compress/zstd"
 	bpb "google.golang.org/genproto/googleapis/bytestream"
@@ -26,7 +26,6 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 
-	"go.chromium.org/infra/build/siso/o11y/clog"
 	"go.chromium.org/infra/build/siso/reapi/bytestreamio"
 	"go.chromium.org/infra/build/siso/reapi/digest"
 	"go.chromium.org/infra/build/siso/reapi/retry"
@@ -83,7 +82,7 @@ var errUploadNotFinished = errors.New("upload not finished")
 func contextWithTimeoutForBytestream(ctx context.Context, d digest.Digest) (context.Context, context.CancelFunc) {
 	timeout := max(time.Duration(d.SizeBytes/bytestreamSlowThroughputPerSec)*time.Second, 10*time.Minute)
 	if timeout > 10*time.Minute {
-		clog.Infof(ctx, "bytestream timeout for %s: %s", d, timeout)
+		glog.Infof("bytestream timeout for %s: %s", d, timeout)
 	}
 	return context.WithTimeout(ctx, timeout)
 }
@@ -187,8 +186,8 @@ func (c *Client) getWithBatchReadBlobs(ctx context.Context, d digest.Digest, nam
 func (c *Client) getWithByteStream(ctx context.Context, d digest.Digest, name string) ([]byte, error) {
 	started := time.Now()
 	resourceName := c.resourceName(d)
-	if log.V(1) {
-		clog.Infof(ctx, "get %s", resourceName)
+	if glog.V(1) {
+		glog.Infof("get %s", resourceName)
 	}
 	var buf []byte
 	err := retry.Do(ctx, func() error {
@@ -283,7 +282,7 @@ func (c *Client) UploadAll(ctx context.Context, ds *digest.Store) (numUploaded i
 			case errUploadNotFinished:
 				close(uop.ch)
 			default:
-				clog.Infof(ctx, "upload %s failed: %v", d, uop.err)
+				glog.Infof("upload %s failed: %v", d, uop.err)
 				c.knownDigests.CompareAndDelete(d, uop)
 			}
 		}
@@ -346,7 +345,7 @@ func (c *Client) UploadAll(ctx context.Context, ds *digest.Store) (numUploaded i
 		durWaitPending = time.Since(t)
 	}
 
-	clog.Infof(ctx, "upload all: blobs=%d -> {uploaded=%d, found=%d, pending=%d, skipped=%d}, timing: {find_missing=%s, upload=%s, wait_pending=%s}",
+	glog.Infof("upload all: blobs=%d -> {uploaded=%d, found=%d, pending=%d, skipped=%d}, timing: {find_missing=%s, upload=%s, wait_pending=%s}",
 		len(blobs), len(newBlobs), len(foundBlobs), len(pendingBlobs), skippedBlobs,
 		durFindMissing.Round(time.Microsecond),
 		durUpload.Round(time.Microsecond),
@@ -381,7 +380,7 @@ func (c *Client) upload(ctx context.Context, ds *digest.Store, blobs []digest.Di
 
 	// Separate small blobs and large blobs because they are going to use different RPCs.
 	smalls, larges := separateBlobs(c.opt.Instance, blobs, byteLimit)
-	clog.Infof(ctx, "upload by batch %d out of %d", len(smalls), len(blobs))
+	glog.Infof("upload by batch %d out of %d", len(smalls), len(blobs))
 
 	// Upload small blobs with BatchUpdateBlobs rpc.
 	var missing missingError
@@ -475,7 +474,7 @@ func (c *Client) uploadWithBatchUpdateBlobs(ctx context.Context, digests []diges
 				blob := digest.FromProto(res.Digest)
 				data, ok := ds.Get(blob)
 				if !ok {
-					clog.Warningf(ctx, "Not found %s in store", blob)
+					glog.Warningf("Not found %s in store", blob)
 					missingBlobs = append(missingBlobs, missingBlob{
 						Digest: blob,
 						Err:    errBlobNotInReq,
@@ -484,7 +483,7 @@ func (c *Client) uploadWithBatchUpdateBlobs(ctx context.Context, digests []diges
 				}
 				st := status.FromProto(res.GetStatus())
 				if st.Code() != codes.OK {
-					clog.Warningf(ctx, "Failed to batch-update %s: %v", data, st)
+					glog.Warningf("Failed to batch-update %s: %v", data, st)
 					err := status.Errorf(st.Code(), "batch update blobs: %v", res.Status)
 					missingBlobs = append(missingBlobs, missingBlob{
 						Digest: blob,
@@ -493,11 +492,11 @@ func (c *Client) uploadWithBatchUpdateBlobs(ctx context.Context, digests []diges
 					uploads[blob].done(err)
 					continue
 				}
-				clog.Infof(ctx, "uploaded in batch: %s", data)
+				glog.Infof("uploaded in batch: %s", data)
 				uploads[blob].done(nil)
 			}
 			uploaded = true
-			clog.Infof(ctx, "upload by batch %d blobs (missing:%d)", len(batchReq.Requests), len(missingBlobs))
+			glog.Infof("upload by batch %d blobs (missing:%d)", len(batchReq.Requests), len(missingBlobs))
 		}
 	}
 	return missingBlobs, nil
@@ -551,7 +550,7 @@ func lookupBlobsInStore(ctx context.Context, blobs []digest.Digest, ds *digest.S
 			reqs = append(reqs, result.req)
 			continue
 		default:
-			clog.Errorf(ctx, "lookup of blobs[%d]=%v no error nor req", i, blob)
+			glog.Errorf("lookup of blobs[%d]=%v no error nor req", i, blob)
 		}
 	}
 	return reqs, missings
@@ -605,14 +604,14 @@ func readAll(ctx context.Context, data digest.Data) ([]byte, error) {
 }
 
 func (c *Client) uploadWithByteStream(ctx context.Context, digests []digest.Digest, uploads map[digest.Digest]*uploadOp, ds *digest.Store) []missingBlob {
-	clog.Infof(ctx, "upload by streaming %d", len(digests))
+	glog.Infof("upload by streaming %d", len(digests))
 
 	var missingBlobs []missingBlob
 	bsClient := bpb.NewByteStreamClient(c.casConn)
 	for _, d := range digests {
 		data, ok := ds.Get(d)
 		if !ok {
-			clog.Warningf(ctx, "Not found %s in store", d)
+			glog.Warningf("Not found %s in store", d)
 			missingBlobs = append(missingBlobs, missingBlob{
 				Digest: d,
 				Err:    errBlobNotInReq,
@@ -628,8 +627,8 @@ func (c *Client) uploadWithByteStream(ctx context.Context, digests []digest.Dige
 			}
 			defer rd.Close()
 			resourceName := c.uploadResourceName(d)
-			if log.V(1) {
-				clog.Infof(ctx, "put %s", resourceName)
+			if glog.V(1) {
+				glog.Infof("put %s", resourceName)
 			}
 			wr, err := bytestreamio.Create(ctx, bsClient, c.uploadResourceName(d))
 			if err != nil {
@@ -655,16 +654,16 @@ func (c *Client) uploadWithByteStream(ctx context.Context, digests []digest.Dige
 		})
 		uploads[d].done(err)
 		if err != nil {
-			clog.Warningf(ctx, "Failed to stream %s: %v", data, err)
+			glog.Warningf("Failed to stream %s: %v", data, err)
 			missingBlobs = append(missingBlobs, missingBlob{
 				Digest: d,
 				Err:    err,
 			})
 			continue
 		}
-		clog.Infof(ctx, "uploaded streaming %s err=%v", data, err)
+		glog.Infof("uploaded streaming %s err=%v", data, err)
 	}
-	clog.Infof(ctx, "uploaded by streaming %d blobs (missing:%d)", len(digests), len(missingBlobs))
+	glog.Infof("uploaded by streaming %d blobs (missing:%d)", len(digests), len(missingBlobs))
 
 	return missingBlobs
 }

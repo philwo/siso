@@ -10,10 +10,10 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/golang/glog"
 	"golang.org/x/sys/unix"
 
 	"go.chromium.org/infra/build/siso/build"
-	"go.chromium.org/infra/build/siso/o11y/clog"
 	"go.chromium.org/infra/build/siso/ui"
 )
 
@@ -21,7 +21,7 @@ func (c *ninjaCmdRun) checkResourceLimits(ctx context.Context) {
 	var lim unix.Rlimit
 	err := unix.Getrlimit(unix.RLIMIT_NOFILE, &lim)
 	if err != nil {
-		clog.Warningf(ctx, "failed to get rlimit: %v", err)
+		glog.Warningf("failed to get rlimit: %v", err)
 		return
 	}
 	limits := build.DefaultLimits(ctx)
@@ -34,7 +34,7 @@ func (c *ninjaCmdRun) checkResourceLimits(ctx context.Context) {
 	default:
 		nfile += uint64(limits.Remote) * 4
 	}
-	clog.Infof(ctx, "rlimit.nofile=%d,%d required=%d?", lim.Cur, lim.Max, nfile)
+	glog.Infof("rlimit.nofile=%d,%d required=%d?", lim.Cur, lim.Max, nfile)
 	if lim.Cur < nfile {
 		ui.Default.PrintLines(ui.SGR(ui.Yellow, fmt.Sprintf("WARNING: too low file limit=%d. would fail with too many open files\n", lim.Cur)))
 	}

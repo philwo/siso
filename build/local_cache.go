@@ -17,12 +17,12 @@ import (
 	"time"
 
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
+	"github.com/golang/glog"
 	"golang.org/x/sync/singleflight"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 
-	"go.chromium.org/infra/build/siso/o11y/clog"
 	"go.chromium.org/infra/build/siso/reapi/digest"
 	"go.chromium.org/infra/build/siso/ui"
 )
@@ -82,7 +82,7 @@ func (c *LocalCache) GetActionResult(ctx context.Context, d digest.Digest) (*rpb
 	}
 
 	if err := os.Chtimes(fname, c.timestamp, c.timestamp); err != nil {
-		clog.Warningf(ctx, "Failed to update mtime for %s: %v", fname, err)
+		glog.Warningf("Failed to update mtime for %s: %v", fname, err)
 	}
 	return result, nil
 }
@@ -139,7 +139,7 @@ func (c *LocalCache) GetContent(ctx context.Context, d digest.Digest, _ string) 
 	buf, err := io.ReadAll(gr)
 	if err == nil {
 		if err := os.Chtimes(cname, c.timestamp, c.timestamp); err != nil {
-			clog.Warningf(ctx, "Failed to update mtime for %s: %v", cname, err)
+			glog.Warningf("Failed to update mtime for %s: %v", cname, err)
 		}
 	}
 	return buf, err
@@ -175,7 +175,7 @@ func (c *LocalCache) SetContent(ctx context.Context, d digest.Digest, fname stri
 		err = w.Close()
 		return nil, err
 	})
-	clog.Infof(ctx, "write cache content %s for %s shared:%t: %v", d, fname, shared, err)
+	glog.Infof("write cache content %s for %s shared:%t: %v", d, fname, shared, err)
 	return err
 }
 
@@ -189,7 +189,7 @@ func (c *LocalCache) HasContent(ctx context.Context, d digest.Digest) bool {
 func garbageCollect(ctx context.Context, dir string, threshold time.Time) (nFiles int, spaceReclaimed int64) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		clog.Warningf(ctx, "Failed to read %s: %v", dir, err)
+		glog.Warningf("Failed to read %s: %v", dir, err)
 		return 0, 0
 	}
 
@@ -204,12 +204,12 @@ func garbageCollect(ctx context.Context, dir string, threshold time.Time) (nFile
 			// ensure that when we read a file we also update the mtime.
 			info, err := os.Stat(path)
 			if err != nil {
-				clog.Warningf(ctx, "Failed to stat file %s: %v", path, err)
+				glog.Warningf("Failed to stat file %s: %v", path, err)
 				continue
 			}
 			if info.ModTime().Before(threshold) {
 				if err := os.Remove(filepath.Join(dir, entry.Name())); err != nil {
-					clog.Warningf(ctx, "Failed to delete %s: %v", filepath.Join(dir, entry.Name()), err)
+					glog.Warningf("Failed to delete %s: %v", filepath.Join(dir, entry.Name()), err)
 				}
 				nFiles += 1
 				spaceReclaimed += info.Size()
@@ -244,7 +244,7 @@ func (c *LocalCache) garbageCollect(ctx context.Context, ttl time.Duration) {
 	spin := ui.Default.NewSpinner()
 	spin.Start("Performing garbage collection on the local cache")
 
-	clog.Infof(ctx, "Performing garbage collection on the local cache")
+	glog.Infof("Performing garbage collection on the local cache")
 	// God this is gross. time.Sub only takes in times, and time.Add only takes
 	// in durations.
 	threshold := c.timestamp.Add(-ttl)
@@ -253,11 +253,11 @@ func (c *LocalCache) garbageCollect(ctx context.Context, ttl time.Duration) {
 	nFiles += nActions
 	spaceReclaimed += sActions
 	if nFiles > 0 {
-		clog.Infof(ctx, "Garbage collected local cache: Removed %d files totalling %d MB", nFiles, spaceReclaimed/1000000)
+		glog.Infof("Garbage collected local cache: Removed %d files totalling %d MB", nFiles, spaceReclaimed/1000000)
 	}
 
 	if err := os.WriteFile(filepath.Join(c.dir, "lastgc"), []byte(fmt.Sprint(c.timestamp.UnixNano())), 0644); err != nil {
-		clog.Warningf(ctx, "Failed to record last garbage collection event: %v", err)
+		glog.Warningf("Failed to record last garbage collection event: %v", err)
 	}
 	spin.Stop(nil)
 }
@@ -317,16 +317,16 @@ func (s dataSource) Open(ctx context.Context) (io.ReadCloser, error) {
 		var err2 error
 		r, err2 = os.Open(s.fname)
 		if err2 != nil {
-			clog.Warningf(ctx, "failed to open cached-digest data %s for %s: %v %v", s.d, s.fname, err, err2)
+			glog.Warningf("failed to open cached-digest data %s for %s: %v %v", s.d, s.fname, err, err2)
 			return nil, err
 		}
-		clog.Infof(ctx, "use %s (failed to open cached-digest data %s: %v)", s.fname, s.d, err)
+		glog.Infof("use %s (failed to open cached-digest data %s: %v)", s.fname, s.d, err)
 		return &dataReadCloser{ReadCloser: r}, nil
 	}
 	gr, err := gzip.NewReader(r)
 	if err != nil {
 		r.Close()
-		clog.Warningf(ctx, "failed to gunzip cached-digest data %s for %s: %v", s.d, s.fname, err)
+		glog.Warningf("failed to gunzip cached-digest data %s for %s: %v", s.d, s.fname, err)
 		return nil, err
 	}
 	return &dataReadCloser{ReadCloser: gr, f: r}, nil

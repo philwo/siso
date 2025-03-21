@@ -12,10 +12,9 @@ import (
 	"strings"
 	"time"
 
-	log "github.com/golang/glog"
+	"github.com/golang/glog"
 
 	"go.chromium.org/infra/build/siso/hashfs"
-	"go.chromium.org/infra/build/siso/o11y/clog"
 )
 
 // ScanDeps is a simple C/C++ dependency scanner.
@@ -96,7 +95,7 @@ func (s *ScanDeps) Scan(ctx context.Context, execRoot string, req Request) ([]st
 
 	setupDur := time.Since(started)
 	if setupDur > 500*time.Millisecond {
-		clog.Infof(ctx, "scan setup dirs:%d %s", len(req.Dirs), setupDur)
+		glog.Infof("scan setup dirs:%d %s", len(req.Dirs), setupDur)
 	}
 	started = time.Now()
 
@@ -118,9 +117,9 @@ func (s *ScanDeps) Scan(ctx context.Context, execRoot string, req Request) ([]st
 			return nil, fmt.Errorf("too slow scandeps: dirs:%d ds:%d i:%d n:%d %s %s", len(req.Dirs), scanner.maxDirstack, icnt, ncnt, setupDur, dur)
 		}
 		names := scanner.nextInputs(ctx)
-		if log.V(1) {
+		if glog.V(1) {
 			logNames := names
-			clog.Infof(ctx, "try include %q", logNames)
+			glog.Infof("try include %q", logNames)
 		}
 		for _, name := range names {
 			ncnt++
@@ -129,12 +128,12 @@ func (s *ScanDeps) Scan(ctx context.Context, execRoot string, req Request) ([]st
 				if errors.Is(err, ctx.Err()) {
 					return nil, fmt.Errorf("timeout dirs:%d ds:%d i:%d n:%d %s %s: %w", len(req.Dirs), scanner.maxDirstack, icnt, ncnt, setupDur, time.Since(started), err)
 				}
-				if log.V(2) {
+				if glog.V(2) {
 					lv := struct {
 						name string
 						err  error
 					}{name, err}
-					clog.Infof(ctx, "name %s not found: %v", lv.name, lv.err)
+					glog.Infof("name %s not found: %v", lv.name, lv.err)
 				}
 				continue
 			}
@@ -142,13 +141,13 @@ func (s *ScanDeps) Scan(ctx context.Context, execRoot string, req Request) ([]st
 				// already read?
 				continue
 			}
-			if log.V(1) {
-				clog.Infof(ctx, "include %s -> %s", name, incpath)
+			if glog.V(1) {
+				glog.Infof("include %s -> %s", name, incpath)
 			}
 			if deps, ok := s.inputDeps[incpath]; ok {
-				if log.V(1) {
+				if glog.V(1) {
 					logDeps := deps
-					clog.Infof(ctx, "add inputDeps %q", logDeps)
+					glog.Infof("add inputDeps %q", logDeps)
 				}
 				scanner.addInputs(ctx, deps...)
 			}
@@ -157,8 +156,8 @@ func (s *ScanDeps) Scan(ctx context.Context, execRoot string, req Request) ([]st
 		}
 	}
 	results := scanner.results()
-	if log.V(1) {
-		clog.Infof(ctx, "results=%q", results)
+	if glog.V(1) {
+		glog.Infof("results=%q", results)
 	}
 	return results, nil
 }

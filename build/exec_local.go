@@ -12,16 +12,15 @@ import (
 	"time"
 
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
-	log "github.com/golang/glog"
+	"github.com/golang/glog"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.chromium.org/infra/build/siso/execute"
 	"go.chromium.org/infra/build/siso/execute/localexec"
-	"go.chromium.org/infra/build/siso/o11y/clog"
 )
 
 func (b *Builder) execLocal(ctx context.Context, step *Step) error {
-	clog.Infof(ctx, "exec local %s", step.cmd.Desc)
+	glog.Infof("exec local %s", step.cmd.Desc)
 	step.cmd.RemoteWrapper = ""
 
 	step.setPhase(stepInput)
@@ -60,7 +59,7 @@ func (b *Builder) execLocal(ctx context.Context, step *Step) error {
 			step.cmd.FileTrace = &execute.FileTrace{}
 		}
 	case enableTrace:
-		clog.Warningf(ctx, "unable to use file-access-trace")
+		glog.Warningf("unable to use file-access-trace")
 	}
 	if phase == stepLocalRun && step.metrics.Fallback {
 		phase = stepFallbackRun
@@ -71,7 +70,7 @@ func (b *Builder) execLocal(ctx context.Context, step *Step) error {
 	var dur time.Duration
 	step.setPhase(phase.wait())
 	err = sema.Do(ctx, func(ctx context.Context) error {
-		clog.Infof(ctx, "step state: %s", stateMessage)
+		glog.Infof("step state: %s", stateMessage)
 		step.setPhase(phase)
 		if step.cmd.Console {
 			b.progress.startConsoleCmd(step.cmd)
@@ -108,7 +107,7 @@ func (b *Builder) execLocal(ctx context.Context, step *Step) error {
 		if step.cmd.FileTrace != nil {
 			cerr := b.checkTrace(ctx, step, dur)
 			if cerr != nil {
-				clog.Warningf(ctx, "failed to check trace %v", cerr)
+				glog.Warningf("failed to check trace %v", cerr)
 				if err == nil {
 					err = cerr
 				}
@@ -132,11 +131,11 @@ func (b *Builder) execLocal(ctx context.Context, step *Step) error {
 func (b *Builder) prepareLocalInputs(ctx context.Context, step *Step) error {
 	inputs := step.cmd.AllInputs()
 	start := time.Now()
-	if log.V(1) {
-		clog.Infof(ctx, "prepare-local-inputs %d", len(inputs))
+	if glog.V(1) {
+		glog.Infof("prepare-local-inputs %d", len(inputs))
 	}
 	err := b.hashFS.Flush(ctx, step.cmd.ExecRoot, inputs)
-	clog.Infof(ctx, "prepare-local-inputs %d %s: %v", len(inputs), time.Since(start), err)
+	glog.Infof("prepare-local-inputs %d %s: %v", len(inputs), time.Since(start), err)
 	// now, all inputs are expected to be on disk.
 	// for reproxy and local, no need to scan deps.
 	// but need to remove missing inputs from cmd.Inputs
@@ -152,7 +151,7 @@ func (b *Builder) prepareLocalInputs(ctx context.Context, step *Step) error {
 		inputs = b.hashFS.Availables(ctx, step.cmd.ExecRoot, step.cmd.Inputs)
 	}
 	if len(inputs) != len(step.cmd.Inputs) {
-		clog.Infof(ctx, "deps remove missing inputs %d -> %d", len(step.cmd.Inputs), len(inputs))
+		glog.Infof("deps remove missing inputs %d -> %d", len(step.cmd.Inputs), len(inputs))
 		step.cmd.Inputs = inputs
 	}
 	return err
@@ -167,7 +166,7 @@ func (b *Builder) checkLocalOutputs(ctx context.Context, step *Step) error {
 		return nil
 	}
 	if step.def.Binding("phony_output") != "" {
-		clog.Infof(ctx, "phony_output. no check output files %q", step.cmd.Outputs)
+		glog.Infof("phony_output. no check output files %q", step.cmd.Outputs)
 		return nil
 	}
 
@@ -184,7 +183,7 @@ func (b *Builder) checkLocalOutputs(ctx context.Context, step *Step) error {
 				}
 			}
 			if !required {
-				clog.Warningf(ctx, "ignore missing outputs %s: %v", out, err)
+				glog.Warningf("ignore missing outputs %s: %v", out, err)
 				continue
 			}
 			return fmt.Errorf("missing outputs %s: %w", out, err)
@@ -216,6 +215,6 @@ command: %q %d
 		command, dur.Milliseconds())
 	_, err := b.localexecLogWriter.Write(buf.Bytes())
 	if err != nil {
-		clog.Warningf(ctx, "failed to log localexec: %v", err)
+		glog.Warningf("failed to log localexec: %v", err)
 	}
 }

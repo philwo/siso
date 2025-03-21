@@ -15,9 +15,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/golang/glog"
 	"google.golang.org/protobuf/proto"
 
-	"go.chromium.org/infra/build/siso/o11y/clog"
 	pb "go.chromium.org/infra/build/siso/toolsupport/ciderutil/proto"
 	"go.chromium.org/infra/build/siso/toolsupport/ninjautil"
 	"go.chromium.org/infra/build/siso/toolsupport/shutil"
@@ -25,7 +25,7 @@ import (
 )
 
 func (a *ideAnalyzer) analyzeJava(ctx context.Context, edge *ninjautil.Edge, result *pb.AnalysisResult) (*pb.AnalysisResult, map[string]*pb.BuildableUnit) {
-	clog.Infof(ctx, "analyze java %s", result.SourceFilePath)
+	glog.Infof("analyze java %s", result.SourceFilePath)
 	started := time.Now()
 	deps := map[string]*pb.BuildableUnit{}
 	seen := make(map[string]bool)
@@ -59,7 +59,7 @@ func (a *ideAnalyzer) appendIndirectJavaBuildableUnits(ctx context.Context, edge
 		return nil, nil
 	}
 	seen[edge.Outputs()[0].Path()] = true
-	clog.Infof(ctx, "check edge for %q", edge.Outputs()[0].Path())
+	glog.Infof("check edge for %q", edge.Outputs()[0].Path())
 	isFinalCommand := len(buildableUnits) == 0
 	var nextEdges []*ninjautil.Edge
 	depIDseen := map[string]bool{}
@@ -143,11 +143,11 @@ func (a *ideAnalyzer) appendIndirectJavaBuildableUnits(ctx context.Context, edge
 				tempdir := filepath.Dir(rspfile)
 				buf, err := os.ReadFile(rspfile)
 				if err != nil {
-					clog.Warningf(ctx, "failed to read javac rsp file %q: %v", rspfile, err)
+					glog.Warningf("failed to read javac rsp file %q: %v", rspfile, err)
 				}
 				err = os.RemoveAll(tempdir)
 				if err != nil {
-					clog.Warningf(ctx, "failed to remove tempdir %q: %v", tempdir, err)
+					glog.Warningf("failed to remove tempdir %q: %v", tempdir, err)
 				}
 				generatedFiles = append(generatedFiles, &pb.GeneratedFile{
 					Path:     rspfile,
@@ -194,7 +194,7 @@ func (a *ideAnalyzer) appendIndirectJavaBuildableUnits(ctx context.Context, edge
 			case ".jar":
 				buf, err := a.hashFS.ReadFile(ctx, a.path.ExecRoot, a.path.MaybeFromWD(ctx, path))
 				if err != nil {
-					clog.Warningf(ctx, "not exist generated file %q: %v", path, err)
+					glog.Warningf("not exist generated file %q: %v", path, err)
 					continue
 				}
 				generatedFiles = append(generatedFiles, &pb.GeneratedFile{
@@ -213,7 +213,7 @@ func (a *ideAnalyzer) appendIndirectJavaBuildableUnits(ctx context.Context, edge
 			case ".java", ".jar", ".class":
 				buf, err := a.hashFS.ReadFile(ctx, a.path.ExecRoot, a.path.MaybeFromWD(ctx, path))
 				if err != nil {
-					clog.Warningf(ctx, "not exist generated file %q: %v", path, err)
+					glog.Warningf("not exist generated file %q: %v", path, err)
 					continue
 				}
 				generatedFiles = append(generatedFiles, &pb.GeneratedFile{
