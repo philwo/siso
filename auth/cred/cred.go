@@ -24,7 +24,7 @@ import (
 
 // Cred holds credentials and derived values.
 type Cred struct {
-	// Type is credential type. e.g. "luci-auth", "gcloud", etc.
+	// Type is credential type. e.g. "luci-auth", etc.
 	Type string
 
 	// Email is authenticated email.
@@ -61,8 +61,6 @@ func AuthOpts(credHelper string) Options {
 	var tokenSource oauth2.TokenSource
 	if credHelper != "" {
 		tokenSource = credHelperTokenSource{credHelper}
-	} else {
-		tokenSource = gcloudTokenSource{}
 	}
 	return Options{
 		LUCIAuth:         authOpts,
