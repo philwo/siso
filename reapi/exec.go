@@ -102,7 +102,6 @@ retryLoop:
 				return erespErr(ctx, resp)
 			}
 		}()
-		c.m.OpsDone(err)
 		// https://github.com/bazelbuild/bazel/blob/7.1.1/src/main/java/com/google/devtools/build/lib/remote/RemoteRetrier.java#L47
 		unknownErr := true
 		switch status.Code(err) {

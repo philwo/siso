@@ -19,7 +19,6 @@ import (
 	"github.com/pkg/xattr"
 
 	"go.chromium.org/infra/build/siso/o11y/clog"
-	"go.chromium.org/infra/build/siso/o11y/iometrics"
 	"go.chromium.org/infra/build/siso/reapi/digest"
 	"go.chromium.org/infra/build/siso/reapi/retry"
 	"go.chromium.org/infra/build/siso/runtimex"
@@ -34,12 +33,9 @@ var LstatSemaphore = semaphore.New("osfs-lstat", runtimex.NumCPU()*2)
 const defaultDigestXattr = "google.digest.sha256"
 
 // OSFS provides OS Filesystem access.
-// It counts metrics by iometrics.
 // It would be an interface to communicate local filesystem server,
 // in addition to local filesystem.
 type OSFS struct {
-	*iometrics.IOMetrics
-
 	digestXattrName string
 }
 
@@ -66,7 +62,6 @@ func New(ctx context.Context, name string, opt Option) *OSFS {
 		clog.Infof(ctx, "use xattr %s for file digest", opt.DigestXattrName)
 	}
 	return &OSFS{
-		IOMetrics:       iometrics.New(name),
 		digestXattrName: opt.DigestXattrName,
 	}
 }
@@ -81,7 +76,6 @@ func logSlow(ctx context.Context, name string, dur time.Duration, err error) {
 func (ofs *OSFS) Chmod(ctx context.Context, name string, mode fs.FileMode) error {
 	started := time.Now()
 	err := os.Chmod(name, mode)
-	ofs.OpsDone(err)
 	if dur := time.Since(started); dur > 1*time.Minute {
 		logSlow(ctx, name, dur, err)
 	}
@@ -95,7 +89,6 @@ func (ofs *OSFS) Chtimes(ctx context.Context, name string, atime, mtime time.Tim
 	_, _ = os.Stat(name)
 
 	err := os.Chtimes(name, atime, mtime)
-	ofs.OpsDone(err)
 	if dur := time.Since(started); dur > 1*time.Minute {
 		logSlow(ctx, name, dur, err)
 	}
@@ -125,7 +118,6 @@ func (ofs *OSFS) Lstat(ctx context.Context, fname string) (fs.FileInfo, error) {
 		fi, err = os.Lstat(fname)
 		return err
 	})
-	ofs.OpsDone(err)
 	if dur := time.Since(started); dur > 1*time.Minute {
 		logSlow(ctx, fname, dur, err)
 	}
@@ -136,7 +128,6 @@ func (ofs *OSFS) Lstat(ctx context.Context, fname string) (fs.FileInfo, error) {
 func (ofs *OSFS) MkdirAll(ctx context.Context, dirname string, perm fs.FileMode) error {
 	started := time.Now()
 	err := os.MkdirAll(dirname, perm)
-	ofs.OpsDone(err)
 	if dur := time.Since(started); dur > 1*time.Minute {
 		logSlow(ctx, dirname, dur, err)
 	}
@@ -147,7 +138,6 @@ func (ofs *OSFS) MkdirAll(ctx context.Context, dirname string, perm fs.FileMode)
 func (ofs *OSFS) Readlink(ctx context.Context, name string) (string, error) {
 	started := time.Now()
 	target, err := os.Readlink(name)
-	ofs.OpsDone(err)
 	if dur := time.Since(started); dur > 1*time.Minute {
 		logSlow(ctx, name, dur, err)
 	}
@@ -158,7 +148,6 @@ func (ofs *OSFS) Readlink(ctx context.Context, name string) (string, error) {
 func (ofs *OSFS) Remove(ctx context.Context, name string) error {
 	started := time.Now()
 	err := os.Remove(name)
-	ofs.OpsDone(err)
 	if dur := time.Since(started); dur > 1*time.Minute {
 		logSlow(ctx, name, dur, err)
 	}
@@ -169,7 +158,6 @@ func (ofs *OSFS) Remove(ctx context.Context, name string) error {
 func (ofs *OSFS) Rename(ctx context.Context, oldpath, newpath string) error {
 	started := time.Now()
 	err := os.Rename(oldpath, newpath)
-	ofs.OpsDone(err)
 	if dur := time.Since(started); dur > 1*time.Minute {
 		logSlow(ctx, newpath, dur, err)
 	}
@@ -180,7 +168,6 @@ func (ofs *OSFS) Rename(ctx context.Context, oldpath, newpath string) error {
 func (ofs *OSFS) Symlink(ctx context.Context, oldname, newname string) error {
 	started := time.Now()
 	err := os.Symlink(oldname, newname)
-	ofs.OpsDone(err)
 	if dur := time.Since(started); dur > 1*time.Minute {
 		logSlow(ctx, newname, dur, err)
 	}
@@ -191,7 +178,6 @@ func (ofs *OSFS) Symlink(ctx context.Context, oldname, newname string) error {
 func (ofs *OSFS) WriteFile(ctx context.Context, name string, data []byte, perm fs.FileMode) error {
 	started := time.Now()
 	err := writeFile(name, data, perm)
-	ofs.WriteDone(len(data), err)
 	if dur := time.Since(started); dur > 1*time.Minute {
 		logSlow(ctx, name, dur, err)
 	}
@@ -201,7 +187,6 @@ func (ofs *OSFS) WriteFile(ctx context.Context, name string, data []byte, perm f
 // WriteDigestData writes digest source into the named file.
 func (ofs *OSFS) WriteDigestData(ctx context.Context, name string, src digest.Source, perm fs.FileMode) error {
 	started := time.Now()
-	var n int64
 	err := retry.Do(ctx, func() error {
 		r, err := src.Open(ctx)
 		if err != nil {
@@ -212,14 +197,13 @@ func (ofs *OSFS) WriteDigestData(ctx context.Context, name string, src digest.So
 		if err != nil {
 			return err
 		}
-		n, err = io.Copy(w, r)
+		_, err = io.Copy(w, r)
 		cerr := w.Close()
 		if err == nil {
 			err = cerr
 		}
 		return err
 	})
-	ofs.WriteDone(int(n), err)
 	if dur := time.Since(started); dur > 1*time.Minute {
 		logSlow(ctx, name, dur, err)
 	}
@@ -232,13 +216,11 @@ func (ofs *OSFS) FileDigestFromXattr(ctx context.Context, name string, size int6
 		return digest.Digest{}, errors.ErrUnsupported
 	}
 	d, err := xattr.LGet(name, ofs.digestXattrName)
-	ofs.OpsDone(err)
 	if err != nil {
 		return digest.Digest{}, err
 	}
 	if size < 0 {
 		fi, err := os.Lstat(name)
-		ofs.OpsDone(err)
 		if err != nil {
 			return digest.Digest{}, err
 		}
@@ -292,7 +274,6 @@ func (f *file) Read(buf []byte) (int, error) {
 func (f *file) Close() error {
 	name := f.file.Name()
 	err := f.file.Close()
-	f.fs.ReadDone(f.n, err)
 	if dur := time.Since(f.started); dur > 1*time.Minute {
 		logSlow(f.ctx, name, dur, err)
 	}

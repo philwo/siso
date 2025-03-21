@@ -28,7 +28,6 @@ import (
 
 	"go.chromium.org/infra/build/siso/auth/cred"
 	"go.chromium.org/infra/build/siso/o11y/clog"
-	"go.chromium.org/infra/build/siso/o11y/iometrics"
 	"go.chromium.org/infra/build/siso/reapi/digest"
 )
 
@@ -104,8 +103,6 @@ type Client struct {
 
 	capabilities *rpb.ServerCapabilities
 	knownDigests sync.Map // key:digest.Digest, value: *uploadOp or true
-
-	m *iometrics.IOMetrics
 }
 
 // serviceConfig is gRPC service config for RE API.
@@ -221,7 +218,6 @@ func NewFromConn(ctx context.Context, opt Option, conn grpcClientConn) (*Client,
 		opt:          opt,
 		conn:         conn,
 		capabilities: capa,
-		m:            iometrics.New("reapi"),
 	}
 	c.knownDigests.Store(digest.Empty, true)
 	return c, nil
@@ -230,14 +226,6 @@ func NewFromConn(ctx context.Context, opt Option, conn grpcClientConn) (*Client,
 // Close closes the client.
 func (c *Client) Close() error {
 	return c.conn.Close()
-}
-
-// IOMetrics returns an IOMetrics of the client.
-func (c *Client) IOMetrics() *iometrics.IOMetrics {
-	if c == nil {
-		return nil
-	}
-	return c.m
 }
 
 // Proto fetches contents of digest into proto message.
@@ -256,7 +244,6 @@ func (c *Client) GetActionResult(ctx context.Context, d digest.Digest) (*rpb.Act
 		InstanceName: c.opt.Instance,
 		ActionDigest: d.Proto(),
 	})
-	c.m.OpsDone(err)
 	return result, err
 }
 
