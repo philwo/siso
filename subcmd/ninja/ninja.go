@@ -35,11 +35,9 @@ import (
 	"github.com/maruel/subcommands"
 	"golang.org/x/sync/errgroup"
 	mrpb "google.golang.org/genproto/googleapis/api/monitoredres"
-	rspb "google.golang.org/genproto/googleapis/devtools/resultstore/v2"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/grpclog"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.chromium.org/luci/auth"
 	"go.chromium.org/luci/cipd/version"
@@ -53,11 +51,9 @@ import (
 	"go.chromium.org/infra/build/siso/build/ninjabuild"
 	"go.chromium.org/infra/build/siso/hashfs"
 	"go.chromium.org/infra/build/siso/o11y/clog"
-	"go.chromium.org/infra/build/siso/o11y/resultstore"
 	"go.chromium.org/infra/build/siso/o11y/trace"
 	"go.chromium.org/infra/build/siso/reapi"
 	"go.chromium.org/infra/build/siso/reapi/digest"
-	"go.chromium.org/infra/build/siso/reapi/merkletree"
 	"go.chromium.org/infra/build/siso/toolsupport/artfsutil"
 	"go.chromium.org/infra/build/siso/toolsupport/cogutil"
 	"go.chromium.org/infra/build/siso/toolsupport/ninjautil"
@@ -153,7 +149,6 @@ type ninjaCmdRun struct {
 	artfsEndpoint string
 
 	enableCloudLogging bool
-	enableResultstore  bool
 	// enableCPUProfiler bool
 	enableCloudProfiler      bool
 	cloudProfilerServiceName string
@@ -170,8 +165,6 @@ type ninjaCmdRun struct {
 
 	sisoInfoLog string // abs or relative to logDir
 	startDir    string
-
-	resultstoreUploader *resultstore.Uploader
 }
 
 // Run runs the `ninja` subcommand.
@@ -518,7 +511,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		spin.Start("init credentials")
 		credential, err = cred.New(ctx, c.authOpts)
 		if err != nil {
-			if !c.reopt.NeedCred() && !c.enableCloudLogging && !c.enableResultstore && !c.enableCloudProfiler && !c.enableCloudTrace {
+			if !c.reopt.NeedCred() && !c.enableCloudLogging && !c.enableCloudProfiler && !c.enableCloudTrace {
 				log.Warningf("failed to init credential: %v", err)
 				log.Warningf("but no remote apis require credential")
 			} else {
@@ -544,14 +537,8 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		}
 	}
 	// logging is ready.
-	var properties resultstore.Properties
-	properties.Add("dir", c.dir)
-	info := cpuinfo()
-	clog.Infof(ctx, "%s", info)
-	properties.Add("cpu", info)
-	info = gcinfo()
-	clog.Infof(ctx, "%s", info)
-	properties.Add("memgc", info)
+	clog.Infof(ctx, "%s", cpuinfo())
+	clog.Infof(ctx, "%s", gcinfo())
 
 	clog.Infof(ctx, "siso version %s", c.version)
 	if cmdver, err := version.GetStartupVersion(); err != nil {
@@ -559,26 +546,21 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	} else if cmdver.PackageName != "" {
 		clog.Infof(ctx, "CIPD package name: %s", cmdver.PackageName)
 		clog.Infof(ctx, "CIPD instance ID: %s", cmdver.InstanceID)
-		properties.Add("cipd_package_name", cmdver.PackageName)
-		properties.Add("cipd_instance_id", cmdver.InstanceID)
 	} else {
 		buildInfo, ok := debug.ReadBuildInfo()
 		if ok {
 			if buildInfo.GoVersion != "" {
 				clog.Infof(ctx, "Go version: %s", buildInfo.GoVersion)
-				properties.Add("go_version", buildInfo.GoVersion)
 			}
 			for _, s := range buildInfo.Settings {
 				if strings.HasPrefix(s.Key, "vcs.") || strings.HasPrefix(s.Key, "-") {
 					clog.Infof(ctx, "build_%s=%s", s.Key, s.Value)
-					properties.Add(fmt.Sprintf("build_%s", s.Key), s.Value)
 				}
 			}
 		}
 	}
 	c.checkResourceLimits(ctx)
 
-	properties.Add("job_id", c.jobID)
 	clog.Infof(ctx, "job id: %q", c.jobID)
 	clog.Infof(ctx, "build id: %q", c.buildID)
 	clog.Infof(ctx, "project id: %q", projectID)
@@ -587,29 +569,6 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 
 	spin := ui.Default.NewSpinner()
 
-	if c.enableResultstore {
-		c.resultstoreUploader, err = resultstore.New(ctx, resultstore.Options{
-			InvocationID: c.buildID,
-			Invocation:   c.invocation(ctx, c.buildID, projectID, execRoot, properties),
-			DialOptions:  credential.GRPCDialOptions(),
-		})
-		if err != nil {
-			return stats, err
-		}
-		fmt.Fprintf(os.Stderr, "https://btx.cloud.google.com/invocations/%s\n", c.buildID)
-		defer func() {
-			spin.Start("finishing upload to resultstore")
-			exitCode := 0
-			if err != nil {
-				exitCode = 1
-			}
-			cerr := c.resultstoreUploader.Close(ctx, exitCode)
-			if cerr != nil {
-				clog.Warningf(ctx, "failed to close resultstore: %v", cerr)
-			}
-			spin.Stop(cerr)
-		}()
-	}
 	if c.enableCloudProfiler {
 		c.initCloudProfiler(ctx, projectID, credential)
 	}
@@ -815,35 +774,6 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		return stats, errNothingToDo
 	}
 
-	if c.resultstoreUploader != nil {
-		defer func() {
-			var ents []merkletree.Entry
-
-			var files []string
-			if c.metricsJSON != "" {
-				files = append(files, c.metricsJSON)
-			}
-			// TODO(b/329564182): add other files? e.g. siso_output, siso_trace.json etc.
-			if len(files) != 0 {
-				var err error
-				ents, err = hashFS.Entries(ctx, filepath.Join(execRoot, c.dir), files)
-				if err != nil {
-					clog.Warningf(ctx, "failed to get entries for %q: %v", files, err)
-				}
-			}
-			ents = append(ents, merkletree.Entry{
-				Name: "build.log",
-				Data: c.resultstoreUploader.BuildLogData(),
-			})
-			spin.Start("uploading to resultstore")
-			uerr := c.resultstoreUploader.UploadFiles(ctx, ents)
-			if uerr != nil {
-				clog.Warningf(ctx, "failed to upload results: %v", uerr)
-			}
-			spin.Stop(uerr)
-		}()
-	}
-
 	bopts, done, err := c.initBuildOpts(ctx, projectID, buildPath, config, ds, hashFS, limits, traceExporter)
 	if err != nil {
 		return stats, err
@@ -978,13 +908,6 @@ func runNinja(ctx context.Context, fname string, graph *ninjabuild.Graph, bopts 
 			continue
 		}
 		clog.Infof(ctx, "build finished: %v", err)
-		if bopts.ResultstoreUploader != nil {
-			if err != nil {
-				bopts.ResultstoreUploader.AddBuildLog(fmt.Sprintf("build failed: %v\n", err))
-			} else {
-				bopts.ResultstoreUploader.AddBuildLog("build succeeded\n")
-			}
-		}
 		return stats, err
 	}
 }
@@ -1072,7 +995,6 @@ func (c *ninjaCmdRun) init() {
 	c.Flags.DurationVar(&c.traceSpanThreshold, "trace_span_threshold", 100*time.Millisecond, "theshold for trace span record")
 
 	c.Flags.BoolVar(&c.enableCloudLogging, "enable_cloud_logging", false, "enable cloud logging")
-	c.Flags.BoolVar(&c.enableResultstore, "enable_resultstore", false, "enable resultstore")
 	c.Flags.BoolVar(&c.enableCloudProfiler, "enable_cloud_profiler", false, "enable cloud profiler")
 	c.Flags.StringVar(&c.cloudProfilerServiceName, "cloud_profiler_service_name", "siso", "cloud profiler service name")
 	c.Flags.BoolVar(&c.enableCloudTrace, "enable_cloud_trace", false, "enable cloud trace")
@@ -1454,7 +1376,6 @@ func (c *ninjaCmdRun) initBuildOpts(ctx context.Context, projectID string, build
 		TraceExporter:        traceExporter,
 		TraceJSON:            c.traceJSON,
 		Pprof:                c.buildPprof,
-		ResultstoreUploader:  c.resultstoreUploader,
 		Clobber:              c.clobber,
 		Prepare:              c.prepare,
 		Verbose:              c.verbose,
@@ -1555,23 +1476,6 @@ func doBuild(ctx context.Context, graph *ninjabuild.Graph, bopts build.Options, 
 	err = rebuildManifest(ctx, graph, bopts)
 	if err != nil {
 		return stats, err
-	}
-	if bopts.ResultstoreUploader != nil {
-		err := bopts.ResultstoreUploader.NewConfiguration(ctx, "default", graph.ConfigProperties())
-		if err != nil {
-			return stats, err
-		}
-		bopts.ResultstoreUploader.HashFS = bopts.HashFS
-		bopts.ResultstoreUploader.REAPIClient = bopts.REAPIClient
-
-		ents, err := bopts.HashFS.Entries(ctx, filepath.Join(bopts.Path.ExecRoot, bopts.Path.Dir), []string{".siso_config", ".siso_filegroups"})
-		if err != nil {
-			return stats, err
-		}
-		err = bopts.ResultstoreUploader.UploadFiles(ctx, ents)
-		if err != nil {
-			return stats, err
-		}
 	}
 
 	if !bopts.DryRun && nopts.cleandead {
@@ -1689,9 +1593,6 @@ func doBuild(ctx context.Context, graph *ninjabuild.Graph, bopts build.Options, 
 	if len(semaTraces) > 0 {
 		rut := dumpResourceUsageTable(ctx, semaTraces)
 		clog.Infof(ctx, "resource usage table:\n%s", rut)
-		if bopts.ResultstoreUploader != nil {
-			bopts.ResultstoreUploader.AddBuildLog(rut + "\n")
-		}
 	}
 	stats = b.Stats()
 	clog.Infof(ctx, "stats=%#v", stats)
@@ -2007,56 +1908,6 @@ func gcinfo() string {
 		fmt.Fprintf(&sb, " (GOGC=%s)", v)
 	}
 	return sb.String()
-}
-
-func (c *ninjaCmdRun) invocation(ctx context.Context, buildID, projectID, execRoot string, properties resultstore.Properties) *rspb.Invocation {
-	username := lookupUser(ctx)
-	hostname, err := os.Hostname()
-	if err != nil {
-		clog.Warningf(ctx, "failed to get hostname: %v", err)
-		hostname = "unknownhost"
-	}
-
-	return &rspb.Invocation{
-		Timing: &rspb.Timing{
-			StartTime: timestamppb.New(c.started),
-		},
-		InvocationAttributes: &rspb.InvocationAttributes{
-			ProjectId:   projectID,
-			Users:       []string{username},
-			Labels:      []string{"siso", "build"},
-			Description: fmt.Sprintf("Invocation ID %s", buildID),
-		},
-		WorkspaceInfo: &rspb.WorkspaceInfo{
-			Hostname:         hostname,
-			WorkingDirectory: execRoot,
-			ToolTag:          "siso",
-			CommandLines:     c.commandLines(),
-		},
-		Properties: properties,
-	}
-}
-
-func (c *ninjaCmdRun) commandLines() []*rspb.CommandLine {
-	var cmdlines []*rspb.CommandLine
-	cmdlines = append(cmdlines, &rspb.CommandLine{
-		Label:   "original",
-		Tool:    os.Args[0],
-		Args:    os.Args[1:],
-		Command: "ninja",
-	})
-	cmdline := &rspb.CommandLine{
-		Label:   "canonical",
-		Tool:    os.Args[0],
-		Args:    []string{"ninja"},
-		Command: "ninja",
-	}
-	c.Flags.VisitAll(func(f *flag.Flag) {
-		cmdline.Args = append(cmdline.Args, fmt.Sprintf("-%s=%s", f.Name, f.Value.String()))
-	})
-	cmdline.Args = append(cmdline.Args, c.Flags.Args()...)
-	cmdlines = append(cmdlines, cmdline)
-	return cmdlines
 }
 
 func (c *ninjaCmdRun) setupCrashOutput(ctx context.Context) (func(), error) {
