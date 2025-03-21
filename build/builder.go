@@ -28,7 +28,6 @@ import (
 	"time"
 
 	"cloud.google.com/go/logging"
-	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
 	log "github.com/golang/glog"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -42,7 +41,6 @@ import (
 	"go.chromium.org/infra/build/siso/hashfs/osfs"
 	"go.chromium.org/infra/build/siso/o11y/clog"
 	"go.chromium.org/infra/build/siso/o11y/iometrics"
-	"go.chromium.org/infra/build/siso/o11y/monitoring"
 	sisopprof "go.chromium.org/infra/build/siso/o11y/pprof"
 	"go.chromium.org/infra/build/siso/o11y/resultstore"
 	"go.chromium.org/infra/build/siso/o11y/trace"
@@ -828,20 +826,6 @@ func (b *Builder) recordMetrics(ctx context.Context, m StepMetric) {
 		return
 	}
 	fmt.Fprintf(b.metricsJSONWriter, "%s\n", mb)
-}
-
-func (b *Builder) recordCloudMonitoringActionMetrics(ctx context.Context, step *Step, actionErr error) {
-	ar, cached := step.cmd.ActionResult()
-	var remoteAr *rpb.ActionResult
-	var remoteErr error
-	if step.metrics.IsRemote {
-		remoteAr = ar
-		remoteErr = actionErr
-	} else if step.metrics.Fallback {
-		remoteAr, remoteErr = step.cmd.RemoteFallbackResult()
-	}
-	monitoring.ExportActionMetrics(
-		ctx, time.Duration(step.metrics.Duration), ar, remoteAr, actionErr, remoteErr, cached)
 }
 
 func (b *Builder) recordNinjaLogs(ctx context.Context, s *Step) {

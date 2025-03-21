@@ -8,7 +8,6 @@ require (
 	cloud.google.com/go/longrunning v0.6.6
 	cloud.google.com/go/profiler v0.4.2
 	cloud.google.com/go/trace v1.11.5
-	contrib.go.opencensus.io/exporter/stackdriver v0.13.14
 	github.com/Microsoft/go-winio v0.6.2
 	github.com/bazelbuild/reclient/api v0.0.0-20240617160057-89d6134e48e5
 	github.com/bazelbuild/remote-apis v0.0.0-20250311143718-2721568dea74
@@ -21,7 +20,6 @@ require (
 	github.com/maruel/subcommands v1.1.1
 	github.com/pkg/xattr v0.4.10
 	go.chromium.org/luci v0.0.0-20250321144226-119db4c5a855
-	go.opencensus.io v0.24.0
 	go.starlark.net v0.0.0-20250318223901-d9371fef63fe
 	golang.org/x/oauth2 v0.28.0
 	golang.org/x/sync v0.12.0
@@ -41,24 +39,20 @@ require (
 	cloud.google.com/go v0.118.3 // indirect
 	cloud.google.com/go/auth v0.15.0 // indirect
 	cloud.google.com/go/auth/oauth2adapt v0.2.7 // indirect
-	cloud.google.com/go/monitoring v1.24.0 // indirect
 	github.com/GoogleCloudPlatform/protoc-gen-bq-schema v0.0.0-20190119112626-026f9fcdf705 // indirect
-	github.com/aws/aws-sdk-go v1.55.5 // indirect
-	github.com/census-instrumentation/opencensus-proto v0.4.1 // indirect
 	github.com/cncf/xds/go v0.0.0-20250121191232-2f005788dc42 // indirect
+	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/go-logr/logr v1.4.2 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
-	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/golang/mock v1.7.0-rc.1 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/google/pprof v0.0.0-20241029153458-d1b30febd7db // indirect
 	github.com/google/s2a-go v0.1.9 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.6 // indirect
 	github.com/googleapis/gax-go/v2 v2.14.1 // indirect
-	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/julienschmidt/httprouter v1.3.0 // indirect
-	github.com/prometheus/prometheus v0.54.1 // indirect
+	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/texttheater/golang-levenshtein v1.0.1 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	go.opentelemetry.io/auto/sdk v1.1.0 // indirect

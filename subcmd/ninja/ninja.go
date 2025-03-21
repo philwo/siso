@@ -28,7 +28,6 @@ import (
 	"cloud.google.com/go/compute/metadata"
 	"cloud.google.com/go/logging"
 	"cloud.google.com/go/profiler"
-	"contrib.go.opencensus.io/exporter/stackdriver"
 	log "github.com/golang/glog"
 	"github.com/google/uuid"
 	"github.com/klauspost/cpuid/v2"
@@ -54,7 +53,6 @@ import (
 	"go.chromium.org/infra/build/siso/build/ninjabuild"
 	"go.chromium.org/infra/build/siso/hashfs"
 	"go.chromium.org/infra/build/siso/o11y/clog"
-	"go.chromium.org/infra/build/siso/o11y/monitoring"
 	"go.chromium.org/infra/build/siso/o11y/resultstore"
 	"go.chromium.org/infra/build/siso/o11y/trace"
 	"go.chromium.org/infra/build/siso/reapi"
@@ -159,7 +157,6 @@ type ninjaCmdRun struct {
 	enableCloudProfiler      bool
 	cloudProfilerServiceName string
 	enableCloudTrace         bool
-	enableCloudMonitoring    bool
 	metricsLabels            string
 	metricsProject           string
 	traceThreshold           time.Duration
@@ -614,50 +611,6 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	}
 	if c.enableCloudProfiler {
 		c.initCloudProfiler(ctx, projectID, credential)
-	}
-	if c.enableCloudMonitoring && c.reproxyAddr == "" {
-		// When using the builtin RBE client instead of Reclient, Siso sends metrics
-		// to Cloud monitoring. For now, keep using the same project, prefix etc with
-		// what Reclient uses, so that we can reuse the existing metrics pipeline and
-		// alerts.
-		monitoringPrefix := "go.chromium.org"
-		metricsLabels := make(map[string]string)
-		for _, l := range strings.Split(c.metricsLabels, ",") {
-			kv := strings.Split(l, "=")
-			if len(kv) != 2 {
-				clog.Warningf(ctx, "metrics label must be in the form key=value. got %q", l)
-				continue
-			}
-			metricsLabels[kv[0]] = kv[1]
-		}
-
-		if c.metricsProject == "" {
-			// TODO: crbug.com/368518993 - Use the siso project ID by default.
-			// It may require changes on monitoring pipeline and permissions etc.
-			return stats, errors.New("cloud project ID for Cloud monitoring must be specified by -metrics_project or RBE_metrics_project")
-		}
-		e, err := c.initCloudMonitoring(ctx, credential, c.metricsProject, monitoringPrefix, projectID, metricsLabels)
-		if err != nil {
-			return stats, err
-		}
-		defer func() {
-			// Report build metrics.
-			var cacheHitRatio float64
-			if stats.CacheHit+stats.Remote > 0 {
-				cacheHitRatio = float64(stats.CacheHit) / float64(stats.CacheHit+stats.Remote)
-			}
-			isErr := err != nil && !errors.Is(err, errNothingToDo)
-			monitoring.ExportBuildMetrics(ctx, time.Since(c.started), cacheHitRatio, isErr)
-
-			spin.Start("finishing upload metrics to Cloud monitoring")
-			e.StopMetricsExporter()
-			e.Flush()
-			cerr := e.Close()
-			if cerr != nil {
-				clog.Warningf(ctx, "failed to close Cloud monitoring exporter: %v", cerr)
-			}
-			spin.Stop(cerr)
-		}()
 	}
 	var traceExporter *trace.Exporter
 	if c.enableCloudTrace {
@@ -1121,9 +1074,6 @@ func (c *ninjaCmdRun) init() {
 	c.Flags.BoolVar(&c.enableCloudProfiler, "enable_cloud_profiler", false, "enable cloud profiler")
 	c.Flags.StringVar(&c.cloudProfilerServiceName, "cloud_profiler_service_name", "siso", "cloud profiler service name")
 	c.Flags.BoolVar(&c.enableCloudTrace, "enable_cloud_trace", false, "enable cloud trace")
-	c.Flags.BoolVar(&c.enableCloudMonitoring, "enable_cloud_monitoring", false, "enable cloud monitoring")
-	c.Flags.StringVar(&c.metricsLabels, "metrics_labels", os.Getenv("RBE_metrics_labels"), "comma-separated arbitrary key value pairs in the form key=value, which are added to cloud monitoring metrics.")
-	c.Flags.StringVar(&c.metricsProject, "metrics_project", os.Getenv("RBE_metrics_project"), "Cloud Monitoring GCP project where Siso sends action and build metrics.")
 
 	c.Flags.StringVar(&c.subtool, "t", "", "run a subtool (use '-t list' to list subtools)")
 	c.Flags.BoolVar(&c.cleandead, "cleandead", false, "clean built files that are no longer produced by the manifest")
@@ -1206,7 +1156,6 @@ func (c *ninjaCmdRun) initCloudLogging(ctx context.Context, projectID, execRoot 
 	// log_id: "siso.log" and "siso.step"
 	// use generic_task resource
 	// https://cloud.google.com/logging/docs/api/v2/resource-list
-	// https://cloud.google.com/monitoring/api/resources#tag_generic_task
 	client, err := logging.NewClient(ctx, projectID, credential.ClientOptions()...)
 	if err != nil {
 		return ctx, "", func() {}, err
@@ -1296,20 +1245,6 @@ func (c *ninjaCmdRun) initCloudTrace(ctx context.Context, projectID string, cred
 		clog.Errorf(ctx, "failed to start trace exporter: %v", err)
 	}
 	return traceExporter
-}
-
-func (c *ninjaCmdRun) initCloudMonitoring(ctx context.Context, credential cred.Cred, projectID, prefix, rbeProjectID string, labels map[string]string) (*stackdriver.Exporter, error) {
-	clog.Infof(ctx, "enable cloud monitoring in %s", projectID)
-	if err := monitoring.SetupViews(ctx, c.version, labels); err != nil {
-		return nil, err
-	}
-	return monitoring.NewExporter(
-		ctx,
-		projectID,
-		prefix,
-		rbeProjectID,
-		credential.ClientOptions(),
-	)
 }
 
 func (c *ninjaCmdRun) initLogDir(ctx context.Context) error {
