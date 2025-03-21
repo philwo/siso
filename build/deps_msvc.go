@@ -19,7 +19,6 @@ import (
 
 	"go.chromium.org/infra/build/siso/execute"
 	"go.chromium.org/infra/build/siso/o11y/clog"
-	"go.chromium.org/infra/build/siso/o11y/trace"
 	"go.chromium.org/infra/build/siso/reapi/merkletree"
 	"go.chromium.org/infra/build/siso/scandeps"
 	"go.chromium.org/infra/build/siso/toolsupport/msvcutil"
@@ -96,8 +95,6 @@ func (msvc depsMSVC) fixCmdInputs(ctx context.Context, b *Builder, cmd *execute.
 }
 
 func (depsMSVC) DepsAfterRun(ctx context.Context, b *Builder, step *Step) ([]string, error) {
-	ctx, span := trace.NewSpan(ctx, "deps-for-msvc")
-	defer span.Close(nil)
 	if step.cmd.Deps != "msvc" {
 		return nil, fmt.Errorf("deps-for-msvc: unexpected deps=%q %s", step.cmd.Deps, step)
 	}
@@ -105,7 +102,6 @@ func (depsMSVC) DepsAfterRun(ctx context.Context, b *Builder, step *Step) ([]str
 	// http://b/149501385 stdout and stderr get merged in ActionResult
 	output := step.cmd.Stderr()
 	output = append(output, step.cmd.Stdout()...)
-	_, dspan := trace.NewSpan(ctx, "parse-deps")
 	deps, filteredOutput := msvcutil.ParseShowIncludes(output)
 
 	m := make(map[string]bool)
@@ -145,8 +141,6 @@ func (depsMSVC) DepsAfterRun(ctx context.Context, b *Builder, step *Step) ([]str
 	if err != nil {
 		return nil, fmt.Errorf("error in /showIncludes: %w", err)
 	}
-	dspan.SetAttr("deps", len(deps))
-	dspan.Close(nil)
 
 	step.cmd.StdoutWriter().Write(filteredOutput)
 	step.cmd.StderrWriter().Write(nil)

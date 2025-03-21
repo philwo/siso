@@ -18,7 +18,6 @@ import (
 	"go.chromium.org/infra/build/siso/execute"
 	"go.chromium.org/infra/build/siso/o11y/clog"
 	"go.chromium.org/infra/build/siso/o11y/iometrics"
-	"go.chromium.org/infra/build/siso/o11y/trace"
 	"go.chromium.org/infra/build/siso/reapi/digest"
 	"go.chromium.org/infra/build/siso/runtimex"
 	"go.chromium.org/infra/build/siso/sync/semaphore"
@@ -68,8 +67,6 @@ func (c *Cache) GetActionResult(ctx context.Context, cmd *execute.Cmd) error {
 	if !c.enableRead {
 		return status.Error(codes.NotFound, "cache disable raed")
 	}
-	ctx, span := trace.NewSpan(ctx, "cache-get")
-	defer span.Close(nil)
 
 	var d digest.Digest
 	err := c.sema.Do(ctx, func(ctx context.Context) error {
@@ -80,9 +77,7 @@ func (c *Cache) GetActionResult(ctx context.Context, cmd *execute.Cmd) error {
 	if err != nil {
 		return err
 	}
-	rctx, getSpan := trace.NewSpan(ctx, "get-action-result")
-	result, err := c.store.GetActionResult(rctx, d)
-	getSpan.Close(nil)
+	result, err := c.store.GetActionResult(ctx, d)
 	if err != nil {
 		return err
 	}

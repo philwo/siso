@@ -19,7 +19,6 @@ import (
 
 	"go.chromium.org/infra/build/siso/execute"
 	"go.chromium.org/infra/build/siso/o11y/clog"
-	"go.chromium.org/infra/build/siso/o11y/trace"
 	"go.chromium.org/infra/build/siso/toolsupport/makeutil"
 )
 
@@ -104,8 +103,6 @@ func depsFastStep(ctx context.Context, b *Builder, step *Step) (*Step, error) {
 // depsExpandInputs expands step.cmd.Inputs.
 // result will not contain labels nor non-existing files.
 func depsExpandInputs(ctx context.Context, b *Builder, step *Step) {
-	ctx, span := trace.NewSpan(ctx, "deps-expand-inputs")
-	defer span.Close(nil)
 	// deps=gcc, msvc will get correct inputs from deps log,
 	// so no need to expand inputs here.
 	switch step.cmd.Deps {
@@ -222,9 +219,6 @@ func depsAfterRun(ctx context.Context, b *Builder, step *Step) ([]string, error)
 }
 
 func fixInputsByDeps(ctx context.Context, b *Builder, stepInputs, depsIns []string) ([]string, error) {
-	ctx, span := trace.NewSpan(ctx, "fix-inputs-by-deps")
-	defer span.Close(nil)
-	span.SetAttr("deps-inputs", len(depsIns))
 	entries, err := b.hashFS.Entries(ctx, b.path.ExecRoot, depsIns)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get entries: %w", err)

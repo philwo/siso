@@ -29,7 +29,6 @@ import (
 	"go.chromium.org/infra/build/siso/execute"
 	"go.chromium.org/infra/build/siso/hashfs/osfs"
 	"go.chromium.org/infra/build/siso/o11y/clog"
-	"go.chromium.org/infra/build/siso/o11y/trace"
 	"go.chromium.org/infra/build/siso/reapi"
 	"go.chromium.org/infra/build/siso/reapi/digest"
 )
@@ -112,9 +111,6 @@ func (re *REProxyExec) Used() bool {
 
 // Run runs a cmd.
 func (re *REProxyExec) Run(ctx context.Context, cmd *execute.Cmd) error {
-	ctx, span := trace.NewSpan(ctx, "reproxy-exec")
-	defer span.Close(nil)
-
 	// ignore cmd.REProxyConfig.ServerAddress, which is
 	// default value in rewrapper.cfg, but will be overridden
 	// by RBE_server_address (which we set in re.connAddress).

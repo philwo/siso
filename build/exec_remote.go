@@ -14,14 +14,11 @@ import (
 	"google.golang.org/grpc/status"
 
 	"go.chromium.org/infra/build/siso/o11y/clog"
-	"go.chromium.org/infra/build/siso/o11y/trace"
 	"go.chromium.org/infra/build/siso/reapi"
 	"go.chromium.org/infra/build/siso/reapi/retry"
 )
 
 func (b *Builder) execRemote(ctx context.Context, step *Step) error {
-	ctx, span := trace.NewSpan(ctx, "exec-remote")
-	defer span.Close(nil)
 	noFallback := !b.localFallbackEnabled()
 	var timeout time.Duration
 	if noFallback {
@@ -106,8 +103,6 @@ func (b *Builder) execRemote(ctx context.Context, step *Step) error {
 }
 
 func (b *Builder) execRemoteCache(ctx context.Context, step *Step) error {
-	ctx, span := trace.NewSpan(ctx, "exec-remote-cache")
-	defer span.Close(nil)
 	err := b.cacheSema.Do(ctx, func(ctx context.Context) error {
 		start := time.Now()
 		step.metrics.ActionStartTime = IntervalMetric(start.Sub(b.start))

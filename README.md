@@ -10,7 +10,7 @@ Siso is a build tool that aims to significantly speed up Chromium's build.
 * It reduces CPU usage and memory consumption by sharing in one process memory
   space.
 * It collects performance metrics for each action during a build and allows to
-  analyze them using cloud trace/cloud profiler.
+  analyze them using cloud profiler.
 
 ## Key Differences from Ninja
 

@@ -19,7 +19,6 @@ import (
 	log "github.com/golang/glog"
 
 	"go.chromium.org/infra/build/siso/o11y/clog"
-	"go.chromium.org/infra/build/siso/o11y/trace"
 )
 
 // TODO(b/276390237): Provide user friendly build dependency errors caught by file trace
@@ -43,8 +42,6 @@ import (
 // - for deps=gcc/msvc, we believe deps is correct by `clang -M` so never return error.
 // - if `keeps-going-impure` experiment flag is set, not return error.
 func (b *Builder) checkTrace(ctx context.Context, step *Step, dur time.Duration) error {
-	ctx, span := trace.NewSpan(ctx, "check-trace")
-	defer span.Close(nil)
 	command := step.def.Binding("command")
 	if len(command) > 256 {
 		command = command[:256] + "..."

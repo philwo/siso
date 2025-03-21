@@ -22,7 +22,6 @@ import (
 	"go.chromium.org/infra/build/siso/execute"
 	"go.chromium.org/infra/build/siso/hashfs"
 	"go.chromium.org/infra/build/siso/o11y/clog"
-	"go.chromium.org/infra/build/siso/o11y/trace"
 )
 
 const configEntryPoint = "init"
@@ -218,9 +217,6 @@ func (cfg *Config) Handle(ctx context.Context, handler string, bpath *build.Path
 	if !ok {
 		return fmt.Errorf("no handler:%q for %s", handler, cmd)
 	}
-	ctx, span := trace.NewSpan(ctx, "handle")
-	defer span.Close(nil)
-	span.SetAttr("handler", handler)
 	started := time.Now()
 	defer func() {
 		clog.Infof(ctx, "handle:%s %s", handler, time.Since(started))

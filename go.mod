@@ -7,7 +7,6 @@ require (
 	cloud.google.com/go/logging v1.13.0
 	cloud.google.com/go/longrunning v0.6.6
 	cloud.google.com/go/profiler v0.4.2
-	cloud.google.com/go/trace v1.11.5
 	github.com/Microsoft/go-winio v0.6.2
 	github.com/bazelbuild/reclient/api v0.0.0-20240617160057-89d6134e48e5
 	github.com/bazelbuild/remote-apis v0.0.0-20250311143718-2721568dea74

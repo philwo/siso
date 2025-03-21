@@ -13,14 +13,10 @@ import (
 	log "github.com/golang/glog"
 
 	"go.chromium.org/infra/build/siso/o11y/clog"
-	"go.chromium.org/infra/build/siso/o11y/trace"
 )
 
 // CPPScan scans C preprocessor directives for #include/#define in buf.
 func CPPScan(ctx context.Context, fname string, buf []byte) ([]string, map[string][]string, error) {
-	ctx, span := trace.NewSpan(ctx, "cppScan")
-	defer span.Close(nil)
-
 	started := time.Now()
 
 	var includes []string

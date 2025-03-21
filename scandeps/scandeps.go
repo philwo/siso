@@ -16,7 +16,6 @@ import (
 
 	"go.chromium.org/infra/build/siso/hashfs"
 	"go.chromium.org/infra/build/siso/o11y/clog"
-	"go.chromium.org/infra/build/siso/o11y/trace"
 )
 
 // ScanDeps is a simple C/C++ dependency scanner.
@@ -68,9 +67,6 @@ type Request struct {
 
 // Scan scans C/C++ source/header files for req to get C/C++ dependencies.
 func (s *ScanDeps) Scan(ctx context.Context, execRoot string, req Request) ([]string, error) {
-	ctx, span := trace.NewSpan(ctx, "scandeps")
-	defer span.Close(nil)
-
 	started := time.Now()
 
 	// Assume sysroots use precomputed tree.
