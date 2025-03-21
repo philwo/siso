@@ -45,11 +45,6 @@ func NewManifestParser(state *State) *ManifestParser {
 
 var loaderConcurrency = runtimex.NumCPU()
 
-// SetWd sets working directory to use for loading files.
-func (p *ManifestParser) SetWd(wd string) {
-	p.wd = wd
-}
-
 // Load loads the Ninja manifest given an fname.
 func (p *ManifestParser) Load(ctx context.Context, fname string) error {
 	if p.eg == nil {

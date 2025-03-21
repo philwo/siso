@@ -39,7 +39,6 @@ import (
 	"go.chromium.org/infra/build/siso/subcmd/report"
 	"go.chromium.org/infra/build/siso/subcmd/scandeps"
 	"go.chromium.org/infra/build/siso/subcmd/version"
-	"go.chromium.org/infra/build/siso/subcmd/webui"
 	"go.chromium.org/infra/build/siso/ui"
 )
 
@@ -74,7 +73,6 @@ func getApplication(authOpts cred.Options) *cli.Application {
 			ps.Cmd(),
 			scandeps.Cmd(),
 			authcheck.Cmd(authOpts),
-			webui.Cmd(versionID),
 
 			authcli.SubcommandLogin(authOpts.LUCIAuth, "login", true),
 			authcli.SubcommandLogout(authOpts.LUCIAuth, "logout", true),
