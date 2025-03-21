@@ -14,12 +14,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/golang/glog"
 	"golang.org/x/sync/errgroup"
 
 	"go.chromium.org/infra/build/siso/build"
 	"go.chromium.org/infra/build/siso/build/buildconfig"
 	"go.chromium.org/infra/build/siso/hashfs"
-	"go.chromium.org/infra/build/siso/o11y/clog"
 	"go.chromium.org/infra/build/siso/toolsupport/ninjautil"
 )
 
@@ -111,10 +111,10 @@ func NewStepConfig(ctx context.Context, config *buildconfig.Config, p *build.Pat
 	stepConfig := &StepConfig{}
 	err = json.Unmarshal([]byte(s), stepConfig)
 	if err != nil {
-		clog.Errorf(ctx, "Failed to parse init output:\n%s", s)
+		glog.Errorf("Failed to parse init output:\n%s", s)
 		return nil, fmt.Errorf("failed to parse init output: %w", err)
 	}
-	clog.Infof(ctx, "loaded %d platforms / %d input deps / %d rules", len(stepConfig.Platforms), len(stepConfig.InputDeps), len(stepConfig.Rules))
+	glog.Infof("loaded %d platforms / %d input deps / %d rules", len(stepConfig.Platforms), len(stepConfig.InputDeps), len(stepConfig.Rules))
 	buf, err := json.MarshalIndent(stepConfig, "", " ")
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal config: %w", err)
@@ -123,7 +123,7 @@ func NewStepConfig(ctx context.Context, config *buildconfig.Config, p *build.Pat
 	if err != nil {
 		return nil, err
 	}
-	clog.Infof(ctx, "save to .siso_config")
+	glog.Infof("save to .siso_config")
 	err = stepConfig.Init(ctx)
 	if err != nil {
 		return nil, err
@@ -152,25 +152,25 @@ func updateFilegroups(ctx context.Context, config *buildconfig.Config, buildPath
 	if fnameTime.Before(fgTime) {
 		buf, err := os.ReadFile(".siso_filegroups")
 		if err != nil {
-			clog.Warningf(ctx, "Failed to load .siso_filegroups: %v", err)
+			glog.Warningf("Failed to load .siso_filegroups: %v", err)
 		} else {
 			err = json.Unmarshal(buf, &fg)
 			if err != nil {
-				clog.Warningf(ctx, "Failed to unmarshal filegroups: %v", err)
+				glog.Warningf("Failed to unmarshal filegroups: %v", err)
 			} else {
-				clog.Infof(ctx, "loaded %d filegroups", len(fg.Filegroups))
+				glog.Infof("loaded %d filegroups", len(fg.Filegroups))
 			}
 		}
 	}
 	started := time.Now()
 	defer func() {
-		clog.Infof(ctx, "update filegroups in %s", time.Since(started))
+		glog.Infof("update filegroups in %s", time.Since(started))
 	}()
 	fg, err = config.UpdateFilegroups(ctx, hashFS, buildPath, fg)
 	if err != nil {
 		return err
 	}
-	clog.Infof(ctx, "updated %d filegroups", len(fg.Filegroups))
+	glog.Infof("updated %d filegroups", len(fg.Filegroups))
 	buf, err := json.MarshalIndent(fg, "", " ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal filegroups: %w", err)
@@ -179,7 +179,7 @@ func updateFilegroups(ctx context.Context, config *buildconfig.Config, buildPath
 	if err != nil {
 		return err
 	}
-	clog.Infof(ctx, "save to .siso_filegroups")
+	glog.Infof("save to .siso_filegroups")
 	return sc.UpdateFilegroups(ctx, fg.Filegroups)
 }
 
@@ -194,7 +194,7 @@ func Load(ctx context.Context, fname string, buildPath *build.Path) (*ninjautil.
 	if err != nil {
 		return nil, fmt.Errorf("failed to load %s: %w", fname, err)
 	}
-	clog.Infof(ctx, "load %s %s", fname, time.Since(started))
+	glog.Infof("load %s %s", fname, time.Since(started))
 	return state, nil
 }
 
@@ -290,7 +290,7 @@ func (g *Graph) initGlobals(ctx context.Context) {
 		}
 		absPath = filepath.ToSlash(absPath)
 		hfsExecutables[absPath] = true
-		clog.Infof(ctx, "set executable %q %q", f, absPath)
+		glog.Infof("set executable %q %q", f, absPath)
 	}
 	g.globals.hashFS.SetExecutables(hfsExecutables)
 
@@ -372,7 +372,7 @@ func (g *Graph) initGlobals(ctx context.Context) {
 			}
 		}
 	}
-	clog.Infof(ctx, "gn_targets=%d edges=%d in %s", nGNTargets, len(g.globals.gnTargets), time.Since(started))
+	glog.Infof("gn_targets=%d edges=%d in %s", nGNTargets, len(g.globals.gnTargets), time.Since(started))
 }
 
 // Filename returns filename of build manifest (e.g. build.ninja).
@@ -400,7 +400,7 @@ func (g *Graph) Targets(ctx context.Context, args ...string) ([]build.Target, er
 		targets = append(targets, build.Target(n.ID()))
 		names = append(names, n.Path())
 	}
-	clog.Infof(ctx, "targets %q -> %q: %v", args, names, err)
+	glog.Infof("targets %q -> %q: %v", args, names, err)
 	return targets, err
 }
 
@@ -516,7 +516,7 @@ func (g *Graph) CleanDead(ctx context.Context) (int, int, error) {
 			// genFile may not be in out dir via symlink dir,
 			// then we should not remove the file.
 			// b/336667052
-			clog.Warningf(ctx, "skip generated file not in out dir: %s", genFile)
+			glog.Warningf("skip generated file not in out dir: %s", genFile)
 			continue
 		}
 		rel = filepath.ToSlash(rel)
@@ -526,7 +526,7 @@ func (g *Graph) CleanDead(ctx context.Context) (int, int, error) {
 			if err != nil {
 				return len(deads), len(genFiles), err
 			}
-			clog.Infof(ctx, "deadfile %s", rel)
+			glog.Infof("deadfile %s", rel)
 		}
 	}
 	var err error
@@ -534,10 +534,10 @@ func (g *Graph) CleanDead(ctx context.Context) (int, int, error) {
 		err = g.globals.hashFS.Flush(ctx, dir, deads)
 	}
 	if err != nil {
-		clog.Warningf(ctx, "cleandead %d/%d %s: %v", len(deads), len(genFiles), time.Since(started), err)
+		glog.Warningf("cleandead %d/%d %s: %v", len(deads), len(genFiles), time.Since(started), err)
 
 	} else {
-		clog.Infof(ctx, "cleandead %d/%d %s", len(deads), len(genFiles), time.Since(started))
+		glog.Infof("cleandead %d/%d %s", len(deads), len(genFiles), time.Since(started))
 	}
 	return len(deads), len(genFiles), err
 }

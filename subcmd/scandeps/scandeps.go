@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/golang/glog"
 	"github.com/maruel/subcommands"
 
 	"go.chromium.org/luci/common/cli"
@@ -22,7 +23,6 @@ import (
 	"go.chromium.org/infra/build/siso/build/buildconfig"
 	"go.chromium.org/infra/build/siso/build/ninjabuild"
 	"go.chromium.org/infra/build/siso/hashfs"
-	"go.chromium.org/infra/build/siso/o11y/clog"
 	"go.chromium.org/infra/build/siso/scandeps"
 )
 
@@ -93,7 +93,7 @@ func (c *run) run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	clog.Infof(ctx, "input_deps=%q\n", inputDeps)
+	glog.Infof("input_deps=%q\n", inputDeps)
 
 	execRoot, err := os.Getwd()
 	if err != nil {

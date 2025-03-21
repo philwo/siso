@@ -9,9 +9,9 @@ import (
 	"path/filepath"
 
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
+	"github.com/golang/glog"
 	"google.golang.org/protobuf/proto"
 
-	"go.chromium.org/infra/build/siso/o11y/clog"
 	"go.chromium.org/infra/build/siso/reapi/digest"
 )
 
@@ -43,14 +43,14 @@ func Traverse(ctx context.Context, base string, dir *rpb.Directory, ds *digest.S
 		db, found := ds.Get(dg)
 		if !found {
 			// TODO(b/269199873): revisit error handling.
-			clog.Errorf(ctx, "digest.Store doesn't have a directory: %s %s", subdirname, dg)
+			glog.Errorf("digest.Store doesn't have a directory: %s %s", subdirname, dg)
 			continue
 		}
 		subdir := &rpb.Directory{}
 		err := readProto(ctx, db, subdir)
 		if err != nil {
 			// TODO(b/269199873): revisit error handling.
-			clog.Errorf(ctx, "invalid rpb.Directory proto:%s %s", subdirname, dg)
+			glog.Errorf("invalid rpb.Directory proto:%s %s", subdirname, dg)
 			continue
 		}
 		dirs = append(dirs, &rpb.OutputDirectory{

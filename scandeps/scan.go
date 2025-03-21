@@ -15,9 +15,7 @@ import (
 	"strings"
 	"sync"
 
-	log "github.com/golang/glog"
-
-	"go.chromium.org/infra/build/siso/o11y/clog"
+	"github.com/golang/glog"
 )
 
 // scanner is a C++ dependency scanner per request.
@@ -174,8 +172,8 @@ func (s *scanner) updateMacros(ctx context.Context, macros map[string][]string) 
 func (s *scanner) addInclude(ctx context.Context, fname string) {
 	// -include or /FI is equivalent with `#include "filename"`
 	s.pushInputs(`"` + fname + `"`)
-	if log.V(1) {
-		clog.Infof(ctx, "include %q", fname)
+	if glog.V(1) {
+		glog.Infof("include %q", fname)
 	}
 }
 
@@ -184,8 +182,8 @@ func (s *scanner) addSource(ctx context.Context, fname string) {
 	s.pushDir(ctx, filepath.ToSlash(filepath.Dir(fname)))
 	base := filepath.Base(fname)
 	s.pushInputs(`"` + base + `"`)
-	if log.V(1) {
-		clog.Infof(ctx, "source %q", fname)
+	if glog.V(1) {
+		glog.Infof("source %q", fname)
 	}
 }
 
@@ -203,8 +201,8 @@ func (s *scanner) pushDir(ctx context.Context, dir string) {
 		s.maxDirstack = len(s.dirstack)
 	}
 	s.fsview.addDir(ctx, dir, noSearchPath)
-	if log.V(1) {
-		clog.Infof(ctx, "push dir <- %s", dir)
+	if glog.V(1) {
+		glog.Infof("push dir <- %s", dir)
 	}
 }
 
@@ -214,8 +212,8 @@ func (s *scanner) popDir(ctx context.Context) {
 	}
 	dir := s.dirstack[len(s.dirstack)-1]
 	s.dirstack = s.dirstack[:len(s.dirstack)-1]
-	if log.V(1) {
-		clog.Infof(ctx, "pop dir -> %s", dir)
+	if glog.V(1) {
+		glog.Infof("pop dir -> %s", dir)
 	}
 }
 
@@ -272,9 +270,9 @@ func (s *scanner) find(ctx context.Context, name string) (string, error) {
 	mi := len(ds)
 	ds = append(ds, s.fsview.searchPaths[s.nameDirs[name]:]...)
 	if len(ds) > 0 {
-		if log.V(1) {
-			clog.Infof(ctx, "find %q dirs:%d", name, len(ds))
-			clog.Infof(ctx, "dirs %d %d %q", qi, mi, ds)
+		if glog.V(1) {
+			glog.Infof("find %q dirs:%d", name, len(ds))
+			glog.Infof("dirs %d %d %q", qi, mi, ds)
 		}
 		// TODO: lookup hmap appropriately.
 		s.ds = ds
@@ -283,12 +281,12 @@ func (s *scanner) find(ctx context.Context, name string) (string, error) {
 				continue
 			}
 			included[dir] = true
-			if log.V(1) {
-				clog.Infof(ctx, "find check %s/%s", dir, name)
+			if glog.V(1) {
+				glog.Infof("find check %s/%s", dir, name)
 			}
 			incpath, sr, err := s.fsview.get(ctx, dir, name)
-			if log.V(1) {
-				clog.Infof(ctx, "fsview get %s/%s -> %q: %v", dir, name, incpath, err)
+			if glog.V(1) {
+				glog.Infof("fsview get %s/%s -> %q: %v", dir, name, incpath, err)
 			}
 			if err != nil {
 				continue
@@ -300,8 +298,8 @@ func (s *scanner) find(ctx context.Context, name string) (string, error) {
 			dir := path.Dir(incpath)
 			s.pushDir(ctx, dir)
 
-			if log.V(1) {
-				clog.Infof(ctx, "find %s -> includes:%q defines:%q", incpath, sr.includes, sr.defines)
+			if glog.V(1) {
+				glog.Infof("find %s -> includes:%q defines:%q", incpath, sr.includes, sr.defines)
 			}
 
 			s.updateMacros(ctx, sr.defines)
@@ -322,20 +320,20 @@ func (s *scanner) find(ctx context.Context, name string) (string, error) {
 		if found {
 			// framework import "Foo/Bar.h" -> "Foo.framework/Headers/Bar.h"
 			fwname := path.Join(fwdir+".framework", "Headers", base)
-			if log.V(1) {
-				clog.Infof(ctx, "check framework %s -> %s : %s", name, fwname, s.fsview.frameworkPaths)
+			if glog.V(1) {
+				glog.Infof("check framework %s -> %s : %s", name, fwname, s.fsview.frameworkPaths)
 			}
 			for _, dir := range s.fsview.frameworkPaths {
 				if included[dir] {
 					continue
 				}
 				included[dir] = true
-				if log.V(1) {
-					clog.Infof(ctx, "find check %s/%s", dir, fwname)
+				if glog.V(1) {
+					glog.Infof("find check %s/%s", dir, fwname)
 				}
 				incpath, sr, err := s.fsview.get(ctx, dir, fwname)
-				if log.V(1) {
-					clog.Infof(ctx, "fsview get %s/%s -> %q: %v", dir, name, incpath, err)
+				if glog.V(1) {
+					glog.Infof("fsview get %s/%s -> %q: %v", dir, name, incpath, err)
 				}
 				if err != nil {
 					continue
@@ -347,8 +345,8 @@ func (s *scanner) find(ctx context.Context, name string) (string, error) {
 				dir := path.Dir(incpath)
 				s.pushDir(ctx, dir)
 
-				if log.V(1) {
-					clog.Infof(ctx, "find %s -> includes:%q defines:%q", incpath, sr.includes, sr.defines)
+				if glog.V(1) {
+					glog.Infof("find %s -> includes:%q defines:%q", incpath, sr.includes, sr.defines)
 				}
 
 				s.updateMacros(ctx, sr.defines)
@@ -357,8 +355,8 @@ func (s *scanner) find(ctx context.Context, name string) (string, error) {
 			}
 		}
 	}
-	if log.V(1) {
-		clog.Infof(ctx, "find %s %v", name, fs.ErrNotExist)
+	if glog.V(1) {
+		glog.Infof("find %s %v", name, fs.ErrNotExist)
 	}
 	return "", fs.ErrNotExist
 }
@@ -390,8 +388,8 @@ func (s *scanner) macroAllUsed(ctx context.Context, macro string) bool {
 	allUsed := true
 	for _, v := range values {
 		if !s.macroUsed[macro][v] {
-			if log.V(1) {
-				clog.Infof(ctx, "macro %s=%s not used yet", macro, v)
+			if glog.V(1) {
+				glog.Infof("macro %s=%s not used yet", macro, v)
 			}
 			s.macroUsed[macro][v] = true
 			allUsed = false

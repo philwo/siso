@@ -18,6 +18,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/golang/glog"
 	"github.com/maruel/subcommands"
 	"golang.org/x/sync/errgroup"
 
@@ -28,7 +29,6 @@ import (
 
 	"go.chromium.org/infra/build/siso/auth/cred"
 	"go.chromium.org/infra/build/siso/hashfs"
-	"go.chromium.org/infra/build/siso/o11y/clog"
 	"go.chromium.org/infra/build/siso/reapi"
 	"go.chromium.org/infra/build/siso/reapi/digest"
 	"go.chromium.org/infra/build/siso/reapi/merkletree"
@@ -146,7 +146,6 @@ func (c *run) run(ctx context.Context) error {
 		return err
 	}
 	spin.Stop(nil)
-	// init cloud logging?
 
 	ui.Default.PrintLines(fmt.Sprintf("reapi instance: %s\n", c.reopt.Instance))
 	client, err := reapi.New(ctx, credential, *c.reopt)
@@ -156,7 +155,7 @@ func (c *run) run(ctx context.Context) error {
 	defer func() {
 		err := client.Close()
 		if err != nil {
-			clog.Errorf(ctx, "close reapi client: %v", err)
+			glog.Errorf("close reapi client: %v", err)
 		}
 	}()
 	artifactStore := client.CacheStore()
@@ -174,7 +173,7 @@ func (c *run) run(ctx context.Context) error {
 	defer func() {
 		err := casClient.Close()
 		if err != nil {
-			clog.Errorf(ctx, "close cas client: %v", err)
+			glog.Errorf("close cas client: %v", err)
 		}
 	}()
 
@@ -249,17 +248,17 @@ func (c *run) initWorkdirs(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	clog.Infof(ctx, "wd: %s", execRoot)
+	glog.Infof("wd: %s", execRoot)
 	err = os.Chdir(c.dir)
 	if err != nil {
 		return "", err
 	}
-	clog.Infof(ctx, "change dir to %s", c.dir)
+	glog.Infof("change dir to %s", c.dir)
 	cwd, err := os.Getwd()
 	if err != nil {
 		return "", err
 	}
-	clog.Infof(ctx, "exec_root: %s", execRoot)
+	glog.Infof("exec_root: %s", execRoot)
 
 	// recalculate dir as relative to exec_root.
 	// recipe may use absolute path for -C.
@@ -271,7 +270,7 @@ func (c *run) initWorkdirs(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("dir %q is out of exec root %q", cwd, execRoot)
 	}
 	c.dir = rdir
-	clog.Infof(ctx, "working_directory in exec_root: %s", c.dir)
+	glog.Infof("working_directory in exec_root: %s", c.dir)
 	return execRoot, err
 }
 
@@ -332,7 +331,7 @@ func upload(ctx context.Context, execRoot, buildDir string, hashFS *hashfs.HashF
 			fnames = append(fnames, fname)
 			continue
 		}
-		clog.Infof(ctx, "expand dir %s", pathname)
+		glog.Infof("expand dir %s", pathname)
 		fsys := hashFS.FileSystem(ctx, filepath.Join(execRoot, pathname))
 		err = fs.WalkDir(fsys, ".", func(path string, d fs.DirEntry, err error) error {
 			if err != nil {
@@ -380,11 +379,11 @@ func upload(ctx context.Context, execRoot, buildDir string, hashFS *hashfs.HashF
 	if err != nil {
 		return digest.Digest{}, err
 	}
-	clog.Infof(ctx, "upload %s for %s", d, target)
+	glog.Infof("upload %s for %s", d, target)
 	n, err := casClient.UploadAll(ctx, ds)
 	if err != nil {
 		return digest.Digest{}, err
 	}
-	clog.Infof(ctx, "uploaded %d for %s", n, target)
+	glog.Infof("uploaded %d for %s", n, target)
 	return d, nil
 }

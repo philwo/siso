@@ -18,13 +18,12 @@ import (
 	"time"
 
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
-	log "github.com/golang/glog"
+	"github.com/golang/glog"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.chromium.org/infra/build/siso/execute"
 	epb "go.chromium.org/infra/build/siso/execute/proto"
-	"go.chromium.org/infra/build/siso/o11y/clog"
 	"go.chromium.org/infra/build/siso/runtimex"
 	"go.chromium.org/infra/build/siso/sync/semaphore"
 	"go.chromium.org/infra/build/siso/toolsupport/straceutil"
@@ -47,7 +46,7 @@ func (LocalExec) Run(ctx context.Context, cmd *execute.Cmd) (err error) {
 	}
 	cmd.SetActionResult(res, false)
 
-	clog.Infof(ctx, "exit=%d stdout=%d stderr=%d metadata=%s", res.ExitCode, len(res.StdoutRaw), len(res.StderrRaw), res.ExecutionMetadata)
+	glog.Infof("exit=%d stdout=%d stderr=%d metadata=%s", res.ExitCode, len(res.StdoutRaw), len(res.StderrRaw), res.ExecutionMetadata)
 
 	if res.ExitCode != 0 {
 		return &execute.ExitError{ExitCode: int(res.ExitCode)}
@@ -81,7 +80,7 @@ func run(ctx context.Context, cmd *execute.Cmd) (*rpb.ActionResult, error) {
 		checkClose := func(f *os.File, s string) {
 			err := f.Close()
 			if err != nil && !errors.Is(err, fs.ErrClosed) {
-				clog.Warningf(ctx, "close %s: %v", s, err)
+				glog.Warningf("close %s: %v", s, err)
 			}
 		}
 		stdoutr, stdoutw, err := os.Pipe()
@@ -97,10 +96,7 @@ func run(ctx context.Context, cmd *execute.Cmd) (*rpb.ActionResult, error) {
 		defer checkClose(stderrr, "stderr(r)")
 		defer checkClose(stderrw, "stderr(w)")
 
-		rctx, cancel := context.WithCancel(ctx)
-		defer cancel()
 		consoleCancel = func() {
-			cancel()
 			checkClose(stdoutr, "stdout(r)")
 			checkClose(stdoutw, "stdout(w)")
 			checkClose(stderrr, "stderr(r)")
@@ -111,7 +107,7 @@ func run(ctx context.Context, cmd *execute.Cmd) (*rpb.ActionResult, error) {
 			var buf [1]byte
 			n, err := r.Read(buf[:])
 			if err != nil {
-				clog.Warningf(rctx, "consoleOut %s: read %v", s, err)
+				glog.Warningf("consoleOut %s: read %v", s, err)
 				return
 			}
 			if !cmd.ConsoleOut.Swap(true) {
@@ -119,11 +115,11 @@ func run(ctx context.Context, cmd *execute.Cmd) (*rpb.ActionResult, error) {
 			}
 			_, err = w.Write(buf[:n])
 			if err != nil {
-				clog.Warningf(rctx, "console write %s: %v", s, err)
+				glog.Warningf("console write %s: %v", s, err)
 			}
 			_, err = io.Copy(w, r)
 			if err != nil && !errors.Is(err, os.ErrClosed) {
-				clog.Warningf(rctx, "console copy %s: %v", s, err)
+				glog.Warningf("console copy %s: %v", s, err)
 			}
 		}
 
@@ -159,7 +155,7 @@ func run(ctx context.Context, cmd *execute.Cmd) (*rpb.ActionResult, error) {
 			}
 		}
 		st.Close(ctx)
-		log.V(1).Infof("%s filetrace=false n_traced_inputs=%d n_traced_outputs=%d err=%v", cmd.ID, len(cmd.Inputs), len(cmd.Outputs), err)
+		glog.V(1).Infof("%s filetrace=false n_traced_inputs=%d n_traced_outputs=%d err=%v", cmd.ID, len(cmd.Inputs), len(cmd.Outputs), err)
 	} else {
 		err = forkSema.Do(ctx, func(ctx context.Context) error {
 			return c.Start()
@@ -170,7 +166,7 @@ func run(ctx context.Context, cmd *execute.Cmd) (*rpb.ActionResult, error) {
 		if err == nil {
 			ru = rusage(c)
 		}
-		log.V(1).Infof("%s filetrace=false %v", cmd.ID, err)
+		glog.V(1).Infof("%s filetrace=false %v", cmd.ID, err)
 	}
 	if cmd.Console {
 		consoleCancel()
@@ -196,7 +192,7 @@ func run(ctx context.Context, cmd *execute.Cmd) (*rpb.ActionResult, error) {
 	if ru != nil {
 		p, err := anypb.New(ru)
 		if err != nil {
-			clog.Warningf(ctx, "pack rusage: %v", err)
+			glog.Warningf("pack rusage: %v", err)
 		} else {
 			result.ExecutionMetadata.AuxiliaryMetadata = append(result.ExecutionMetadata.AuxiliaryMetadata, p)
 		}

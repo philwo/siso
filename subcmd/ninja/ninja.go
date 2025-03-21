@@ -24,17 +24,11 @@ import (
 	"strings"
 	"time"
 
-	"cloud.google.com/go/compute/metadata"
-	"cloud.google.com/go/logging"
-	"cloud.google.com/go/profiler"
-	log "github.com/golang/glog"
-	"github.com/google/uuid"
+	"github.com/golang/glog"
 	"github.com/klauspost/cpuid/v2"
 	"github.com/maruel/subcommands"
 	"golang.org/x/sync/errgroup"
-	mrpb "google.golang.org/genproto/googleapis/api/monitoredres"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/grpclog"
 	"google.golang.org/grpc/status"
 
 	"go.chromium.org/luci/auth"
@@ -48,7 +42,6 @@ import (
 	"go.chromium.org/infra/build/siso/build/cachestore"
 	"go.chromium.org/infra/build/siso/build/ninjabuild"
 	"go.chromium.org/infra/build/siso/hashfs"
-	"go.chromium.org/infra/build/siso/o11y/clog"
 	"go.chromium.org/infra/build/siso/reapi"
 	"go.chromium.org/infra/build/siso/reapi/digest"
 	"go.chromium.org/infra/build/siso/toolsupport/artfsutil"
@@ -91,9 +84,6 @@ type ninjaCmdRun struct {
 	dir        string
 	configName string
 	projectID  string
-
-	buildID string
-	jobID   string
 
 	offline         bool
 	batch           bool
@@ -142,10 +132,7 @@ type ninjaCmdRun struct {
 	artfsDir      string
 	artfsEndpoint string
 
-	enableCloudLogging bool
 	// enableCPUProfiler bool
-	enableCloudProfiler      bool
-	cloudProfilerServiceName string
 
 	subtool    string
 	cleandead  bool
@@ -399,11 +386,9 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 
 	if c.offline {
 		fmt.Fprintln(os.Stderr, ui.SGR(ui.Red, "offline mode"))
-		clog.Warningf(ctx, "offline mode")
+		glog.Warningf("offline mode")
 		c.reopt = new(reapi.Option)
 		c.projectID = ""
-		c.enableCloudLogging = false
-		c.enableCloudProfiler = false
 		c.reproxyAddr = ""
 	}
 
@@ -415,7 +400,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		lock, err := newLockFile(ctx, ".siso_lock")
 		switch {
 		case errors.Is(err, errors.ErrUnsupported):
-			clog.Warningf(ctx, "lockfile is not supported")
+			glog.Warningf("lockfile is not supported")
 		case err != nil:
 			return stats, err
 		case err == nil:
@@ -465,7 +450,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	if err != nil {
 		return stats, err
 	}
-	clog.Infof(ctx, "siso log dir=%s default=%t", c.logDir, isLogDirDefault)
+	glog.Infof("siso log dir=%s default=%t", c.logDir, isLogDirDefault)
 
 	resetCrashOutput, err := c.setupCrashOutput(ctx)
 	if err != nil {
@@ -483,13 +468,6 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		limits.REWrap = c.remoteJobs
 	}
 
-	if err = uuid.Validate(c.buildID); err != nil {
-		return stats, flagError{err: fmt.Errorf("%q is an invalid build ID. -build_id must be a UUID", c.buildID)}
-	}
-	if len(c.jobID) > 1024 {
-		return stats, flagError{err: fmt.Errorf("-job_id length must be less than 1024")}
-	}
-
 	projectID := c.reopt.UpdateProjectID(c.projectID)
 
 	var credential cred.Cred
@@ -499,9 +477,9 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		spin.Start("init credentials")
 		credential, err = cred.New(ctx, c.authOpts)
 		if err != nil {
-			if !c.reopt.NeedCred() && !c.enableCloudLogging && !c.enableCloudProfiler {
-				log.Warningf("failed to init credential: %v", err)
-				log.Warningf("but no remote apis require credential")
+			if !c.reopt.NeedCred() {
+				glog.Warningf("failed to init credential: %v", err)
+				glog.Warningf("but no remote apis require credential")
 			} else {
 				spin.Stop(errors.New(""))
 				return stats, err
@@ -509,57 +487,36 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		}
 		spin.Stop(nil)
 	}
-	if c.enableCloudLogging {
-		logCtx, loggerURL, done, err := c.initCloudLogging(ctx, projectID, execRoot, credential)
-		if err != nil {
-			// b/335295396 Compile step hitting write requests quota
-			// rather than build fails, fallback to glog.
-			fmt.Fprintf(os.Stderr, "cloud logging: %v\n", err)
-			fmt.Fprintln(os.Stderr, "fallback to glog")
-			c.enableCloudLogging = false
-		} else {
-			// use stderr for confirm no-op step. b/288534744
-			fmt.Fprintln(os.Stderr, loggerURL)
-			defer done()
-			ctx = logCtx
-		}
-	}
 	// logging is ready.
-	clog.Infof(ctx, "%s", cpuinfo())
-	clog.Infof(ctx, "%s", gcinfo())
+	glog.Infof("%s", cpuinfo())
+	glog.Infof("%s", gcinfo())
 
-	clog.Infof(ctx, "siso version %s", c.version)
+	glog.Infof("siso version %s", c.version)
 	if cmdver, err := version.GetStartupVersion(); err != nil {
-		clog.Warningf(ctx, "cannot determine CIPD package version: %s", err)
+		glog.Warningf("cannot determine CIPD package version: %s", err)
 	} else if cmdver.PackageName != "" {
-		clog.Infof(ctx, "CIPD package name: %s", cmdver.PackageName)
-		clog.Infof(ctx, "CIPD instance ID: %s", cmdver.InstanceID)
+		glog.Infof("CIPD package name: %s", cmdver.PackageName)
+		glog.Infof("CIPD instance ID: %s", cmdver.InstanceID)
 	} else {
 		buildInfo, ok := debug.ReadBuildInfo()
 		if ok {
 			if buildInfo.GoVersion != "" {
-				clog.Infof(ctx, "Go version: %s", buildInfo.GoVersion)
+				glog.Infof("Go version: %s", buildInfo.GoVersion)
 			}
 			for _, s := range buildInfo.Settings {
 				if strings.HasPrefix(s.Key, "vcs.") || strings.HasPrefix(s.Key, "-") {
-					clog.Infof(ctx, "build_%s=%s", s.Key, s.Value)
+					glog.Infof("build_%s=%s", s.Key, s.Value)
 				}
 			}
 		}
 	}
 	c.checkResourceLimits(ctx)
 
-	clog.Infof(ctx, "job id: %q", c.jobID)
-	clog.Infof(ctx, "build id: %q", c.buildID)
-	clog.Infof(ctx, "project id: %q", projectID)
-	clog.Infof(ctx, "commandline %q", os.Args)
-	clog.Infof(ctx, "is_terminal=%t batch=%t", ui.IsTerminal(), c.batch)
+	glog.Infof("project id: %q", projectID)
+	glog.Infof("commandline %q", os.Args)
+	glog.Infof("is_terminal=%t batch=%t", ui.IsTerminal(), c.batch)
 
 	spin := ui.Default.NewSpinner()
-
-	if c.enableCloudProfiler {
-		c.initCloudProfiler(ctx, projectID, credential)
-	}
 
 	targets := c.Flags.Args()
 	config, err := c.initConfig(ctx, execRoot, targets)
@@ -590,7 +547,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	defer func() {
 		err := ds.Close(ctx)
 		if err != nil {
-			clog.Errorf(ctx, "close datasource: %v", err)
+			glog.Errorf("close datasource: %v", err)
 		}
 	}()
 	c.fsopt.DataSource = ds
@@ -602,7 +559,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		cwd := filepath.Join(execRoot, c.dir)
 		// ignore siso files not to be captured by ReadDir
 		// (i.g. scandeps for -I.)
-		clog.Infof(ctx, "ignore siso files in %s", cwd)
+		glog.Infof("ignore siso files in %s", cwd)
 		c.fsopt.Ignore = func(ctx context.Context, fname string) bool {
 			dir, base := filepath.Split(fname)
 			// allow siso prefix in other dir.
@@ -626,7 +583,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		}
 	} else {
 		// expect logDir is out of exec root.
-		clog.Infof(ctx, "ignore .ninja_log")
+		glog.Infof("ignore .ninja_log")
 		ninjaLogFname := filepath.Join(execRoot, c.dir, ".ninja_log")
 		c.fsopt.Ignore = func(ctx context.Context, fname string) bool {
 			return fname == ninjaLogFname
@@ -635,7 +592,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	// TODO: pass reopt for reclient mode?
 	cogfs, err := cogutil.New(ctx, execRoot, c.reopt)
 	if err != nil && !errors.Is(err, errors.ErrUnsupported) {
-		clog.Warningf(ctx, "unable to use cog? %v", err)
+		glog.Warningf("unable to use cog? %v", err)
 	}
 	if cogfs != nil {
 		ui.Default.PrintLines(ui.SGR(ui.Yellow, fmt.Sprintf("build in cog: %s\n", cogfs.Info())))
@@ -655,7 +612,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		if !filepath.IsAbs(fsmonitor) {
 			fsmonitorPath, err = exec.LookPath(fsmonitor)
 			if err != nil {
-				clog.Warningf(ctx, "failed to find fsmonitor %q: %v", fsmonitor, err)
+				glog.Warningf("failed to find fsmonitor %q: %v", fsmonitor, err)
 				fmt.Fprintln(os.Stderr, ui.SGR(ui.BackgroundRed, fmt.Sprintf("SISO_FSMONITOR=%q: failed %v", fsmonitor, err)))
 			}
 		} else {
@@ -667,7 +624,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 			case "watchman":
 				fsm, err := watchmanutil.New(ctx, fsmonitorPath, execRoot)
 				if err != nil {
-					clog.Warningf(ctx, "failed to initialize watchman: %v", err)
+					glog.Warningf("failed to initialize watchman: %v", err)
 					fmt.Fprintln(os.Stderr, ui.SGR(ui.BackgroundRed, fmt.Sprintf("SISO_FSMONITOR=watchman: failed %v", err)))
 				} else {
 					fmt.Fprintln(os.Stdout, ui.SGR(ui.Yellow, fmt.Sprintf("use watchman as fsmonitor: %s", fsmonitorPath)))
@@ -712,22 +669,22 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 			if !errors.As(errBuild.err, &stepError) {
 				rerr := os.Remove(c.logFilename(c.failedCommandsFile, ""))
 				if rerr != nil {
-					clog.Warningf(ctx, "failed to remove failed command file: %v", rerr)
+					glog.Warningf("failed to remove failed command file: %v", rerr)
 				}
 				return
 			}
 			// store failed targets only when build steps failed.
 			// i.e., don't store with error like context canceled, etc.
-			clog.Infof(ctx, "record failed targets: %q", stepError.Target)
+			glog.Infof("record failed targets: %q", stepError.Target)
 			serr := saveTargets(ctx, failedTargetsFilename, targets, []string{stepError.Target})
 			if serr != nil {
-				clog.Warningf(ctx, "failed to save failed targets: %v", serr)
+				glog.Warningf("failed to save failed targets: %v", serr)
 				return
 			}
 		} else {
 			rerr := os.Remove(c.logFilename(c.failedCommandsFile, ""))
 			if rerr != nil {
-				clog.Warningf(ctx, "failed to remove failed command file: %v", rerr)
+				glog.Warningf("failed to remove failed command file: %v", rerr)
 			}
 		}
 	}()
@@ -735,7 +692,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		hashFS.SetBuildTargets(ctx, targets, !c.dryRun && c.subtool == "" && !c.prepare && err == nil)
 		err := hashFS.Close(ctx)
 		if err != nil {
-			clog.Errorf(ctx, "close hashfs: %v", err)
+			glog.Errorf("close hashfs: %v", err)
 		}
 	}()
 	hashFSErr := hashFS.LoadErr()
@@ -746,7 +703,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	_, err = os.Stat(failedTargetsFilename)
 	lastFailed := err == nil
 	isClean := hashFS.IsClean(targets)
-	clog.Infof(ctx, "hashfs loaderr: %v clean: %t (%q) last failed: %t", hashFSErr, isClean, targets, lastFailed)
+	glog.Infof("hashfs loaderr: %v clean: %t (%q) last failed: %t", hashFSErr, isClean, targets, lastFailed)
 	// if not using non-default log_dir, it would see different
 	// .siso_last_targets, which won't match with .siso_fs_state.
 	// in this case, don't shortcut noop build, but better to check
@@ -802,7 +759,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	}
 	err = os.Remove(failedTargetsFilename)
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
-		clog.Warningf(ctx, "failed to remove %s: %v", failedTargetsFilename, err)
+		glog.Warningf("failed to remove %s: %v", failedTargetsFilename, err)
 	}
 	return runNinja(ctx, c.fname, graph, bopts, targets, runNinjaOpts{
 		checkFailedTargets: lastFailedTargets,
@@ -832,7 +789,7 @@ func runNinja(ctx context.Context, fname string, graph *ninjabuild.Graph, bopts 
 	spin := ui.Default.NewSpinner()
 
 	for {
-		clog.Infof(ctx, "build starts")
+		glog.Infof("build starts")
 		if len(nopts.checkFailedTargets) > 0 {
 			failedTargets := nopts.checkFailedTargets
 			ui.Default.PrintLines(fmt.Sprintf("Building last failed targets: %s...\n", failedTargets))
@@ -842,7 +799,7 @@ func runNinja(ctx context.Context, fname string, graph *ninjabuild.Graph, bopts 
 				if bopts.DryRun {
 					return stats, nil
 				}
-				clog.Infof(ctx, "%s modified.", fname)
+				glog.Infof("%s modified.", fname)
 				spin.Start("reloading")
 				err := graph.Reload(ctx)
 				if err != nil {
@@ -851,7 +808,7 @@ func runNinja(ctx context.Context, fname string, graph *ninjabuild.Graph, bopts 
 				}
 				spin.Stop(nil)
 				ui.Default.PrintLines("\n", "\n")
-				clog.Infof(ctx, "reload done. build retry")
+				glog.Infof("reload done. build retry")
 				continue
 			}
 			var errBuild buildError
@@ -878,7 +835,7 @@ func runNinja(ctx context.Context, fname string, graph *ninjabuild.Graph, bopts 
 			if bopts.DryRun {
 				return stats, nil
 			}
-			clog.Infof(ctx, "%s modified", fname)
+			glog.Infof("%s modified", fname)
 			spin.Start("reloading")
 			err := graph.Reload(ctx)
 			if err != nil {
@@ -886,10 +843,10 @@ func runNinja(ctx context.Context, fname string, graph *ninjabuild.Graph, bopts 
 				return stats, err
 			}
 			spin.Stop(nil)
-			clog.Infof(ctx, "reload done. build retry")
+			glog.Infof("reload done. build retry")
 			continue
 		}
-		clog.Infof(ctx, "build finished: %v", err)
+		glog.Infof("build finished: %v", err)
 		return stats, err
 	}
 }
@@ -899,20 +856,13 @@ func (c *ninjaCmdRun) init() {
 	c.Flags.StringVar(&c.configName, "config", "", "config name passed to starlark")
 	c.Flags.StringVar(&c.projectID, "project", os.Getenv("SISO_PROJECT"), "cloud project ID. can set by $SISO_PROJECT")
 
-	defaultBuildID := os.Getenv("SISO_BUILD_ID")
-	if defaultBuildID == "" {
-		defaultBuildID = uuid.New().String()
-	}
-	c.Flags.StringVar(&c.buildID, "build_id", defaultBuildID, "ID for the build. used for `invocation_id` of remote-apis-sdks and `tool_invocation_id` of remote-apis, and Cloud logging resource `build_id` label.")
-	c.Flags.StringVar(&c.jobID, "job_id", uuid.New().String(), "ID for a grouping of related builds such as a Buildbucket job. used for `correlated_invocations_id` of remote-apis and remote-apis-sdks, and Cloud logging resource `job_id` label.")
-
 	c.Flags.BoolVar(&c.offline, "offline", false, "offline mode.")
 	c.Flags.BoolVar(&c.offline, "o", false, "alias of `-offline`")
 	if f := c.Flags.Lookup("offline"); f != nil {
 		if s := os.Getenv("RBE_remote_disabled"); s != "" {
 			err := f.Value.Set(s)
 			if err != nil {
-				log.Errorf("invalid RBE_remote_disabled=%q: %v", s, err)
+				glog.Errorf("invalid RBE_remote_disabled=%q: %v", s, err)
 			}
 		}
 	}
@@ -971,10 +921,6 @@ func (c *ninjaCmdRun) init() {
 	c.Flags.StringVar(&c.artfsDir, "artfs_dir", "", "artfs mount point")
 	c.Flags.StringVar(&c.artfsEndpoint, "artfs_endpoint", "localhost:65001", "artfs server endpoint")
 
-	c.Flags.BoolVar(&c.enableCloudLogging, "enable_cloud_logging", false, "enable cloud logging")
-	c.Flags.BoolVar(&c.enableCloudProfiler, "enable_cloud_profiler", false, "enable cloud profiler")
-	c.Flags.StringVar(&c.cloudProfilerServiceName, "cloud_profiler_service_name", "siso", "cloud profiler service name")
-
 	c.Flags.StringVar(&c.subtool, "t", "", "run a subtool (use '-t list' to list subtools)")
 	c.Flags.BoolVar(&c.cleandead, "cleandead", false, "clean built files that are no longer produced by the manifest")
 	c.Flags.Var(&c.debugMode, "d", "enable debugging (use '-d list' to list modes)")
@@ -995,7 +941,7 @@ func (c *ninjaCmdRun) initWorkdirs(ctx context.Context) (string, error) {
 		return "", err
 	}
 	c.startDir = execRoot
-	clog.Infof(ctx, "wd: %s", execRoot)
+	glog.Infof("wd: %s", execRoot)
 	// The formatting of this string, complete with funny quotes, is
 	// so Emacs can properly identify that the cwd has changed for
 	// subsequent commands.
@@ -1008,16 +954,16 @@ func (c *ninjaCmdRun) initWorkdirs(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	clog.Infof(ctx, "change dir to %s", c.dir)
+	glog.Infof("change dir to %s", c.dir)
 	cwd, err := os.Getwd()
 	if err != nil {
 		return "", err
 	}
 	realCWD, err := filepath.EvalSymlinks(cwd)
 	if err != nil {
-		clog.Warningf(ctx, "failed to eval symlinks %q: %v", cwd, err)
+		glog.Warningf("failed to eval symlinks %q: %v", cwd, err)
 	} else if cwd != realCWD {
-		clog.Infof(ctx, "cwd %s -> %s", cwd, realCWD)
+		glog.Infof("cwd %s -> %s", cwd, realCWD)
 		cwd = realCWD
 	}
 	if !filepath.IsAbs(c.configRepoDir) {
@@ -1027,7 +973,7 @@ func (c *ninjaCmdRun) initWorkdirs(ctx context.Context) (string, error) {
 		}
 		c.configRepoDir = filepath.Join(execRoot, c.configRepoDir)
 	}
-	clog.Infof(ctx, "exec_root: %s", execRoot)
+	glog.Infof("exec_root: %s", execRoot)
 
 	// recalculate dir as relative to exec_root.
 	// recipe may use absolute path for -C.
@@ -1039,7 +985,7 @@ func (c *ninjaCmdRun) initWorkdirs(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("dir %q is out of exec root %q", cwd, execRoot)
 	}
 	c.dir = rdir
-	clog.Infof(ctx, "working_directory in exec_root: %s", c.dir)
+	glog.Infof("working_directory in exec_root: %s", c.dir)
 	if c.startDir != execRoot {
 		ui.Default.PrintLines(fmt.Sprintf("exec_root=%s dir=%s\n", execRoot, c.dir))
 	}
@@ -1048,88 +994,6 @@ func (c *ninjaCmdRun) initWorkdirs(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("%s not found in %s. need `-C <dir>`?", c.fname, cwd)
 	}
 	return execRoot, err
-}
-
-func (c *ninjaCmdRun) initCloudLogging(ctx context.Context, projectID, execRoot string, credential cred.Cred) (context.Context, string, func(), error) {
-	log.Infof("enable cloud logging project=%s id=%s", projectID, c.buildID)
-
-	// log_id: "siso.log" and "siso.step"
-	// use generic_task resource
-	// https://cloud.google.com/logging/docs/api/v2/resource-list
-	client, err := logging.NewClient(ctx, projectID, credential.ClientOptions()...)
-	if err != nil {
-		return ctx, "", func() {}, err
-	}
-	hostname, err := os.Hostname()
-	if err != nil {
-		return ctx, "", func() {}, err
-	}
-	logger, err := clog.New(ctx, client, "siso.log", "siso.step", &mrpb.MonitoredResource{
-		Type: "generic_task",
-		// should set labels for generic_task.
-		// see https://cloud.google.com/logging/docs/api/v2/resource-list
-		Labels: map[string]string{
-			"project_id": projectID,
-			"job":        c.jobID,
-			"task_id":    c.buildID,
-			"location":   hostname,
-			"namespace":  execRoot,
-		},
-	})
-	if err != nil {
-		return ctx, "", func() {}, err
-	}
-	ctx = clog.NewContext(ctx, logger)
-	grpclog.SetLoggerV2(logger)
-	return ctx, logger.URL(), func() {
-		errch := make(chan error, 1)
-		go func() {
-			errch <- logger.Close()
-		}()
-		timeout := 1 * time.Second
-		if c.batch {
-			timeout = 10 * time.Second
-		}
-		// Don't use clog as it's closing Cloud logging client.
-		select {
-
-		case <-time.After(timeout):
-			log.Warningf("close not finished in %s", timeout)
-		case err := <-errch:
-			if err != nil {
-				log.Warningf("falied to close Cloud logger: %v", err)
-			}
-		}
-	}, nil
-}
-
-func (c *ninjaCmdRun) initCloudProfiler(ctx context.Context, projectID string, credential cred.Cred) {
-	clog.Infof(ctx, "enable cloud profiler %q in %s", c.cloudProfilerServiceName, projectID)
-	config := profiler.Config{
-		Service:        c.cloudProfilerServiceName,
-		ServiceVersion: fmt.Sprintf("%s/%s", c.version, runtime.GOOS),
-		MutexProfiling: true,
-		ProjectID:      projectID,
-	}
-	if metadata.OnGCE() {
-		// need to set zone,instance if it seems to run on GCE
-		// but metadata failed to reply them. b/376372151
-		var err error
-		config.Zone, err = metadata.ZoneWithContext(ctx)
-		if err != nil {
-			clog.Warningf(ctx, "failed to get zone from metadata: %v", err)
-			config.Zone = "us-central1-a"
-		}
-		config.Instance, err = metadata.InstanceNameWithContext(ctx)
-		if err != nil {
-			clog.Warningf(ctx, "failed to get instnace from metadata: %v", err)
-			config.Instance = "non-gce-instance"
-		}
-	}
-	err := profiler.Start(config, credential.ClientOptions()...)
-	if err != nil {
-		clog.Errorf(ctx, "failed to start cloud profiler: %v", err)
-	}
 }
 
 func (c *ninjaCmdRun) initLogDir(ctx context.Context) error {
@@ -1179,7 +1043,7 @@ func (c *ninjaCmdRun) initConfig(ctx context.Context, execRoot string, targets [
 			return nil, err
 		}
 	} else if errors.Is(err, fs.ErrNotExist) {
-		clog.Warningf(ctx, "no args.gn: %v", err)
+		glog.Warningf("no args.gn: %v", err)
 	} else {
 		return nil, err
 	}
@@ -1189,12 +1053,12 @@ func (c *ninjaCmdRun) initConfig(ctx context.Context, execRoot string, targets [
 func (c *ninjaCmdRun) initDepsLog(ctx context.Context) (*ninjautil.DepsLog, error) {
 	err := os.MkdirAll(filepath.Dir(c.depsLogFile), 0755)
 	if err != nil {
-		clog.Warningf(ctx, "failed to mkdir for deps log: %v", err)
+		glog.Warningf("failed to mkdir for deps log: %v", err)
 		return nil, err
 	}
 	depsLog, err := ninjautil.NewDepsLog(ctx, c.depsLogFile)
 	if err != nil {
-		clog.Warningf(ctx, "failed to load deps log: %v", err)
+		glog.Warningf("failed to load deps log: %v", err)
 		return nil, err
 	}
 	if !depsLog.NeedsRecompact() {
@@ -1202,7 +1066,7 @@ func (c *ninjaCmdRun) initDepsLog(ctx context.Context) (*ninjautil.DepsLog, erro
 	}
 	err = depsLog.Recompact(ctx)
 	if err != nil {
-		clog.Warningf(ctx, "failed to recompact deps log: %v", err)
+		glog.Warningf("failed to recompact deps log: %v", err)
 		return nil, err
 	}
 	return depsLog, nil
@@ -1285,7 +1149,7 @@ func (c *ninjaCmdRun) initBuildOpts(ctx context.Context, projectID string, build
 		return bopts, nil, err
 	}
 	dones = append(dones, func(errp *error) {
-		clog.Infof(ctx, "close .ninja_log")
+		glog.Infof("close .ninja_log")
 		cerr := ninjaLogWriter.Close()
 		if *errp == nil {
 			*errp = cerr
@@ -1301,11 +1165,9 @@ func (c *ninjaCmdRun) initBuildOpts(ctx context.Context, projectID string, build
 		EnableRead: c.cacheEnableRead,
 	})
 	if err != nil {
-		clog.Warningf(ctx, "no cache enabled: %v", err)
+		glog.Warningf("no cache enabled: %v", err)
 	}
 	bopts = build.Options{
-		JobID:                c.jobID,
-		ID:                   c.buildID,
 		StartTime:            c.started,
 		ProjectID:            projectID,
 		Metadata:             config.Metadata,
@@ -1379,7 +1241,7 @@ func (c *ninjaCmdRun) logWriter(ctx context.Context, fname string) (io.Writer, f
 		return nil, func(*error) {}, err
 	}
 	return f, func(errp *error) {
-		clog.Infof(ctx, "close %s", fname)
+		glog.Infof("close %s", fname)
 		cerr := f.Close()
 		if *errp == nil {
 			*errp = cerr
@@ -1390,7 +1252,7 @@ func (c *ninjaCmdRun) logWriter(ctx context.Context, fname string) (io.Writer, f
 func defaultCacheDir() string {
 	d, err := os.UserCacheDir()
 	if err != nil {
-		log.Warningf("Failed to get user cache dir: %v", err)
+		glog.Warningf("Failed to get user cache dir: %v", err)
 		return ""
 	}
 	return filepath.Join(d, "siso")
@@ -1399,10 +1261,10 @@ func defaultCacheDir() string {
 func rebuildManifest(ctx context.Context, graph *ninjabuild.Graph, bopts build.Options) error {
 	_, err := graph.Targets(ctx, graph.Filename())
 	if err != nil {
-		clog.Warningf(ctx, "don't rebuild manifest: no target for %s: %v", graph.Filename(), err)
+		glog.Warningf("don't rebuild manifest: no target for %s: %v", graph.Filename(), err)
 		return nil
 	}
-	clog.Infof(ctx, "rebuild manifest")
+	glog.Infof("rebuild manifest")
 	mfbopts := bopts
 	mfbopts.Clobber = false
 	mfbopts.Prepare = false
@@ -1451,7 +1313,7 @@ func doBuild(ctx context.Context, graph *ninjabuild.Graph, bopts build.Options, 
 		go func() {
 			err := newStatuszServer(hctx, b)
 			if err != nil {
-				clog.Warningf(ctx, "statusz: %v", err)
+				glog.Warningf("statusz: %v", err)
 			}
 		}()
 	}
@@ -1459,7 +1321,7 @@ func doBuild(ctx context.Context, graph *ninjabuild.Graph, bopts build.Options, 
 	defer func(ctx context.Context) {
 		cerr := b.Close()
 		if cerr != nil {
-			clog.Warningf(ctx, "failed to close builder: %v", cerr)
+			glog.Warningf("failed to close builder: %v", cerr)
 		}
 	}(ctx)
 	// prof := newCPUProfiler(ctx, "build")
@@ -1476,7 +1338,7 @@ func doBuild(ctx context.Context, graph *ninjabuild.Graph, bopts build.Options, 
 	}
 
 	stats = b.Stats()
-	clog.Infof(ctx, "stats=%#v", stats)
+	glog.Infof("stats=%#v", stats)
 	if err != nil {
 		return stats, buildError{err: err}
 	}
@@ -1490,7 +1352,7 @@ func doBuild(ctx context.Context, graph *ninjabuild.Graph, bopts build.Options, 
 func (c *ninjaCmdRun) logSymlink(ctx context.Context) error {
 	logFilename := c.glogFilename()
 	rotateFiles(ctx, logFilename)
-	logfiles, err := log.Names("INFO")
+	logfiles, err := glog.Names("INFO")
 	if err != nil {
 		return fmt.Errorf("failed to get glog INFO level log files: %w", err)
 	}
@@ -1499,17 +1361,17 @@ func (c *ninjaCmdRun) logSymlink(ctx context.Context) error {
 	}
 	err = os.Symlink(logfiles[0], logFilename)
 	if err != nil {
-		clog.Warningf(ctx, "failed to create %s: %v", logFilename, err)
+		glog.Warningf("failed to create %s: %v", logFilename, err)
 		// On Windows, it failed to create symlink.
 		// just same filename in *.redirected file.
 		err = os.WriteFile(logFilename+".redirected", []byte(logfiles[0]), 0644)
 		if err != nil {
-			clog.Warningf(ctx, "failed to write %s.redirected: %v", logFilename, err)
+			glog.Warningf("failed to write %s.redirected: %v", logFilename, err)
 		}
 		c.sisoInfoLog = logfiles[0]
 		return nil
 	}
-	clog.Infof(ctx, "logfile: %q", logfiles)
+	glog.Infof("logfile: %q", logfiles)
 	c.sisoInfoLog = filepath.Base(logFilename)
 	return nil
 }
@@ -1524,7 +1386,7 @@ func (c *ninjaCmdRun) initDataSource(ctx context.Context, credential cred.Cred) 
 	if c.localCacheEnable {
 		cache, err := build.NewLocalCache(c.cacheDir)
 		if err != nil {
-			clog.Warningf(ctx, "failed to create local cache - no local cache enabled: %v", err)
+			glog.Warningf("failed to create local cache - no local cache enabled: %v", err)
 		} else {
 			layeredCache.AddLayer(cache)
 			cache.GarbageCollectIfRequired(ctx)
@@ -1605,12 +1467,12 @@ func rotateFiles(ctx context.Context, fname string) {
 			fmt.Sprintf("%s.%d%s", fnameBase, i, ext),
 			fmt.Sprintf("%s.%d%s", fnameBase, i+1, ext))
 		if err != nil && !errors.Is(err, fs.ErrNotExist) {
-			clog.Warningf(ctx, "rotate %s %d->%d failed: %v", fname, i, i+1, err)
+			glog.Warningf("rotate %s %d->%d failed: %v", fname, i, i+1, err)
 		}
 	}
 	err := os.Rename(fname, fmt.Sprintf("%s.0%s", fnameBase, ext))
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
-		clog.Warningf(ctx, "rotate %s ->0 failed: %v", fname, err)
+		glog.Warningf("rotate %s ->0 failed: %v", fname, err)
 	}
 }
 
@@ -1682,7 +1544,7 @@ func saveTargets(ctx context.Context, targetsFile string, targets, failed []stri
 func checkTargets(ctx context.Context, lastTargetsFilename string, targets []string) ([]string, bool) {
 	lastTargets, failed, err := loadTargets(ctx, lastTargetsFilename)
 	if err != nil {
-		clog.Warningf(ctx, "checkTargets: %v", err)
+		glog.Warningf("checkTargets: %v", err)
 		return nil, false
 	}
 	if len(targets) != len(lastTargets) {

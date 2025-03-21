@@ -16,12 +16,11 @@ import (
 	"sort"
 	"strings"
 
-	log "github.com/golang/glog"
+	"github.com/golang/glog"
 
 	"go.chromium.org/infra/build/siso/build"
 	"go.chromium.org/infra/build/siso/execute"
 	"go.chromium.org/infra/build/siso/hashfs"
-	"go.chromium.org/infra/build/siso/o11y/clog"
 	"go.chromium.org/infra/build/siso/toolsupport/ninjautil"
 )
 
@@ -56,7 +55,7 @@ func (ii *IndirectInputs) filter(ctx context.Context) func(context.Context, stri
 			// match any file
 			m = append(m, func(ctx context.Context, p string, debug bool) bool {
 				if debug {
-					clog.Infof(ctx, "match any: %q", p)
+					glog.Infof("match any: %q", p)
 				}
 				return true
 			})
@@ -69,7 +68,7 @@ func (ii *IndirectInputs) filter(ctx context.Context) func(context.Context, stri
 			m = append(m, func(ctx context.Context, p string, debug bool) bool {
 				ok := strings.HasSuffix(path.Base(p), suffix)
 				if debug {
-					clog.Infof(ctx, "match suffix %q: %q => %t", suffix, p, ok)
+					glog.Infof("match suffix %q: %q => %t", suffix, p, ok)
 				}
 				return ok
 			})
@@ -80,7 +79,7 @@ func (ii *IndirectInputs) filter(ctx context.Context) func(context.Context, stri
 		// to test pattern.
 		_, err := path.Match(in, in)
 		if err != nil {
-			clog.Warningf(ctx, "bad indirect_inputs.includes pattern %q: %v", in, err)
+			glog.Warningf("bad indirect_inputs.includes pattern %q: %v", in, err)
 			continue
 		}
 		pattern := in
@@ -90,7 +89,7 @@ func (ii *IndirectInputs) filter(ctx context.Context) func(context.Context, stri
 				b := path.Base(p)
 				ok, _ := path.Match(pattern, b)
 				if debug {
-					clog.Infof(ctx, "match pattern(base) %q: %q => %t", pattern, p, ok)
+					glog.Infof("match pattern(base) %q: %q => %t", pattern, p, ok)
 				}
 				return ok
 			})
@@ -99,7 +98,7 @@ func (ii *IndirectInputs) filter(ctx context.Context) func(context.Context, stri
 		m = append(m, func(ctx context.Context, p string, debug bool) bool {
 			ok, _ := path.Match(pattern, p)
 			if debug {
-				clog.Infof(ctx, "match pattern %q: %q => %t", pattern, p, ok)
+				glog.Infof("match pattern %q: %q => %t", pattern, p, ok)
 			}
 			return ok
 		})
@@ -111,7 +110,7 @@ func (ii *IndirectInputs) filter(ctx context.Context) func(context.Context, stri
 			}
 		}
 		if debug {
-			clog.Infof(ctx, "match none %q", p)
+			glog.Infof("match none %q", p)
 		}
 		return false
 	}
@@ -330,7 +329,7 @@ func (sc StepConfig) Init(ctx context.Context) error {
 		seen[rule.Name] = true
 		err := rule.Init()
 		if err != nil {
-			clog.Errorf(ctx, "Failed to init rule %q: %v", rule.Name, err)
+			glog.Errorf("Failed to init rule %q: %v", rule.Name, err)
 			return fmt.Errorf("failed to init rule %q: %w", rule.Name, err)
 		}
 	}
@@ -380,8 +379,8 @@ func (sc StepConfig) Lookup(ctx context.Context, bpath *build.Path, edge *ninjau
 			// TODO(b/277532415): preserve quote of args0?
 		}
 	}
-	if log.V(1) {
-		clog.Infof(ctx, "lookup action:%s out:%s args0:%s", actionName, out, args0)
+	if glog.V(1) {
+		glog.Infof("lookup action:%s out:%s args0:%s", actionName, out, args0)
 	}
 
 loop:
@@ -436,8 +435,8 @@ loop:
 			rule.Platform["InputRootAbsolutePath"] = bpath.ExecRoot
 		}
 
-		if bool(log.V(1)) || rule.Debug {
-			clog.Infof(ctx, "hit %s actionName:%q out:%q args0:%q -> action_name:%q action_outs:%q command:%q inputs:%d+%d outputs:%d+%d output-local:%t platform:%v + %v replace:%t accumulate:%t", rule.Name, actionName, outConfig, args0, rule.ActionName, rule.ActionOuts, rule.CommandPrefix, len(rule.Inputs), len(opt.Inputs), len(rule.Outputs), len(opt.Outputs), rule.OutputLocal, rule.Platform, opt.Platform, rule.Replace, rule.Accumulate)
+		if bool(glog.V(1)) || rule.Debug {
+			glog.Infof("hit %s actionName:%q out:%q args0:%q -> action_name:%q action_outs:%q command:%q inputs:%d+%d outputs:%d+%d output-local:%t platform:%v + %v replace:%t accumulate:%t", rule.Name, actionName, outConfig, args0, rule.ActionName, rule.ActionOuts, rule.CommandPrefix, len(rule.Inputs), len(opt.Inputs), len(rule.Outputs), len(opt.Outputs), rule.OutputLocal, rule.Platform, opt.Platform, rule.Replace, rule.Accumulate)
 		}
 
 		inputs := make([]string, 0, len(rule.Inputs)+len(opt.Inputs))
@@ -472,7 +471,7 @@ loop:
 		}
 		return rule, !c.Impure
 	}
-	clog.Infof(ctx, "miss actionName:%q out:%q args0:%q", actionName, out, args0)
+	glog.Infof("miss actionName:%q out:%q args0:%q", actionName, out, args0)
 	return StepRule{}, false
 }
 
@@ -490,7 +489,7 @@ func (sc StepConfig) ExpandInputs(ctx context.Context, p *build.Path, hashFS *ha
 			_, err := hashFS.Stat(ctx, p.ExecRoot, path)
 			if err != nil {
 				// TODO(b/271783311): hard error for bad config
-				clog.Warningf(ctx, "missing inputs %s", path)
+				glog.Warningf("missing inputs %s", path)
 			} else {
 				expanded = append(expanded, filepath.ToSlash(path))
 			}
@@ -498,8 +497,8 @@ func (sc StepConfig) ExpandInputs(ctx context.Context, p *build.Path, hashFS *ha
 		path = toConfigPath(p, path)
 		deps, ok := sc.InputDeps[path]
 		if ok {
-			if log.V(1) {
-				clog.Infof(ctx, "input-deps expand %s", path)
+			if glog.V(1) {
+				glog.Infof("input-deps expand %s", path)
 			}
 			for _, dep := range deps {
 				dep := fromConfigPath(ctx, p, dep)
@@ -509,7 +508,7 @@ func (sc StepConfig) ExpandInputs(ctx context.Context, p *build.Path, hashFS *ha
 				}
 				_, err := hashFS.Stat(ctx, p.ExecRoot, dep)
 				if err != nil {
-					clog.Warningf(ctx, "missing file in input-dep %s (from %s): %v", dep, path, err)
+					glog.Warningf("missing file in input-dep %s (from %s): %v", dep, path, err)
 					continue
 				}
 				paths = append(paths, dep)
