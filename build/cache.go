@@ -17,7 +17,6 @@ import (
 	"go.chromium.org/infra/build/siso/build/cachestore"
 	"go.chromium.org/infra/build/siso/execute"
 	"go.chromium.org/infra/build/siso/o11y/clog"
-	"go.chromium.org/infra/build/siso/o11y/iometrics"
 	"go.chromium.org/infra/build/siso/reapi/digest"
 	"go.chromium.org/infra/build/siso/runtimex"
 	"go.chromium.org/infra/build/siso/sync/semaphore"
@@ -35,8 +34,6 @@ type Cache struct {
 	enableRead bool
 
 	sema *semaphore.Semaphore
-
-	m *iometrics.IOMetrics
 }
 
 // NewCache creates new cache.
@@ -53,8 +50,6 @@ func NewCache(ctx context.Context, opts CacheOptions) (*Cache, error) {
 
 		// TODO(b/274038010): cache-digest semaphore should share with execute/remotecache?
 		sema: semaphore.New("cache-digest", runtimex.NumCPU()*10),
-
-		m: iometrics.New("cache-content"),
 	}, nil
 }
 
