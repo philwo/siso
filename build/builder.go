@@ -38,10 +38,7 @@ import (
 	"go.chromium.org/infra/build/siso/execute/remoteexec"
 	"go.chromium.org/infra/build/siso/execute/reproxyexec"
 	"go.chromium.org/infra/build/siso/hashfs"
-	"go.chromium.org/infra/build/siso/hashfs/osfs"
 	"go.chromium.org/infra/build/siso/o11y/clog"
-	"go.chromium.org/infra/build/siso/o11y/iometrics"
-	"go.chromium.org/infra/build/siso/o11y/trace"
 	"go.chromium.org/infra/build/siso/reapi"
 	"go.chromium.org/infra/build/siso/reapi/digest"
 	"go.chromium.org/infra/build/siso/reapi/merkletree"
@@ -90,8 +87,6 @@ type Options struct {
 	LocalexecLogWriter   io.Writer
 	MetricsJSONWriter    io.Writer
 	NinjaLogWriter       io.Writer
-	TraceJSON            string
-	TraceExporter        *trace.Exporter
 
 	// Clobber forces to rebuild ignoring existing generated files.
 	Clobber bool
@@ -191,9 +186,6 @@ type Builder struct {
 	metricsJSONWriter    io.Writer
 	ninjaLogWriter       io.Writer
 	outputLogWriter      io.Writer
-	traceExporter        *trace.Exporter
-	traceEvents          *traceEvents
-	traceStats           *traceStats
 
 	// envfiles: filename -> *envfile
 	envFiles sync.Map
@@ -321,9 +313,6 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 		localexecLogWriter:   lelw,
 		metricsJSONWriter:    mw,
 		ninjaLogWriter:       nw,
-		traceExporter:        opts.TraceExporter,
-		traceEvents:          newTraceEvents(opts.TraceJSON, opts.Metadata),
-		traceStats:           newTraceStats(),
 		clobber:              opts.Clobber,
 		prepare:              opts.Prepare,
 		verbose:              opts.Verbose,
@@ -362,11 +351,6 @@ func (b *Builder) Close() error {
 // Stats returns stats of the builder.
 func (b *Builder) Stats() Stats {
 	return b.stats.stats()
-}
-
-// TraceStats returns trace stats of the builder.
-func (b *Builder) TraceStats() []*TraceStat {
-	return b.traceStats.get()
 }
 
 // ErrManifestModified is an error to indicate that manifest is modified.
@@ -541,26 +525,6 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 			ui.Default.PrintLines("\n", "\n")
 		}
 	}()
-	semas := []*semaphore.Semaphore{
-		b.cache.sema,
-		b.cacheSema,
-		b.localSema,
-		b.remoteSema,
-		b.reproxySema,
-		b.rewrapSema,
-		b.stepSema,
-		hashfs.FlushSemaphore,
-		hashfs.ForgetMissingsSemaphore,
-		osfs.LstatSemaphore,
-		reapi.FileSemaphore,
-		remoteexec.Semaphore,
-	}
-	b.traceEvents.Start(ctx, semas, []*iometrics.IOMetrics{
-		b.hashFS.OS.IOMetrics,
-		b.reapiclient.IOMetrics(),
-		// TODO: cache iometrics?
-	})
-	defer b.traceEvents.Close(ctx)
 	pstat := b.plan.stats()
 	b.progress.report("\nbuild start: Ready %d Pending %d", pstat.nready, pstat.npendings)
 	clog.Infof(ctx, "build pendings=%d ready=%d", pstat.npendings, pstat.nready)
@@ -921,16 +885,12 @@ func dedupInputs(ctx context.Context, cmd *execute.Cmd) {
 // - it has an extension that requires scan deps of future steps.
 // - it is specified by OutptutLocalFunc.
 func (b *Builder) outputs(ctx context.Context, step *Step) error {
-	ctx, span := trace.NewSpan(ctx, "outputs")
-	defer span.Close(nil)
-
 	outputs := step.cmd.Outputs
 	if step.def.Binding("phony_outputs") != "" {
 		clog.Infof(ctx, "phony_outputs. no check output files %q", outputs)
 		return nil
 	}
 
-	span.SetAttr("outputs", len(outputs))
 	if step.cmd.Depfile != "" {
 		switch step.cmd.Deps {
 		case "gcc", "msvc":
@@ -942,7 +902,6 @@ func (b *Builder) outputs(ctx context.Context, step *Step) error {
 	}
 
 	localOutputs := step.def.LocalOutputs(ctx)
-	span.SetAttr("outputs-local", len(localOutputs))
 	seen := make(map[string]bool)
 	for _, o := range localOutputs {
 		if seen[o] {
@@ -1038,8 +997,6 @@ func (b *Builder) progressStepFallback(ctx context.Context, step *Step) {
 var errNotRelocatable = errors.New("request is not relocatable")
 
 func (b *Builder) updateDeps(ctx context.Context, step *Step) error {
-	ctx, span := trace.NewSpan(ctx, "update-deps")
-	defer span.Close(nil)
 	if len(step.cmd.Outputs) == 0 {
 		clog.Warningf(ctx, "update deps: no outputs")
 		return nil
@@ -1063,20 +1020,12 @@ func (b *Builder) updateDeps(ctx context.Context, step *Step) error {
 		clog.Warningf(ctx, "update deps: failed to record deps %s, %s, %s, %s: %v", output, base64.StdEncoding.EncodeToString(step.cmd.CmdHash), fi.ModTime(), deps, err)
 	}
 	clog.Infof(ctx, "update deps=%s: %s %s %d updated:%t pure:%t/%t->true", step.cmd.Deps, output, base64.StdEncoding.EncodeToString(step.cmd.CmdHash), len(deps), updated, step.cmd.Pure, step.cmd.Pure)
-	span.SetAttr("deps", len(deps))
-	span.SetAttr("updated", updated)
 	canonicalizedDeps := make([]string, 0, len(deps))
 	for _, dep := range deps {
 		canonicalizedDeps = append(canonicalizedDeps, b.path.MaybeFromWD(ctx, dep))
 	}
 	depsFixCmd(ctx, b, step, canonicalizedDeps)
 	return nil
-}
-
-func (b *Builder) finalizeTrace(ctx context.Context, tc *trace.Context) {
-	b.traceEvents.Add(ctx, tc)
-	b.traceStats.update(ctx, tc)
-	b.traceExporter.Export(ctx, tc)
 }
 
 func (b *Builder) prepareAllOutDirs(ctx context.Context) error {

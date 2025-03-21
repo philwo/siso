@@ -32,7 +32,6 @@ import (
 	"go.chromium.org/infra/build/siso/hashfs/osfs"
 	pb "go.chromium.org/infra/build/siso/hashfs/proto"
 	"go.chromium.org/infra/build/siso/o11y/clog"
-	"go.chromium.org/infra/build/siso/o11y/trace"
 	"go.chromium.org/infra/build/siso/reapi/digest"
 	"go.chromium.org/infra/build/siso/reapi/merkletree"
 	"go.chromium.org/infra/build/siso/runtimex"
@@ -444,8 +443,6 @@ func (hfs *HashFS) Stat(ctx context.Context, root, fname string) (FileInfo, erro
 
 // ReadDir returns directory entries of root/name.
 func (hfs *HashFS) ReadDir(ctx context.Context, root, name string) (dents []DirEntry, err error) {
-	ctx, span := trace.NewSpan(ctx, "read-dir")
-	defer span.Close(nil)
 	if log.V(1) {
 		clog.Infof(ctx, "readdir @%s %s", root, name)
 		defer func() {
@@ -505,14 +502,11 @@ func (hfs *HashFS) ReadDir(ctx context.Context, root, name string) (dents []DirE
 
 // ReadFile reads a contents of root/fname.
 func (hfs *HashFS) ReadFile(ctx context.Context, root, fname string) ([]byte, error) {
-	ctx, span := trace.NewSpan(ctx, "read-file")
-	defer span.Close(nil)
 	if log.V(1) {
 		clog.Infof(ctx, "readfile @%s %s", root, fname)
 	}
 	fname = filepath.Join(root, fname)
 	fname = filepath.ToSlash(fname)
-	span.SetAttr("fname", fname)
 	e, _, ok := hfs.directory.lookup(ctx, fname)
 	if !ok {
 		e = newLocalEntry()
@@ -548,8 +542,6 @@ func (hfs *HashFS) ReadFile(ctx context.Context, root, fname string) ([]byte, er
 
 // WriteFile writes a contents in root/fname with mtime and cmdhash.
 func (hfs *HashFS) WriteFile(ctx context.Context, root, fname string, b []byte, isExecutable bool, mtime time.Time, cmdhash []byte) error {
-	ctx, span := trace.NewSpan(ctx, "write-file")
-	defer span.Close(nil)
 	if log.V(1) {
 		clog.Infof(ctx, "writefile @%s %s x:%t mtime:%s", root, fname, isExecutable, mtime)
 	}
@@ -557,7 +549,6 @@ func (hfs *HashFS) WriteFile(ctx context.Context, root, fname string, b []byte, 
 	data := digest.FromBytes(fname, b)
 	fname = filepath.Join(root, fname)
 	fname = filepath.ToSlash(fname)
-	span.SetAttr("fname", fname)
 	lready := make(chan bool, 1)
 	lready <- true
 	mode := fs.FileMode(0644)
@@ -915,8 +906,6 @@ func (hfs *HashFS) Availables(ctx context.Context, root string, inputs []string)
 // Entries gets merkletree entries for inputs at root.
 // it won't return entries symlink escaped from root.
 func (hfs *HashFS) Entries(ctx context.Context, root string, inputs []string) ([]merkletree.Entry, error) {
-	ctx, span := trace.NewSpan(ctx, "fs-entries")
-	defer span.Close(nil)
 	var nwait int
 	var wg sync.WaitGroup
 	ents := make([]*entry, 0, len(inputs))
@@ -965,10 +954,7 @@ func (hfs *HashFS) Entries(ctx context.Context, root string, inputs []string) ([
 		}()
 	}
 	// wait ensures all entries have computed the digests.
-	_, wspan := trace.NewSpan(ctx, "fs-entries-wait")
 	wg.Wait()
-	wspan.SetAttr("waits", nwait)
-	wspan.Close(nil)
 	var entries []merkletree.Entry
 	for i, fname := range inputs {
 		e := ents[i]
@@ -1091,8 +1077,6 @@ func (e UpdateEntry) String() string {
 
 // Update updates cache information for entries under execRoot.
 func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []UpdateEntry) error {
-	ctx, span := trace.NewSpan(ctx, "fs-update")
-	defer span.Close(nil)
 	select {
 	case <-ctx.Done():
 		return context.Cause(ctx)
@@ -1303,8 +1287,6 @@ func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []Update
 
 // RetrieveUpdateEntries gets UpdateEntry for fnames at root.
 func (hfs *HashFS) RetrieveUpdateEntries(ctx context.Context, root string, fnames []string) []UpdateEntry {
-	ctx, span := trace.NewSpan(ctx, "fs-update-entries")
-	defer span.Close(nil)
 	ents, err := hfs.Entries(ctx, root, fnames)
 	if err != nil {
 		clog.Warningf(ctx, "failed to get entries: %v", err)
@@ -1336,9 +1318,6 @@ func (hfs *HashFS) RetrieveUpdateEntries(ctx context.Context, root string, fname
 // will be nil.
 // It will forget recorded enties when err (doesn't exist or so).
 func (hfs *HashFS) RetrieveUpdateEntriesFromLocal(ctx context.Context, root string, fnames []string) []UpdateEntry {
-	ctx, span := trace.NewSpan(ctx, "fs-update-entries-from-local")
-	defer span.Close(nil)
-
 	ents := make([]UpdateEntry, 0, len(fnames))
 	for _, fname := range fnames {
 		fullname := filepath.Join(root, fname)
@@ -1405,8 +1384,6 @@ func (hfs *HashFS) NeedFlush(ctx context.Context, execRoot, fname string) bool {
 func (hfs *HashFS) Flush(ctx context.Context, execRoot string, files []string) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	ctx, span := trace.NewSpan(ctx, "flush")
-	defer span.Close(nil)
 	eg, ctx := errgroup.WithContext(ctx)
 	for _, file := range files {
 		fname := filepath.Join(execRoot, file)

@@ -18,7 +18,6 @@ import (
 	log "github.com/golang/glog"
 
 	"go.chromium.org/infra/build/siso/o11y/clog"
-	"go.chromium.org/infra/build/siso/o11y/trace"
 	"go.chromium.org/infra/build/siso/runtimex"
 	"go.chromium.org/infra/build/siso/sync/semaphore"
 )
@@ -186,8 +185,6 @@ func (fv *fsview) scanFile(ctx context.Context, fname string) (*scanResult, erro
 	if sr.done {
 		return sr, sr.err
 	}
-	ctx, span := trace.NewSpan(ctx, "scanFile")
-	defer span.Close(nil)
 
 	buf, err := fv.fs.hashfs.ReadFile(ctx, fv.execRoot, fname)
 	if log.V(1) {

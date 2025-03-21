@@ -24,7 +24,6 @@ import (
 
 	"go.chromium.org/infra/build/siso/o11y/clog"
 	"go.chromium.org/infra/build/siso/o11y/iometrics"
-	"go.chromium.org/infra/build/siso/o11y/trace"
 	"go.chromium.org/infra/build/siso/reapi/digest"
 	"go.chromium.org/infra/build/siso/ui"
 )
@@ -141,8 +140,6 @@ func (c *LocalCache) SetActionResult(ctx context.Context, d digest.Digest, ar *r
 
 // GetContent returns content of the fname identified by the digest.
 func (c *LocalCache) GetContent(ctx context.Context, d digest.Digest, _ string) ([]byte, error) {
-	_, span := trace.NewSpan(ctx, "cache-get-content")
-	defer span.Close(nil)
 	cname := c.contentCacheFilename(d)
 	r, err := os.Open(cname)
 	if err != nil {

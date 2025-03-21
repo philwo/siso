@@ -20,7 +20,6 @@ import (
 	"go.chromium.org/infra/build/siso/execute"
 	"go.chromium.org/infra/build/siso/execute/reproxyexec"
 	"go.chromium.org/infra/build/siso/o11y/clog"
-	"go.chromium.org/infra/build/siso/o11y/trace"
 )
 
 // StepDef is a build step definition.
@@ -371,8 +370,6 @@ func (s *Step) useReclient() bool {
 }
 
 func (s *Step) init(ctx context.Context, b *Builder) {
-	ctx, span := trace.NewSpan(ctx, "step-init")
-	defer span.Close(nil)
 	s.def.EnsureRule(ctx)
 	s.cmd = newCmd(ctx, b, s.def)
 	clog.Infof(ctx, "cmdhash:%s", base64.StdEncoding.EncodeToString(s.cmd.CmdHash))
