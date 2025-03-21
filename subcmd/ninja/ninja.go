@@ -24,9 +24,7 @@ import (
 	"strings"
 	"time"
 
-	"cloud.google.com/go/compute/metadata"
 	"cloud.google.com/go/logging"
-	"cloud.google.com/go/profiler"
 	log "github.com/golang/glog"
 	"github.com/google/uuid"
 	"github.com/klauspost/cpuid/v2"
@@ -143,8 +141,6 @@ type ninjaCmdRun struct {
 
 	enableCloudLogging bool
 	// enableCPUProfiler bool
-	enableCloudProfiler      bool
-	cloudProfilerServiceName string
 
 	subtool    string
 	cleandead  bool
@@ -402,7 +398,6 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		c.reopt = new(reapi.Option)
 		c.projectID = ""
 		c.enableCloudLogging = false
-		c.enableCloudProfiler = false
 		c.reproxyAddr = ""
 	}
 
@@ -549,10 +544,6 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	clog.Infof(ctx, "is_terminal=%t batch=%t", ui.IsTerminal(), c.batch)
 
 	spin := ui.Default.NewSpinner()
-
-	if c.enableCloudProfiler {
-		c.initCloudProfiler(ctx, projectID, credential)
-	}
 
 	targets := c.Flags.Args()
 	config, err := c.initConfig(ctx, execRoot, targets)
@@ -964,8 +955,6 @@ func (c *ninjaCmdRun) init() {
 	c.Flags.StringVar(&c.artfsEndpoint, "artfs_endpoint", "localhost:65001", "artfs server endpoint")
 
 	c.Flags.BoolVar(&c.enableCloudLogging, "enable_cloud_logging", false, "enable cloud logging")
-	c.Flags.BoolVar(&c.enableCloudProfiler, "enable_cloud_profiler", false, "enable cloud profiler")
-	c.Flags.StringVar(&c.cloudProfilerServiceName, "cloud_profiler_service_name", "siso", "cloud profiler service name")
 
 	c.Flags.StringVar(&c.subtool, "t", "", "run a subtool (use '-t list' to list subtools)")
 	c.Flags.BoolVar(&c.cleandead, "cleandead", false, "clean built files that are no longer produced by the manifest")
@@ -1093,35 +1082,6 @@ func (c *ninjaCmdRun) initCloudLogging(ctx context.Context, projectID, execRoot 
 			}
 		}
 	}, nil
-}
-
-func (c *ninjaCmdRun) initCloudProfiler(ctx context.Context, projectID string, credential cred.Cred) {
-	clog.Infof(ctx, "enable cloud profiler %q in %s", c.cloudProfilerServiceName, projectID)
-	config := profiler.Config{
-		Service:        c.cloudProfilerServiceName,
-		ServiceVersion: fmt.Sprintf("%s/%s", c.version, runtime.GOOS),
-		MutexProfiling: true,
-		ProjectID:      projectID,
-	}
-	if metadata.OnGCE() {
-		// need to set zone,instance if it seems to run on GCE
-		// but metadata failed to reply them. b/376372151
-		var err error
-		config.Zone, err = metadata.ZoneWithContext(ctx)
-		if err != nil {
-			clog.Warningf(ctx, "failed to get zone from metadata: %v", err)
-			config.Zone = "us-central1-a"
-		}
-		config.Instance, err = metadata.InstanceNameWithContext(ctx)
-		if err != nil {
-			clog.Warningf(ctx, "failed to get instnace from metadata: %v", err)
-			config.Instance = "non-gce-instance"
-		}
-	}
-	err := profiler.Start(config, credential.ClientOptions()...)
-	if err != nil {
-		clog.Errorf(ctx, "failed to start cloud profiler: %v", err)
-	}
 }
 
 func (c *ninjaCmdRun) initLogDir(ctx context.Context) error {

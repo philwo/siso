@@ -3,10 +3,8 @@ module go.chromium.org/infra/build/siso
 go 1.24.1
 
 require (
-	cloud.google.com/go/compute/metadata v0.6.0
 	cloud.google.com/go/logging v1.13.0
 	cloud.google.com/go/longrunning v0.6.6
-	cloud.google.com/go/profiler v0.4.2
 	github.com/Microsoft/go-winio v0.6.2
 	github.com/bazelbuild/reclient/api v0.0.0-20240617160057-89d6134e48e5
 	github.com/bazelbuild/remote-apis v0.0.0-20250311143718-2721568dea74
@@ -33,19 +31,17 @@ require (
 )
 
 require (
-	cel.dev/expr v0.19.2 // indirect
 	cloud.google.com/go v0.118.3 // indirect
 	cloud.google.com/go/auth v0.15.0 // indirect
 	cloud.google.com/go/auth/oauth2adapt v0.2.7 // indirect
+	cloud.google.com/go/compute/metadata v0.6.0 // indirect
 	github.com/GoogleCloudPlatform/protoc-gen-bq-schema v0.0.0-20190119112626-026f9fcdf705 // indirect
-	github.com/cncf/xds/go v0.0.0-20250121191232-2f005788dc42 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/go-logr/logr v1.4.2 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/golang/mock v1.7.0-rc.1 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
-	github.com/google/pprof v0.0.0-20241029153458-d1b30febd7db // indirect
 	github.com/google/s2a-go v0.1.9 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.6 // indirect
 	github.com/googleapis/gax-go/v2 v2.14.1 // indirect
