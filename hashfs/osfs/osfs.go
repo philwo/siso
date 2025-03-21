@@ -239,6 +239,9 @@ func (ofs *OSFS) FileDigestFromXattr(ctx context.Context, name string, size int6
 	if size < 0 {
 		fi, err := os.Lstat(name)
 		ofs.OpsDone(err)
+		if err != nil {
+			return digest.Digest{}, err
+		}
 		size = fi.Size()
 	}
 	return digest.Digest{
