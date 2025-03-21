@@ -172,14 +172,11 @@ func (c *Client) getWithBatchReadBlobs(ctx context.Context, d digest.Digest, nam
 		return err
 	})
 	if err != nil {
-		c.m.ReadDone(0, err)
 		return nil, fmt.Errorf("failed to read blobs %s for %s in %s: %w", d, name, time.Since(started), err)
 	}
 	if len(resp.Responses) != 1 {
-		c.m.ReadDone(0, err)
 		return nil, fmt.Errorf("failed to read blobs %s for %s in %s: responses=%d", d, name, time.Since(started), len(resp.Responses))
 	}
-	c.m.ReadDone(len(resp.Responses[0].Data), err)
 	if int64(len(resp.Responses[0].Data)) != d.SizeBytes {
 		return nil, fmt.Errorf("failed to read blobs %s for %s in %s: size mismatch got=%d", d, name, time.Since(started), len(resp.Responses[0].Data))
 	}
@@ -199,18 +196,15 @@ func (c *Client) getWithByteStream(ctx context.Context, d digest.Digest, name st
 		defer cancel()
 		r, err := bytestreamio.Open(ctx, bpb.NewByteStreamClient(c.casConn), resourceName)
 		if err != nil {
-			c.m.ReadDone(0, err)
 			return err
 		}
 		rd, err := c.newDecoder(r, d)
 		if err != nil {
-			c.m.ReadDone(0, err)
 			return err
 		}
 		defer rd.Close()
 		buf = make([]byte, d.SizeBytes)
-		n, err := io.ReadFull(rd, buf)
-		c.m.ReadDone(n, err)
+		_, err = io.ReadFull(rd, buf)
 		if err != nil {
 			return err
 		}
@@ -238,7 +232,6 @@ func (c *Client) Missing(ctx context.Context, blobs []digest.Digest) ([]digest.D
 			InstanceName: c.opt.Instance,
 			BlobDigests:  blobspb,
 		})
-		c.m.OpsDone(err)
 		return err
 	})
 	if err != nil {
@@ -475,7 +468,6 @@ func (c *Client) uploadWithBatchUpdateBlobs(ctx context.Context, digests []diges
 				return err
 			})
 			if err != nil {
-				c.m.WriteDone(0, err)
 				return nil, status.Errorf(status.Code(err), "batch update blobs: %v", err)
 			}
 
@@ -498,12 +490,10 @@ func (c *Client) uploadWithBatchUpdateBlobs(ctx context.Context, digests []diges
 						Digest: blob,
 						Err:    err,
 					})
-					c.m.WriteDone(int(res.Digest.SizeBytes), err)
 					uploads[blob].done(err)
 					continue
 				}
 				clog.Infof(ctx, "uploaded in batch: %s", data)
-				c.m.WriteDone(int(res.Digest.SizeBytes), nil)
 				uploads[blob].done(nil)
 			}
 			uploaded = true
@@ -663,7 +653,6 @@ func (c *Client) uploadWithByteStream(ctx context.Context, digests []digest.Dige
 			}
 			return wr.Close()
 		})
-		c.m.WriteDone(int(d.SizeBytes), err)
 		uploads[d].done(err)
 		if err != nil {
 			clog.Warningf(ctx, "Failed to stream %s: %v", data, err)
