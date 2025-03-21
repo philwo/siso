@@ -122,10 +122,6 @@ to register handlers and step configs.
      * value: handler function used in [per-step config](#per_step-config).
    * `step_config` json string
      [`StepConfig`](../build/ninjabuild/step_config.go). It will be stored in `.siso_config` in working directory.
-     * `properties`
-       * a dict for config properties. used for resultstore if enabled.
-       * key: property key
-       * value: property value
      * `platforms`
        * key: platform reference name. "default" is used by default.
        * value: a dict of [platform properties](https://developers.google.com/remote-build-execution/docs/remote-execution-properties)
