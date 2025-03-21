@@ -16,7 +16,6 @@ import (
 	log "github.com/golang/glog"
 
 	"go.chromium.org/infra/build/siso/o11y/clog"
-	"go.chromium.org/infra/build/siso/o11y/trace"
 )
 
 func (b *Builder) setupRSP(ctx context.Context, step *Step) error {
@@ -24,8 +23,6 @@ func (b *Builder) setupRSP(ctx context.Context, step *Step) error {
 	if rsp == "" {
 		return nil
 	}
-	ctx, span := trace.NewSpan(ctx, "setup-rsp")
-	defer span.Close(nil)
 	content := step.cmd.RSPFileContent
 	if log.V(1) {
 		clog.Infof(ctx, "create rsp %q=%q", rsp, content)

@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"go.chromium.org/infra/build/siso/o11y/clog"
-	"go.chromium.org/infra/build/siso/o11y/trace"
 	"go.chromium.org/infra/build/siso/reapi/digest"
 	"go.chromium.org/infra/build/siso/runtimex"
 	"go.chromium.org/infra/build/siso/sync/semaphore"
@@ -31,9 +30,6 @@ var (
 )
 
 func localDigest(ctx context.Context, src digest.Source, fname string) (digest.Data, error) {
-	ctx, span := trace.NewSpan(ctx, "local-digest")
-	defer span.Close(nil)
-
 	digestLock.Lock()
 	digestFnames[fname] = struct{}{}
 	digestLock.Unlock()

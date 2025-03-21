@@ -17,7 +17,6 @@ import (
 
 	"go.chromium.org/infra/build/siso/execute"
 	"go.chromium.org/infra/build/siso/o11y/clog"
-	"go.chromium.org/infra/build/siso/o11y/trace"
 	"go.chromium.org/infra/build/siso/reapi/merkletree"
 	"go.chromium.org/infra/build/siso/scandeps"
 	"go.chromium.org/infra/build/siso/toolsupport/gccutil"
@@ -104,8 +103,6 @@ func (depsGCC) fixForSplitDwarf(ctx context.Context, cmd *execute.Cmd) {
 }
 
 func (depsGCC) DepsAfterRun(ctx context.Context, b *Builder, step *Step) ([]string, error) {
-	ctx, span := trace.NewSpan(ctx, "gcc-deps")
-	defer span.Close(nil)
 	if step.cmd.Deps != "gcc" {
 		return nil, fmt.Errorf("gcc-deps; unexpected deps=%q %s", step.cmd.Deps, step)
 	}
@@ -121,10 +118,7 @@ func (depsGCC) DepsAfterRun(ctx context.Context, b *Builder, step *Step) ([]stri
 	if err != nil {
 		return nil, fmt.Errorf("gcc-deps: failed to get depfile %q of %s: %w", step.cmd.Depfile, step, err)
 	}
-	span.SetAttr("depfile", step.cmd.Depfile)
-	span.SetAttr("deps-file-size", len(buf))
 
-	_, dspan := trace.NewSpan(ctx, "parse-deps")
 	deps, err := makeutil.ParseDeps(buf)
 	if err != nil {
 		return nil, fmt.Errorf("gcc-deps: failed to parse depfile %q: %w", step.cmd.Depfile, err)
@@ -133,8 +127,6 @@ func (depsGCC) DepsAfterRun(ctx context.Context, b *Builder, step *Step) ([]stri
 	if err != nil {
 		return nil, fmt.Errorf("error in depfile %q: %w", step.cmd.Depfile, err)
 	}
-	dspan.SetAttr("deps", len(deps))
-	dspan.Close(nil)
 	return deps, nil
 }
 

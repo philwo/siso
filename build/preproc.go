@@ -12,12 +12,9 @@ import (
 	log "github.com/golang/glog"
 
 	"go.chromium.org/infra/build/siso/o11y/clog"
-	"go.chromium.org/infra/build/siso/o11y/trace"
 )
 
 func fastDepsCmd(ctx context.Context, b *Builder, step *Step) (*Step, bool) {
-	ctx, span := trace.NewSpan(ctx, "fast-deps")
-	defer span.Close(nil)
 	fastStep, err := depsFastStep(ctx, b, step)
 	if err != nil {
 		if log.V(1) {

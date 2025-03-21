@@ -15,7 +15,6 @@ import (
 	log "github.com/golang/glog"
 
 	"go.chromium.org/infra/build/siso/o11y/clog"
-	"go.chromium.org/infra/build/siso/o11y/trace"
 )
 
 type phonyState struct {
@@ -54,9 +53,6 @@ func (b *Builder) needToRun(ctx context.Context, stepDef StepDef, outputs []Targ
 // checkUpToDate returns true if outputs are already up-to-date and
 // no need to run command.
 func (b *Builder) checkUpToDate(ctx context.Context, stepDef StepDef, outputs []Target) bool {
-	ctx, span := trace.NewSpan(ctx, "mtime-check")
-	defer span.Close(nil)
-
 	generator := stepDef.Binding("generator") != ""
 	cmdline := stepDef.Binding("command")
 	rspfileContent := stepDef.Binding("rspfile_content")
@@ -80,25 +76,21 @@ func (b *Builder) checkUpToDate(ctx context.Context, stepDef StepDef, outputs []
 		case errors.Is(err, errDirty):
 			reason = "dirty"
 		}
-		span.SetAttr("run-reason", reason)
 		fmt.Fprintf(b.explainWriter, "deps for %s %s: %v\n", outname, reason, err)
 		return false
 	}
 	if outmtime.IsZero() {
 		clog.Infof(ctx, "need: output doesn't exist")
-		span.SetAttr("run-reason", "no-output")
 		fmt.Fprintf(b.explainWriter, "output %s doesn't exist\n", outname)
 		return false
 	}
 	if inmtime.After(outmtime) {
 		clog.Infof(ctx, "need: in:%s > out:%s %s: in:%s out:%s", lastIn, out0, inmtime.Sub(outmtime), inmtime, outmtime)
-		span.SetAttr("run-reason", "dirty")
 		fmt.Fprintf(b.explainWriter, "output %s older than most recent input %s: out:%s in:+%s\n", outname, lastInName, outmtime.Format(time.RFC3339), inmtime.Sub(outmtime))
 		return false
 	}
 	if !generator && !bytes.Equal(cmdhash, stepCmdHash) {
 		clog.Infof(ctx, "need: cmdhash differ %q -> %q", base64.StdEncoding.EncodeToString(cmdhash), base64.StdEncoding.EncodeToString(stepCmdHash))
-		span.SetAttr("run-reason", "cmdhash-update")
 		if len(cmdhash) == 0 {
 			fmt.Fprintf(b.explainWriter, "command line not found in log for %s\n", outname)
 		} else {
@@ -108,7 +100,6 @@ func (b *Builder) checkUpToDate(ctx context.Context, stepDef StepDef, outputs []
 	}
 	if b.clobber {
 		clog.Infof(ctx, "need: clobber")
-		span.SetAttr("run-reason", "clobber")
 		// explain once at the beginning of the build.
 		return false
 	}
@@ -148,7 +139,6 @@ func (b *Builder) checkUpToDate(ctx context.Context, stepDef StepDef, outputs []
 			err := b.hashFS.Flush(ctx, b.path.ExecRoot, localOutputs)
 			if err != nil {
 				clog.Infof(ctx, "need: no local outputs %q: %v", localOutputs, err)
-				span.SetAttr("run-reason", "missing-local-outputs")
 				fmt.Fprintf(b.explainWriter, "output %s flush error %s: %v", outname, localOutputs, err)
 				return false
 			}
@@ -161,7 +151,6 @@ func (b *Builder) checkUpToDate(ctx context.Context, stepDef StepDef, outputs []
 	if log.V(1) {
 		clog.Infof(ctx, "skip: in:%s < out:%s %s", lastIn, out0, outmtime.Sub(inmtime))
 	}
-	span.SetAttr("skip", true)
 	return true
 }
 

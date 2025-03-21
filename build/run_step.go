@@ -14,10 +14,8 @@ import (
 	"time"
 
 	"cloud.google.com/go/logging"
-	"google.golang.org/grpc/status"
 
 	"go.chromium.org/infra/build/siso/o11y/clog"
-	"go.chromium.org/infra/build/siso/o11y/trace"
 	"go.chromium.org/infra/build/siso/reapi"
 	"go.chromium.org/infra/build/siso/toolsupport/msvcutil"
 	"go.chromium.org/infra/build/siso/ui"
@@ -50,33 +48,18 @@ func (e StepError) Unwrap() error {
 // can control the flows with the experiment ids, defined in experiments.go.
 func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 	step.startTime = time.Now()
-	tc := trace.New(ctx, step.def.String())
-	ctx = trace.NewContext(ctx, tc)
 	spanName := stepSpanName(step.def)
-	ctx, span := trace.NewSpan(ctx, "step:"+spanName)
-	traceID, spanID := span.ID(b.projectID)
-	ctx = clog.NewSpan(ctx, traceID, spanID, map[string]string{
-		logLabelKeyID: step.def.String(),
-	})
 	logger := clog.FromContext(ctx)
 	logger.Formatter = logFormat
-	defer func(span *trace.Span) {
+	defer func() {
 		if r := recover(); r != nil {
 			panic(r) // re-throw panic, handled in *Builder.Build.
 		}
 		if errors.Is(err, context.Canceled) {
-			span.Close(status.FromContextError(err).Proto())
 			return
 		}
 		if err != nil {
 			step.metrics.Err = true
-			st, ok := status.FromError(err)
-			if !ok {
-				st = status.FromContextError(err)
-			}
-			span.Close(st.Proto())
-		} else {
-			span.Close(nil)
 		}
 		if !step.metrics.skip {
 			step.endTime = time.Now()
@@ -88,13 +71,12 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 			b.recordMetrics(ctx, step.metrics)
 			b.recordNinjaLogs(ctx, step)
 			b.stats.update(ctx, &step.metrics, step.cmd.Pure)
-			b.finalizeTrace(ctx, tc)
 			b.outputFailureSummary(ctx, step, err)
 			b.outputFailedCommands(ctx, step, err)
 		}
 		// unref for GC to reclaim memory.
 		step.cmd = nil
-	}(span)
+	}()
 
 	if !b.needToRun(ctx, step.def, step.outputs) {
 		step.metrics.skip = true
@@ -114,10 +96,6 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 	prevStepOut := b.prevStepOut(ctx, step)
 	stepStartLog(ctx, logger, step, description, spanName)
 	step.metrics.init(ctx, b, step, step.startTime, prevStepOut)
-	b.stepSpanInit(ctx, span, step, description, spanName, prevStepOut)
-
-	ctx, span = trace.NewSpan(ctx, "run-step")
-	defer span.Close(nil)
 
 	if b.dryRun {
 		select {
@@ -235,31 +213,7 @@ func stepStartLog(ctx context.Context, logger *clog.Logger, step *Step, descript
 	logger.Log(logEntry)
 }
 
-func (b *Builder) stepSpanInit(ctx context.Context, span *trace.Span, step *Step, description, spanName, prevStepOut string) {
-	span.SetAttr("ready_time", time.Since(step.readyTime).Milliseconds())
-	span.SetAttr("prev", step.prevStepID)
-	span.SetAttr("prev_out", prevStepOut)
-	span.SetAttr("queue_time", time.Since(step.queueTime).Milliseconds())
-	span.SetAttr("queue_size", step.queueSize)
-	span.SetAttr("build_id", b.id)
-	span.SetAttr("id", step.def.String())
-	span.SetAttr("command", step.def.Binding("command"))
-	span.SetAttr("description", description)
-	span.SetAttr("action", step.def.ActionName())
-	span.SetAttr("span_name", spanName)
-	span.SetAttr("output0", step.def.Outputs(ctx)[0])
-	if next := step.def.Next(); next != nil {
-		span.SetAttr("next_id", step.def.Next().String())
-	}
-	if step.metrics.GNTarget != "" {
-		span.SetAttr("gn_target", step.metrics.GNTarget)
-	}
-	span.SetAttr("backtraces", stepBacktraces(ctx, step))
-}
-
 func (b *Builder) handleStep(ctx context.Context, step *Step) (bool, error) {
-	ctx, span := trace.NewSpan(ctx, "handle-step")
-	defer span.Close(nil)
 	started := time.Now()
 	err := step.def.Handle(ctx, step.cmd)
 	if err != nil {
