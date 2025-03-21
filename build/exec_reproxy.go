@@ -21,13 +21,10 @@ import (
 	"go.chromium.org/infra/build/siso/execute"
 	"go.chromium.org/infra/build/siso/execute/reproxyexec"
 	"go.chromium.org/infra/build/siso/o11y/clog"
-	"go.chromium.org/infra/build/siso/o11y/trace"
 	"go.chromium.org/infra/build/siso/reapi"
 )
 
 func (b *Builder) execReproxy(ctx context.Context, step *Step) error {
-	ctx, span := trace.NewSpan(ctx, "exec-reproxy")
-	defer span.Close(nil)
 	clog.Infof(ctx, "exec reproxy %s", step.cmd.Desc)
 	step.setPhase(stepInput)
 	err := b.prepareLocalInputs(ctx, step)
@@ -113,8 +110,6 @@ func (b *Builder) execReproxy(ctx context.Context, step *Step) error {
 // allowWriteOutputs fixes the permissions of the output files if they are not writable.
 // TODO: b/299227633 - Remove this workaround after Reproxy fixes the write operation.
 func allowWriteOutputs(ctx context.Context, cmd *execute.Cmd) error {
-	ctx, span := trace.NewSpan(ctx, "allow-write-outputs")
-	defer span.Close(nil)
 	for _, out := range cmd.Outputs {
 		fname := filepath.Join(cmd.ExecRoot, out)
 		fi, err := os.Lstat(fname)

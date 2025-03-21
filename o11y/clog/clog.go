@@ -66,12 +66,6 @@ func NewContext(ctx context.Context, logger *Logger) context.Context {
 	return context.WithValue(ctx, contextKey, logger)
 }
 
-// NewSpan sets a new logger.Span with the given labels to the context.
-func NewSpan(ctx context.Context, trace, spanID string, labels map[string]string) context.Context {
-	logger, _ := ctx.Value(contextKey).(*Logger)
-	return NewContext(ctx, logger.Span(trace, spanID, labels))
-}
-
 // FromContext returns a logger in the context, or returns a new logger.
 func FromContext(ctx context.Context) *Logger {
 	logger, ok := ctx.Value(contextKey).(*Logger)
@@ -297,12 +291,6 @@ func (l *Logger) fatalf(ctx context.Context, format string, args ...any) {
 		glog.ErrorDepth(1, fmt.Sprintf("logSync: %v", err))
 	}
 	glog.FatalDepth(2, fmt.Sprintf(format, args...))
-}
-
-// Fatalf logs at fatal log level in the manner of fmt.Printf with stacktrace, and exit.
-func Fatalf(ctx context.Context, format string, args ...any) {
-	logger := FromContext(ctx)
-	logger.log(logger.Entry(logging.Critical, fmt.Sprintf(format, args...)))
 }
 
 // Exitf logs at fatal log level in the manner of fmt.Printf, and exit.

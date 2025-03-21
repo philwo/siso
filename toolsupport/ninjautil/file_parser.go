@@ -8,7 +8,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"runtime/trace"
 	"sync"
 	"time"
 
@@ -64,8 +63,6 @@ type fileParser struct {
 
 // parseFile parses a file of fname.
 func (p *fileParser) parseFile(ctx context.Context, fname string) error {
-	ctx, task := trace.NewTask(ctx, "ninja:"+fname)
-	defer task.End()
 	p.fname = fname
 	p.fileState.filenames = append(p.fileState.filenames, fname)
 	t := time.Now()
@@ -90,7 +87,6 @@ func (p *fileParser) parseFile(ctx context.Context, fname string) error {
 
 // readFile reads a file of fname in parallel.
 func (p *fileParser) readFile(ctx context.Context, fname string) ([]byte, error) {
-	defer trace.StartRegion(ctx, "ninja.read").End()
 	f, err := os.Open(fname)
 	if err != nil {
 		return nil, err
@@ -138,7 +134,6 @@ func (p *fileParser) readFile(ctx context.Context, fname string) ([]byte, error)
 
 // parseContent parses ninja file.
 func (p *fileParser) parseContent(ctx context.Context) error {
-	defer trace.StartRegion(ctx, "ninja.parse").End()
 	t := time.Now()
 	p.chunks = splitIntoChunks(ctx, p.buf)
 	if log.V(1) {
@@ -191,7 +186,6 @@ func (p *fileParser) parseContent(ctx context.Context) error {
 
 // parseChunks parses chunks into statements and counts for allocs concurrently.
 func (p *fileParser) parseChunks(ctx context.Context) error {
-	defer trace.StartRegion(ctx, "ninja.parseChunks").End()
 	var eg errgroup.Group
 	for i := range p.chunks {
 		eg.Go(func() error {
@@ -206,7 +200,6 @@ func (p *fileParser) parseChunks(ctx context.Context) error {
 
 // alloc allocates arenas.
 func (p *fileParser) alloc(ctx context.Context) {
-	defer trace.StartRegion(ctx, "ninja.alloc").End()
 	p.full.start = 0
 	p.full.end = len(p.buf)
 	pos := 0
@@ -264,7 +257,6 @@ func (p *fileParser) alloc(ctx context.Context) {
 
 // setup prepares binding scopes (var, pool, rule).
 func (p *fileParser) setup(ctx context.Context) error {
-	defer trace.StartRegion(ctx, "ninja.setup").End()
 	var eg errgroup.Group
 	if p.full.ninclude > 0 {
 		eg.SetLimit(1)
@@ -294,7 +286,6 @@ func (p *fileParser) setup(ctx context.Context) error {
 
 // buildGraph parses build statements and rule bindings concurrently.
 func (p *fileParser) buildGraph(ctx context.Context) error {
-	defer trace.StartRegion(ctx, "ninja.buildGraph").End()
 	var eg errgroup.Group
 	for i := range p.chunks {
 		ch := &p.chunks[i]
@@ -322,7 +313,6 @@ func (p *fileParser) buildGraph(ctx context.Context) error {
 
 // finalize finalizes a file parsing.
 func (p *fileParser) finalize(ctx context.Context) error {
-	defer trace.StartRegion(ctx, "ninja.finalize").End()
 	p.fileState.edges = make([]*Edge, 0, p.edgeArena.len())
 	for i := range p.edgeArena.used() {
 		edge := p.edgeArena.at(i)

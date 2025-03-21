@@ -28,7 +28,6 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"go.chromium.org/infra/build/siso/o11y/clog"
-	"go.chromium.org/infra/build/siso/o11y/trace"
 	"go.chromium.org/infra/build/siso/reapi/bytestreamio"
 	"go.chromium.org/infra/build/siso/reapi/digest"
 	"go.chromium.org/infra/build/siso/reapi/retry"
@@ -166,10 +165,6 @@ func (c *Client) Get(ctx context.Context, d digest.Digest, name string) ([]byte,
 		return nil, nil
 	}
 
-	ctx, span := trace.NewSpan(ctx, "reapi-get")
-	defer span.Close(nil)
-	span.SetAttr("sizebytes", d.SizeBytes)
-
 	if d.SizeBytes < bytestreamReadThreshold {
 		return c.getWithBatchReadBlobs(ctx, d, name)
 	}
@@ -287,12 +282,8 @@ func (c *Client) UploadAll(ctx context.Context, ds *digest.Store) (numUploaded i
 		return 0, status.Error(codes.FailedPrecondition, "conn is not configured")
 	}
 
-	ctx, span := trace.NewSpan(ctx, "upload-all")
-	defer span.Close(nil)
-	blobs := ds.List()
-	span.SetAttr("blobs", len(blobs))
-
 	// First, partition the "blobs" list into three possible cases.
+	blobs := ds.List()
 	newBlobs := make(map[digest.Digest]*uploadOp)
 	pendingBlobs := make(map[digest.Digest]*uploadOp)
 	skippedBlobs := 0
@@ -338,10 +329,6 @@ func (c *Client) UploadAll(ctx context.Context, ds *digest.Store) (numUploaded i
 		}
 	}()
 
-	span.SetAttr("upload", len(newBlobs))
-	span.SetAttr("pending", len(pendingBlobs))
-	span.SetAttr("skipped", skippedBlobs)
-
 	// For all "new" blobs, use FindMissingBlobs to ask the remote CAS which of them are
 	// really still missing - they might already be present and we just don't know about it yet.
 	var missingBlobs []digest.Digest
@@ -373,8 +360,6 @@ func (c *Client) UploadAll(ctx context.Context, ds *digest.Store) (numUploaded i
 			newBlobs[d].done(nil)
 			delete(newBlobs, d)
 		}
-		span.SetAttr("missing", len(missingBlobs))
-		span.SetAttr("founds", len(foundBlobs))
 		durFindMissing = time.Since(t)
 	}
 
@@ -386,7 +371,6 @@ func (c *Client) UploadAll(ctx context.Context, ds *digest.Store) (numUploaded i
 		if err != nil {
 			return numUploaded, fmt.Errorf("upload: %w", err)
 		}
-		span.SetAttr("uploaded", numUploaded)
 		durUpload = time.Since(t)
 	}
 
@@ -430,9 +414,6 @@ func (e missingError) Error() string {
 
 // upload uploads blobs in digest stores.
 func (c *Client) upload(ctx context.Context, ds *digest.Store, blobs []digest.Digest, uploads map[digest.Digest]*uploadOp) (int, error) {
-	ctx, span := trace.NewSpan(ctx, "upload")
-	defer span.Close(nil)
-
 	byteLimit := int64(defaultBatchUpdateByteLimit)
 	if max := c.capabilities.GetCacheCapabilities().GetMaxBatchTotalSizeBytes(); max > 0 {
 		byteLimit = max
@@ -441,8 +422,6 @@ func (c *Client) upload(ctx context.Context, ds *digest.Store, blobs []digest.Di
 	// Separate small blobs and large blobs because they are going to use different RPCs.
 	smalls, larges := separateBlobs(c.opt.Instance, blobs, byteLimit)
 	clog.Infof(ctx, "upload by batch %d out of %d", len(smalls), len(blobs))
-	span.SetAttr("small", len(smalls))
-	span.SetAttr("large", len(larges))
 
 	// Upload small blobs with BatchUpdateBlobs rpc.
 	var missing missingError

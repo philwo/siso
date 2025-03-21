@@ -8,7 +8,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"runtime/trace"
 	"strconv"
 	"time"
 
@@ -52,7 +51,6 @@ type chunk struct {
 
 // splitIntoChunks splits buf into chunks.
 func splitIntoChunks(ctx context.Context, buf []byte) []chunk {
-	defer trace.StartRegion(ctx, "ninja.split").End()
 	chunkCount := runtimex.NumCPU()
 	chunkSize := max(1024*1024, len(buf)/chunkCount+1)
 

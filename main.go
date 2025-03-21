@@ -14,7 +14,6 @@ import (
 	"os/signal"
 	"runtime"
 	"runtime/pprof"
-	"runtime/trace"
 
 	log "github.com/golang/glog"
 	"github.com/maruel/subcommands"
@@ -206,26 +205,6 @@ Use "siso help -advanced" to display all commands.
 				log.Errorf("failed to write heap profile: %v", err)
 			}
 		}()
-	}
-
-	// Save a go trace to disk during execution.
-	if traceFile != "" {
-		fmt.Fprintf(os.Stderr, "enable go trace in %q\n", traceFile)
-		f, err := os.Create(traceFile)
-		if err != nil {
-			log.Fatalf("Failed to create go trace output file: %v", err)
-		}
-		defer func() {
-			fmt.Fprintf(os.Stderr, "go trace: go tool trace %s\n", traceFile)
-			cerr := f.Close()
-			if cerr != nil {
-				log.Fatalf("Failed to close go trace output file: %v", cerr)
-			}
-		}()
-		if err := trace.Start(f); err != nil {
-			log.Fatalf("Failed to start go trace: %v", err)
-		}
-		defer trace.Stop()
 	}
 
 	// Initialize the UI and ensure we restore the state of the terminal upon exit.

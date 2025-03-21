@@ -20,7 +20,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
-	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -52,7 +51,6 @@ import (
 	"go.chromium.org/infra/build/siso/build/ninjabuild"
 	"go.chromium.org/infra/build/siso/hashfs"
 	"go.chromium.org/infra/build/siso/o11y/clog"
-	"go.chromium.org/infra/build/siso/o11y/trace"
 	"go.chromium.org/infra/build/siso/reapi"
 	"go.chromium.org/infra/build/siso/reapi/digest"
 	"go.chromium.org/infra/build/siso/subcmd/ninja/ninjalog"
@@ -144,7 +142,6 @@ type ninjaCmdRun struct {
 	explainFile        string
 	localexecLogFile   string
 	metricsJSON        string
-	traceJSON          string
 
 	fsopt              *hashfs.Option
 	reopt              *reapi.Option
@@ -160,11 +157,6 @@ type ninjaCmdRun struct {
 	// enableCPUProfiler bool
 	enableCloudProfiler      bool
 	cloudProfilerServiceName string
-	enableCloudTrace         bool
-	metricsLabels            string
-	metricsProject           string
-	traceThreshold           time.Duration
-	traceSpanThreshold       time.Duration
 
 	subtool    string
 	cleandead  bool
@@ -446,7 +438,6 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		c.projectID = ""
 		c.enableCloudLogging = false
 		c.enableCloudProfiler = false
-		c.enableCloudTrace = false
 		c.reproxyAddr = ""
 	}
 
@@ -541,7 +532,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	var sisoMetadata ninjalog.SisoMetadata
 
 	var credential cred.Cred
-	if !c.offline && (c.reopt.NeedCred() || c.enableCloudLogging || c.enableCloudProfiler || c.enableCloudTrace) {
+	if !c.offline && (c.reopt.NeedCred() || c.enableCloudLogging || c.enableCloudProfiler) {
 		// TODO: can be async until cred is needed?
 		spin := ui.Default.NewSpinner()
 		spin.Start("init credentials")
@@ -604,11 +595,6 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 
 	if c.enableCloudProfiler {
 		c.initCloudProfiler(ctx, projectID, credential)
-	}
-	var traceExporter *trace.Exporter
-	if c.enableCloudTrace {
-		traceExporter = c.initCloudTrace(ctx, projectID, credential)
-		defer traceExporter.Close(ctx)
 	}
 
 	targets := c.Flags.Args()
@@ -813,7 +799,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		return stats, errNothingToDo
 	}
 
-	bopts, done, err := c.initBuildOpts(ctx, projectID, buildPath, config, ds, hashFS, limits, traceExporter)
+	bopts, done, err := c.initBuildOpts(ctx, projectID, buildPath, config, ds, hashFS, limits)
 	if err != nil {
 		return stats, err
 	}
@@ -1026,7 +1012,6 @@ func (c *ninjaCmdRun) init() {
 	c.Flags.StringVar(&c.explainFile, "explain_log", "siso_explain", "explain log filename (relative to -log_dir")
 	c.Flags.StringVar(&c.localexecLogFile, "localexec_log", "siso_localexec", "localexec log filename (relative to -log_dir")
 	c.Flags.StringVar(&c.metricsJSON, "metrics_json", "siso_metrics.json", "metrics JSON filename (relative to -log_dir)")
-	c.Flags.StringVar(&c.traceJSON, "trace_json", "siso_trace.json", "trace JSON filename (relative to -log_dir)")
 
 	c.fsopt = new(hashfs.Option)
 	c.fsopt.StateFile = ".siso_fs_state"
@@ -1044,13 +1029,9 @@ func (c *ninjaCmdRun) init() {
 	c.Flags.StringVar(&c.artfsDir, "artfs_dir", "", "artfs mount point")
 	c.Flags.StringVar(&c.artfsEndpoint, "artfs_endpoint", "localhost:65001", "artfs server endpoint")
 
-	c.Flags.DurationVar(&c.traceThreshold, "trace_threshold", 1*time.Minute, "threshold for trace record")
-	c.Flags.DurationVar(&c.traceSpanThreshold, "trace_span_threshold", 100*time.Millisecond, "theshold for trace span record")
-
 	c.Flags.BoolVar(&c.enableCloudLogging, "enable_cloud_logging", false, "enable cloud logging")
 	c.Flags.BoolVar(&c.enableCloudProfiler, "enable_cloud_profiler", false, "enable cloud profiler")
 	c.Flags.StringVar(&c.cloudProfilerServiceName, "cloud_profiler_service_name", "siso", "cloud profiler service name")
-	c.Flags.BoolVar(&c.enableCloudTrace, "enable_cloud_trace", false, "enable cloud trace")
 
 	c.Flags.StringVar(&c.subtool, "t", "", "run a subtool (use '-t list' to list subtools)")
 	c.Flags.BoolVar(&c.cleandead, "cleandead", false, "clean built files that are no longer produced by the manifest")
@@ -1209,21 +1190,6 @@ func (c *ninjaCmdRun) initCloudProfiler(ctx context.Context, projectID string, c
 	}
 }
 
-func (c *ninjaCmdRun) initCloudTrace(ctx context.Context, projectID string, credential cred.Cred) *trace.Exporter {
-	clog.Infof(ctx, "enable trace in %s [trace > %s]", projectID, c.traceThreshold)
-	traceExporter, err := trace.NewExporter(ctx, trace.Options{
-		ProjectID:     projectID,
-		ServiceName:   fmt.Sprintf("siso/%s/%s", c.version, runtime.GOOS),
-		StepThreshold: c.traceThreshold,
-		SpanThreshold: c.traceSpanThreshold,
-		ClientOptions: slices.Clone(credential.ClientOptions()),
-	})
-	if err != nil {
-		clog.Errorf(ctx, "failed to start trace exporter: %v", err)
-	}
-	return traceExporter
-}
-
 func (c *ninjaCmdRun) initLogDir(ctx context.Context) error {
 	if !filepath.IsAbs(c.logDir) {
 		logDir, err := filepath.Abs(c.logDir)
@@ -1302,7 +1268,7 @@ func (c *ninjaCmdRun) initDepsLog(ctx context.Context) (*ninjautil.DepsLog, erro
 	return depsLog, nil
 }
 
-func (c *ninjaCmdRun) initBuildOpts(ctx context.Context, projectID string, buildPath *build.Path, config *buildconfig.Config, ds dataSource, hashFS *hashfs.HashFS, limits build.Limits, traceExporter *trace.Exporter) (bopts build.Options, done func(*error), err error) {
+func (c *ninjaCmdRun) initBuildOpts(ctx context.Context, projectID string, buildPath *build.Path, config *buildconfig.Config, ds dataSource, hashFS *hashfs.HashFS, limits build.Limits) (bopts build.Options, done func(*error), err error) {
 	var dones []func(*error)
 	defer func() {
 		if err != nil {
@@ -1374,16 +1340,9 @@ func (c *ninjaCmdRun) initBuildOpts(ctx context.Context, projectID string, build
 	}
 	dones = append(dones, done)
 
-	if !filepath.IsAbs(c.traceJSON) {
-		c.traceJSON = filepath.Join(c.logDir, c.traceJSON)
-	}
-
 	var actionSaltBytes []byte
 	if c.actionSalt != "" {
 		actionSaltBytes = []byte(c.actionSalt)
-	}
-	if c.traceJSON != "" {
-		rotateFiles(ctx, c.traceJSON)
 	}
 
 	cache, err := build.NewCache(ctx, build.CacheOptions{
@@ -1415,8 +1374,6 @@ func (c *ninjaCmdRun) initBuildOpts(ctx context.Context, projectID string, build
 		ExplainWriter:        explainWriter,
 		LocalexecLogWriter:   localexecLogWriter,
 		MetricsJSONWriter:    metricsJSONWriter,
-		TraceExporter:        traceExporter,
-		TraceJSON:            c.traceJSON,
 		Clobber:              c.clobber,
 		Batch:                c.batch,
 		Prepare:              c.prepare,
@@ -1570,73 +1527,6 @@ func doBuild(ctx context.Context, graph *ninjabuild.Graph, bopts build.Options, 
 		}
 	}
 
-	semaTraces := make(map[string]semaTrace)
-	tstats := b.TraceStats()
-	var rbeWorker, rbeExec *build.TraceStat
-	for _, ts := range tstats {
-		clog.Infof(ctx, "%s: n=%d avg=%s max=%s", ts.Name, ts.N, ts.Avg(), ts.Max)
-		switch {
-		case strings.HasPrefix(ts.Name, "wait:"):
-			name := strings.TrimPrefix(ts.Name, "wait:")
-			t := semaTraces[name]
-			t.name = name
-			t.n = ts.N
-			t.waitAvg = ts.Avg()
-			t.waitBuckets = ts.Buckets
-			semaTraces[name] = t
-		case strings.HasPrefix(ts.Name, "serv:"):
-			name := strings.TrimPrefix(ts.Name, "serv:")
-			t := semaTraces[name]
-			t.name = name
-			t.n = ts.N
-			t.nerr = ts.NErr
-			t.servAvg = ts.Avg()
-			t.servBuckets = ts.Buckets
-			semaTraces[name] = t
-		case ts.Name == "rbe:queue":
-			name := "rbe:sched"
-			t := semaTraces[name]
-			t.name = name
-			t.n = ts.N
-			t.nerr = ts.NErr
-			t.waitAvg = ts.Avg()
-			t.waitBuckets = ts.Buckets
-			semaTraces[name] = t
-		case ts.Name == "rbe:worker":
-			rbeWorker = ts
-		case ts.Name == "rbe:exec":
-			rbeExec = ts
-		}
-	}
-	if rbeWorker != nil {
-		name := "rbe:sched"
-		t := semaTraces[name]
-		t.name = name
-		t.servAvg = rbeWorker.Avg()
-		t.servBuckets = rbeWorker.Buckets
-		semaTraces[name] = t
-	}
-	if rbeWorker != nil && rbeExec != nil {
-		name := "rbe:worker"
-		t := semaTraces[name]
-		t.name = name
-		t.n = rbeExec.N
-		t.waitAvg = rbeWorker.Avg() - rbeExec.Avg()
-		// number of waits would not be correct with this calculation
-		// because it just uses counts in buckets.
-		// not sure how we can measure actual waiting time in buckets,
-		// but this would provide enough estimated values.
-		for i := range rbeWorker.Buckets {
-			t.waitBuckets[i] = rbeWorker.Buckets[i] - rbeExec.Buckets[i]
-		}
-		t.servAvg = rbeExec.Avg()
-		t.servBuckets = rbeExec.Buckets
-		semaTraces[name] = t
-	}
-	if len(semaTraces) > 0 {
-		rut := dumpResourceUsageTable(ctx, semaTraces)
-		clog.Infof(ctx, "resource usage table:\n%s", rut)
-	}
 	stats = b.Stats()
 	clog.Infof(ctx, "stats=%#v", stats)
 	if err != nil {

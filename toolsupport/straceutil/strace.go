@@ -56,7 +56,7 @@ type Strace struct {
 // It will be fatal error when not available, so check Available before New.
 func New(ctx context.Context, id string, args []string, dir string) *Strace {
 	if !Available(ctx) {
-		clog.Fatalf(ctx, "straceutil.New is called when !Available")
+		panic("straceutil.New is called when !Available")
 	}
 	fname := filepath.Join(os.TempDir(), fmt.Sprintf("%s.trace", id))
 	return &Strace{

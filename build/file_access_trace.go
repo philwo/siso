@@ -20,7 +20,6 @@ import (
 
 	"go.chromium.org/infra/build/siso/execute"
 	"go.chromium.org/infra/build/siso/o11y/clog"
-	"go.chromium.org/infra/build/siso/o11y/trace"
 	"go.chromium.org/infra/build/siso/toolsupport/straceutil"
 )
 
@@ -82,8 +81,6 @@ func (f *fileTraceExecutor) logLocalExec(ctx context.Context, step *Step, dur ti
 // - for deps=gcc/msvc, we believe deps is correct by `clang -M` so never return error.
 // - if `keeps-going-impure` experiment flag is set, not return error.
 func (f *fileTraceExecutor) checkTrace(ctx context.Context, step *Step, dur time.Duration) error {
-	ctx, span := trace.NewSpan(ctx, "check-trace")
-	defer span.Close(nil)
 	b := f.b
 	command := step.def.Binding("command")
 	if len(command) > 256 {

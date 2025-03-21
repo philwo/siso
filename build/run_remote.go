@@ -14,7 +14,6 @@ import (
 
 	"go.chromium.org/infra/build/siso/execute"
 	"go.chromium.org/infra/build/siso/o11y/clog"
-	"go.chromium.org/infra/build/siso/o11y/trace"
 	"go.chromium.org/infra/build/siso/reapi"
 )
 
@@ -157,9 +156,7 @@ func (b *Builder) runRemote(ctx context.Context, step *Step) error {
 }
 
 func (b *Builder) tryFastStep(ctx context.Context, step, fastStep *Step, cacheCheck bool) error {
-	fctx, fastSpan := trace.NewSpan(ctx, "fast-deps-run")
-	err := b.runRemoteStep(fctx, fastStep, cacheCheck)
-	fastSpan.Close(nil)
+	err := b.runRemoteStep(ctx, fastStep, cacheCheck)
 	if err == nil {
 		return b.fastStepDone(ctx, step, fastStep)
 	}

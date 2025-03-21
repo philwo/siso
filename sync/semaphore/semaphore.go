@@ -12,10 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"google.golang.org/grpc/status"
-
 	"go.chromium.org/infra/build/siso/o11y/clog"
-	"go.chromium.org/infra/build/siso/o11y/trace"
 )
 
 // Semaphore is a semaphore.
@@ -48,25 +45,16 @@ func New(name string, n int) *Semaphore {
 // WaitAcquire acquires a semaphore.
 // It returns a context for acquired semaphore and func to release it.
 func (s *Semaphore) WaitAcquire(ctx context.Context) (context.Context, func(error), error) {
-	_, span := trace.NewSpan(ctx, s.waitSpanName)
 	s.waits.Add(1)
-	defer span.Close(nil)
 	defer s.waits.Add(-1)
 	now := time.Now()
 	select {
 	case tid := <-s.ch:
 		s.reqs.Add(1)
-		ctx, span := trace.NewSpan(ctx, s.servSpanName)
-		span.SetAttr("tid", tid)
 		if dur := time.Since(now); dur > 1*time.Second {
 			clog.Infof(ctx, "wait %s for %s", s.name, dur)
 		}
 		return ctx, func(err error) {
-			st, ok := status.FromError(err)
-			if !ok {
-				st = status.FromContextError(err)
-			}
-			span.Close(st.Proto())
 			s.ch <- tid
 		}, nil
 	case <-ctx.Done():
@@ -82,14 +70,7 @@ func (s *Semaphore) TryAcquire(ctx context.Context) (context.Context, func(error
 	select {
 	case tid := <-s.ch:
 		s.reqs.Add(1)
-		ctx, span := trace.NewSpan(ctx, s.servSpanName)
-		span.SetAttr("tid", tid)
 		return ctx, func(err error) {
-			st, ok := status.FromError(err)
-			if !ok {
-				st = status.FromContextError(err)
-			}
-			span.Close(st.Proto())
 			s.ch <- tid
 		}, nil
 	default:

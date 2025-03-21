@@ -13,12 +13,9 @@ import (
 	log "github.com/golang/glog"
 
 	"go.chromium.org/infra/build/siso/o11y/clog"
-	"go.chromium.org/infra/build/siso/o11y/trace"
 )
 
 func fastDepsCmd(ctx context.Context, b *Builder, step *Step) (*Step, bool) {
-	ctx, span := trace.NewSpan(ctx, "fast-deps")
-	defer span.Close(nil)
 	fastStep, err := depsFastStep(ctx, b, step)
 	if err != nil {
 		if log.V(1) {
@@ -32,8 +29,6 @@ func fastDepsCmd(ctx context.Context, b *Builder, step *Step) (*Step, bool) {
 func preprocCmd(ctx context.Context, b *Builder, step *Step) error {
 	step.setPhase(stepPreproc)
 	err := b.preprocSema.Do(ctx, func(ctx context.Context) error {
-		ctx, span := trace.NewSpan(ctx, "preproc")
-		defer span.Close(nil)
 		err := depsCmd(ctx, b, step)
 		if err != nil {
 			// disable remote execution. b/289143861

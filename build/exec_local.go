@@ -18,13 +18,10 @@ import (
 
 	"go.chromium.org/infra/build/siso/execute"
 	"go.chromium.org/infra/build/siso/o11y/clog"
-	"go.chromium.org/infra/build/siso/o11y/trace"
 	"go.chromium.org/infra/build/siso/reapi/digest"
 )
 
 func (b *Builder) execLocal(ctx context.Context, step *Step) error {
-	ctx, span := trace.NewSpan(ctx, "exec-local")
-	defer span.Close(nil)
 	clog.Infof(ctx, "exec local %s", step.cmd.Desc)
 	step.cmd.RemoteWrapper = ""
 
@@ -217,10 +214,7 @@ func (b *Builder) trustedLocalUpload(ctx context.Context, step *Step) error {
 }
 
 func (b *Builder) prepareLocalInputs(ctx context.Context, step *Step) error {
-	ctx, span := trace.NewSpan(ctx, "prepare-local-inputs")
-	defer span.Close(nil)
 	inputs := step.cmd.AllInputs()
-	span.SetAttr("inputs", len(inputs))
 	start := time.Now()
 	if log.V(1) {
 		clog.Infof(ctx, "prepare-local-inputs %d", len(inputs))
@@ -252,9 +246,6 @@ func (b *Builder) prepareLocalInputs(ctx context.Context, step *Step) error {
 // If not, it returns error.
 // It ignores missing outputs added by siso config.
 func (b *Builder) checkLocalOutputs(ctx context.Context, step *Step) error {
-	ctx, span := trace.NewSpan(ctx, "capture-local-outputs")
-	defer span.Close(nil)
-	span.SetAttr("outputs", len(step.cmd.Outputs))
 	result, _ := step.cmd.ActionResult()
 	if result.GetExitCode() != 0 {
 		return nil

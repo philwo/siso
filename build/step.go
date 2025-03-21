@@ -8,7 +8,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
-	"fmt"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -19,7 +18,6 @@ import (
 	"go.chromium.org/infra/build/siso/execute"
 	"go.chromium.org/infra/build/siso/execute/reproxyexec"
 	"go.chromium.org/infra/build/siso/o11y/clog"
-	"go.chromium.org/infra/build/siso/o11y/trace"
 )
 
 // StepDef is a build step definition.
@@ -380,27 +378,6 @@ func stepSpanName(stepDef StepDef) string {
 	return cmd
 }
 
-func stepBacktraces(ctx context.Context, step *Step) []string {
-	var locs []string
-	var prev string
-	for s := step.def; s != nil; s = s.Next() {
-		outs := s.Outputs(ctx)
-		loc := stepSpanName(s)
-		if len(outs) > 0 {
-			out := outs[0]
-			if odir := filepath.Dir(out); odir != "." {
-				out = odir
-			}
-			loc = fmt.Sprintf("%s %s", loc, out)
-		}
-		if loc != prev {
-			locs = append(locs, loc)
-			prev = loc
-		}
-	}
-	return locs
-}
-
 // useReclient returns true if the step uses Reclient via rewrapper or reproxy.
 // A step with reclient doesn't need to collect dependencies and check action result caches on Siso side.
 func (s *Step) useReclient() bool {
@@ -408,8 +385,6 @@ func (s *Step) useReclient() bool {
 }
 
 func (s *Step) init(ctx context.Context, b *Builder, stepManifest *stepManifest) {
-	ctx, span := trace.NewSpan(ctx, "step-init")
-	defer span.Close(nil)
 	s.def.EnsureRule(ctx)
 	s.cmd = newCmd(ctx, b, s.def, stepManifest)
 	clog.Infof(ctx, "cmdhash:%s", base64.StdEncoding.EncodeToString(s.cmd.CmdHash))
