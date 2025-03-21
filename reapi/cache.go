@@ -100,7 +100,6 @@ func (r *digestSourceReader) Read(buf []byte) (int, error) {
 
 func (r *digestSourceReader) Close() error {
 	err := r.r.Close()
-	r.c.m.ReadDone(r.n, err)
 	return err
 }
 
@@ -113,12 +112,10 @@ type digestSource struct {
 func (s digestSource) Open(ctx context.Context) (io.ReadCloser, error) {
 	r, err := bytestreamio.Open(ctx, bpb.NewByteStreamClient(s.c.casConn), s.c.resourceName(s.d))
 	if err != nil {
-		s.c.m.ReadDone(0, err)
 		return nil, err
 	}
 	rd, err := s.c.newDecoder(r, s.d)
 	if err != nil {
-		s.c.m.ReadDone(0, err)
 		return nil, err
 	}
 	return &digestSourceReader{r: rd, c: s.c}, err

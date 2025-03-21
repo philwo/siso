@@ -23,7 +23,6 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"go.chromium.org/infra/build/siso/o11y/clog"
-	"go.chromium.org/infra/build/siso/o11y/iometrics"
 	"go.chromium.org/infra/build/siso/reapi/digest"
 	"go.chromium.org/infra/build/siso/ui"
 )
@@ -33,7 +32,6 @@ type LocalCache struct {
 	dir string
 
 	singleflight singleflight.Group
-	m            *iometrics.IOMetrics
 	timestamp    time.Time
 }
 
@@ -49,18 +47,9 @@ func NewLocalCache(dir string) (*LocalCache, error) {
 	}
 	return &LocalCache{
 		dir: dir,
-		m:   iometrics.New("local-cache"),
 		// Use the same timestamp throughout the build. Makes things simpler.
 		timestamp: time.Now(),
 	}, nil
-}
-
-// IOMetrics returns io metrics of the local cache.
-func (c *LocalCache) IOMetrics() *iometrics.IOMetrics {
-	if c == nil {
-		return nil
-	}
-	return c.m
 }
 
 func (c *LocalCache) actionCacheFilename(d digest.Digest) string {
@@ -80,7 +69,6 @@ func (c *LocalCache) GetActionResult(ctx context.Context, d digest.Digest) (*rpb
 	}
 	fname := c.actionCacheFilename(d)
 	b, err := os.ReadFile(fname)
-	c.m.ReadDone(len(b), err)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, status.Errorf(codes.NotFound, "not found %s: %v", fname, err)
 	}
@@ -114,7 +102,6 @@ func (c *LocalCache) SetActionResult(ctx context.Context, d digest.Digest, ar *r
 	fname := c.actionCacheFilename(d)
 	_, err, _ = c.singleflight.Do(fname, func() (any, error) {
 		err := os.MkdirAll(filepath.Dir(fname), 0755)
-		c.m.OpsDone(err)
 		if err != nil {
 			return nil, err
 		}
@@ -122,15 +109,13 @@ func (c *LocalCache) SetActionResult(ctx context.Context, d digest.Digest, ar *r
 		// write.
 		tmp := fname + ".tmp"
 		err = os.WriteFile(tmp, b, 0644)
-		c.m.WriteDone(len(b), err)
 		if err != nil {
-			c.m.OpsDone(os.Remove(tmp))
+			os.Remove(tmp)
 			return nil, err
 		}
 		err = os.Rename(tmp, fname)
-		c.m.OpsDone(err)
 		if err != nil {
-			c.m.OpsDone(os.Remove(tmp))
+			os.Remove(tmp)
 			return nil, err
 		}
 		return nil, nil
@@ -143,19 +128,15 @@ func (c *LocalCache) GetContent(ctx context.Context, d digest.Digest, _ string) 
 	cname := c.contentCacheFilename(d)
 	r, err := os.Open(cname)
 	if err != nil {
-		c.m.ReadDone(0, err)
 		return nil, err
 	}
 	defer r.Close()
 	gr, err := gzip.NewReader(r)
 	if err != nil {
-		c.m.ReadDone(0, err)
 		return nil, err
 	}
 	defer gr.Close()
 	buf, err := io.ReadAll(gr)
-	// TODO(b/274060507): local cache metric: iometrics uses compressed size or uncompressed size?
-	c.m.ReadDone(len(buf), err)
 	if err == nil {
 		if err := os.Chtimes(cname, c.timestamp, c.timestamp); err != nil {
 			clog.Warningf(ctx, "Failed to update mtime for %s: %v", cname, err)
@@ -168,37 +149,30 @@ func (c *LocalCache) GetContent(ctx context.Context, d digest.Digest, _ string) 
 func (c *LocalCache) SetContent(ctx context.Context, d digest.Digest, fname string, buf []byte) error {
 	cname := c.contentCacheFilename(d)
 	_, err := os.Stat(cname)
-	c.m.OpsDone(err)
 	if err == nil {
 		return nil
 	}
 	err = os.MkdirAll(filepath.Dir(cname), 0755)
-	c.m.OpsDone(err)
 	if err != nil {
 		return err
 	}
 	_, err, shared := c.singleflight.Do(cname, func() (any, error) {
 		w, err := os.Create(cname)
 		if err != nil {
-			c.m.WriteDone(0, err)
 			return nil, err
 		}
 		gw := gzip.NewWriter(w)
 		_, err = gw.Write(buf)
 		if err != nil {
-			c.m.WriteDone(0, err)
 			w.Close()
 			return nil, err
 		}
 		err = gw.Close()
 		if err != nil {
-			c.m.WriteDone(0, err)
 			w.Close()
 			return nil, err
 		}
 		err = w.Close()
-		// TODO(b/274060507): local cache metric: iometrics uses compressed size or uncompressed size?
-		c.m.WriteDone(len(buf), err)
 		return nil, err
 	})
 	clog.Infof(ctx, "write cache content %s for %s shared:%t: %v", d, fname, shared, err)
@@ -209,7 +183,6 @@ func (c *LocalCache) SetContent(ctx context.Context, d digest.Digest, fname stri
 func (c *LocalCache) HasContent(ctx context.Context, d digest.Digest) bool {
 	cname := c.contentCacheFilename(d)
 	_, err := os.Stat(cname)
-	c.m.OpsDone(err)
 	return err == nil
 }
 
@@ -298,13 +271,12 @@ func (c *LocalCache) GarbageCollectIfRequired(ctx context.Context) {
 
 // Source returns digest source for fname identified by the digest.
 func (c *LocalCache) Source(_ context.Context, d digest.Digest, fname string) digest.Source {
-	return dataSource{c: c, d: d, fname: fname, m: c.IOMetrics()}
+	return dataSource{c: c, d: d, fname: fname}
 }
 
 type dataReadCloser struct {
 	io.ReadCloser
 	f io.Closer
-	m *iometrics.IOMetrics
 	n int
 }
 
@@ -322,7 +294,6 @@ func (r *dataReadCloser) Close() error {
 			err = cerr
 		}
 	}
-	r.m.ReadDone(r.n, err)
 	return err
 }
 
@@ -330,7 +301,6 @@ type dataSource struct {
 	c     *LocalCache
 	d     digest.Digest
 	fname string
-	m     *iometrics.IOMetrics
 }
 
 func (s dataSource) Open(ctx context.Context) (io.ReadCloser, error) {
@@ -348,20 +318,18 @@ func (s dataSource) Open(ctx context.Context) (io.ReadCloser, error) {
 		r, err2 = os.Open(s.fname)
 		if err2 != nil {
 			clog.Warningf(ctx, "failed to open cached-digest data %s for %s: %v %v", s.d, s.fname, err, err2)
-			s.m.ReadDone(0, err)
 			return nil, err
 		}
 		clog.Infof(ctx, "use %s (failed to open cached-digest data %s: %v)", s.fname, s.d, err)
-		return &dataReadCloser{ReadCloser: r, m: s.m}, nil
+		return &dataReadCloser{ReadCloser: r}, nil
 	}
 	gr, err := gzip.NewReader(r)
 	if err != nil {
 		r.Close()
 		clog.Warningf(ctx, "failed to gunzip cached-digest data %s for %s: %v", s.d, s.fname, err)
-		s.m.ReadDone(0, err)
 		return nil, err
 	}
-	return &dataReadCloser{ReadCloser: gr, f: r, m: s.m}, nil
+	return &dataReadCloser{ReadCloser: gr, f: r}, nil
 }
 
 func (s dataSource) String() string {

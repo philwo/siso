@@ -414,32 +414,6 @@ var ErrManifest = errors.New("manifest error")
 // ErrManifestModified is an error to indicate that manifest is modified.
 var ErrManifestModified = errors.New("manifest modified")
 
-type numBytes int64
-
-var bytesUnit = map[int64]string{
-	1 << 10: "KiB",
-	1 << 20: "MiB",
-	1 << 30: "GiB",
-	1 << 40: "TiB",
-}
-
-func (b numBytes) String() string {
-	var n []int64
-	for k := range bytesUnit {
-		n = append(n, k)
-	}
-	sort.Slice(n, func(i, j int) bool {
-		return n[i] > n[j]
-	})
-	i := int64(b)
-	for _, k := range n {
-		if i >= k {
-			return fmt.Sprintf("%.02f%s", float64(i)/float64(k), bytesUnit[k])
-		}
-	}
-	return fmt.Sprintf("%dB", i)
-}
-
 // Build builds args with the name.
 func (b *Builder) Build(ctx context.Context, name string, args ...string) (err error) {
 	started := time.Now()
@@ -564,32 +538,19 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 			ui.Default.PrintLines(ninjaNoWorkToDo)
 			return
 		}
-		fsstat := b.hashFS.OS.IOMetrics.Stats()
-		fsstatLine := fmt.Sprintf("fs: ops: %d(err:%d) / r:%d(err:%d) %s / w:%d(err:%d) %s\n",
-			fsstat.Ops, fsstat.OpsErrs,
-			fsstat.ROps, fsstat.RErrs, numBytes(fsstat.RBytes),
-			fsstat.WOps, fsstat.WErrs, numBytes(fsstat.WBytes))
 		var depsStatLine string
-		var restatLine string
 		if b.reapiclient != nil {
 			// fastdeps / scandeps is only used in siso native mode.
 			if stat.FastDepsSuccess != 0 || stat.FastDepsFailed != 0 || stat.ScanDepsFailed != 0 {
 				depsStatLine = fmt.Sprintf("deps log:%d logErr:%d scanErr:%d\n",
 					stat.FastDepsSuccess, stat.FastDepsFailed, stat.ScanDepsFailed)
 			}
-			restat := b.reapiclient.IOMetrics().Stats()
-			restatLine = fmt.Sprintf("reapi: ops: %d(err:%d) / r:%d(err:%d) %s / w:%d(err:%d) %s\n",
-				restat.Ops, restat.OpsErrs,
-				restat.ROps, restat.RErrs, numBytes(restat.RBytes),
-				restat.WOps, restat.WErrs, numBytes(restat.WBytes))
 		}
 		if !b.reproxyExec.Used() {
 			// this stats will be shown by reproxy shutdown.
 			msg := fmt.Sprintf("\nlocal:%d remote:%d cache:%d fallback:%d retry:%d skip:%d\n",
 				stat.Local+stat.NoExec, stat.Remote, stat.CacheHit, stat.LocalFallback, stat.RemoteRetry, stat.Skipped) +
-				depsStatLine +
-				restatLine +
-				fsstatLine + "\n"
+				depsStatLine + "\n"
 			ui.Default.PrintLines("\n", msg)
 		} else {
 			ui.Default.PrintLines("\n", "\n")
