@@ -17,13 +17,11 @@ require (
 	github.com/bazelbuild/remote-apis-sdks v0.0.0-20250207195839-4efbcf8eb020
 	github.com/biogo/hts v1.4.5
 	github.com/golang/glog v1.2.4
-	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
 	github.com/klauspost/compress v1.18.0
 	github.com/klauspost/cpuid/v2 v2.2.10
 	github.com/maruel/subcommands v1.1.1
 	github.com/pkg/xattr v0.4.10
-	go.chromium.org/infra v0.0.0-00010101000000-000000000000
 	go.chromium.org/luci v0.0.0-20250321144226-119db4c5a855
 	go.opencensus.io v0.24.0
 	go.starlark.net v0.0.0-20250318223901-d9371fef63fe
@@ -41,6 +39,7 @@ require (
 )
 
 require (
+	cel.dev/expr v0.19.2 // indirect
 	cloud.google.com/go v0.118.3 // indirect
 	cloud.google.com/go/auth v0.15.0 // indirect
 	cloud.google.com/go/auth/oauth2adapt v0.2.7 // indirect
@@ -48,6 +47,7 @@ require (
 	github.com/GoogleCloudPlatform/protoc-gen-bq-schema v0.0.0-20190119112626-026f9fcdf705 // indirect
 	github.com/aws/aws-sdk-go v1.55.5 // indirect
 	github.com/census-instrumentation/opencensus-proto v0.4.1 // indirect
+	github.com/cncf/xds/go v0.0.0-20250121191232-2f005788dc42 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/go-logr/logr v1.4.2 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
@@ -70,6 +70,7 @@ require (
 	go.opentelemetry.io/otel/metric v1.34.0 // indirect
 	go.opentelemetry.io/otel/trace v1.34.0 // indirect
 	golang.org/x/crypto v0.36.0 // indirect
+	golang.org/x/exp v0.0.0-20250106191152-7588d65b2ba8 // indirect
 	golang.org/x/net v0.37.0 // indirect
 	golang.org/x/text v0.23.0 // indirect
 	golang.org/x/time v0.11.0 // indirect
