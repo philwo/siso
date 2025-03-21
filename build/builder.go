@@ -42,7 +42,6 @@ import (
 	"go.chromium.org/infra/build/siso/hashfs/osfs"
 	"go.chromium.org/infra/build/siso/o11y/clog"
 	"go.chromium.org/infra/build/siso/o11y/iometrics"
-	sisopprof "go.chromium.org/infra/build/siso/o11y/pprof"
 	"go.chromium.org/infra/build/siso/o11y/trace"
 	"go.chromium.org/infra/build/siso/reapi"
 	"go.chromium.org/infra/build/siso/reapi/digest"
@@ -93,9 +92,7 @@ type Options struct {
 	LocalexecLogWriter   io.Writer
 	MetricsJSONWriter    io.Writer
 	TraceJSON            string
-	Pprof                string
 	TraceExporter        *trace.Exporter
-	PprofUploader        *sisopprof.Uploader
 
 	// Clobber forces to rebuild ignoring existing generated files.
 	Clobber bool
@@ -210,8 +207,6 @@ type Builder struct {
 	traceExporter        *trace.Exporter
 	traceEvents          *traceEvents
 	traceStats           *traceStats
-	tracePprof           *tracePprof
-	pprofUploader        *sisopprof.Uploader
 
 	// envfiles: filename -> *envfile
 	envFiles sync.Map
@@ -376,8 +371,6 @@ func New(ctx context.Context, graph Graph, opts Options) (_ *Builder, err error)
 		traceExporter:        opts.TraceExporter,
 		traceEvents:          newTraceEvents(opts.TraceJSON, opts.Metadata),
 		traceStats:           newTraceStats(),
-		tracePprof:           newTracePprof(opts.Pprof),
-		pprofUploader:        opts.PprofUploader,
 		clobber:              opts.Clobber,
 		batch:                opts.Batch,
 		prepare:              opts.Prepare,
@@ -639,25 +632,6 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 		// TODO: cache iometrics?
 	})
 	defer b.traceEvents.Close(ctx)
-	b.tracePprof.SetMetadata(b.metadata)
-	b.pprofUploader.SetMetadata(ctx, b.metadata)
-	defer func(ctx context.Context) {
-		perr := b.tracePprof.Close(ctx)
-		if perr != nil {
-			clog.Warningf(ctx, "pprof close: %v", perr)
-		}
-		if b.pprofUploader != nil {
-			perr := b.pprofUploader.Upload(ctx, b.tracePprof.p)
-			if perr != nil {
-				clog.Warningf(ctx, "upload pprof: %v", perr)
-			} else {
-				clog.Infof(ctx, "uploaded pprof")
-			}
-		} else {
-			clog.Infof(ctx, "no pprof uploader")
-		}
-
-	}(ctx)
 	pstat := b.plan.stats()
 	b.progress.report("\nbuild start: Ready %d Pending %d", pstat.nready, pstat.npendings)
 	clog.Infof(ctx, "build pendings=%d ready=%d", pstat.npendings, pstat.nready)
@@ -1168,7 +1142,6 @@ func (b *Builder) finalizeTrace(ctx context.Context, tc *trace.Context) {
 	b.traceEvents.Add(ctx, tc)
 	b.traceStats.update(ctx, tc)
 	b.traceExporter.Export(ctx, tc)
-	b.tracePprof.Add(ctx, tc)
 }
 
 func (b *Builder) prepareAllOutDirs(ctx context.Context) error {
