@@ -380,11 +380,6 @@ func (g *Graph) Filenames() []string {
 	return g.globals.nstate.Filenames()
 }
 
-// ConfigProperties returns configuration properties.
-func (g *Graph) ConfigProperties() map[string]string {
-	return g.globals.stepConfig.Properties
-}
-
 func (g *Graph) NumTargets() int {
 	return g.globals.nstate.NumNodes()
 }

@@ -43,7 +43,6 @@ import (
 	"go.chromium.org/infra/build/siso/o11y/clog"
 	"go.chromium.org/infra/build/siso/o11y/iometrics"
 	sisopprof "go.chromium.org/infra/build/siso/o11y/pprof"
-	"go.chromium.org/infra/build/siso/o11y/resultstore"
 	"go.chromium.org/infra/build/siso/o11y/trace"
 	"go.chromium.org/infra/build/siso/reapi"
 	"go.chromium.org/infra/build/siso/reapi/digest"
@@ -97,7 +96,6 @@ type Options struct {
 	Pprof                string
 	TraceExporter        *trace.Exporter
 	PprofUploader        *sisopprof.Uploader
-	ResultstoreUploader  *resultstore.Uploader
 
 	// Clobber forces to rebuild ignoring existing generated files.
 	Clobber bool
@@ -214,7 +212,6 @@ type Builder struct {
 	traceStats           *traceStats
 	tracePprof           *tracePprof
 	pprofUploader        *sisopprof.Uploader
-	resultstoreUploader  *resultstore.Uploader
 
 	// envfiles: filename -> *envfile
 	envFiles sync.Map
@@ -381,7 +378,6 @@ func New(ctx context.Context, graph Graph, opts Options) (_ *Builder, err error)
 		traceStats:           newTraceStats(),
 		tracePprof:           newTracePprof(opts.Pprof),
 		pprofUploader:        opts.PprofUploader,
-		resultstoreUploader:  opts.ResultstoreUploader,
 		clobber:              opts.Clobber,
 		batch:                opts.Batch,
 		prepare:              opts.Prepare,
@@ -619,9 +615,6 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 				restatLine +
 				fsstatLine + "\n"
 			ui.Default.PrintLines("\n", msg)
-			if b.resultstoreUploader != nil {
-				b.resultstoreUploader.AddBuildLog(msg + "\n")
-			}
 		} else {
 			ui.Default.PrintLines("\n", "\n")
 		}
@@ -880,12 +873,6 @@ func (b *Builder) uploadBuildNinja(ctx context.Context) {
 	if err != nil {
 		clog.Warningf(ctx, "failed to upload build files tree %s: %v", d, err)
 		return
-	}
-	if b.resultstoreUploader != nil {
-		err := b.resultstoreUploader.SetFile(ctx, "build.ninja.dir", d)
-		if err != nil {
-			clog.Warningf(ctx, "failed to set build files tree %s: %v", d, err)
-		}
 	}
 	clog.Infof(ctx, "uploaded build files tree %s (%d entries) in %s", d, len(ents), time.Since(started))
 }
