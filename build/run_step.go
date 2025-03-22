@@ -76,7 +76,7 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 
 	if !b.needToRun(ctx, step.def, stepManifest) {
 		step.metrics.skip = true
-		b.plan.done(ctx, step)
+		b.plan.done(step)
 		b.stats.update(&step.metrics, true)
 		return nil
 	}
@@ -98,7 +98,7 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 		default:
 		}
 		ui.Default.Infof("%s\n", step.def.Binding("command"))
-		b.plan.done(ctx, step)
+		b.plan.done(step)
 		return nil
 	}
 
@@ -121,7 +121,7 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 		// better to upload to CAS, or store in fs_state?
 		err = b.hashFS.Flush(ctx, step.cmd.ExecRoot, step.cmd.Outputs)
 		if err == nil {
-			b.plan.done(ctx, step)
+			b.plan.done(step)
 			return nil
 		}
 		log.Warnf("handle step failure: %v", err)
@@ -179,7 +179,7 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 			return fmt.Errorf("%s emit stdout/stderr", step)
 		}
 	}
-	b.plan.done(ctx, step)
+	b.plan.done(step)
 	return nil
 }
 
