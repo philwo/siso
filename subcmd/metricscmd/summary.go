@@ -213,7 +213,7 @@ func (c *summaryRun) run(ctx context.Context) error {
 	for i := len(topMetrics) - 1; i >= 0; i-- {
 		tm := topMetrics[i]
 		fmt.Printf("      %8s weighted to build %s (%s elapsed time)\n",
-			formatDuration(time.Duration(tm.WeightedDuration())),
+			formatDuration(tm.WeightedDuration()),
 			relPath(c.dir, tm.Output),
 			formatDuration(tm.Duration()))
 	}
@@ -306,7 +306,7 @@ func (c *summaryRun) aggregate(metrics []*targetMetric) ([]aggregatedMetric, err
 		a.Type = t
 		a.Count++
 		a.Duration += m.Duration()
-		a.WeightedDuration += time.Duration(m.WeightedDuration())
+		a.WeightedDuration += m.WeightedDuration()
 		am[t] = a
 	}
 	var ret []aggregatedMetric
