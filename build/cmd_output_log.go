@@ -99,7 +99,7 @@ func (c *cmdOutputLog) String() string {
 	return sb.String()
 }
 
-func (c *cmdOutputLog) Msg(width int, console, verboseFailure bool) string {
+func (c *cmdOutputLog) Msg(console, verboseFailure bool) string {
 	if c == nil {
 		return ""
 	}
@@ -139,23 +139,7 @@ func (c *cmdOutputLog) Msg(width int, console, verboseFailure bool) string {
 	if c.err != nil {
 		fmt.Fprintf(&sb, "err: %v\n", c.err)
 	}
-	const cmdlineTooLong = "  ...(too long)"
-	if verboseFailure || width < len(cmdlineTooLong)-1 {
-		fmt.Fprintf(&sb, "%s\n", c.cmdline)
-	} else {
-		cmdline := c.cmdline
-		var cut bool
-		if len(cmdline) >= width-len(cmdlineTooLong)-1 {
-			cmdline = cmdline[:width-len(cmdlineTooLong)-1]
-			cut = true
-		}
-		fmt.Fprintf(&sb, "%s", cmdline)
-		if cut {
-			fmt.Fprintf(&sb, "%s\nUse '--verbose_failures' to see the command lines\n", cmdlineTooLong)
-		} else {
-			fmt.Fprintf(&sb, "\n")
-		}
-	}
+	fmt.Fprintf(&sb, "%s\n", c.cmdline)
 	fmt.Fprintf(&sb, "build step: %s %q\n", c.cmd.ActionName, c.output)
 	if c.sisoRule != "" {
 		fmt.Fprintf(&sb, "siso_rule: %s\n", c.sisoRule)
@@ -204,20 +188,15 @@ func (b *Builder) logOutput(cmdOutput *cmdOutputLog, console bool) string {
 	if cmdOutput == nil {
 		return ""
 	}
-	var width int
-	tui, ok := ui.Default.(*ui.TermUI)
-	if ok {
-		width = tui.Width()
-	}
 	if b.outputLogWriter != nil {
 		fmt.Fprint(b.outputLogWriter, cmdOutput.String()+"\f\n")
 		if cmdOutput.result == cmdOutputResultFALLBACK {
 			return ""
 		}
-		return cmdOutput.Msg(width, console, b.verboseFailures)
+		return cmdOutput.Msg(console, b.verboseFailures)
 	}
 	if cmdOutput.result == cmdOutputResultFALLBACK {
 		return ""
 	}
-	return cmdOutput.Msg(width, console, true)
+	return cmdOutput.Msg(console, true)
 }

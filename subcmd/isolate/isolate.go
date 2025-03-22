@@ -162,7 +162,7 @@ func (c *run) run(ctx context.Context) error {
 	}()
 	artifactStore := client.CacheStore()
 
-	ui.Default.PrintLines(fmt.Sprintf("target cas instance: %s\n", c.casopt.Instance))
+	ui.Default.Infof("target cas instance: %s\n", c.casopt.Instance)
 
 	ccred, err := c.casCred(ctx)
 	if err != nil {
@@ -217,7 +217,7 @@ func (c *run) run(ctx context.Context) error {
 			result[target] = d.String()
 			mu.Unlock()
 			log.Infof("uploaded digest for %s: %s in %s", target, d, duration)
-			ui.Default.PrintLines(fmt.Sprintf("uploaded digest for %s: %s in %s\n", target, d, duration))
+			ui.Default.Infof("uploaded digest for %s: %s in %s\n", target, d, duration)
 			return nil
 		})
 	}
@@ -235,7 +235,7 @@ func (c *run) run(ctx context.Context) error {
 			return err
 		}
 	}
-	ui.Default.PrintLines(fmt.Sprintf("done %s\n", time.Since(started)))
+	ui.Default.Infof("done %s\n", time.Since(started))
 	return nil
 }
 

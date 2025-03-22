@@ -23,7 +23,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"text/tabwriter"
 	"time"
 
 	"github.com/charmbracelet/log"
@@ -435,7 +434,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 			log.Warnf("lockfile is not supported")
 		case err != nil:
 			return stats, err
-		case err == nil:
+		default:
 			var owner string
 			spin := ui.Default.NewSpinner()
 			for {
@@ -543,7 +542,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 			}
 		}
 	}
-	c.checkResourceLimits(ctx, limits)
+	c.checkResourceLimits(limits)
 
 	log.Infof("project id: %q", projectID)
 	log.Infof("commandline %q", os.Args)
@@ -633,7 +632,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		log.Warnf("unable to use cog? %v", err)
 	}
 	if cogfs != nil {
-		ui.Default.PrintLines(ui.SGR(ui.Yellow, fmt.Sprintf("build in cog: %s\n", cogfs.Info())))
+		ui.Default.Warningf("build in cog: %s", cogfs.Info())
 		c.fsopt.CogFS = cogfs
 	}
 	if c.artfsDir != "" && c.artfsEndpoint != "" {
@@ -641,7 +640,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		if err != nil {
 			return stats, err
 		}
-		ui.Default.PrintLines(ui.SGR(ui.Yellow, "build on artfs\n"))
+		ui.Default.Warningf("build on artfs")
 		c.fsopt.ArtFS = artfs
 	}
 
@@ -773,11 +772,11 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	if c.fsopt.KeepTainted {
 		tainted := hashFS.TaintedFiles()
 		if len(tainted) == 0 {
-			ui.Default.Warningf(ui.SGR(ui.Yellow, "no tainted generated files:\n"))
+			ui.Default.Warningf("no tainted generated files")
 		} else if len(tainted) < 5 {
-			ui.Default.Warningf(ui.SGR(ui.Yellow, fmt.Sprintf("keep %d tainted files:\n %s\n", len(tainted), strings.Join(tainted, "\n "))))
+			ui.Default.Warningf("keep %d tainted files: %s", len(tainted), strings.Join(tainted, ", "))
 		} else {
-			ui.Default.Warningf(ui.SGR(ui.Yellow, fmt.Sprintf("keep %d tainted files:\n %s\n ...more\n", len(tainted), strings.Join(tainted, "\n "))))
+			ui.Default.Warningf("keep %d tainted files: %s ... more", len(tainted), strings.Join(tainted, ", "))
 		}
 	}
 
@@ -839,7 +838,7 @@ func runNinja(ctx context.Context, fname string, graph *ninjabuild.Graph, bopts 
 		log.Infof("build starts")
 		if len(nopts.checkFailedTargets) > 0 {
 			failedTargets := nopts.checkFailedTargets
-			ui.Default.PrintLines(fmt.Sprintf("Building last failed targets: %s...\n", failedTargets))
+			ui.Default.Infof("Building last failed targets: %s...", failedTargets)
 			var err error
 			stats, err = doBuild(ctx, graph, bopts, nopts, failedTargets...)
 			if errors.Is(err, build.ErrManifest) {
@@ -857,7 +856,6 @@ func runNinja(ctx context.Context, fname string, graph *ninjabuild.Graph, bopts 
 					return stats, err
 				}
 				spin.Stop(nil)
-				ui.Default.PrintLines("\n", "\n")
 				log.Infof("reload done. build retry")
 				continue
 			}
@@ -871,9 +869,9 @@ func runNinja(ctx context.Context, fname string, graph *ninjabuild.Graph, bopts 
 			}
 			nopts.checkFailedTargets = nil
 			if err != nil {
-				ui.Default.PrintLines(fmt.Sprintf(" %s: %s: %v\n\n", ui.SGR(ui.Yellow, "err in last failed targets, rebuild again"), failedTargets, err))
+				ui.Default.Infof(" %s: %s: %v", ui.SGR(ui.Yellow, "err in last failed targets, rebuild again"), failedTargets, err)
 			} else {
-				ui.Default.PrintLines(fmt.Sprintf(" %s: %s\n\n", ui.SGR(ui.Green, "last failed targets fixed"), failedTargets))
+				ui.Default.Infof(" %s: %s", ui.SGR(ui.Green, "last failed targets fixed"), failedTargets)
 			}
 			err = graph.Reset(ctx)
 			if err != nil {
@@ -997,7 +995,7 @@ func (c *ninjaCmdRun) initWorkdirs() (string, error) {
 	// Don't print this if a tool is being used, so that tool output
 	// can be piped into a file without this string showing up.
 	if c.subtool == "" && c.dir != "." {
-		ui.Default.PrintLines(fmt.Sprintf("ninja: Entering directory `%s'\n\n", c.dir))
+		ui.Default.Infof("ninja: Entering directory `%s'", c.dir)
 	}
 	err = os.Chdir(c.dir)
 	if err != nil {
@@ -1036,7 +1034,7 @@ func (c *ninjaCmdRun) initWorkdirs() (string, error) {
 	c.dir = rdir
 	log.Infof("working_directory in exec_root: %s", c.dir)
 	if c.startDir != execRoot {
-		ui.Default.PrintLines(fmt.Sprintf("exec_root=%s dir=%s\n", execRoot, c.dir))
+		ui.Default.Infof("exec_root=%s dir=%s", execRoot, c.dir)
 	}
 	_, err = os.Stat(c.fname)
 	if errors.Is(err, fs.ErrNotExist) {
@@ -1384,58 +1382,7 @@ func doBuild(ctx context.Context, graph *ninjabuild.Graph, bopts build.Options, 
 	return stats, err
 }
 
-func dumpResourceUsageTable(ctx context.Context, semaTraces map[string]semaTrace) string {
-	var semaNames []string
-	for key := range semaTraces {
-		semaNames = append(semaNames, key)
-	}
-	sort.Strings(semaNames)
-	var lsb, usb strings.Builder
-	var needToShow bool
-	ltw := tabwriter.NewWriter(&lsb, 10, 8, 1, ' ', tabwriter.AlignRight)
-	utw := tabwriter.NewWriter(&usb, 10, 8, 1, ' ', tabwriter.AlignRight)
-	fmt.Fprintf(ltw, "resource/capa\tused(err)\twait-avg\t|   s m |\tserv-avg\t|   s m |\t\n")
-	fmt.Fprintf(utw, "resource/capa\tused(err)\twait-avg\t|   s m |\tserv-avg\t|   s m |\t\n")
-	for _, key := range semaNames {
-		t := semaTraces[key]
-		fmt.Fprintf(ltw, "%s\t%d(%d)\t%s\t%s\t%s\t%s\t\n", t.name, t.n, t.nerr, t.waitAvg.Round(time.Millisecond), histogram(t.waitBuckets), t.servAvg.Round(time.Millisecond), histogram(t.servBuckets))
-		// bucket 5 = [1m,10m)
-		// bucket 6 = [10m,*)
-		if t.waitBuckets[5] > 0 || t.waitBuckets[6] > 0 || t.servBuckets[5] > 0 || t.servBuckets[6] > 0 {
-			needToShow = true
-			fmt.Fprintf(utw, "%s\t%d(%d)\t%s\t%s\t%s\t%s\t\n", t.name, t.n, t.nerr, ui.FormatDuration(t.waitAvg), histogram(t.waitBuckets), ui.FormatDuration(t.servAvg), histogram(t.servBuckets))
-		}
-	}
-	ltw.Flush()
-	utw.Flush()
-	if needToShow {
-		ui.Default.Infof("%s", usb.String())
-	}
-	return lsb.String()
-}
-
 var histchar = [...]string{"▂", "▃", "▄", "▅", "▆", "▇", "█"}
-
-func histogram(b [7]int) string {
-	max := 0
-	for _, n := range b {
-		if max < n {
-			max = n
-		}
-	}
-	var sb strings.Builder
-	sb.WriteRune('|')
-	for _, n := range b {
-		if n <= 0 {
-			sb.WriteRune(' ')
-			continue
-		}
-		i := len(histchar) * n / (max + 1)
-		sb.WriteString(histchar[i])
-	}
-	sb.WriteRune('|')
-	return sb.String()
-}
 
 type semaTrace struct {
 	name                     string
@@ -1649,7 +1596,7 @@ func gcinfo() string {
 
 	gcPercent := debug.SetGCPercent(100) // 100 is default
 	if gcPercent < 0 {
-		ui.Default.PrintLines(ui.SGR(ui.BackgroundRed, fmt.Sprintf("Garbage collection is disabled. GOGC=%s\n", os.Getenv("GOGC"))))
+		ui.Default.Warningf("Garbage collection is disabled. GOGC=%s\n", os.Getenv("GOGC"))
 		fmt.Fprintf(&sb, "gc=off")
 	} else {
 		fmt.Fprintf(&sb, "gc=%d", gcPercent)

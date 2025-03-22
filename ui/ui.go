@@ -6,13 +6,9 @@
 package ui
 
 import (
-	"bytes"
 	"fmt"
-	"os"
 	"strings"
 	"unicode"
-
-	"golang.org/x/term"
 )
 
 // Spinner controls spinner.
@@ -27,10 +23,6 @@ type Spinner interface {
 
 // UI is a user interface.
 type UI interface {
-	// PrintLines prints message lines.
-	// If msgs starts with \n, it will print from the current line.
-	// Otherwise, it will replaces the last N lines, where N is len(msgs).
-	PrintLines(msgs ...string)
 	// NewSpinner returns a new spinner.
 	NewSpinner() Spinner
 
@@ -49,122 +41,13 @@ type UI interface {
 // UI implementations are currently not expected to handle being changed.
 var Default UI
 
-// termUI needs
-// - cursor up : \033[A
-// - kill line:  \033[K
-// disable termUI if term doesn't support these feature.
-// https://invisible-island.net/ncurses/terminfo.src.html
-func isSmartTerminal(term string) bool {
-	switch term {
-	case "dumb", "dumb-emacs-ansi":
-		return false
-	}
-	// assume default terminal works.
-	return true
-}
-
 func init() {
-	if isSmartTerminal(os.Getenv("TERM")) && term.IsTerminal(int(os.Stdout.Fd())) {
-		termUI := &TermUI{}
-		termUI.init()
-		Default = termUI
-	} else {
-		Default = &LogUI{}
-	}
+	Default = &LogUI{}
 }
 
 // IsTerminal returns whether currently using a terminal UI.
 func IsTerminal() bool {
-	_, ok := Default.(*TermUI)
-	return ok
-}
-
-func writeLinesMaxWidth(buf *bytes.Buffer, msgs []string, width int) {
-	for i, msg := range msgs {
-		if msg == "" {
-			continue
-		}
-		// Truncate in middle if too long, unless terminated with newline.
-		// If printing last message, don't truncate if any newline.
-		if width > 4 && len(msg)+3 > width-1 && ((width-4)/2) < len(msg) &&
-			((i < len(msgs)-1 && !strings.Contains(msg[:len(msg)-1], "\n")) ||
-				(i == len(msgs)-1 && !strings.Contains(msg, "\n"))) {
-			msg = elideMiddle(msg, width)
-		}
-		if i > 0 {
-			fmt.Fprintln(buf)
-		}
-		msg = strings.TrimSuffix(msg, "\n")
-		fmt.Fprint(buf, msg)
-	}
-}
-
-func elideMiddle(msg string, width int) string {
-	chrs := make([]byte, 0, len(msg))
-	sgrs := make([]string, 0, len(msg))
-	var sgr string
-	hasSGR := false
-	const escapeSeq = "\033["
-	for i := 0; i < len(msg); i++ {
-		if strings.HasPrefix(msg[i:], escapeSeq) {
-			i += len(escapeSeq)
-			j := strings.Index(msg[i:], "m")
-			if j < 0 {
-				// no SGR escape sequence?
-				// TODO: handle this case correctly
-				chrs = append(chrs, []byte(escapeSeq)...)
-				chrs = append(chrs, []byte(msg[i:])...)
-				hasSGR = false
-				break
-			}
-			hasSGR = true
-			sgr = msg[i : i+j]
-			i += j
-			continue
-		}
-		chrs = append(chrs, msg[i])
-		sgrs = append(sgrs, sgr)
-	}
-	const elideMarker = "..."
-	if len(chrs) < width {
-		return msg
-	}
-	n := (width - (len(elideMarker) + 1)) / 2
-	if len(chrs)+len(elideMarker) <= width-1 || n > len(chrs) {
-		return msg
-	}
-	if !hasSGR {
-		return msg[:n] + "..." + msg[len(msg)-n:]
-	}
-	sgr = ""
-	var sb strings.Builder
-	for i := range n {
-		if sgrs[i] != sgr {
-			sb.WriteString(escapeSeq)
-			sb.WriteString(sgrs[i])
-			sb.WriteString("m")
-			sgr = sgrs[i]
-		}
-		sb.WriteByte(chrs[i])
-	}
-	if sgr != "" && sgr != "0" {
-		sb.WriteString(escapeSeq + "0m")
-	}
-	sb.WriteString("...")
-	sgr = "0"
-	for i := len(chrs) - n; i < len(chrs); i++ {
-		if sgrs[i] != sgr {
-			sb.WriteString(escapeSeq)
-			sb.WriteString(sgrs[i])
-			sb.WriteString("m")
-			sgr = sgrs[i]
-		}
-		sb.WriteByte(chrs[i])
-	}
-	if sgr != "" && sgr != "0" {
-		sb.WriteString(escapeSeq + "0m")
-	}
-	return sb.String()
+	return false
 }
 
 // https://en.wikipedia.org/wiki/ANSI_escape_code#SGR_(Select_Graphic_Rendition)_parameters

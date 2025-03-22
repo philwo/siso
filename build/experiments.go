@@ -83,7 +83,7 @@ func (e *Experiments) ShowOnce() {
 		s := e.String()
 		if s != "" {
 			s = ui.SGR(ui.Yellow, s)
-			ui.Default.PrintLines(s)
+			ui.Default.Infof(s)
 		}
 	})
 }
@@ -109,7 +109,7 @@ func (e *Experiments) Enabled(k, format string, args ...any) bool {
 		return false
 	}
 	ex.once.Do(func() {
-		ui.Default.PrintLines(fmt.Sprintf(format+" %s\n", append(args, e.Hint(k))...))
+		ui.Default.Warningf(format+" %s", append(args, e.Hint(k))...)
 	})
 	return true
 }

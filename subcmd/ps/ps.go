@@ -73,17 +73,6 @@ func (c *run) Run(a subcommands.Application, args []string, env subcommands.Env)
 		cancel()
 	})()
 
-	u, ok := ui.Default.(*ui.TermUI)
-	if ok {
-		c.termui = true
-		if c.n == 0 {
-			c.n = u.Height() - 2
-		}
-		if c.interval < 0 {
-			c.interval = 1 * time.Second
-		}
-	}
-
 	var src source
 	var err error
 	if c.stdoutURL != "" {
@@ -144,15 +133,10 @@ func (c *run) render(lines []string, activeSteps []build.ActiveStepInfo) {
 		if dur == "" {
 			dur = "(" + as.Dur + ")"
 		}
-		if c.termui {
-			lines = append(lines, fmt.Sprintf("%10s %9s %s", dur, as.Phase, as.Desc))
-		} else {
-			lines = append(lines, fmt.Sprintf("%10s %9s %s\n", dur, as.Phase, as.Desc))
-		}
+		ui.Default.Infof("%10s %9s %s", dur, as.Phase, as.Desc)
 		if c.n > 0 && len(lines) >= c.n {
 			break
 		}
 	}
-	lines = append(lines, fmt.Sprintf("steps=%d out of %d\n", len(lines)-headings, len(activeSteps)))
-	ui.Default.PrintLines(lines...)
+	ui.Default.Infof("steps=%d out of %d", len(lines)-headings, len(activeSteps))
 }

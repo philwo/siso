@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/charmbracelet/log"
 	"go.chromium.org/infra/build/siso/execute"
 	"go.chromium.org/infra/build/siso/ui"
 )
@@ -23,7 +24,6 @@ type progress struct {
 	verbose    bool
 	numLocal   atomic.Int32
 	mu         sync.Mutex
-	ts         time.Time
 	consoleCmd *execute.Cmd
 
 	actives       activeSteps
@@ -145,20 +145,7 @@ func (p *progress) stop() {
 }
 
 func (p *progress) report(format string, args ...any) {
-	p.mu.Lock()
-	t := p.ts
-	p.mu.Unlock()
-	var msg string
-	if ui.IsTerminal() && time.Since(t) < 500*time.Millisecond {
-		return
-	}
-	if msg == "" {
-		msg = fmt.Sprintf(format, args...)
-	}
-	ui.Default.PrintLines(msg)
-	p.mu.Lock()
-	p.ts = time.Now()
-	p.mu.Unlock()
+	ui.Default.Infof(format, args...)
 }
 
 const (
@@ -170,144 +157,38 @@ const (
 )
 
 func (p *progress) step(b *Builder, step *Step, s string) {
-	p.mu.Lock()
-	t := p.ts
-	if step != nil {
-		if strings.HasPrefix(s, progressPrefixStart) {
-			heap.Push(&p.actives, &stepInfo{
-				step: step,
-				desc: step.cmd.Desc,
-			})
-		}
-	}
-	p.mu.Unlock()
-	dur := ui.FormatDuration(time.Since(b.start))
-	stat := b.stats.stats()
-	var outputResult string
-	if strings.HasPrefix(s, progressPrefixFinish) && step != nil {
-		outputResult = step.cmd.OutputResult()
-	}
-	if ui.IsTerminal() && !p.verbose && outputResult == "" && (time.Since(t) < 30*time.Millisecond || strings.HasPrefix(s, progressPrefixFinish)) {
-		// not output when all conditions below met.
-		//  - terminal
-		//  - not verbose
-		//  - no output result
-		//  - too soon (in 30ms) or finished message
+	if step == nil {
+		log.Info(s)
 		return
 	}
-	// will output if
-	//  - not terminal
-	//  - verbose mode
-	//  - has output result
-	var lines []string
-	msg := s
-	switch {
-	case p.verbose:
-		if strings.HasPrefix(s, progressPrefixStart) && step != nil {
-			msg = fmt.Sprintf("[%d/%d] %s %s",
-				stat.Done-stat.Skipped, stat.Total-stat.Skipped,
-				dur,
-				step.def.Binding("command"))
-			ui.Default.Infof("%s\n", msg)
-		} else if strings.HasPrefix(s, progressPrefixFinish) && step != nil {
-			msg = fmt.Sprintf("[%d/%d] %s %s",
-				stat.Done-stat.Skipped, stat.Total-stat.Skipped,
-				dur,
-				step.def.Binding("command"))
-			if outputResult != "" {
-				msg += "\n" + outputResult + "\n"
-			}
-			ui.Default.Infof("%s\n", msg)
 
-		} else if step == nil {
-			ui.Default.Infof("%s\n", msg)
-		}
-	case ui.IsTerminal():
-		runProgress := func(waits, servs int) string {
-			if waits > 0 {
-				return ui.SGR(ui.BackgroundRed, fmt.Sprintf("%d", waits+servs))
-			}
-			return fmt.Sprintf("%d", servs)
-		}
-		preprocWaits := b.preprocSema.NumWaits()
-		preprocServs := b.preprocSema.NumServs()
-		preprocProgress := runProgress(preprocWaits, preprocServs)
-
-		localWaits := b.localSema.NumWaits()
-		localServs := b.localSema.NumServs()
-		for _, p := range b.poolSemas {
-			localWaits += p.NumWaits()
-			localServs += p.NumServs()
-		}
-		// no wait for fastLocalSema since it only use TryAcquire,
-		// so no need to count b.fastLocalSema.NumWaits.
-		// fastLocal step also acquires localSema,
-		// so no need to count b.fastLocalSema.NumServ.
-		p.numLocal.Store(int32(localWaits + localServs))
-		localProgress := runProgress(localWaits, localServs)
-
-		remoteWaits := b.remoteSema.NumWaits()
-		remoteServs := b.remoteSema.NumServs()
-		remoteWaits += b.rewrapSema.NumWaits()
-		remoteServs += b.rewrapSema.NumServs()
-		remoteProgress := runProgress(remoteWaits, remoteServs)
-
-		var stepsPerSec string
-		if stat.Done-stat.Skipped > 0 {
-			stepsPerSec = fmt.Sprintf("%.1f/s ", float64(stat.Done-stat.Skipped)/time.Since(p.started).Seconds())
-		}
-		var cacheHitRatio string
-		if stat.Remote+stat.CacheHit > 0 {
-			cacheHitRatio = fmt.Sprintf("cache:%5.02f%% ", float64(stat.CacheHit)/float64(stat.CacheHit+stat.Remote)*100.0)
-		}
-		var fallback string
-		if stat.LocalFallback > 0 {
-			fallback = "fallback:" + ui.SGR(ui.BackgroundRed, fmt.Sprintf("%d", stat.LocalFallback)) + " "
-		}
-		var retry string
-		if stat.RemoteRetry > 0 {
-			retry = "retry:" + ui.SGR(ui.BackgroundRed, fmt.Sprintf("%d", stat.RemoteRetry)) + " "
-		}
-		if outputResult == "" {
-			lines = append(lines, fmt.Sprintf("pre:%s local:%s remote:%s %s%s%s%s",
-				preprocProgress,
-				localProgress,
-				remoteProgress,
-				stepsPerSec,
-				cacheHitRatio,
-				fallback,
-				retry,
-			))
-		}
-		fallthrough
-	default:
-		if step != nil {
-			b.statusReporter.PlanHasTotalSteps(stat.Total - stat.Skipped)
-			msg = fmt.Sprintf("[%d/%d] %s %s",
-				stat.Done-stat.Skipped, stat.Total-stat.Skipped,
-				dur,
-				s)
-			if outputResult != "" {
-				if !ui.IsTerminal() {
-					outputResult = "\n" + outputResult
-				}
-			}
-		}
-		lines = append(lines, msg)
-		if outputResult != "" {
-			if ui.IsTerminal() {
-				// 2 more lines, so outputResult won't
-				// be overwritten by next progress report.
-				lines = append(lines, "\n"+outputResult+"\n", "\n", "\n")
-			} else {
-				lines = append(lines, outputResult+"\n")
-			}
-		}
-		ui.Default.PrintLines(lines...)
+	if strings.HasPrefix(s, progressPrefixStart) {
+		p.mu.Lock()
+		heap.Push(&p.actives, &stepInfo{
+			step: step,
+			desc: step.cmd.Desc,
+		})
+		p.mu.Unlock()
 	}
-	p.mu.Lock()
-	p.ts = time.Now()
-	p.mu.Unlock()
+
+	if strings.HasPrefix(s, progressPrefixCacheHit) || strings.HasPrefix(s, progressPrefixFinish) {
+		dur := ui.FormatDuration(time.Since(b.start))
+		stat := b.stats.stats()
+		msg := fmt.Sprintf("[%d/%d] %s ",
+			stat.Done-stat.Skipped, stat.Total-stat.Skipped, dur)
+		if p.verbose {
+			msg += step.def.Binding("command")
+		} else {
+			msg += msg[len(progressPrefixFinish):]
+		}
+
+		ui.Default.Infof(msg)
+
+		outputResult := step.cmd.OutputResult()
+		if outputResult != "" {
+			ui.Default.Infof(outputResult)
+		}
+	}
 }
 
 type ActiveStepInfo struct {

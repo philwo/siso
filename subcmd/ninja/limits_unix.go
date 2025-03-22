@@ -7,9 +7,6 @@
 package ninja
 
 import (
-	"context"
-	"fmt"
-
 	"github.com/charmbracelet/log"
 	"golang.org/x/sys/unix"
 
@@ -17,7 +14,7 @@ import (
 	"go.chromium.org/infra/build/siso/ui"
 )
 
-func (c *ninjaCmdRun) checkResourceLimits(ctx context.Context, limits build.Limits) {
+func (c *ninjaCmdRun) checkResourceLimits(limits build.Limits) {
 	var lim unix.Rlimit
 	err := unix.Getrlimit(unix.RLIMIT_NOFILE, &lim)
 	if err != nil {
@@ -34,6 +31,6 @@ func (c *ninjaCmdRun) checkResourceLimits(ctx context.Context, limits build.Limi
 		nfile += uint64(limits.Remote) * 4
 	}
 	if lim.Cur < nfile {
-		ui.Default.PrintLines(ui.SGR(ui.Yellow, fmt.Sprintf("WARNING: too low file limit=%d. would fail with too many open files\n", lim.Cur)))
+		ui.Default.Warningf("WARNING: too low file limit=%d. would fail with too many open files\n", lim.Cur)
 	}
 }

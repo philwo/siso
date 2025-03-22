@@ -206,7 +206,7 @@ func schedule(ctx context.Context, sched *scheduler, graph Graph, args ...string
 		if !experiments.Enabled("ignore-missing-targets", "") {
 			return TargetError{err: err, Suggests: suggestTargets(ctx, sched, graph, args...)}
 		}
-		ui.Default.PrintLines(ui.SGR(ui.Yellow, fmt.Sprintf("WARNING: ignore missing targets: %v\n\n", err)))
+		ui.Default.Warningf("WARNING: ignore missing targets: %v\n\n", err)
 	}
 	if len(targets) == 0 {
 		return TargetError{err: errors.New("no targets")}
@@ -217,7 +217,7 @@ func schedule(ctx context.Context, sched *scheduler, graph Graph, args ...string
 			targetNames = append(targetNames, sched.path.MaybeToWD(targetPath(ctx, graph, t)))
 		}
 		if !slices.Equal(args, targetNames) {
-			ui.Default.PrintLines(fmt.Sprintf("target: %q\n    ->  %q\n\n", args, targetNames))
+			ui.Default.Infof("target: %q\n    ->  %q\n\n", args, targetNames)
 		}
 	}
 	// validationQueue collects validation targets found during scheduling.
@@ -486,7 +486,7 @@ func (s *scheduler) mark(ctx context.Context, graph Graph, target Target, next S
 }
 
 func (s *scheduler) progressReport(format string, args ...any) {
-	ui.Default.PrintLines(fmt.Sprintf(format, args...))
+	ui.Default.Infof(format, args...)
 }
 
 // finish finishes the scheduling.
@@ -498,7 +498,7 @@ func (s *scheduler) finish(d time.Duration) {
 	if d < ui.DurationThreshold {
 		return
 	}
-	s.progressReport("%6s schedule pending:%d+ready:%d (node:%d edge:%d)\n", ui.FormatDuration(d), npendings, nready, len(s.plan.targets), s.visited)
+	s.progressReport("%6s schedule pending:%d+ready:%d (node:%d edge:%d)", ui.FormatDuration(d), npendings, nready, len(s.plan.targets), s.visited)
 }
 
 // add adds new stepDef to run.

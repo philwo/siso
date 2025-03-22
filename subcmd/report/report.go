@@ -111,7 +111,7 @@ func (c *run) collect(ctx context.Context) (map[string]digest.Data, error) {
 				// dangling symlink or so?
 				continue
 			}
-			ui.Default.PrintLines(fmt.Sprintf("reading %s", fname))
+			ui.Default.Infof("reading %s", fname)
 			localFname := fname
 			if strings.HasSuffix(fname, ".redirected") {
 				buf, err := os.ReadFile(fname)
@@ -175,7 +175,7 @@ func (c *run) archive(ctx context.Context) (err error) {
 	sort.Strings(fnames)
 	now := time.Now()
 	for _, fname := range fnames {
-		ui.Default.PrintLines(fmt.Sprintf("packing %s", fname))
+		ui.Default.Infof("packing %s", fname)
 		buf, err := digest.DataToBytes(ctx, report[fname])
 		if err != nil {
 			return fmt.Errorf("failed to get bytes for %s: %w", fname, err)
@@ -194,6 +194,6 @@ func (c *run) archive(ctx context.Context) (err error) {
 			return fmt.Errorf("failed to write data of %s: %w", fname, err)
 		}
 	}
-	ui.Default.PrintLines(fmt.Sprintf("report file: %s\n\n", f.Name()))
+	ui.Default.Infof("report file: %s", f.Name())
 	return tw.Flush()
 }

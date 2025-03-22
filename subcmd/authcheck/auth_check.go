@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/charmbracelet/log"
 	"github.com/maruel/subcommands"
 
 	"go.chromium.org/luci/common/cli"
@@ -52,19 +53,20 @@ func (r *authCheckRun) Run(a subcommands.Application, args []string, env subcomm
 	}
 	credential, err := cred.New(ctx, r.authOpts)
 	if err != nil {
-		fmt.Printf("auth error: %v\n", err)
+		log.Errorf("auth error: %v", err)
 		return 1
 	}
-	fmt.Printf("Logged in by %s\n", credential.Type)
+	msg := fmt.Sprintf("Logged in by %s\n", credential.Type)
 	if credential.Email != "" {
-		fmt.Printf(" as %s\n", credential.Email)
+		msg += fmt.Sprintf(" as %s", credential.Email)
 	}
+	log.Info(msg)
 	r.reopt.UpdateProjectID(r.projectID)
 	if r.reopt.IsValid() {
 		client, err := reapi.New(ctx, credential, *r.reopt)
-		fmt.Printf("use %s\n", r.reopt)
+		log.Infof("use %s\n", r.reopt)
 		if err != nil {
-			fmt.Printf("access error: %v\n", err)
+			log.Errorf("access error: %v", err)
 			return 1
 		}
 		defer client.Close()
