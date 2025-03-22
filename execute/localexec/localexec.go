@@ -27,7 +27,6 @@ import (
 	"go.chromium.org/infra/build/siso/runtimex"
 	"go.chromium.org/infra/build/siso/sync/semaphore"
 	"go.chromium.org/infra/build/siso/toolsupport/straceutil"
-	"go.chromium.org/infra/build/siso/ui"
 )
 
 // TODO(b/270886586): Compare local execution with/without local execution server.
@@ -171,9 +170,6 @@ func run(ctx context.Context, cmd *execute.Cmd) (*rpb.ActionResult, error) {
 	if cmd.Console {
 		consoleCancel()
 		consoleWG.Wait()
-		if ui.IsTerminal() && cmd.ConsoleOut.Load() {
-			fmt.Printf("\n\n\n\n") // preserve console output from progress report
-		}
 	}
 	e := time.Now()
 

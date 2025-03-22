@@ -117,7 +117,7 @@ func DefaultLimits() Limits {
 				log.Warnf("unknown limits name %q", k)
 				continue
 			}
-			ui.Default.PrintLines(ui.SGR(ui.Yellow, fmt.Sprintf("use SISO_LIMITS=%s=%d\n", k, n)))
+			ui.Default.PrintLines(ui.SGR(ui.Yellow, fmt.Sprintf("use SISO_LIMITS=%s=%d", k, n)))
 		}
 	})
 	return defaultLimits

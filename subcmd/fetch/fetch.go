@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
+	"github.com/charmbracelet/log"
 	"github.com/maruel/subcommands"
 	"google.golang.org/protobuf/proto"
 
@@ -168,10 +169,10 @@ func (c *run) run(ctx context.Context) error {
 		dir := "."
 		if c.Flags.NArg() > 1 {
 			dir = c.Flags.Arg(1)
-			fmt.Printf("extract %s to %s\n", d, dir)
+			log.Infof("extract %s to %s", d, dir)
 		} else {
 			w = os.Stdout
-			fmt.Printf("list %s\n", d)
+			log.Infof("list %s", d)
 		}
 
 		b, err := client.Get(ctx, d, d.String())

@@ -6,9 +6,9 @@ package ui
 
 import (
 	"fmt"
-	"os"
-	"strings"
 	"time"
+
+	"github.com/charmbracelet/log"
 )
 
 type logSpinner struct {
@@ -19,22 +19,22 @@ type logSpinner struct {
 // Because a log-based UI cannot support an animated spinner, this is used only to report spinner completion.
 func (l *logSpinner) Start(format string, args ...any) {
 	l.started = time.Now()
-	fmt.Printf(format, args...)
+	log.Infof(format, args...)
 }
 
 // Stop implements the ui.spinner interface.
 // Because a log-based UI cannot support an animated spinner, this is used to report how long the spinner operation took to complete.
 func (l *logSpinner) Stop(err error) {
 	if err != nil {
-		fmt.Printf(" failed %s %v\n", time.Since(l.started), err)
+		log.Warnf("-> failed %s %v", time.Since(l.started), err)
 		return
 	}
-	fmt.Printf(" done %s\n", time.Since(l.started))
+	log.Infof("-> done %s", time.Since(l.started))
 }
 
 // Done finishes the spinner with message.
 func (l *logSpinner) Done(format string, args ...any) {
-	fmt.Printf(" %s %s\n", fmt.Sprintf(format, args...), time.Since(l.started))
+	log.Infof("-> %s %s", fmt.Sprintf(format, args...), time.Since(l.started))
 }
 
 // LogUI is a log-based UI.
@@ -43,10 +43,10 @@ type LogUI struct{}
 // PrintLines implements the ui.ui interface.
 // Because a log-based UI cannot support erasing previous lines, msgs will be printed as-is.
 func (LogUI) PrintLines(msgs ...string) {
+	log.Helper()
 	for i := range msgs {
-		msgs[i] = StripANSIEscapeCodes(msgs[i])
+		log.Info(StripANSIEscapeCodes(msgs[i]))
 	}
-	os.Stdout.Write([]byte(strings.Join(msgs, "\t") + "\n"))
 }
 
 // NewSpinner returns an implementation of ui.spinner.
