@@ -18,7 +18,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/golang/glog"
+	"github.com/charmbracelet/log"
 	"github.com/maruel/subcommands"
 
 	"go.chromium.org/luci/common/cli"
@@ -80,7 +80,7 @@ func (c *run) run(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer signals.HandleInterrupt(cancel)()
 
-	glog.Infof("dir %s", c.dir)
+	log.Infof("dir %s", c.dir)
 	err := os.Chdir(c.dir)
 	if err != nil {
 		return err
@@ -117,19 +117,19 @@ func (c *run) collect(ctx context.Context) (map[string]digest.Data, error) {
 			if strings.HasSuffix(fname, ".redirected") {
 				buf, err := os.ReadFile(fname)
 				if err != nil {
-					glog.Warningf("failed to read %s: %v", fname, err)
+					log.Warnf("failed to read %s: %v", fname, err)
 					continue
 				}
 				localFname = string(buf)
 				fname = strings.TrimSuffix(fname, ".redirected")
-				glog.Infof("%s -> %s", fname, localFname)
+				log.Infof("%s -> %s", fname, localFname)
 			}
 			src := osfs.FileSource(localFname, -1)
 			data, err := digest.FromLocalFile(ctx, src)
 			if err != nil {
-				glog.Errorf("Error to calculate digest %s: %v", fname, err)
+				log.Errorf("Error to calculate digest %s: %v", fname, err)
 			} else {
-				glog.Infof("add %s %s", fname, data.Digest())
+				log.Infof("add %s %s", fname, data.Digest())
 				report[fname] = data
 			}
 		}
@@ -139,7 +139,7 @@ func (c *run) collect(ctx context.Context) (map[string]digest.Data, error) {
 	// .reproxy_tmp/cache may exist, but must not collect reproxy.creds.
 	_, err = os.Stat(".reproxy_tmp/logs")
 	if err != nil {
-		glog.Infof("no .reproxy_tmp/logs: %v", err)
+		log.Infof("no .reproxy_tmp/logs: %v", err)
 		return report, nil
 	}
 	err = fs.WalkDir(fsys, ".reproxy_tmp/logs", func(fname string, d fs.DirEntry, err error) error {
@@ -153,10 +153,10 @@ func (c *run) collect(ctx context.Context) (map[string]digest.Data, error) {
 		src := osfs.FileSource(fname, -1)
 		data, err := digest.FromLocalFile(ctx, src)
 		if err != nil {
-			glog.Errorf("Error to calculate digest %s: %v", fname, err)
+			log.Errorf("Error to calculate digest %s: %v", fname, err)
 			return nil
 		}
-		glog.Infof("add %s %s", fname, data.Digest())
+		log.Infof("add %s %s", fname, data.Digest())
 		report[fname] = data
 		return nil
 	})

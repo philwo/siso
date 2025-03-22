@@ -18,7 +18,7 @@ import (
 	"strings"
 
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
-	"github.com/golang/glog"
+	"github.com/charmbracelet/log"
 	"google.golang.org/protobuf/proto"
 
 	"go.chromium.org/infra/build/siso/reapi/digest"
@@ -359,7 +359,7 @@ func (m *MerkleTree) buildTree(ctx context.Context, curdir *rpb.Directory, dirna
 			// Siso might send duplicate entries such as
 			//   dir/subdir/../otherdir/name
 			//   dir/otherdir/name
-			glog.Infof("duplicate file %s in %s: %s", f.Name, dirname, f)
+			log.Infof("duplicate file %s in %s: %s", f.Name, dirname, f)
 			continue
 		}
 		names[f.Name] = f
@@ -377,7 +377,7 @@ func (m *MerkleTree) buildTree(ctx context.Context, curdir *rpb.Directory, dirna
 			if !proto.Equal(s, p) {
 				return nil, fmt.Errorf("duplicate symlink %s in %s: %s != %s", s.Name, dirname, s, p)
 			}
-			glog.Infof("duplicate symlink %s in %s: %s", s.Name, dirname, s)
+			log.Infof("duplicate symlink %s in %s: %s", s.Name, dirname, s)
 			continue
 		}
 		names[s.Name] = s
@@ -399,7 +399,7 @@ func (m *MerkleTree) buildTree(ctx context.Context, curdir *rpb.Directory, dirna
 		if found {
 			switch p.(type) {
 			case *rpb.SymlinkNode:
-				glog.Infof("use symlink for dir: %s", filepath.Join(dirname, subdir.Name))
+				log.Infof("use symlink for dir: %s", filepath.Join(dirname, subdir.Name))
 				continue
 			}
 			// other checks later.
@@ -415,7 +415,7 @@ func (m *MerkleTree) buildTree(ctx context.Context, curdir *rpb.Directory, dirna
 			if !proto.Equal(subdir, p) {
 				return nil, fmt.Errorf("duplicate dir %s in %s: %s != %s", subdir.Name, dirname, subdir, p)
 			}
-			glog.Infof("duplicate dir %s in %s: %s", subdir.Name, dirname, subdir)
+			log.Infof("duplicate dir %s in %s: %s", subdir.Name, dirname, subdir)
 			continue
 		}
 		names[subdir.Name] = subdir

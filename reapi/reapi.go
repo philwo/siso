@@ -17,7 +17,7 @@ import (
 	"time"
 
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
-	"github.com/golang/glog"
+	"github.com/charmbracelet/log"
 	"google.golang.org/api/option"
 	gtransport "google.golang.org/api/transport/grpc"
 	"google.golang.org/grpc"
@@ -176,7 +176,7 @@ func New(ctx context.Context, cred cred.Cred, opt Option) (*Client, error) {
 	if opt.Instance == "" {
 		return nil, errors.New("no reapi instance")
 	}
-	glog.Infof("address: %q instance: %q", opt.Address, opt.Instance)
+	log.Infof("address: %q instance: %q", opt.Address, opt.Instance)
 
 	copts := []option.ClientOption{
 		option.WithEndpoint(opt.Address),
@@ -205,12 +205,12 @@ func NewFromConn(ctx context.Context, opt Option, conn grpcClientConn) (*Client,
 		conn.Close()
 		return nil, err
 	}
-	glog.Infof("capabilities of %s: %s", opt.Instance, capa)
+	log.Infof("capabilities of %s: %s", opt.Instance, capa)
 	if opt.CompressedBlob > 0 {
 		if len(capa.GetCacheCapabilities().SupportedCompressors) > 0 && capa.CacheCapabilities.SupportedCompressors[0] != rpb.Compressor_IDENTITY {
-			glog.Infof("compressed-blobs/%s for > %d", strings.ToLower(capa.CacheCapabilities.SupportedCompressors[0].String()), opt.CompressedBlob)
+			log.Infof("compressed-blobs/%s for > %d", strings.ToLower(capa.CacheCapabilities.SupportedCompressors[0].String()), opt.CompressedBlob)
 		} else {
-			glog.Infof("compressed-blobs is not supported")
+			log.Infof("compressed-blobs is not supported")
 			opt.CompressedBlob = 0
 		}
 	}
@@ -261,7 +261,7 @@ func NewContext(ctx context.Context, rmd *rpb.RequestMetadata) context.Context {
 	// https://github.com/bazelbuild/remote-apis/blob/8f539af4b407a4f649707f9632fc2b715c9aa065/build/bazel/remote/execution/v2/remote_execution.proto#L2034-L2045
 	b, err := proto.Marshal(rmd)
 	if err != nil {
-		glog.Warningf("marshal %v: %v", rmd, err)
+		log.Warnf("marshal %v: %v", rmd, err)
 		return ctx
 	}
 	return metadata.AppendToOutgoingContext(ctx,

@@ -15,7 +15,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/golang/glog"
+	"github.com/charmbracelet/log"
 	"go.chromium.org/infra/build/siso/build"
 )
 
@@ -56,7 +56,7 @@ func (s *localSource) fetch(ctx context.Context) ([]build.ActiveStepInfo, error)
 	defer func() {
 		err := resp.Body.Close()
 		if err != nil {
-			glog.Warningf("close %v", err)
+			log.Warnf("close %v", err)
 		}
 	}()
 	if resp.StatusCode != http.StatusOK {

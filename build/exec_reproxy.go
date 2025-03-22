@@ -16,7 +16,7 @@ import (
 
 	ppb "github.com/bazelbuild/reclient/api/proxy"
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
-	"github.com/golang/glog"
+	"github.com/charmbracelet/log"
 
 	"go.chromium.org/infra/build/siso/execute"
 	"go.chromium.org/infra/build/siso/execute/reproxyexec"
@@ -24,7 +24,7 @@ import (
 )
 
 func (b *Builder) execReproxy(ctx context.Context, step *Step) error {
-	glog.Infof("exec reproxy %s", step.cmd.Desc)
+	log.Infof("exec reproxy %s", step.cmd.Desc)
 	step.setPhase(stepInput)
 	err := b.prepareLocalInputs(ctx, step)
 	if err != nil && !experiments.Enabled("ignore-missing-local-inputs", "step %s missing inputs: %v", step, err) {
@@ -48,21 +48,21 @@ func (b *Builder) execReproxy(ctx context.Context, step *Step) error {
 			ActionMnemonic:          step.def.ActionName(),
 			TargetId:                step.cmd.Outputs[0],
 		})
-		glog.Infof("step state: remote exec (via reproxy)")
+		log.Infof("step state: remote exec (via reproxy)")
 		maybeDisableLocalFallback(ctx, b, step)
 
 		err := b.reproxyExec.Run(ctx, step.cmd)
 		step.setPhase(stepOutput)
 		ar, cached := step.cmd.ActionResult()
 		if err == nil && !validateRemoteActionResult(ar) {
-			glog.Errorf("no outputs in action result. retry without cache lookup. b/350360391")
+			log.Errorf("no outputs in action result. retry without cache lookup. b/350360391")
 			step.cmd.SkipCacheLookup = true
 			step.setPhase(stepRemoteRun)
 			err = b.reproxyExec.Run(ctx, step.cmd)
 			step.setPhase(stepOutput)
 			ar, cached = step.cmd.ActionResult()
 			if err == nil && !validateRemoteActionResult(ar) {
-				glog.Errorf("no outputs in action result again. b/350360391")
+				log.Errorf("no outputs in action result again. b/350360391")
 			}
 		}
 		switch ar.GetExecutionMetadata().GetWorker() {
@@ -117,7 +117,7 @@ func allowWriteOutputs(ctx context.Context, cmd *execute.Cmd) error {
 			continue
 		} else if err != nil {
 			// We don't know the filemode. So let it go.
-			glog.Warningf("failed to stat %s: %v", fname, err)
+			log.Warnf("failed to stat %s: %v", fname, err)
 			continue
 		}
 		// The file needs to be writable. Otherwise writing the output file fails with permission denied.
@@ -138,9 +138,7 @@ func maybeDisableLocalFallback(ctx context.Context, b *Builder, step *Step) {
 	// needs to do local fallback on Reproxy side. However, all local executions
 	// need to be handled at Siso layer.
 	if !b.localFallbackEnabled() && strings.ToUpper(step.cmd.REProxyConfig.ExecStrategy) == ppb.ExecutionStrategy_REMOTE_LOCAL_FALLBACK.String() {
-		if glog.V(1) {
-			glog.Infof("overriding reproxy REMOTE_LOCAL_FALLBACK to REMOTE")
-		}
+		log.Debugf("overriding reproxy REMOTE_LOCAL_FALLBACK to REMOTE")
 		step.cmd.REProxyConfig.ExecStrategy = ppb.ExecutionStrategy_REMOTE.String()
 	}
 }

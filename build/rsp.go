@@ -13,7 +13,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/golang/glog"
+	"github.com/charmbracelet/log"
 )
 
 func (b *Builder) setupRSP(ctx context.Context, step *Step) error {
@@ -22,9 +22,7 @@ func (b *Builder) setupRSP(ctx context.Context, step *Step) error {
 		return nil
 	}
 	content := step.cmd.RSPFileContent
-	if glog.V(1) {
-		glog.Infof("create rsp %q=%q", rsp, content)
-	}
+	log.Debugf("create rsp %q=%q", rsp, content)
 	err := b.hashFS.WriteFile(ctx, step.cmd.ExecRoot, rsp, content, false, time.Now(), nil)
 	if err != nil {
 		return fmt.Errorf("failed to create rsp %s: %w", rsp, err)
@@ -40,16 +38,14 @@ func (b *Builder) teardownRSP(ctx context.Context, step *Step) {
 	if rsp == "" {
 		return
 	}
-	if glog.V(1) {
-		glog.Infof("remove rsp %q", rsp)
-	}
+	log.Debugf("remove rsp %q", rsp)
 	err := b.hashFS.Remove(ctx, step.cmd.ExecRoot, rsp)
 	if err != nil {
-		glog.Warningf("failed to remove %s: %v", rsp, err)
+		log.Warnf("failed to remove %s: %v", rsp, err)
 	}
 	// remove local file if it is used on local?
 	err = os.Remove(filepath.Join(step.cmd.ExecRoot, rsp))
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
-		glog.Warningf("failed to remove %s: %v", rsp, err)
+		log.Warnf("failed to remove %s: %v", rsp, err)
 	}
 }

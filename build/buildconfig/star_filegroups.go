@@ -11,7 +11,7 @@ import (
 	"io/fs"
 	"strings"
 
-	"github.com/golang/glog"
+	"github.com/charmbracelet/log"
 	"go.starlark.net/starlark"
 
 	"go.chromium.org/infra/build/siso/build"
@@ -115,7 +115,7 @@ func (cfg *Config) UpdateFilegroups(ctx context.Context, hashFS *hashfs.HashFS, 
 		Filegroups: make(map[string][]string),
 	}
 	for k, g := range cfg.filegroups {
-		glog.Infof("filegroup %s", k)
+		log.Infof("filegroup %s", k)
 		v := filegroup{
 			etag:  filegroups.ETags[k],
 			files: filegroups.Filegroups[k],

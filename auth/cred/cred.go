@@ -10,7 +10,7 @@ import (
 	"crypto/tls"
 	"fmt"
 
-	"github.com/golang/glog"
+	"github.com/charmbracelet/log"
 	"golang.org/x/oauth2"
 	"google.golang.org/api/option"
 	"google.golang.org/grpc"
@@ -92,7 +92,7 @@ func New(ctx context.Context, opts Options) (Cred, error) {
 		}
 		t, _ := tok.Extra("x-token-source").(string)
 		email, _ := tok.Extra("x-token-email").(string)
-		glog.Infof("use auth %v email: %s", t, email)
+		log.Infof("use auth %v email: %s", t, email)
 		ts := oauth2.ReuseTokenSource(tok, opts.TokenSource)
 		return Cred{
 			Type:  t,
@@ -119,7 +119,7 @@ func New(ctx context.Context, opts Options) (Cred, error) {
 		return Cred{}, err
 	}
 
-	glog.Infof("use luci-auth email: %s", email)
+	log.Infof("use luci-auth email: %s", email)
 	return Cred{
 		Type:           t,
 		Email:          email,

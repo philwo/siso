@@ -10,7 +10,7 @@ import (
 	"io"
 
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
-	"github.com/golang/glog"
+	"github.com/charmbracelet/log"
 	bpb "google.golang.org/genproto/googleapis/bytestream"
 
 	"go.chromium.org/infra/build/siso/reapi/bytestreamio"
@@ -71,7 +71,7 @@ func (c CacheStore) SetContent(ctx context.Context, d digest.Digest, fname strin
 func (c CacheStore) HasContent(ctx context.Context, d digest.Digest) bool {
 	missing, err := c.client.Missing(ctx, []digest.Digest{d})
 	if err != nil {
-		glog.Warningf("failed to call missing [%s]: %v", d, err)
+		log.Warnf("failed to call missing [%s]: %v", d, err)
 		return false
 	}
 	return len(missing) != 1

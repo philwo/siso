@@ -19,7 +19,7 @@ import (
 	"time"
 
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
-	"github.com/golang/glog"
+	"github.com/charmbracelet/log"
 	"github.com/google/uuid"
 	"github.com/maruel/subcommands"
 	"google.golang.org/grpc/codes"
@@ -259,10 +259,10 @@ func (c *run) call(ctx context.Context, reopt reapi.Option, credential cred.Cred
 		if err != nil {
 			return err
 		}
-		glog.Infof("inputRoot: %s", inputRootDigest)
+		log.Infof("inputRoot: %s", inputRootDigest)
 		fmt.Printf("%s\n", inputRootDigest)
 	} else {
-		glog.Infof("no root directory: %v", err)
+		log.Infof("no root directory: %v", err)
 	}
 
 	var commandDigest digest.Digest
@@ -281,11 +281,11 @@ func (c *run) call(ctx context.Context, reopt reapi.Option, credential cred.Cred
 			return err
 		}
 		commandDigest = data.Digest()
-		glog.Infof("command: %s", commandDigest)
+		log.Infof("command: %s", commandDigest)
 		fmt.Printf("%s\n", commandDigest)
 		ds.Set(data)
 	} else {
-		glog.Infof("failed to access command.txt: %v", err)
+		log.Infof("failed to access command.txt: %v", err)
 	}
 
 	action := &rpb.Action{}
@@ -302,13 +302,13 @@ func (c *run) call(ctx context.Context, reopt reapi.Option, credential cred.Cred
 	if !inputRootDigest.IsZero() {
 		action.InputRootDigest = inputRootDigest.Proto()
 	}
-	glog.Infof("action: %s", action)
+	log.Infof("action: %s", action)
 	data, err := digest.FromProtoMessage(action)
 	if err != nil {
 		return err
 	}
 	actionDigest := data.Digest()
-	glog.Infof("action: %s", actionDigest)
+	log.Infof("action: %s", actionDigest)
 	fmt.Printf("Action: %s\n", actionDigest)
 	ds.Set(data)
 
@@ -316,14 +316,14 @@ func (c *run) call(ctx context.Context, reopt reapi.Option, credential cred.Cred
 	if err != nil {
 		return err
 	}
-	glog.Infof("upload %d/%d", n, len(ds.List()))
+	log.Infof("upload %d/%d", n, len(ds.List()))
 	executeReq.ActionDigest = actionDigest.Proto()
-	glog.Infof("execute req: %s", executeReq)
+	log.Infof("execute req: %s", executeReq)
 	opName, resp, err := client.ExecuteAndWait(ctx, executeReq)
-	glog.Infof("operation: %s", opName)
-	glog.Infof("response: %s", resp)
+	log.Infof("operation: %s", opName)
+	log.Infof("response: %s", resp)
 	if err != nil {
-		glog.Errorf("err: %v", err)
+		log.Errorf("err: %v", err)
 	}
 	fmt.Printf("cache=%t\n", resp.GetCachedResult())
 	printActionResult(resp.GetResult())
@@ -372,12 +372,12 @@ func printActionResult(result *rpb.ActionResult) {
 			fmt.Printf("   %s\n", aux.GetTypeUrl())
 			any, err := aux.UnmarshalNew()
 			if err != nil {
-				glog.Errorf("failed to unmarshal aux %s: %v", aux, err)
+				log.Errorf("failed to unmarshal aux %s: %v", aux, err)
 				continue
 			}
 			switch m := any.(type) {
 			case *rbepb.AuxiliaryMetadata:
-				glog.Infof("metadata %T: %s", m, m)
+				log.Infof("metadata %T: %s", m, m)
 				fmt.Printf("    version: %s\n", m.GetVersions())
 				fmt.Printf("    pool: %s\n", m.GetPool())
 				fmt.Printf("    resource_usage:\n")
@@ -387,7 +387,7 @@ func printActionResult(result *rpb.ActionResult) {
 				fmt.Printf("      mem peak: %4.2f%%\n", ru.GetMemoryPercentagePeak())
 				fmt.Printf("      mem avg : %4.2f%%\n", ru.GetMemoryPercentageAverage())
 			default:
-				glog.Infof("metadata %T: %s", m, m)
+				log.Infof("metadata %T: %s", m, m)
 			}
 		}
 	}

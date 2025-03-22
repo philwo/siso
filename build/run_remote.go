@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/golang/glog"
+	"github.com/charmbracelet/log"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -45,14 +45,14 @@ func (b *Builder) runRemote(ctx context.Context, step *Step) error {
 					return b.fastStepDone(ctx, step, fastStep)
 				}
 				fastNeedCheckCache = false
-				glog.Infof("cmd fast cache miss: %v", err)
+				log.Infof("cmd fast cache miss: %v", err)
 			}
 			fastChecked = true
 		}
 		if ctx, done, err := b.fastLocalSema.TryAcquire(ctx); err == nil {
 			var err error
 			defer func() { done(err) }()
-			glog.Infof("fast local %s", step.cmd.Desc)
+			log.Infof("fast local %s", step.cmd.Desc)
 			// TODO: check cache if input age is old enough.
 			// TODO: detach remote for future cache hit.
 			err = b.execLocal(ctx, step)
@@ -94,7 +94,7 @@ func (b *Builder) runRemote(ctx context.Context, step *Step) error {
 			return err
 		}
 		if errors.Is(err, errNotRelocatable) {
-			glog.Errorf("not relocatable: %v", err)
+			log.Errorf("not relocatable: %v", err)
 			return err
 		}
 		var eerr execute.ExitError
@@ -105,11 +105,11 @@ func (b *Builder) runRemote(ctx context.Context, step *Step) error {
 			}
 			switch {
 			case eerr.ExitCode == 137:
-				glog.Warningf("Fallback due to potential SIGKILL by docker: remote exec %s failed: output=%q siso_config=%q, gn_target=%q: %v", step.cmd.ActionDigest(), output, step.def.RuleName(), step.def.Binding("gn_target"), err)
+				log.Warnf("Fallback due to potential SIGKILL by docker: remote exec %s failed: output=%q siso_config=%q, gn_target=%q: %v", step.cmd.ActionDigest(), output, step.def.RuleName(), step.def.Binding("gn_target"), err)
 			case experiments.Enabled("fallback-on-exec-error", "remote exec %s failed: %v", step.cmd.ActionDigest(), err):
-				glog.Warningf("fallback-on-exec-error: remote exec %s failed: output=%q siso_config=%q, gn_target=%q: %v", step.cmd.ActionDigest(), output, step.def.RuleName(), step.def.Binding("gn_target"), err)
+				log.Warnf("fallback-on-exec-error: remote exec %s failed: output=%q siso_config=%q, gn_target=%q: %v", step.cmd.ActionDigest(), output, step.def.RuleName(), step.def.Binding("gn_target"), err)
 			case os.Getenv("AUTONINJA_BUILD_ID") == "": // TODO(b/377426017): remove this chrome infra specific logic once we set SISO_EXPERIMENTS=fallback-on-exec-error on problematic builders.
-				glog.Warningf("fallback-on-exec-error on builder (no AUTONINJA_BUILD_ID): remote exec %s failed: output=%q siso_config=%q gn_target=%q: %v", step.cmd.ActionDigest(), output, step.def.RuleName(), step.def.Binding("gn_target"), err)
+				log.Warnf("fallback-on-exec-error on builder (no AUTONINJA_BUILD_ID): remote exec %s failed: output=%q siso_config=%q gn_target=%q: %v", step.cmd.ActionDigest(), output, step.def.RuleName(), step.def.Binding("gn_target"), err)
 			default:
 				// report compile fail early to developers.
 				// If user runs on non-terminal or user sets a
@@ -122,7 +122,7 @@ func (b *Builder) runRemote(ctx context.Context, step *Step) error {
 		if !b.localFallbackEnabled() {
 			return fmt.Errorf("remote-exec %s failed no-fallback: %w", step.cmd.ActionDigest(), err)
 		}
-		glog.Warningf("remote-exec %s failed, fallback to local: %v", step.cmd.ActionDigest(), err)
+		log.Warnf("remote-exec %s failed, fallback to local: %v", step.cmd.ActionDigest(), err)
 		b.progressStepFallback(ctx, step)
 		step.metrics.IsRemote = false
 		step.metrics.Fallback = true
@@ -156,7 +156,7 @@ func (b *Builder) tryFastStep(ctx context.Context, step, fastStep *Step, cacheCh
 	if nFastDeps > 100 && (stats.FastDepsFailed+1)*100 > nFastDeps {
 		// many fast-deps failure.
 		// better to use scandeps to reduce retry by fast-deps failure.
-		glog.Infof("too many fast-deps failure detected %d/%d", stats.FastDepsFailed+1, stats.FastDepsSuccess)
+		log.Infof("too many fast-deps failure detected %d/%d", stats.FastDepsFailed+1, stats.FastDepsSuccess)
 		b.disableFastDeps.CompareAndSwap(nil, "too many fast-deps failure")
 	}
 
@@ -188,7 +188,7 @@ func (b *Builder) runRemoteStep(ctx context.Context, step *Step, cacheCheck bool
 		if err == nil {
 			return nil
 		}
-		glog.Infof("cmd cache miss: %v", err)
+		log.Infof("cmd cache miss: %v", err)
 	}
 	return b.execRemote(ctx, step)
 }

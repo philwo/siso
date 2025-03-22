@@ -10,7 +10,7 @@ import (
 	"context"
 	"os"
 
-	"github.com/golang/glog"
+	"github.com/charmbracelet/log"
 )
 
 func lookupUser(ctx context.Context) string {
@@ -25,6 +25,6 @@ func lookupUser(ctx context.Context) string {
 	if u != "" {
 		return u
 	}
-	glog.Warningf("failed to get username $env:USER or $env:USERNAME")
+	log.Warnf("failed to get username $env:USER or $env:USERNAME")
 	return "unknownuser"
 }

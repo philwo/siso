@@ -24,7 +24,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/golang/glog"
+	"github.com/charmbracelet/log"
 	"golang.org/x/sync/errgroup"
 
 	"go.chromium.org/infra/build/siso/hashfs/osfs"
@@ -127,15 +127,15 @@ func New(ctx context.Context, opt Option) (*HashFS, error) {
 
 		fstate, err := Load(ctx, opt)
 		if errors.Is(err, fs.ErrNotExist) {
-			glog.Infof("missing fs state. new build? %v", err)
+			log.Infof("missing fs state. new build? %v", err)
 			// missing .siso_fs_state is not considered as load error.
 			fstate = &pb.State{}
 		} else if err != nil {
-			glog.Warningf("Failed to load fs state from %s: %v", opt.StateFile, err)
+			log.Warnf("Failed to load fs state from %s: %v", opt.StateFile, err)
 			fsys.loadErr = err
 			fstate = &pb.State{}
 		} else {
-			glog.Infof("Load fs state from %s: %s", opt.StateFile, time.Since(start))
+			log.Infof("Load fs state from %s: %s", opt.StateFile, time.Since(start))
 		}
 
 		// for corrupted fs state, we also don't use journal,
@@ -151,18 +151,18 @@ func New(ctx context.Context, opt Option) (*HashFS, error) {
 				// save fstate to make it base state for next journaling.
 				err := Save(ctx, fstate, opt)
 				if err != nil {
-					glog.Errorf("Failed to save reconciled fs state in %s: %v", opt.StateFile, err)
+					log.Errorf("Failed to save reconciled fs state in %s: %v", opt.StateFile, err)
 				}
 			}
 		}
 		err = os.Remove(journalFile)
 		if err != nil && !errors.Is(err, fs.ErrNotExist) {
-			glog.Warningf("Failed to remove journal: %v", err)
+			log.Warnf("Failed to remove journal: %v", err)
 		}
 
 		f, err := os.Create(journalFile)
 		if err != nil {
-			glog.Warningf("Failed to create fs state journal: %v", err)
+			log.Warnf("Failed to create fs state journal: %v", err)
 		} else {
 			fsys.journal = f
 		}
@@ -184,16 +184,16 @@ func (hfs *HashFS) WaitReady(ctx context.Context) error {
 	started := time.Now()
 	select {
 	case <-ctx.Done():
-		glog.Errorf("hashfs does not become ready %s: %v", time.Since(started), context.Cause(ctx))
+		log.Errorf("hashfs does not become ready %s: %v", time.Since(started), context.Cause(ctx))
 		return context.Cause(ctx)
 
 	case err := <-hfs.setStateCh:
 		hfs.setStateCh = nil
 		if err != nil {
-			glog.Errorf("hashfs does not become ready %s: %v", time.Since(started), err)
+			log.Errorf("hashfs does not become ready %s: %v", time.Since(started), err)
 			return err
 		}
-		glog.Infof("hashfs becomes ready: %v", time.Since(started))
+		log.Infof("hashfs becomes ready: %v", time.Since(started))
 	}
 	return nil
 }
@@ -213,18 +213,18 @@ func (hfs *HashFS) SetExecutables(m map[string]bool) {
 func (hfs *HashFS) SetBuildTargets(ctx context.Context, buildTargets []string, success bool) {
 	if !success {
 		hfs.buildTargets = nil
-		glog.Infof("set no build targets")
+		log.Infof("set no build targets")
 		return
 	}
 	hfs.buildTargets = make([]string, len(buildTargets))
 	copy(hfs.buildTargets, buildTargets)
-	glog.Infof("set build targets=%q", hfs.buildTargets)
+	log.Infof("set build targets=%q", hfs.buildTargets)
 }
 
 // Close closes the HashFS.
 // Persists current state in opt.StateFile.
 func (hfs *HashFS) Close(ctx context.Context) error {
-	glog.Infof("fs close")
+	log.Infof("fs close")
 	hfs.digester.stop(ctx)
 	if hfs.opt.StateFile == "" {
 		return nil
@@ -233,26 +233,26 @@ func (hfs *HashFS) Close(ctx context.Context) error {
 	if hfs.journal != nil {
 		err := hfs.journal.Close()
 		if err != nil {
-			glog.Warningf("Failed to close journal %v", err)
+			log.Warnf("Failed to close journal %v", err)
 		}
 		hfs.journal = nil
 	}
 	hfs.journalMu.Unlock()
-	glog.Infof("close journal")
+	log.Infof("close journal")
 	if hfs.clean.Load() || !hfs.loaded.Load() || len(hfs.taintedFiles) > 0 {
 		// don't update fs state when there are tainted files.
-		glog.Warningf("not save state clean=%t loaded=%t tainted:%d", hfs.clean.Load(), hfs.loaded.Load(), len(hfs.taintedFiles))
+		log.Warnf("not save state clean=%t loaded=%t tainted:%d", hfs.clean.Load(), hfs.loaded.Load(), len(hfs.taintedFiles))
 		return nil
 	}
 	err := Save(ctx, hfs.State(ctx), hfs.opt)
 	if err != nil {
-		glog.Errorf("Failed to save fs state in %s: %v", hfs.opt.StateFile, err)
+		log.Errorf("Failed to save fs state in %s: %v", hfs.opt.StateFile, err)
 		if rerr := os.Remove(hfs.opt.StateFile); rerr != nil && !errors.Is(rerr, fs.ErrNotExist) {
-			glog.Errorf("Failed to remove stale fs state %s: %v", hfs.opt.StateFile, err)
+			log.Errorf("Failed to remove stale fs state %s: %v", hfs.opt.StateFile, err)
 		}
 		return err
 	}
-	glog.Infof("Saved fs state in %s", hfs.opt.StateFile)
+	log.Infof("Saved fs state in %s", hfs.opt.StateFile)
 	return nil
 }
 
@@ -364,9 +364,7 @@ func (hfs *HashFS) dirStoreAndNotify(ctx context.Context, fullname string, e *en
 
 // Stat returns a FileInfo at root/fname.
 func (hfs *HashFS) Stat(ctx context.Context, root, fname string) (FileInfo, error) {
-	if glog.V(1) {
-		glog.Infof("stat @%s %s", root, fname)
-	}
+	log.Debugf("stat @%s %s", root, fname)
 	e, dir, ok := hfs.dirLookup(ctx, root, fname)
 	if ok {
 		if e.err != nil {
@@ -382,14 +380,14 @@ func (hfs *HashFS) Stat(ctx context.Context, root, fname string) (FileInfo, erro
 			case errors.Is(err, fs.ErrNotExist):
 				// virtually created dir in hashfs,
 				// so no need to update mtime.
-				glog.Infof("stat hashfs dir %s. not local", fullname)
+				log.Infof("stat hashfs dir %s. not local", fullname)
 			case err != nil:
-				glog.Warningf("unexpected dir stat fail %s: %v", fullname, err)
+				log.Warnf("unexpected dir stat fail %s: %v", fullname, err)
 				return FileInfo{}, err
 			default:
 				mtime := lfi.ModTime()
 				if now := time.Now(); mtime.After(now) {
-					glog.Warningf("future timestamp on %s: mtime=%s now=%s", fullname, mtime, now)
+					log.Warnf("future timestamp on %s: mtime=%s now=%s", fullname, mtime, now)
 					return FileInfo{}, fmt.Errorf("future timestamp on %s: mtime=%s now=%s", fullname, mtime, now)
 				}
 				e.mu.Lock()
@@ -397,7 +395,7 @@ func (hfs *HashFS) Stat(ctx context.Context, root, fname string) (FileInfo, erro
 				if e.updatedTime.Before(mtime) {
 					// if no cmdhash, it may not be generated by any step, so keep updated_time with mtime silently.
 					if len(e.cmdhash) > 0 {
-						glog.Warningf("unexpected update dir mtime %s %v; updated_time=%v", fullname, mtime, e.updatedTime)
+						log.Warnf("unexpected update dir mtime %s %v; updated_time=%v", fullname, mtime, e.updatedTime)
 					}
 					e.updatedTime = mtime
 				}
@@ -412,9 +410,7 @@ func (hfs *HashFS) Stat(ctx context.Context, root, fname string) (FileInfo, erro
 	fname = filepath.ToSlash(fname)
 	e = newLocalEntry()
 	e.init(ctx, fname, hfs.executables, hfs.OS)
-	if glog.V(1) {
-		glog.Infof("stat new entry %s %s", fname, e)
-	}
+	log.Debugf("stat new entry %s %s", fname, e)
 	if errors.Is(e.err, context.Canceled) {
 		return FileInfo{}, e.err
 	}
@@ -428,7 +424,7 @@ func (hfs *HashFS) Stat(ctx context.Context, root, fname string) (FileInfo, erro
 		e, err = hfs.directory.store(ctx, fname, e)
 	}
 	if err != nil {
-		glog.Warningf("failed to store %s %s in %s: %v", fname, e, dir, err)
+		log.Warnf("failed to store %s %s in %s: %v", fname, e, dir, err)
 		return FileInfo{}, err
 	}
 	if e.err != nil {
@@ -440,12 +436,10 @@ func (hfs *HashFS) Stat(ctx context.Context, root, fname string) (FileInfo, erro
 
 // ReadDir returns directory entries of root/name.
 func (hfs *HashFS) ReadDir(ctx context.Context, root, name string) (dents []DirEntry, err error) {
-	if glog.V(1) {
-		glog.Infof("readdir @%s %s", root, name)
-		defer func() {
-			glog.Infof("readdir @%s %s -> %d %v", root, name, len(dents), err)
-		}()
-	}
+	log.Debugf("readdir @%s %s", root, name)
+	defer func() {
+		log.Debugf("readdir @%s %s -> %d %v", root, name, len(dents), err)
+	}()
 	dirname := name
 	if !filepath.IsAbs(name) {
 		dirname = filepath.Join(root, name)
@@ -461,10 +455,10 @@ func (hfs *HashFS) ReadDir(ctx context.Context, root, name string) (dents []DirE
 		var err error
 		e, err = hfs.directory.store(ctx, dname, e)
 		if err != nil {
-			glog.Warningf("failed to store %s %s: %v", dname, e, err)
+			log.Warnf("failed to store %s %s: %v", dname, e, err)
 			return nil, err
 		}
-		glog.Infof("stat new dir entry %s %s", dname, e)
+		log.Infof("stat new dir entry %s %s", dname, e)
 	}
 	err = e.err
 	if err != nil {
@@ -475,9 +469,7 @@ func (hfs *HashFS) ReadDir(ctx context.Context, root, name string) (dents []DirE
 	}
 	// TODO(ukai): fix race in updateDir -> store.
 	names := e.updateDir(ctx, hfs, dirname)
-	if glog.V(1) {
-		glog.Infof("update-dir %s -> %d", dirname, len(names))
-	}
+	log.Debugf("update-dir %s -> %d", dirname, len(names))
 	var ents []DirEntry
 	e.directory.m.Range(func(k, v any) bool {
 		name := k.(string)
@@ -499,9 +491,7 @@ func (hfs *HashFS) ReadDir(ctx context.Context, root, name string) (dents []DirE
 
 // ReadFile reads a contents of root/fname.
 func (hfs *HashFS) ReadFile(ctx context.Context, root, fname string) ([]byte, error) {
-	if glog.V(1) {
-		glog.Infof("readfile @%s %s", root, fname)
-	}
+	log.Debugf("readfile @%s %s", root, fname)
 	fname = filepath.Join(root, fname)
 	fname = filepath.ToSlash(fname)
 	e, _, ok := hfs.directory.lookup(ctx, fname)
@@ -514,10 +504,10 @@ func (hfs *HashFS) ReadFile(ctx context.Context, root, fname string) ([]byte, er
 		var err error
 		e, err = hfs.directory.store(ctx, fname, e)
 		if err != nil {
-			glog.Warningf("failed to store %s %s: %v", fname, e, err)
+			log.Warnf("failed to store %s %s: %v", fname, e, err)
 			return nil, err
 		}
-		glog.Infof("stat new entry %s %s", fname, e)
+		log.Infof("stat new entry %s %s", fname, e)
 	}
 	err := e.err
 	if err != nil {
@@ -531,17 +521,13 @@ func (hfs *HashFS) ReadFile(ctx context.Context, root, fname string) ([]byte, er
 		return nil, fmt.Errorf("read file %s: no data", fname)
 	}
 	buf, err := digest.DataToBytes(ctx, digest.NewData(e.src, e.d))
-	if glog.V(1) {
-		glog.Infof("readfile %s: %v", fname, err)
-	}
+	log.Debugf("readfile %s: %v", fname, err)
 	return buf, err
 }
 
 // WriteFile writes a contents in root/fname with mtime and cmdhash.
 func (hfs *HashFS) WriteFile(ctx context.Context, root, fname string, b []byte, isExecutable bool, mtime time.Time, cmdhash []byte) error {
-	if glog.V(1) {
-		glog.Infof("writefile @%s %s x:%t mtime:%s", root, fname, isExecutable, mtime)
-	}
+	log.Debugf("writefile @%s %s x:%t mtime:%s", root, fname, isExecutable, mtime)
 	hfs.clean.Store(false)
 	data := digest.FromBytes(fname, b)
 	fname = filepath.Join(root, fname)
@@ -565,7 +551,7 @@ func (hfs *HashFS) WriteFile(ctx context.Context, root, fname string, b []byte, 
 		isChanged:   true,
 	}
 	err := hfs.dirStoreAndNotify(ctx, fname, e)
-	glog.Infof("writefile %s x:%t mtime:%s: %v", fname, isExecutable, mtime, err)
+	log.Infof("writefile %s x:%t mtime:%s: %v", fname, isExecutable, mtime, err)
 	if err != nil {
 		return err
 	}
@@ -575,9 +561,7 @@ func (hfs *HashFS) WriteFile(ctx context.Context, root, fname string, b []byte, 
 
 // Symlink creates a symlink to target at root/linkpath with mtime and cmdhash.
 func (hfs *HashFS) Symlink(ctx context.Context, root, target, linkpath string, mtime time.Time, cmdhash []byte) error {
-	if glog.V(1) {
-		glog.Infof("symlink @%s %s -> %s", root, linkpath, target)
-	}
+	log.Debugf("symlink @%s %s -> %s", root, linkpath, target)
 	hfs.clean.Store(false)
 	linkfname := filepath.Join(root, linkpath)
 	linkfname = filepath.ToSlash(linkfname)
@@ -593,7 +577,7 @@ func (hfs *HashFS) Symlink(ctx context.Context, root, target, linkpath string, m
 		isChanged:   true,
 	}
 	err := hfs.dirStoreAndNotify(ctx, linkfname, e)
-	glog.Infof("symlink @%s %s -> %s: %v", root, linkpath, target, err)
+	log.Infof("symlink @%s %s -> %s: %v", root, linkpath, target, err)
 	if err != nil {
 		return err
 	}
@@ -604,9 +588,7 @@ func (hfs *HashFS) Symlink(ctx context.Context, root, target, linkpath string, m
 // Copy copies a file from root/src to root/dst with mtime and cmdhash.
 // if src is dir, returns error.
 func (hfs *HashFS) Copy(ctx context.Context, root, src, dst string, mtime time.Time, cmdhash []byte) error {
-	if glog.V(1) {
-		glog.Infof("copy @%s %s to %s", root, src, dst)
-	}
+	log.Debugf("copy @%s %s to %s", root, src, dst)
 	hfs.clean.Store(false)
 	srcname := src
 	if !filepath.IsAbs(src) {
@@ -618,9 +600,7 @@ func (hfs *HashFS) Copy(ctx context.Context, root, src, dst string, mtime time.T
 	e, _, ok := hfs.directory.lookup(ctx, srcfname)
 	if !ok {
 		e = newLocalEntry()
-		if glog.V(9) {
-			glog.Infof("new entry for copy src %s", srcfname)
-		}
+		log.Debugf("new entry for copy src %s", srcfname)
 		e.init(ctx, srcfname, hfs.executables, hfs.OS)
 		if errors.Is(e.err, context.Canceled) {
 			return e.err
@@ -628,10 +608,10 @@ func (hfs *HashFS) Copy(ctx context.Context, root, src, dst string, mtime time.T
 		var err error
 		e, err := hfs.directory.store(ctx, srcfname, e)
 		if err != nil {
-			glog.Warningf("failed to store copy src %s: %v", srcfname, err)
+			log.Warnf("failed to store copy src %s: %v", srcfname, err)
 			return err
 		}
-		glog.Infof("copy src new entry %s %s", srcfname, e)
+		log.Infof("copy src new entry %s %s", srcfname, e)
 	}
 	if err := e.err; err != nil {
 		return err
@@ -664,15 +644,13 @@ func (hfs *HashFS) Copy(ctx context.Context, root, src, dst string, mtime time.T
 		return err
 	}
 	hfs.journalEntry(ctx, dstfname, newEnt)
-	glog.Infof("copy %s to %s", srcfname, dstfname)
+	log.Infof("copy %s to %s", srcfname, dstfname)
 	return nil
 }
 
 // Mkdir makes a directory at root/dirname.
 func (hfs *HashFS) Mkdir(ctx context.Context, root, dirname string, cmdhash []byte) error {
-	if glog.V(1) {
-		glog.Infof("mkdir @%s %s", root, dirname)
-	}
+	log.Debugf("mkdir @%s %s", root, dirname)
 	hfs.clean.Store(false)
 	dirname = filepath.Join(root, dirname)
 	dirname = filepath.ToSlash(dirname)
@@ -681,7 +659,7 @@ func (hfs *HashFS) Mkdir(ctx context.Context, root, dirname string, cmdhash []by
 	if err == nil && fi.IsDir() {
 		err := hfs.OS.Chtimes(ctx, dirname, time.Time{}, mtime)
 		if err != nil {
-			glog.Warningf("failed to set dir mtime %s: %v: %v", dirname, mtime, err)
+			log.Warnf("failed to set dir mtime %s: %v: %v", dirname, mtime, err)
 		}
 	} else {
 		err := hfs.OS.MkdirAll(ctx, dirname, 0755)
@@ -719,7 +697,7 @@ func (hfs *HashFS) Mkdir(ctx context.Context, root, dirname string, cmdhash []by
 			}
 		}
 	}
-	glog.Infof("mkdir %s %s: %v", dirname, mtime, err)
+	log.Infof("mkdir %s %s: %v", dirname, mtime, err)
 	if err != nil {
 		return err
 	}
@@ -731,9 +709,7 @@ func (hfs *HashFS) Mkdir(ctx context.Context, root, dirname string, cmdhash []by
 
 // Remove removes a file at root/fname.
 func (hfs *HashFS) Remove(ctx context.Context, root, fname string) error {
-	if glog.V(1) {
-		glog.Infof("remove @%s %s", root, fname)
-	}
+	log.Debugf("remove @%s %s", root, fname)
 	hfs.clean.Store(false)
 	fname = filepath.Join(root, fname)
 	fname = filepath.ToSlash(fname)
@@ -744,16 +720,14 @@ func (hfs *HashFS) Remove(ctx context.Context, root, fname string) error {
 		err:    fs.ErrNotExist,
 	}
 	_, err := hfs.directory.store(ctx, fname, e)
-	glog.Infof("remove %s: %v", fname, err)
+	log.Infof("remove %s: %v", fname, err)
 	return err
 }
 
 // RemoveAll removes all files under root/name.
 // Also removes from the disk at the same time.
 func (hfs *HashFS) RemoveAll(ctx context.Context, root, name string) error {
-	if glog.V(1) {
-		glog.Infof("removeAll @%s %s", root, name)
-	}
+	log.Debugf("removeAll @%s %s", root, name)
 	hfs.clean.Store(false)
 	name = filepath.Join(root, name)
 	name = filepath.ToSlash(name)
@@ -768,7 +742,7 @@ func (hfs *HashFS) RemoveAll(ctx context.Context, root, name string) error {
 		err:    err,
 	}
 	_, err = hfs.directory.store(ctx, name, e)
-	glog.Infof("removeAll %s [%v]: %v", name, e.err, err)
+	log.Infof("removeAll %s [%v]: %v", name, e.err, err)
 	return err
 }
 
@@ -801,7 +775,7 @@ func (hfs *HashFS) ForgetMissingsInDir(ctx context.Context, root, dir string) {
 			if fi.IsDir() {
 				dents, err := hfs.ReadDir(ctx, root, fname)
 				if err != nil {
-					glog.Warningf("readdir failed for %q: %v", fname, err)
+					log.Warnf("readdir failed for %q: %v", fname, err)
 					continue
 				}
 				for _, dent := range dents {
@@ -822,7 +796,7 @@ func (hfs *HashFS) ForgetMissingsInDir(ctx context.Context, root, dir string) {
 			fullname = filepath.ToSlash(fullname)
 			_, err := hfs.OS.Lstat(ctx, fullname)
 			if errors.Is(err, fs.ErrNotExist) {
-				glog.Infof("forget missing %s", fullname)
+				log.Infof("forget missing %s", fullname)
 				hfs.directory.delete(ctx, fullname)
 				continue
 			}
@@ -830,7 +804,7 @@ func (hfs *HashFS) ForgetMissingsInDir(ctx context.Context, root, dir string) {
 		return nil
 	})
 	if err != nil {
-		glog.Warningf("forget missings in dir: %v", err)
+		log.Warnf("forget missings in dir: %v", err)
 	}
 }
 
@@ -846,7 +820,7 @@ func (hfs *HashFS) ForgetMissings(ctx context.Context, root string, inputs []str
 		if errors.Is(err, fs.ErrNotExist) {
 			// If it doesn't exist in hashfs,
 			// no need to check with os.Lstat.
-			glog.Infof("remove from inputs %s: %v", fname, err)
+			log.Infof("remove from inputs %s: %v", fname, err)
 			continue
 		}
 		if err == nil && (fi.IsChanged() || fi.IsMissingChecked()) {
@@ -864,7 +838,7 @@ func (hfs *HashFS) ForgetMissings(ctx context.Context, root string, inputs []str
 			fullname = filepath.ToSlash(fullname)
 			_, err := hfs.OS.Lstat(ctx, fullname)
 			if errors.Is(err, fs.ErrNotExist) {
-				glog.Infof("forget missing %s", fullname)
+				log.Infof("forget missing %s", fullname)
 				hfs.directory.delete(ctx, fullname)
 				continue
 			}
@@ -879,7 +853,7 @@ func (hfs *HashFS) ForgetMissings(ctx context.Context, root string, inputs []str
 		return nil
 	})
 	if err != nil {
-		glog.Warningf("forget missings: %v", err)
+		log.Warnf("forget missings: %v", err)
 	}
 	return availables
 }
@@ -892,7 +866,7 @@ func (hfs *HashFS) Availables(ctx context.Context, root string, inputs []string)
 		if errors.Is(err, fs.ErrNotExist) {
 			// If it doesn't exist in hashfs,
 			// no need to check with os.Lstat.
-			glog.Infof("remove from inputs %s: %v", fname, err)
+			log.Infof("remove from inputs %s: %v", fname, err)
 			continue
 		}
 		availables = append(availables, fname)
@@ -911,9 +885,7 @@ func (hfs *HashFS) Entries(ctx context.Context, root string, inputs []string) ([
 		fname = filepath.ToSlash(fname)
 		e, _, ok := hfs.directory.lookup(ctx, fname)
 		if ok {
-			if glog.V(2) {
-				glog.Infof("tree cache hit %s", fname)
-			}
+			log.Debugf("tree cache hit %s", fname)
 			ents = append(ents, e)
 			if e.mode.IsRegular() {
 				e.mu.Lock()
@@ -935,9 +907,7 @@ func (hfs *HashFS) Entries(ctx context.Context, root string, inputs []string) ([
 		if errors.Is(e.err, context.Canceled) {
 			return nil, e.err
 		}
-		if glog.V(1) {
-			glog.Infof("tree new entry %s", fname)
-		}
+		log.Debugf("tree new entry %s", fname)
 		e, err := hfs.directory.store(ctx, fname, e)
 		if err != nil {
 			return nil, err
@@ -958,7 +928,7 @@ func (hfs *HashFS) Entries(ctx context.Context, root string, inputs []string) ([
 		d := e.digest()
 		if e.err != nil || (d.IsZero() && e.target == "" && e.directory == nil) {
 			// TODO: hard fail instead?
-			glog.Warningf("missing %s data:%v target:%q: %v", fname, e.d, e.target, e.err)
+			log.Warnf("missing %s data:%v target:%q: %v", fname, e.d, e.target, e.err)
 			continue
 		}
 		data := digest.NewData(e.src, d)
@@ -974,9 +944,7 @@ func (hfs *HashFS) Entries(ctx context.Context, root string, inputs []string) ([
 				} else {
 					tname = filepath.Join(filepath.Dir(name), elink.target)
 				}
-				if glog.V(1) {
-					glog.Infof("symlink %s -> %s", name, tname)
-				}
+				log.Debugf("symlink %s -> %s", name, tname)
 				tname = filepath.ToSlash(tname)
 				if strings.HasPrefix(tname, root+"/") {
 					break
@@ -987,15 +955,11 @@ func (hfs *HashFS) Entries(ctx context.Context, root string, inputs []string) ([
 				var ok bool
 				elink, _, ok = hfs.directory.lookup(ctx, name)
 				if ok {
-					if glog.V(2) {
-						glog.Infof("tree cache hit %s", name)
-					}
+					log.Debugf("tree cache hit %s", name)
 				} else {
 					elink = newLocalEntry()
 					elink.init(ctx, name, hfs.executables, hfs.OS)
-					if glog.V(1) {
-						glog.Infof("tree new entry %s", name)
-					}
+					log.Debugf("tree new entry %s", name)
 					var err error
 					elink, err = hfs.directory.store(ctx, name, elink)
 					if err != nil {
@@ -1008,7 +972,7 @@ func (hfs *HashFS) Entries(ctx context.Context, root string, inputs []string) ([
 				}
 			}
 			if e != elink {
-				glog.Infof("resolve symlink %s to %s", fname, name)
+				log.Infof("resolve symlink %s to %s", fname, name)
 				target = elink.target
 				hfs.digester.compute(ctx, name, elink)
 				d := elink.digest()
@@ -1114,9 +1078,9 @@ func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []Update
 				err = hfs.opt.ArtFS.ArtfsInsert(ctx, execRoot, updates)
 			}
 			if err != nil {
-				glog.Warningf("cog buildfs insert %d under %s: %v", len(updates), execRoot, err)
+				log.Warnf("cog buildfs insert %d under %s: %v", len(updates), execRoot, err)
 			} else {
-				glog.Infof("cog buildfs insert %d under %s", len(updates), execRoot)
+				log.Infof("cog buildfs insert %d under %s", len(updates), execRoot)
 				// cogfs inserted the update, so we can assume
 				// these files exist locally.
 				for _, i := range updateIdx {
@@ -1124,12 +1088,12 @@ func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []Update
 				}
 			}
 		} else {
-			glog.Warningf("cog buildfs insert 0 from_local=%d not_file=%d", nFromLocals, nNonFiles)
+			log.Warnf("cog buildfs insert 0 from_local=%d not_file=%d", nFromLocals, nNonFiles)
 		}
 	}
 
 	for _, ent := range entries {
-		glog.Infof("update %v", ent)
+		log.Infof("update %v", ent)
 		fname := filepath.Join(execRoot, ent.Name)
 		fname = filepath.ToSlash(fname)
 		if ent.Entry == nil {
@@ -1137,7 +1101,7 @@ func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []Update
 			// so the entry should exists in hfs.directory.
 			e, _, ok := hfs.dirLookup(ctx, execRoot, ent.Name)
 			if !ok {
-				glog.Warningf("failed to update: no entry %s", ent.Name)
+				log.Warnf("failed to update: no entry %s", ent.Name)
 				continue
 			}
 			if e.getMtime().Equal(ent.ModTime) || e.getDir() != nil {
@@ -1175,7 +1139,7 @@ func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []Update
 				// in .siso_fs_state since mtime doesn't match.
 				err := hfs.OS.Chtimes(ctx, fname, time.Time{}, e.getMtime())
 				if errors.Is(err, fs.ErrNotExist) {
-					glog.Warningf("failed to update mtime of %s: %v", fname, err)
+					log.Warnf("failed to update mtime of %s: %v", fname, err)
 					continue
 				}
 				if err != nil {
@@ -1216,7 +1180,7 @@ func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []Update
 			if ent.IsLocal && e.isChanged {
 				err = hfs.OS.Chtimes(ctx, fname, time.Time{}, e.getMtime())
 				if errors.Is(err, fs.ErrNotExist) {
-					glog.Warningf("failed to update mtime of %s: %v", fname, err)
+					log.Warnf("failed to update mtime of %s: %v", fname, err)
 					continue
 				}
 				if err != nil {
@@ -1275,7 +1239,7 @@ func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []Update
 			hfs.journalEntry(ctx, fname, e)
 			err = hfs.OS.Chtimes(ctx, fname, time.Time{}, ent.ModTime)
 			if err != nil {
-				glog.Warningf("failed to update dir mtime %s: %v", fname, err)
+				log.Warnf("failed to update dir mtime %s: %v", fname, err)
 			}
 		}
 	}
@@ -1286,13 +1250,13 @@ func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []Update
 func (hfs *HashFS) RetrieveUpdateEntries(ctx context.Context, root string, fnames []string) []UpdateEntry {
 	ents, err := hfs.Entries(ctx, root, fnames)
 	if err != nil {
-		glog.Warningf("failed to get entries: %v", err)
+		log.Warnf("failed to get entries: %v", err)
 	}
 	entries := make([]UpdateEntry, 0, len(ents))
 	for _, ent := range ents {
 		fi, err := hfs.Stat(ctx, root, ent.Name)
 		if err != nil {
-			glog.Warningf("failed to stat %s: %v", ent.Name, err)
+			log.Warnf("failed to stat %s: %v", ent.Name, err)
 			continue
 		}
 		entries = append(entries, UpdateEntry{
@@ -1321,11 +1285,11 @@ func (hfs *HashFS) RetrieveUpdateEntriesFromLocal(ctx context.Context, root stri
 		fullname = filepath.ToSlash(fullname)
 		lfi, err := hfs.OS.Lstat(ctx, fullname)
 		if errors.Is(err, fs.ErrNotExist) {
-			glog.Warningf("missing local %s: %v", fname, err)
+			log.Warnf("missing local %s: %v", fname, err)
 			hfs.directory.delete(ctx, fullname)
 			continue
 		} else if err != nil {
-			glog.Warningf("failed to access local %s: %v", fname, err)
+			log.Warnf("failed to access local %s: %v", fname, err)
 			hfs.directory.delete(ctx, fullname)
 			continue
 		}
@@ -1342,7 +1306,7 @@ func (hfs *HashFS) RetrieveUpdateEntriesFromLocal(ctx context.Context, root stri
 		}
 		fi, err := hfs.Stat(ctx, root, fname)
 		if err != nil {
-			glog.Warningf("failed to stat after invalidate %s: %v", fname, err)
+			log.Warnf("failed to stat after invalidate %s: %v", fname, err)
 		} else {
 			ent.CmdHash = fi.CmdHash()
 			ent.Action = fi.Action()
@@ -1395,9 +1359,7 @@ func (hfs *HashFS) Flush(ctx context.Context, execRoot string, files []string) e
 			if !need {
 				// need=false means file is already downloaded,
 				// or entry was constructed from local disk.
-				if glog.V(1) {
-					glog.Infof("flush %s local ready", fname)
-				}
+				log.Debugf("flush %s local ready", fname)
 				e.mu.Lock()
 				if e.mtimeUpdated && e.target == "" {
 					// mtime was updated after entry sets mtime from the local disk.
@@ -1406,7 +1368,7 @@ func (hfs *HashFS) Flush(ctx context.Context, execRoot string, files []string) e
 					// and it makes the target invalidated
 					// in .siso_fs_state since mtime doesn't match.
 					err := hfs.OS.Chtimes(ctx, fname, time.Time{}, e.mtime)
-					glog.Infof("flush %s local ready mtime update: %v", fname, err)
+					log.Infof("flush %s local ready mtime update: %v", fname, err)
 					if err == nil {
 						e.mtimeUpdated = false
 					}
@@ -1414,7 +1376,7 @@ func (hfs *HashFS) Flush(ctx context.Context, execRoot string, files []string) e
 				e.mu.Unlock()
 				err := e.err
 				if errors.Is(err, fs.ErrNotExist) {
-					glog.Warningf("flush %s local-ready: %v", fname, err)
+					log.Warnf("flush %s local-ready: %v", fname, err)
 					continue
 				}
 				if err != nil {
@@ -1510,27 +1472,23 @@ func (e *entry) String() string {
 func (e *entry) init(ctx context.Context, fname string, executables map[string]bool, osfs *osfs.OSFS) {
 	fi, err := osfs.Lstat(ctx, fname)
 	if errors.Is(err, fs.ErrNotExist) {
-		if glog.V(1) {
-			glog.Infof("not exist %s", fname)
-		}
+		log.Debugf("not exist %s", fname)
 		e.err = err
 		return
 	}
 	if err != nil {
-		glog.Warningf("failed to lstat %s: %v", fname, err)
+		log.Warnf("failed to lstat %s: %v", fname, err)
 		e.err = err
 		return
 	}
 	if now := time.Now(); fi.ModTime().After(now) {
-		glog.Warningf("future timestamp on %s: mtime=%s now=%s", fname, fi.ModTime(), now)
+		log.Warnf("future timestamp on %s: mtime=%s now=%s", fname, fi.ModTime(), now)
 		e.err = fmt.Errorf("future timestamp on %s: mtime=%s now=%s", fname, fi.ModTime(), now)
 		return
 	}
 	switch {
 	case fi.IsDir():
-		if glog.V(1) {
-			glog.Infof("tree entry %s: is dir", fname)
-		}
+		log.Debugf("tree entry %s: is dir", fname)
 		e.directory = &directory{}
 		e.mode = 0644 | fs.ModeDir
 	case fi.Mode().Type() == fs.ModeSymlink:
@@ -1539,9 +1497,7 @@ func (e *entry) init(ctx context.Context, fname string, executables map[string]b
 		if err != nil {
 			e.err = err
 		}
-		if glog.V(1) {
-			glog.Infof("tree entry %s: symlink to %s: %v", fname, e.target, e.err)
-		}
+		log.Debugf("tree entry %s: symlink to %s: %v", fname, e.target, e.err)
 	case fi.Mode().IsRegular():
 		e.mode = 0644
 		if isExecutable(fi, fname, executables) {
@@ -1551,7 +1507,7 @@ func (e *entry) init(ctx context.Context, fname string, executables map[string]b
 		e.src = osfs.FileSource(fname, fi.Size())
 	default:
 		e.err = fmt.Errorf("unexpected filetype not regular %s: %s", fi.Mode(), fname)
-		glog.Errorf("tree entry %s: unknown filetype %s", fname, fi.Mode())
+		log.Errorf("tree entry %s: unknown filetype %s", fname, fi.Mode())
 		return
 	}
 	if e.mtime.Before(fi.ModTime()) {
@@ -1606,29 +1562,27 @@ func (e *entry) updateDir(ctx context.Context, hfs *HashFS, dname string) []stri
 	d, err := os.Open(dname)
 	if err != nil {
 		if !errors.Is(err, fs.ErrNotExist) {
-			glog.Warningf("updateDir %s: open %v", dname, err)
+			log.Warnf("updateDir %s: open %v", dname, err)
 		}
 		return nil
 	}
 	defer d.Close()
 	fi, err := d.Stat()
 	if err != nil {
-		glog.Warningf("updateDir %s: stat %v", dname, err)
+		log.Warnf("updateDir %s: stat %v", dname, err)
 		return nil
 	}
 	if !fi.IsDir() {
-		glog.Warningf("updateDir %s: is not dir?", dname)
+		log.Warnf("updateDir %s: is not dir?", dname)
 		return nil
 	}
 	if fi.ModTime().Equal(e.directory.mtime) {
-		if glog.V(1) {
-			glog.Infof("updateDir %s: up-to-date %s", dname, e.mtime)
-		}
+		log.Debugf("updateDir %s: up-to-date %s", dname, e.mtime)
 		return nil
 	}
 	names, err := d.Readdirnames(-1)
 	if err != nil {
-		glog.Warningf("updateDir %s: readdirnames %v", dname, err)
+		log.Warnf("updateDir %s: readdirnames %v", dname, err)
 		return nil
 	}
 	if hfs.OnCog() {
@@ -1649,7 +1603,7 @@ func (e *entry) updateDir(ctx context.Context, hfs *HashFS, dname string) []stri
 				// update entry in e.directory.
 				_, err := hfs.Stat(ctx, dname, name)
 				if err != nil {
-					glog.Warningf("updateDir stat %s: %v", name, err)
+					log.Warnf("updateDir stat %s: %v", name, err)
 				}
 			}()
 		}
@@ -1668,11 +1622,11 @@ func (e *entry) updateDir(ctx context.Context, hfs *HashFS, dname string) []stri
 			// update entry in e.directory.
 			_, err := hfs.Stat(ctx, dname, name)
 			if err != nil {
-				glog.Warningf("updateDir stat %s: %v", name, err)
+				log.Warnf("updateDir stat %s: %v", name, err)
 			}
 		}
 	}
-	glog.Infof("updateDir mtime %s %d %s -> %s", dname, len(names), e.mtime, fi.ModTime())
+	log.Infof("updateDir mtime %s %d %s -> %s", dname, len(names), e.mtime, fi.ModTime())
 	e.directory.mtime = fi.ModTime()
 	// if local dir is updated after hashfs update, update hashfs mtime.
 	if e.mtime.Before(e.directory.mtime) {
@@ -1705,7 +1659,7 @@ func (e *entry) flush(ctx context.Context, fname string, osfs *osfs.OSFS) error 
 		}
 		err := osfs.Remove(ctx, fname)
 		digestLock.Unlock()
-		glog.Infof("flush remove %s: %v", fname, err)
+		log.Infof("flush remove %s: %v", fname, err)
 		return err
 	}
 	d := e.digest()
@@ -1715,17 +1669,15 @@ func (e *entry) flush(ctx context.Context, fname string, osfs *osfs.OSFS) error 
 		// directory
 		fi, err := osfs.Lstat(ctx, fname)
 		if err == nil && fi.IsDir() && fi.ModTime().Equal(mtime) {
-			if glog.V(1) {
-				glog.Infof("flush dir %s: already exist", fname)
-			}
+			log.Debugf("flush dir %s: already exist", fname)
 			return nil
 		}
 		err = osfs.MkdirAll(ctx, fname, 0755)
 		if err != nil {
-			glog.Infof("flush dir %s: %v", fname, err)
+			log.Infof("flush dir %s: %v", fname, err)
 		} else {
 			err = osfs.Chtimes(ctx, fname, time.Time{}, mtime)
-			glog.Infof("flush dir chtime %s %v: %v", fname, mtime, err)
+			log.Infof("flush dir chtime %s %v: %v", fname, mtime, err)
 		}
 		return err
 	case d.IsZero() && e.target != "":
@@ -1742,7 +1694,7 @@ func (e *entry) flush(ctx context.Context, fname string, osfs *osfs.OSFS) error 
 			}
 		}
 		e.mu.Unlock()
-		glog.Infof("flush symlink %s -> %s: %v", fname, e.target, err)
+		log.Infof("flush symlink %s -> %s: %v", fname, e.target, err)
 		// don't change mtimes. it fails if target doesn't exist.
 		return err
 	default:
@@ -1758,12 +1710,12 @@ func (e *entry) flush(ctx context.Context, fname string, osfs *osfs.OSFS) error 
 				Path: fname,
 				Err:  syscall.EISDIR,
 			}
-			glog.Warningf("flush %s: %v", fname, err)
+			log.Warnf("flush %s: %v", fname, err)
 			return err
 		}
 		if fi.Size() == d.SizeBytes && fi.ModTime().Equal(mtime) {
 			// TODO: check hash, mode?
-			glog.Infof("flush %s: already exist", fname)
+			log.Infof("flush %s: already exist", fname)
 			return nil
 		}
 		if isHardlink(fi) {
@@ -1781,32 +1733,32 @@ func (e *entry) flush(ctx context.Context, fname string, osfs *osfs.OSFS) error 
 			if err == nil {
 				fileDigest = ld.Digest()
 				if fileDigest == d {
-					glog.Infof("flush %s: already exist - hash match", fname)
+					log.Infof("flush %s: already exist - hash match", fname)
 					if !fi.ModTime().Equal(mtime) {
 						err = osfs.Chtimes(ctx, fname, time.Time{}, mtime)
 					}
 					return err
 				}
 			}
-			glog.Warningf("flush %s: exists but mismatch size:%d!=%d mtime:%s!=%s d:%v!=%v", fname, fi.Size(), d.SizeBytes, fi.ModTime(), mtime, fileDigest, d)
+			log.Warnf("flush %s: exists but mismatch size:%d!=%d mtime:%s!=%s d:%v!=%v", fname, fi.Size(), d.SizeBytes, fi.ModTime(), mtime, fileDigest, d)
 		}
 		if removeReason == "" && fi.Mode()&0200 == 0 {
 			// need to be writable. otherwise os.WriteFile fails with permission denied.
 			err = osfs.Chmod(ctx, fname, fi.Mode()|0200)
-			glog.Warningf("flush %s: not writable? %s: %v", fname, fi.Mode(), err)
+			log.Warnf("flush %s: not writable? %s: %v", fname, fi.Mode(), err)
 		}
 	}
 	err = osfs.MkdirAll(ctx, filepath.Dir(fname), 0755)
 	if err != nil {
-		glog.Warningf("flush %s: mkdir: %v", fname, err)
+		log.Warnf("flush %s: mkdir: %v", fname, err)
 		return fmt.Errorf("failed to create directory for %s: %w", fname, err)
 	}
 	if d.SizeBytes == 0 {
 		if removeReason != "" {
 			err = osfs.Remove(ctx, fname)
-			glog.Infof("flush %s: remove %s: %v", fname, removeReason, err)
+			log.Infof("flush %s: remove %s: %v", fname, removeReason, err)
 		}
-		glog.Infof("flush %s: empty file", fname)
+		log.Infof("flush %s: empty file", fname)
 		err := osfs.WriteFile(ctx, fname, nil, 0644)
 		if err != nil {
 			return err
@@ -1821,7 +1773,7 @@ func (e *entry) flush(ctx context.Context, fname string, osfs *osfs.OSFS) error 
 	removeBeforeWrite := func() {
 		if removeReason != "" {
 			err = osfs.Remove(ctx, fname)
-			glog.Infof("flush %s: remove %s: %v", fname, removeReason, err)
+			log.Infof("flush %s: remove %s: %v", fname, removeReason, err)
 		}
 	}
 	if len(buf) == 0 {
@@ -1845,14 +1797,14 @@ func (e *entry) flush(ctx context.Context, fname string, osfs *osfs.OSFS) error 
 					return err
 				}
 				removeBeforeWrite()
-				glog.Infof("flush %s %s clone from source %s", fname, d, lsrc.Fname)
+				log.Infof("flush %s %s clone from source %s", fname, d, lsrc.Fname)
 				err := osfsc.Clonefile(ctx, lsrc.Fname, fname)
 				if err == nil {
 					err = osfs.Chmod(ctx, fname, e.mode)
 					return err
 				}
 				// clonefile err, fallback to normal copy
-				glog.Warningf("clonefile failed: %v", err)
+				log.Warnf("clonefile failed: %v", err)
 			}
 			var srcname string
 			if ok {
@@ -1868,13 +1820,13 @@ func (e *entry) flush(ctx context.Context, fname string, osfs *osfs.OSFS) error 
 				return fmt.Errorf("flush tmp %s size=%d: %w", tmpname, d.SizeBytes, err)
 			}
 			removeBeforeWrite()
-			glog.Infof("flush %s %s from source %s", fname, d, srcname)
+			log.Infof("flush %s %s from source %s", fname, d, srcname)
 			err = osfs.Rename(ctx, tmpname, fname)
 			return err
 		}()
 	} else {
 		removeBeforeWrite()
-		glog.Infof("flush %s from embedded buf", fname)
+		log.Infof("flush %s from embedded buf", fname)
 		err = osfs.WriteFile(ctx, fname, buf, e.mode)
 	}
 	if err != nil {
@@ -1928,7 +1880,7 @@ func (d *directory) lookup(ctx context.Context, fname string) (*entry, *director
 		}
 		if resolved != "" {
 			if !d.isRoot {
-				glog.Warningf("hashfs directory lookup must be called from root directory")
+				log.Warnf("hashfs directory lookup must be called from root directory")
 			}
 			fname = resolved
 			continue
@@ -1965,10 +1917,8 @@ func (d *directory) lookupEntry(ctx context.Context, fname string) (*entry, *dir
 		}
 		d = subdir
 	}
-	if glog.V(1) {
-		logOrigFname := pe.origFname
-		glog.Infof("lookup %s fname empty", logOrigFname)
-	}
+	logOrigFname := pe.origFname
+	log.Debugf("lookup %s fname empty", logOrigFname)
 	return nil, nil, "", false
 }
 
@@ -2011,10 +1961,8 @@ func (d *directory) storeEntry(ctx context.Context, fname string, e *entry) (*en
 		origFname: fname,
 		elems:     make([]string, 0, strings.Count(fname, "/")+1),
 	}
-	if glog.V(8) {
-		logOrigFname := pe.origFname
-		glog.Infof("store %s %v", logOrigFname, e)
-	}
+	logOrigFname := pe.origFname
+	log.Debugf("store %s %v", logOrigFname, e)
 	if strings.HasPrefix(fname, "/") {
 		pe.elems = append(pe.elems, "/")
 	}
@@ -2024,14 +1972,12 @@ func (d *directory) storeEntry(ctx context.Context, fname string, e *entry) (*en
 		if !ok {
 			v, loaded := d.m.LoadOrStore(fname, e)
 			if !loaded {
-				if glog.V(8) {
-					lv := struct {
-						origFname string
-						d         *directory
-						fname     string
-					}{pe.origFname, d, fname}
-					glog.Infof("store %s -> %p %s", lv.origFname, lv.d, lv.fname)
-				}
+				lv := struct {
+					origFname string
+					d         *directory
+					fname     string
+				}{pe.origFname, d, fname}
+				log.Debugf("store %s -> %p %s", lv.origFname, lv.d, lv.fname)
 				return e, "", nil
 			}
 			// check whether there is an update from previous entry.
@@ -2050,33 +1996,27 @@ func (d *directory) storeEntry(ctx context.Context, fname string, e *entry) (*en
 			cmdchanged := !bytes.Equal(ee.cmdhash, e.cmdhash)
 			actionchanged := ee.action != e.action
 			if e.target != "" && ee.target != e.target {
-				if glog.V(1) {
-					lv := struct {
-						origFname         string
-						cmdchanged        bool
-						eetarget, etarget string
-					}{pe.origFname, cmdchanged, ee.target, e.target}
-					glog.Infof("store %s: cmdchange:%t s:%q to %q", lv.origFname, lv.cmdchanged, lv.eetarget, lv.etarget)
-				}
+				lv := struct {
+					origFname         string
+					cmdchanged        bool
+					eetarget, etarget string
+				}{pe.origFname, cmdchanged, ee.target, e.target}
+				log.Debugf("store %s: cmdchange:%t s:%q to %q", lv.origFname, lv.cmdchanged, lv.eetarget, lv.etarget)
 			} else if !e.d.IsZero() && eed != e.d && eed.SizeBytes != 0 && e.d.SizeBytes != 0 {
-				if glog.V(1) {
-					// don't log nil to digest of empty file (size=0)
-					lv := struct {
-						origFname  string
-						cmdchanged bool
-						eed, ed    digest.Digest
-					}{pe.origFname, cmdchanged, eed, e.d}
-					glog.Infof("store %s: cmdchange:%t d:%v to %v", lv.origFname, lv.cmdchanged, lv.eed, lv.ed)
-				}
+				// don't log nil to digest of empty file (size=0)
+				lv := struct {
+					origFname  string
+					cmdchanged bool
+					eed, ed    digest.Digest
+				}{pe.origFname, cmdchanged, eed, e.d}
+				log.Debugf("store %s: cmdchange:%t d:%v to %v", lv.origFname, lv.cmdchanged, lv.eed, lv.ed)
 			} else if cmdchanged || actionchanged {
-				if glog.V(1) {
-					lv := struct {
-						origFname     string
-						cmdchanged    bool
-						actionchanged bool
-					}{pe.origFname, cmdchanged, actionchanged}
-					glog.Infof("store %s: cmdchange:%t actionchange:%t", lv.origFname, lv.cmdchanged, lv.actionchanged)
-				}
+				lv := struct {
+					origFname     string
+					cmdchanged    bool
+					actionchanged bool
+				}{pe.origFname, cmdchanged, actionchanged}
+				log.Debugf("store %s: cmdchange:%t actionchange:%t", lv.origFname, lv.cmdchanged, lv.actionchanged)
 			} else if ee.target == e.target && ee.size == e.size && ee.mode == e.mode && (e.d.IsZero() || eed == e.d) {
 				// no change?
 
@@ -2092,14 +2032,12 @@ func (d *directory) storeEntry(ctx context.Context, fname string, e *entry) (*en
 				}
 				ee.isChanged = e.isChanged
 				ee.mu.Unlock()
-				if glog.V(1) {
-					lv := struct {
-						origFname   string
-						mtime       time.Time
-						updatedTime time.Time
-					}{pe.origFname, ee.getMtime(), ee.getUpdatedTime()}
-					glog.Infof("store %s: mtime updated %v %v", lv.origFname, lv.mtime, lv.updatedTime)
-				}
+				lv := struct {
+					origFname   string
+					mtime       time.Time
+					updatedTime time.Time
+				}{pe.origFname, ee.getMtime(), ee.getUpdatedTime()}
+				log.Debugf("store %s: mtime updated %v %v", lv.origFname, lv.mtime, lv.updatedTime)
 				return ee, "", nil
 			} else if ee.getDir() != nil && e.getDir() != nil {
 				// ok if mkdir with the no cmdhash or same cmdhash.
@@ -2171,17 +2109,13 @@ func resolveNextDir(ctx context.Context, d *directory, next func(context.Context
 			}
 			if filepath.IsAbs(target) {
 				resolved := filepath.ToSlash(filepath.Join(target, rest))
-				if glog.V(1) {
-					glog.Infof("resolve symlink -> %s", resolved)
-				}
+				log.Debugf("resolve symlink -> %s", resolved)
 				return nil, resolved, false
 			}
 			pe.elems[len(pe.elems)-1] = target
 			pe.elems = append(pe.elems, rest)
 			resolved := filepath.ToSlash(filepath.Join(pe.elems...))
-			if glog.V(1) {
-				glog.Infof("resolve symlink -> %s", resolved)
-			}
+			log.Debugf("resolve symlink -> %s", resolved)
 			return nil, resolved, false
 		}
 
@@ -2191,13 +2125,9 @@ func resolveNextDir(ctx context.Context, d *directory, next func(context.Context
 		if nextDir != nil {
 			return nextDir, "", true
 		}
-		if glog.V(1) {
-			glog.Infof("next %s %d", elem, i)
-		}
+		log.Debugf("next %s %d", elem, i)
 	}
-	if glog.V(1) {
-		glog.Warningf("resolve loop?")
-	}
+	log.Debugf("resolve loop?")
 	return nil, "", false
 }
 
@@ -2231,30 +2161,24 @@ func nextDir(ctx context.Context, d *directory, pe pathElements, elem string) (*
 		if dent != nil && dent.err == nil {
 			target := dent.target
 			subdir := dent.getDir()
-			if glog.V(9) {
-				lv := struct {
-					origFname, elem string
-					d               *directory
-					dent            *entry
-				}{pe.origFname, elem, d, dent}
-				glog.Infof("store %s subdir0 %s -> %s (%v)", lv.origFname, lv.elem, lv.d, lv.dent)
-			}
+			lv := struct {
+				origFname, elem string
+				d               *directory
+				dent            *entry
+			}{pe.origFname, elem, d, dent}
+			log.Debugf("store %s subdir0 %s -> %s (%v)", lv.origFname, lv.elem, lv.d, lv.dent)
 			if subdir == nil && target == "" {
-				if glog.V(9) {
-					glog.Infof("store %s no dir, no symlink", pe.origFname)
-				}
+				log.Debugf("store %s no dir, no symlink", pe.origFname)
 				return nil, "", false
 			}
 			return subdir, target, true
 		}
 		deleted := d.m.CompareAndDelete(elem, dent)
-		if glog.V(9) {
-			lv := struct {
-				origFname, elem string
-				deleted         bool
-			}{pe.origFname, elem, deleted}
-			glog.Infof("store %s delete missing %s to create dir deleted: %t", lv.origFname, lv.elem, lv.deleted)
-		}
+		lv := struct {
+			origFname, elem string
+			deleted         bool
+		}{pe.origFname, elem, deleted}
+		log.Debugf("store %s delete missing %s to create dir deleted: %t", lv.origFname, lv.elem, lv.deleted)
 	}
 	// create intermediate dir of elem.
 	mtime := time.Now()
@@ -2271,7 +2195,7 @@ func nextDir(ctx context.Context, d *directory, pe pathElements, elem string) (*
 		case dfi.Mode().Type() == fs.ModeSymlink:
 			target, err := os.Readlink(fullname)
 			if err != nil {
-				glog.Warningf("readlink %s: %v", fullname, err)
+				log.Warnf("readlink %s: %v", fullname, err)
 				return nil, "", false
 			}
 			lready := make(chan bool, 1)
@@ -2288,11 +2212,11 @@ func nextDir(ctx context.Context, d *directory, pe pathElements, elem string) (*
 				dent = v.(*entry)
 			}
 			if dent.mode != newDent.mode || dent.target != newDent.target {
-				glog.Warningf("store %s symlink dir: race? store %s %s / loaded %s %s", pe.origFname, newDent.mode, newDent.target, dent.mode, dent.target)
+				log.Warnf("store %s symlink dir: race? store %s %s / loaded %s %s", pe.origFname, newDent.mode, newDent.target, dent.mode, dent.target)
 			}
 			return nil, target, true
 		default:
-			glog.Warningf("unexpected mode %s: %s", fullname, dfi.Mode().Type())
+			log.Warnf("unexpected mode %s: %s", fullname, dfi.Mode().Type())
 			return nil, "", false
 		}
 	}
@@ -2317,17 +2241,15 @@ func nextDir(ctx context.Context, d *directory, pe pathElements, elem string) (*
 		target = dent.target
 	}
 	subdir := dent.getDir()
-	if glog.V(9) {
-		lv := struct {
-			origFname, elem string
-			subdir          *directory
-			dent            *entry
-		}{pe.origFname, elem, subdir, dent}
-		glog.Infof("store %s subdir1 %s -> %s (%v)", lv.origFname, lv.elem, lv.subdir, lv.dent)
-	}
+	lv := struct {
+		origFname, elem string
+		subdir          *directory
+		dent            *entry
+	}{pe.origFname, elem, subdir, dent}
+	log.Debugf("store %s subdir1 %s -> %s (%v)", lv.origFname, lv.elem, lv.subdir, lv.dent)
 	d = subdir
 	if d == nil && target == "" {
-		glog.Warningf("store %s no dir, no symlink", pe.origFname)
+		log.Warnf("store %s no dir, no symlink", pe.origFname)
 		return nil, "", false
 	}
 	return d, target, true

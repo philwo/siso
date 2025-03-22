@@ -22,7 +22,7 @@ import (
 	"github.com/bazelbuild/remote-apis-sdks/go/pkg/command"
 	"github.com/bazelbuild/remote-apis-sdks/go/pkg/retry"
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
-	"github.com/golang/glog"
+	"github.com/charmbracelet/log"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -182,7 +182,7 @@ func (re *REProxyExec) Run(ctx context.Context, cmd *execute.Cmd) error {
 	}
 	err = processResponse(ctx, cmd, resp)
 	if err != nil {
-		glog.Warningf("Command failed for cmd %q: %v", cmd.Desc, err)
+		log.Warnf("Command failed for cmd %q: %v", cmd.Desc, err)
 	}
 	return err
 }
@@ -330,14 +330,14 @@ func processResponse(ctx context.Context, cmd *execute.Cmd, response *ppb.RunRes
 	}
 
 	// Log Reproxy's execution ID to associate it with Siso's command ID for debugging purposes.
-	glog.Infof("RunResponse.ExecutionId=%s", response.GetExecutionId())
+	log.Infof("RunResponse.ExecutionId=%s", response.GetExecutionId())
 
 	al := response.GetActionLog()
 	cached := response.GetResult().GetStatus() == cpb.CommandResultStatus_CACHE_HIT
 	if response.GetResult().GetExitCode() == 0 {
-		glog.Infof("exit=%d cache=%t completion_status=%s action=%s", response.GetResult().GetExitCode(), cached, al.GetCompletionStatus(), al.GetRemoteMetadata().GetActionDigest())
+		log.Infof("exit=%d cache=%t completion_status=%s action=%s", response.GetResult().GetExitCode(), cached, al.GetCompletionStatus(), al.GetRemoteMetadata().GetActionDigest())
 	} else {
-		glog.Warningf("exit=%d cache=%t response=%v", response.GetResult().GetExitCode(), cached, response)
+		log.Warnf("exit=%d cache=%t response=%v", response.GetResult().GetExitCode(), cached, response)
 	}
 
 	// TODO(b/273407069): this is nowhere near a complete ActionResult. LogRecord has lots of info, add that info.

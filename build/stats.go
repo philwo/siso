@@ -8,7 +8,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/golang/glog"
+	"github.com/charmbracelet/log"
 )
 
 type stats struct {
@@ -45,7 +45,7 @@ func (s *stats) update(ctx context.Context, m *StepMetric, pure bool) {
 		s.s.Local++
 	case m.Err: // maybe canceled?
 	default:
-		glog.Warningf("unexpected metrics? %#v", m)
+		log.Warnf("unexpected metrics? %#v", m)
 	}
 
 	if m.Fallback {

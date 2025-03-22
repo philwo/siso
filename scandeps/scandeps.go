@@ -12,8 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/golang/glog"
-
+	"github.com/charmbracelet/log"
 	"go.chromium.org/infra/build/siso/hashfs"
 )
 
@@ -95,7 +94,7 @@ func (s *ScanDeps) Scan(ctx context.Context, execRoot string, req Request) ([]st
 
 	setupDur := time.Since(started)
 	if setupDur > 500*time.Millisecond {
-		glog.Infof("scan setup dirs:%d %s", len(req.Dirs), setupDur)
+		log.Infof("scan setup dirs:%d %s", len(req.Dirs), setupDur)
 	}
 	started = time.Now()
 
@@ -117,10 +116,8 @@ func (s *ScanDeps) Scan(ctx context.Context, execRoot string, req Request) ([]st
 			return nil, fmt.Errorf("too slow scandeps: dirs:%d ds:%d i:%d n:%d %s %s", len(req.Dirs), scanner.maxDirstack, icnt, ncnt, setupDur, dur)
 		}
 		names := scanner.nextInputs(ctx)
-		if glog.V(1) {
-			logNames := names
-			glog.Infof("try include %q", logNames)
-		}
+		logNames := names
+		log.Debugf("try include %q", logNames)
 		for _, name := range names {
 			ncnt++
 			incpath, err := scanner.find(ctx, name)
@@ -128,36 +125,27 @@ func (s *ScanDeps) Scan(ctx context.Context, execRoot string, req Request) ([]st
 				if errors.Is(err, ctx.Err()) {
 					return nil, fmt.Errorf("timeout dirs:%d ds:%d i:%d n:%d %s %s: %w", len(req.Dirs), scanner.maxDirstack, icnt, ncnt, setupDur, time.Since(started), err)
 				}
-				if glog.V(2) {
-					lv := struct {
-						name string
-						err  error
-					}{name, err}
-					glog.Infof("name %s not found: %v", lv.name, lv.err)
-				}
+				lv := struct {
+					name string
+					err  error
+				}{name, err}
+				log.Debugf("name %s not found: %v", lv.name, lv.err)
 				continue
 			}
 			if incpath == "" {
 				// already read?
 				continue
 			}
-			if glog.V(1) {
-				glog.Infof("include %s -> %s", name, incpath)
-			}
+			log.Debugf("include %s -> %s", name, incpath)
 			if deps, ok := s.inputDeps[incpath]; ok {
-				if glog.V(1) {
-					logDeps := deps
-					glog.Infof("add inputDeps %q", logDeps)
-				}
+				logDeps := deps
+				log.Debugf("add inputDeps %q", logDeps)
 				scanner.addInputs(ctx, deps...)
 			}
-			// TODO: check name in precomputed subtrees (i.e. sysroots etc)?
 			// if not found, fallback to `clang -M`?
 		}
 	}
 	results := scanner.results()
-	if glog.V(1) {
-		glog.Infof("results=%q", results)
-	}
+	log.Debugf("results=%q", results)
 	return results, nil
 }

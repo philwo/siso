@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/golang/glog"
+	"github.com/charmbracelet/log"
 )
 
 // Path manages paths used by the build.
@@ -54,7 +54,7 @@ func (p *Path) Intern(path string) string {
 func (p *Path) MaybeFromWD(ctx context.Context, path string) string {
 	s, err := p.FromWD(path)
 	if err != nil {
-		glog.Warningf("Failed to get rel %s, %s: %v", p.ExecRoot, path, err)
+		log.Warnf("Failed to get rel %s, %s: %v", p.ExecRoot, path, err)
 		return path
 	}
 	return s
@@ -104,7 +104,7 @@ func (p *Path) MaybeToWD(ctx context.Context, path string) string {
 	}
 	rel, err := filepath.Rel(p.Dir, path)
 	if err != nil {
-		glog.Warningf("Failed to get rel %s, %s: %v", p.Dir, path, err)
+		log.Warnf("Failed to get rel %s, %s: %v", p.Dir, path, err)
 		return path
 	}
 	rel = filepath.ToSlash(rel)

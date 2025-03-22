@@ -16,7 +16,7 @@ import (
 	"time"
 
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
-	"github.com/golang/glog"
+	"github.com/charmbracelet/log"
 
 	"go.chromium.org/infra/build/siso/execute"
 	"go.chromium.org/infra/build/siso/execute/reproxyexec"
@@ -372,7 +372,7 @@ func (s *Step) useReclient() bool {
 func (s *Step) init(ctx context.Context, b *Builder) {
 	s.def.EnsureRule(ctx)
 	s.cmd = newCmd(ctx, b, s.def)
-	glog.Infof("cmdhash:%s", base64.StdEncoding.EncodeToString(s.cmd.CmdHash))
+	log.Infof("cmdhash:%s", base64.StdEncoding.EncodeToString(s.cmd.CmdHash))
 }
 
 func newCmd(ctx context.Context, b *Builder, stepDef StepDef) *execute.Cmd {
@@ -465,7 +465,7 @@ func stepTimeout(ctx context.Context, d string) time.Duration {
 	}
 	dur, err := time.ParseDuration(d)
 	if err != nil {
-		glog.Warningf("failed to parse duration %q: %v", d, err)
+		log.Warnf("failed to parse duration %q: %v", d, err)
 		return defaultTimeout
 	}
 	return dur
@@ -548,7 +548,7 @@ func (b *Builder) loadEnvfile(ctx context.Context, fname string) []string {
 		//  Where ENVFILE is a binary file that contains an environment block suitable for CreateProcessA() on Windows (i.e. a series of zero-terminated strings that look like NAME=VALUE, followed by an extra zero terminator).
 		buf, err := b.hashFS.ReadFile(ctx, b.path.ExecRoot, b.path.MaybeFromWD(ctx, fname))
 		if err != nil {
-			glog.Warningf("failed to load envfile %q: %v", fname, err)
+			log.Warnf("failed to load envfile %q: %v", fname, err)
 			return
 		}
 		for len(buf) > 0 {
@@ -563,7 +563,7 @@ func (b *Builder) loadEnvfile(ctx context.Context, fname string) []string {
 				env.envs = append(env.envs, e)
 			}
 		}
-		glog.Infof("load envfile %q: %d", fname, len(env.envs))
+		log.Infof("load envfile %q: %d", fname, len(env.envs))
 	})
 	return env.envs
 }

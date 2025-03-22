@@ -15,8 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/golang/glog"
-
+	"github.com/charmbracelet/log"
 	"go.chromium.org/infra/build/siso/execute"
 	"go.chromium.org/infra/build/siso/toolsupport/makeutil"
 )
@@ -82,10 +81,10 @@ func depsFastStep(ctx context.Context, b *Builder, step *Step) (*Step, error) {
 		depsIns = step.def.ExpandedCaseSensitives(ctx, depsIns)
 		inputs, err := fixInputsByDeps(ctx, b, stepInputs, depsIns)
 		if err != nil {
-			glog.Warningf("failed to fix inputs by deps: %v", err)
+			log.Warnf("failed to fix inputs by deps: %v", err)
 			return err
 		}
-		glog.Infof("fix inputs by deps %d -> %d", len(step.cmd.Inputs), len(inputs))
+		log.Infof("fix inputs by deps %d -> %d", len(step.cmd.Inputs), len(inputs))
 		newCmd.Inputs = inputs
 		newCmd.Pure = true
 		return nil
@@ -128,7 +127,7 @@ func depsExpandInputs(ctx context.Context, b *Builder, step *Step) {
 				}
 			}
 			if _, err := b.hashFS.Stat(ctx, b.path.ExecRoot, in); err != nil {
-				glog.Warningf("deps stat error %s: %v", in, err)
+				log.Warnf("deps stat error %s: %v", in, err)
 				continue
 			}
 			inputs = append(inputs, in)
@@ -139,12 +138,12 @@ func depsExpandInputs(ctx context.Context, b *Builder, step *Step) {
 			}
 			seen[in] = true
 			if _, err := b.hashFS.Stat(ctx, b.path.ExecRoot, in); err != nil {
-				glog.Warningf("deps stat error %s: %v", in, err)
+				log.Warnf("deps stat error %s: %v", in, err)
 				continue
 			}
 			inputs = append(inputs, in)
 		}
-		glog.Infof("deps expands %d -> %d", len(step.cmd.Inputs), len(inputs))
+		log.Infof("deps expands %d -> %d", len(step.cmd.Inputs), len(inputs))
 		step.cmd.Inputs = make([]string, len(inputs))
 		copy(step.cmd.Inputs, inputs)
 	}
@@ -155,7 +154,7 @@ func depsFixCmd(ctx context.Context, b *Builder, step *Step, deps []string) {
 	deps = step.def.ExpandedCaseSensitives(ctx, deps)
 	inputs, err := fixInputsByDeps(ctx, b, stepInputs, deps)
 	if err != nil {
-		glog.Warningf("fix inputs by deps: %v", err)
+		log.Warnf("fix inputs by deps: %v", err)
 		step.cmd.Pure = false
 		return
 	}
@@ -185,7 +184,7 @@ func depsCmd(ctx context.Context, b *Builder, step *Step) error {
 		depsIns, err := ds.DepsCmd(ctx, b, step)
 		depsIns = step.def.ExpandedCaseSensitives(ctx, depsIns)
 		inputs := uniqueFiles(stepInputs, depsIns)
-		glog.Infof("%s-deps %d %s: %v", step.cmd.Deps, len(inputs), time.Since(start), err)
+		log.Infof("%s-deps %d %s: %v", step.cmd.Deps, len(inputs), time.Since(start), err)
 		if err != nil {
 			return err
 		}
@@ -198,9 +197,7 @@ func depsCmd(ctx context.Context, b *Builder, step *Step) error {
 func depsAfterRun(ctx context.Context, b *Builder, step *Step) ([]string, error) {
 	ds, found := depsProcessors[step.cmd.Deps]
 	if !found {
-		if glog.V(1) {
-			glog.Infof("update deps; unexpected deps=%q", step.cmd.Deps)
-		}
+		log.Debugf("update deps; unexpected deps=%q", step.cmd.Deps)
 		// deps= is not set, but depfile= is set.
 		if step.cmd.Depfile != "" {
 			err := checkDepfile(ctx, b, step)
@@ -274,7 +271,7 @@ func checkDeps(ctx context.Context, b *Builder, step *Step, deps []string) error
 		// remote relocatableReq should not have absolute path dep.
 		if filepath.IsAbs(dep) {
 			if relocatableReq {
-				glog.Warningf("check deps: abs path in deps %s: platform=%v", dep, platform)
+				log.Warnf("check deps: abs path in deps %s: platform=%v", dep, platform)
 				if platform != nil {
 					return fmt.Errorf("absolute path in deps %q of %q: use input_root_absolute_path=true for %q (siso config: %s): %w", dep, step, step.cmd.Outputs[0], step.def.RuleName(), errNotRelocatable)
 				}
@@ -314,7 +311,7 @@ func checkDeps(ctx context.Context, b *Builder, step *Step, deps []string) error
 	if experiments.Enabled("check-deps", "") || experiments.Enabled("fail-on-bad-deps", "") {
 		unknownBadDep, err := step.def.CheckInputDeps(ctx, checkInputs)
 		if err != nil {
-			glog.Warningf("deps error: %v", err)
+			log.Warnf("deps error: %v", err)
 			if unknownBadDep && experiments.Enabled("fail-on-bad-deps", "") {
 				return fmt.Errorf("deps error: %w", err)
 			}

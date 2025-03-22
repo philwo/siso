@@ -12,7 +12,7 @@ import (
 	"time"
 
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
-	"github.com/golang/glog"
+	"github.com/charmbracelet/log"
 
 	"go.chromium.org/infra/build/siso/execute"
 	"go.chromium.org/infra/build/siso/reapi"
@@ -51,7 +51,7 @@ func (re *RemoteExec) prepareInputs(ctx context.Context, cmd *execute.Cmd) (dige
 		if err != nil {
 			return fmt.Errorf("failed to upload all %s: %w", cmd, err)
 		}
-		glog.Infof("upload %d/%d", n, ds.Size())
+		log.Infof("upload %d/%d", n, ds.Size())
 		return nil
 	})
 	return actionDigest, err
@@ -73,12 +73,10 @@ func (re *RemoteExec) Run(ctx context.Context, cmd *execute.Cmd) error {
 		ActionDigest:    actionDigest.Proto(),
 		SkipCacheLookup: cmd.SkipCacheLookup,
 	})
-	glog.Infof("digest: %s, skipCacheLookup:%t opName: %s", actionDigest, cmd.SkipCacheLookup, opName)
-	if glog.V(1) {
-		glog.Infof("response: %s", resp)
-	}
+	log.Infof("digest: %s, skipCacheLookup:%t opName: %s", actionDigest, cmd.SkipCacheLookup, opName)
+	log.Debugf("response: %s", resp)
 	if err != nil {
-		glog.Warningf("digest: %s, err: %v", actionDigest, err)
+		log.Warnf("digest: %s, err: %v", actionDigest, err)
 	}
 	result := resp.GetResult()
 	return re.processResult(ctx, cmd, result, resp.GetCachedResult(), err)
@@ -86,9 +84,9 @@ func (re *RemoteExec) Run(ctx context.Context, cmd *execute.Cmd) error {
 
 func (re *RemoteExec) processResult(ctx context.Context, cmd *execute.Cmd, result *rpb.ActionResult, cached bool, err error) error {
 	if result.GetExitCode() == 0 && err == nil {
-		glog.Infof("exit=%d cache=%t", result.GetExitCode(), cached)
+		log.Infof("exit=%d cache=%t", result.GetExitCode(), cached)
 	} else {
-		glog.Warningf("exit=%d cache=%t result=%v err:%v", result.GetExitCode(), cached, result, err)
+		log.Warnf("exit=%d cache=%t result=%v err:%v", result.GetExitCode(), cached, result, err)
 	}
 	if result == nil {
 		if err != nil {
@@ -104,7 +102,7 @@ func (re *RemoteExec) processResult(ctx context.Context, cmd *execute.Cmd, resul
 		ds := digest.NewStore()
 		outdir, derr := re.client.FetchTree(ctx, d.GetPath(), digest.FromProto(d.GetTreeDigest()), ds)
 		if derr != nil {
-			glog.Errorf("Failed to fetch tree %s %s: %v", d.GetPath(), d.GetTreeDigest(), derr)
+			log.Errorf("Failed to fetch tree %s %s: %v", d.GetPath(), d.GetTreeDigest(), derr)
 			continue
 		}
 		dfiles, dsymlinks, ddirs := merkletree.Traverse(ctx, d.GetPath(), outdir, ds)

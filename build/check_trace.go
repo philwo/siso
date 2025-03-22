@@ -16,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/golang/glog"
+	"github.com/charmbracelet/log"
 )
 
 // TODO(b/276390237): Provide user friendly build dependency errors caught by file trace
@@ -57,22 +57,22 @@ func (b *Builder) checkTrace(ctx context.Context, step *Step, dur time.Duration)
 	}
 	inadds, indels, inplatforms, inerrs := filesDiff(ctx, b, allInputs, inouts, step.cmd.FileTrace.Inputs, step.def.Binding("ignore_extra_input_pattern"))
 	outadds, outdels, outplatforms, outerrs := filesDiff(ctx, b, allOutputs, inouts, step.cmd.FileTrace.Outputs, step.def.Binding("ignore_extra_output_pattern"))
-	glog.Infof("check-trace inputs=%d+%d+%d=>%d+%d+%d outputs=%d+%d+%d=>%d+%d+%d",
+	log.Infof("check-trace inputs=%d+%d+%d=>%d+%d+%d outputs=%d+%d+%d=>%d+%d+%d",
 		len(allInputs), len(inouts), len(step.cmd.FileTrace.Inputs),
 		len(inadds), len(indels), len(inplatforms),
 		len(allOutputs), len(inouts), len(step.cmd.FileTrace.Outputs),
 		len(outadds), len(outdels), len(outplatforms))
 
 	if len(inerrs) > 0 {
-		glog.Warningf("inerrs: %q", inerrs)
+		log.Warnf("inerrs: %q", inerrs)
 	}
 	if len(outerrs) > 0 {
-		glog.Warningf("outerrs: %q", outerrs)
+		log.Warnf("outerrs: %q", outerrs)
 	}
 	if len(inadds) == 0 && len(indels) == 0 && len(inerrs) == 0 &&
 		len(outadds) == 0 && len(outdels) == 0 && len(outerrs) == 0 {
-		glog.Infof("trace-diff pure")
-		glog.V(1).Infof("trace-diff-platform %s\ninputs\n %s\noutputs\n %s", step, strings.Join(inplatforms, "\n "), strings.Join(outplatforms, "\n "))
+		log.Infof("trace-diff pure")
+		log.Debugf("trace-diff-platform %s\ninputs\n %s\noutputs\n %s", step, strings.Join(inplatforms, "\n "), strings.Join(outplatforms, "\n "))
 		var buf bytes.Buffer
 		fmt.Fprintf(&buf, `cmd: %s pure:%t/true restat:%t %s
 action: %s %s
@@ -92,9 +92,9 @@ inerr:%d outerr:%d
 
 	if len(inadds) == 0 && len(inerrs) == 0 &&
 		len(outadds) == 0 && len(outerrs) == 0 {
-		glog.Infof("trace-diff can-be-pure")
-		glog.V(1).Infof("%s trace-diff\ninputs\n-%s\noutputs\n-%s", step, strings.Join(indels, "\n-"), strings.Join(outdels, "\n-"))
-		glog.V(1).Infof("%s trace-diff-platform\ninputs\n %s\noutputs\n %s", step, strings.Join(inplatforms, "\n "), strings.Join(outplatforms, "\n "))
+		log.Infof("trace-diff can-be-pure")
+		log.Debugf("%s trace-diff\ninputs\n-%s\noutputs\n-%s", step, strings.Join(indels, "\n-"), strings.Join(outdels, "\n-"))
+		log.Debugf("%s trace-diff-platform\ninputs\n %s\noutputs\n %s", step, strings.Join(inplatforms, "\n "), strings.Join(outplatforms, "\n "))
 
 		var buf bytes.Buffer
 		fmt.Fprintf(&buf, `cmd: %s pure:%t/can-be-true restat:%t %s
@@ -116,15 +116,15 @@ outputs:
 		b.localexecLogWriter.Write(buf.Bytes())
 		return nil
 	}
-	glog.Infof("trace-diff impure")
-	glog.V(1).Infof("%s trace-diff\ninputs\n+%s\n-%s\n?%s\noutputs\n+%s\n-%s\n?%s", step,
+	log.Infof("trace-diff impure")
+	log.Debugf("%s trace-diff\ninputs\n+%s\n-%s\n?%s\noutputs\n+%s\n-%s\n?%s", step,
 		strings.Join(inadds, "\n+"),
 		strings.Join(indels, "\n-"),
 		strings.Join(inerrs, "\n?"),
 		strings.Join(outadds, "\n+"),
 		strings.Join(outdels, "\n-"),
 		strings.Join(outerrs, "\n?"))
-	glog.V(1).Infof("%s trace-diff-platform\ninputs\n %s\noutputs\n %s", step, strings.Join(inplatforms, "\n "), strings.Join(outplatforms, "\n "))
+	log.Debugf("%s trace-diff-platform\ninputs\n %s\noutputs\n %s", step, strings.Join(inplatforms, "\n "), strings.Join(outplatforms, "\n "))
 
 	ruleBuf := step.def.RuleFix(ctx, inadds, outadds)
 
@@ -159,7 +159,7 @@ allInputs:
 		strings.Join(allInputs, "\n "))
 	b.localexecLogWriter.Write(buf.Bytes())
 	if step.cmd.Pure {
-		glog.Warningf("impure cmd deps=%q marked as pure", step.cmd.Deps)
+		log.Warnf("impure cmd deps=%q marked as pure", step.cmd.Deps)
 		return depsImpureCheck(ctx, step, command)
 	}
 	return nil
@@ -185,7 +185,7 @@ func filesDiff(ctx context.Context, b *Builder, x, opts, y []string, ignorePatte
 		var err error
 		ignoreRE, err = regexp.Compile(ignorePattern)
 		if err != nil {
-			glog.Warningf("bad ignore pattern %q: %v", ignorePattern, err)
+			log.Warnf("bad ignore pattern %q: %v", ignorePattern, err)
 		}
 	}
 	for _, pathname := range y {
@@ -221,9 +221,7 @@ func filesDiff(ctx context.Context, b *Builder, x, opts, y []string, ignorePatte
 		}
 		fi, err := b.hashFS.Stat(ctx, b.path.ExecRoot, relname)
 		if errors.Is(err, os.ErrNotExist) {
-			if glog.V(1) {
-				glog.Infof("%s: stat %v", name, err)
-			}
+			log.Debugf("%s: stat %v", name, err)
 			continue
 		}
 		if err != nil {

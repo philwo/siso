@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/golang/glog"
+	"github.com/charmbracelet/log"
 	"go.starlark.net/starlark"
 	"go.starlark.net/starlarkstruct"
 
@@ -54,7 +54,7 @@ func packCmd(ctx context.Context, cmd *execute.Cmd, expandedInputs func() []stri
 		cmdFieldInputs:     packList(cmd.Inputs),
 		cmdFieldToolInputs: packList(cmd.ToolInputs),
 		cmdFieldExpandedInputs: starlark.NewBuiltin(cmdFieldExpandedInputs, func(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-			glog.V(1).Infof("cmd.expanded_inputs")
+			log.Debugf("cmd.expanded_inputs")
 			return packList(expandedInputs()), nil
 		}),
 		cmdFieldRSPFileContent: starlark.Bytes(cmd.RSPFileContent),

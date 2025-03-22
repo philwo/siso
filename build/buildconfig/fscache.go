@@ -9,7 +9,7 @@ import (
 	"io/fs"
 	"sync"
 
-	"github.com/golang/glog"
+	"github.com/charmbracelet/log"
 	"golang.org/x/sync/singleflight"
 )
 
@@ -27,9 +27,7 @@ func (c *fscache) Get(ctx context.Context, fsys fs.FS, fname string) ([]byte, er
 	buf, ok := c.m[fname]
 	c.mu.Unlock()
 	if ok {
-		if glog.V(1) {
-			glog.Infof("fscache hit %s: %d", fname, len(buf))
-		}
+		log.Debugf("fscache hit %s: %d", fname, len(buf))
 		return buf, nil
 	}
 	v, err, _ := c.s.Do(fname, func() (any, error) {
@@ -37,7 +35,7 @@ func (c *fscache) Get(ctx context.Context, fsys fs.FS, fname string) ([]byte, er
 		if err != nil {
 			return buf, err
 		}
-		glog.Infof("fscache set %s: %d", fname, len(buf))
+		log.Infof("fscache set %s: %d", fname, len(buf))
 		c.mu.Lock()
 		c.m[fname] = buf
 		c.mu.Unlock()

@@ -12,7 +12,7 @@ import (
 	"io/fs"
 	"strings"
 
-	"github.com/golang/glog"
+	"github.com/charmbracelet/log"
 )
 
 // ParseDepsFile parses *.d file in fname on fsys.
@@ -25,9 +25,7 @@ func ParseDepsFile(ctx context.Context, fsys fs.FS, fname string) ([]string, err
 		return nil, err
 	}
 	deps, err := ParseDeps(b)
-	if glog.V(1) {
-		glog.Infof("deps %s => %s: %v", fname, deps, err)
-	}
+	log.Debugf("deps %s => %s: %v", fname, deps, err)
 	return deps, err
 }
 

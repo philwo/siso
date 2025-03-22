@@ -10,7 +10,7 @@ import (
 	"time"
 
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
-	"github.com/golang/glog"
+	"github.com/charmbracelet/log"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -37,7 +37,7 @@ type Cache struct {
 
 // NewCache creates new cache.
 func NewCache(ctx context.Context, opts CacheOptions) (*Cache, error) {
-	glog.Infof("cache store=%v read=%t",
+	log.Infof("cache store=%v read=%t",
 		opts.Store,
 		opts.EnableRead)
 	if opts.Store == nil {
@@ -75,9 +75,7 @@ func (c *Cache) GetActionResult(ctx context.Context, cmd *execute.Cmd) error {
 	if err != nil {
 		return err
 	}
-	if glog.V(1) {
-		glog.Infof("cached result: %s", result)
-	}
+	log.Debugf("cached result: %s", result)
 
 	// copy the action result into cmd.
 	cmd.SetActionDigest(d)
@@ -86,7 +84,7 @@ func (c *Cache) GetActionResult(ctx context.Context, cmd *execute.Cmd) error {
 	c.setActionResultStderr(ctx, cmd, result)
 	err = cmd.RecordOutputs(ctx, c.store, now)
 	if err != nil {
-		glog.Infof("cache get %s: %v", time.Since(now), err)
+		log.Infof("cache get %s: %v", time.Since(now), err)
 		return err
 	}
 	return nil

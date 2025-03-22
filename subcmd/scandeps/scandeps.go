@@ -14,7 +14,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/golang/glog"
+	"github.com/charmbracelet/log"
 	"github.com/maruel/subcommands"
 
 	"go.chromium.org/luci/common/cli"
@@ -92,7 +92,7 @@ func (c *run) run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	glog.Infof("input_deps=%q\n", inputDeps)
+	log.Infof("input_deps=%q\n", inputDeps)
 
 	execRoot, err := os.Getwd()
 	if err != nil {
