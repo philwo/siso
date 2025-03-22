@@ -74,7 +74,6 @@ func (re *RemoteExec) Run(ctx context.Context, cmd *execute.Cmd) error {
 		SkipCacheLookup: cmd.SkipCacheLookup,
 	})
 	log.Infof("digest: %s, skipCacheLookup:%t opName: %s", actionDigest, cmd.SkipCacheLookup, opName)
-	log.Debugf("response: %s", resp)
 	if err != nil {
 		log.Warnf("digest: %s, err: %v", actionDigest, err)
 	}

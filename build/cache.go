@@ -75,7 +75,6 @@ func (c *Cache) GetActionResult(ctx context.Context, cmd *execute.Cmd) error {
 	if err != nil {
 		return err
 	}
-	log.Debugf("cached result: %s", result)
 
 	// copy the action result into cmd.
 	cmd.SetActionDigest(d)

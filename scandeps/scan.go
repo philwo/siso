@@ -13,8 +13,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-
-	"github.com/charmbracelet/log"
 )
 
 // scanner is a C++ dependency scanner per request.
@@ -171,7 +169,6 @@ func (s *scanner) updateMacros(macros map[string][]string) {
 func (s *scanner) addInclude(fname string) {
 	// -include or /FI is equivalent with `#include "filename"`
 	s.pushInputs(`"` + fname + `"`)
-	log.Debugf("include %q", fname)
 }
 
 func (s *scanner) addSource(ctx context.Context, fname string) {
@@ -179,7 +176,6 @@ func (s *scanner) addSource(ctx context.Context, fname string) {
 	s.pushDir(ctx, filepath.ToSlash(filepath.Dir(fname)))
 	base := filepath.Base(fname)
 	s.pushInputs(`"` + base + `"`)
-	log.Debugf("source %q", fname)
 }
 
 func (s *scanner) addDir(ctx context.Context, dir string) {
@@ -196,16 +192,13 @@ func (s *scanner) pushDir(ctx context.Context, dir string) {
 		s.maxDirstack = len(s.dirstack)
 	}
 	s.fsview.addDir(ctx, dir, noSearchPath)
-	log.Debugf("push dir <- %s", dir)
 }
 
 func (s *scanner) popDir() {
 	if len(s.dirstack) == 0 {
 		return
 	}
-	dir := s.dirstack[len(s.dirstack)-1]
 	s.dirstack = s.dirstack[:len(s.dirstack)-1]
-	log.Debugf("pop dir -> %s", dir)
 }
 
 func (s *scanner) addHmap(ctx context.Context, hmap string) bool {
@@ -261,8 +254,6 @@ func (s *scanner) find(ctx context.Context, name string) (string, error) {
 	mi := len(ds)
 	ds = append(ds, s.fsview.searchPaths[s.nameDirs[name]:]...)
 	if len(ds) > 0 {
-		log.Debugf("find %q dirs:%d", name, len(ds))
-		log.Debugf("dirs %d %d %q", qi, mi, ds)
 		// TODO: lookup hmap appropriately.
 		s.ds = ds
 		for i, dir := range ds {
@@ -270,9 +261,7 @@ func (s *scanner) find(ctx context.Context, name string) (string, error) {
 				continue
 			}
 			included[dir] = true
-			log.Debugf("find check %s/%s", dir, name)
 			incpath, sr, err := s.fsview.get(ctx, dir, name)
-			log.Debugf("fsview get %s/%s -> %q: %v", dir, name, incpath, err)
 			if err != nil {
 				continue
 			}
@@ -282,8 +271,6 @@ func (s *scanner) find(ctx context.Context, name string) (string, error) {
 			// from the dir of incpath.
 			dir := path.Dir(incpath)
 			s.pushDir(ctx, dir)
-
-			log.Debugf("find %s -> includes:%q defines:%q", incpath, sr.includes, sr.defines)
 
 			s.updateMacros(sr.defines)
 			if i >= qi && i < mi {
@@ -303,15 +290,12 @@ func (s *scanner) find(ctx context.Context, name string) (string, error) {
 		if found {
 			// framework import "Foo/Bar.h" -> "Foo.framework/Headers/Bar.h"
 			fwname := path.Join(fwdir+".framework", "Headers", base)
-			log.Debugf("check framework %s -> %s : %s", name, fwname, s.fsview.frameworkPaths)
 			for _, dir := range s.fsview.frameworkPaths {
 				if included[dir] {
 					continue
 				}
 				included[dir] = true
-				log.Debugf("find check %s/%s", dir, fwname)
 				incpath, sr, err := s.fsview.get(ctx, dir, fwname)
-				log.Debugf("fsview get %s/%s -> %q: %v", dir, name, incpath, err)
 				if err != nil {
 					continue
 				}
@@ -322,15 +306,12 @@ func (s *scanner) find(ctx context.Context, name string) (string, error) {
 				dir := path.Dir(incpath)
 				s.pushDir(ctx, dir)
 
-				log.Debugf("find %s -> includes:%q defines:%q", incpath, sr.includes, sr.defines)
-
 				s.updateMacros(sr.defines)
 				s.pushInputs(sr.includes...)
 				return incpath, nil
 			}
 		}
 	}
-	log.Debugf("find %s %v", name, fs.ErrNotExist)
 	return "", fs.ErrNotExist
 }
 
@@ -361,7 +342,6 @@ func (s *scanner) macroAllUsed(macro string) bool {
 	allUsed := true
 	for _, v := range values {
 		if !s.macroUsed[macro][v] {
-			log.Debugf("macro %s=%s not used yet", macro, v)
 			s.macroUsed[macro][v] = true
 			allUsed = false
 		}

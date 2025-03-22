@@ -506,7 +506,6 @@ loop:
 			if !stuck {
 				stuck = numServs == 0 && !hasReady
 			}
-			log.Debugf("errs=%d numServs=%d hasReady=%t stuck=%t", b.failures.n, numServs, hasReady, stuck)
 			if shouldFail || stuck {
 				log.Infof("unable to proceed nerrs=%d numServs=%d hasReady=%t stuck=%t", b.failures.n, numServs, hasReady, stuck)
 				cancel()
@@ -697,8 +696,7 @@ func dedupInputs(cmd *execute.Cmd) {
 		if caseInsensitive {
 			key = strings.ToLower(input)
 		}
-		if s, found := m[key]; found {
-			log.Debugf("dedup input %s (%s)", input, s)
+		if _, found := m[key]; found {
 			continue
 		}
 		m[key] = input
