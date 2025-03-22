@@ -10,6 +10,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/charmbracelet/log"
 	"golang.org/x/term"
 )
 
@@ -24,26 +25,9 @@ type termSpinner struct {
 func (s *termSpinner) Start(format string, args ...any) {
 	s.started = time.Now()
 	s.msg = fmt.Sprintf(format, args...)
-	fmt.Printf("%s...", s.msg)
+	log.Infof("%s ...", s.msg)
 	s.quit = make(chan struct{})
 	s.done = make(chan struct{})
-	fmt.Printf(" ")
-	go func() {
-		defer close(s.done)
-		for {
-			select {
-			case <-s.quit:
-				return
-			case <-time.After(1 * time.Second):
-				const chars = `/-\|`
-				fmt.Printf("\b%c", chars[s.n])
-				s.n++
-				if s.n >= len(chars) {
-					s.n = 0
-				}
-			}
-		}
-	}()
 }
 
 // Stop stops the spinner.
@@ -52,24 +36,24 @@ func (s *termSpinner) Stop(err error) {
 	<-s.done
 	d := time.Since(s.started)
 	if err != nil {
-		fmt.Printf("\r\033[K%6s %s failed %v\n", FormatDuration(d), s.msg, err)
+		log.Errorf("%6s %s failed %v\n", FormatDuration(d), s.msg, err)
 		return
 	}
-	if d < DurationThreshold {
-		// omit if duration is too short
-		fmt.Printf("\r\033[K")
-		return
-	}
-	fmt.Printf("\r\033[K%6s %s\n", FormatDuration(d), s.msg)
+	// if d < DurationThreshold {
+	// 	// omit if duration is too short
+	// 	fmt.Printf("\r\033[K")
+	// 	return
+	// }
+	// log.Infof("%s finished in %6s %s", FormatDuration(d), s.msg)
 }
 
 // Done finishes the spinner with message.
 func (s *termSpinner) Done(format string, args ...any) {
 	close(s.quit)
 	<-s.done
-	msg := fmt.Sprintf(format, args...)
-	d := time.Since(s.started)
-	fmt.Printf("\r\033[K%6s %s %s\n", FormatDuration(d), s.msg, msg)
+	// msg := fmt.Sprintf(format, args...)
+	// d := time.Since(s.started)
+	// fmt.Printf("\r\033[K%6s %s %s\n", FormatDuration(d), s.msg, msg)
 }
 
 // TermUI is a terminal-based UI.

@@ -153,6 +153,6 @@ func (c *run) render(lines []string, activeSteps []build.ActiveStepInfo) {
 			break
 		}
 	}
-	lines = append(lines, fmt.Sprintf("steps=%d out of %d\n", len(lines)-headings, len(activeSteps)))
+	lines = append(lines, fmt.Sprintf("steps=%d out of %d", len(lines)-headings, len(activeSteps)))
 	ui.Default.PrintLines(lines...)
 }

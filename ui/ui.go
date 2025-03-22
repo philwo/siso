@@ -49,7 +49,8 @@ func isSmartTerminal(term string) bool {
 		return false
 	}
 	// assume default terminal works.
-	return true
+	// return true
+	return false
 }
 
 func init() {

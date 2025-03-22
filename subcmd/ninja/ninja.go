@@ -535,7 +535,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	})
 
 	if c.reopt.IsValid() {
-		ui.Default.PrintLines(fmt.Sprintf("reapi instance: %s\n\n", c.reopt.Instance))
+		ui.Default.PrintLines(fmt.Sprintf("reapi instance: %s", c.reopt.Instance))
 	}
 	ds, err := c.initDataSource(ctx, credential)
 	if err != nil {
@@ -590,7 +590,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		log.Warnf("unable to use cog? %v", err)
 	}
 	if cogfs != nil {
-		ui.Default.PrintLines(ui.SGR(ui.Yellow, fmt.Sprintf("build in cog: %s\n", cogfs.Info())))
+		ui.Default.PrintLines(ui.SGR(ui.Yellow, fmt.Sprintf("build in cog: %s", cogfs.Info())))
 		c.fsopt.CogFS = cogfs
 	}
 	if c.artfsDir != "" && c.artfsEndpoint != "" {
@@ -598,7 +598,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		if err != nil {
 			return stats, err
 		}
-		ui.Default.PrintLines(ui.SGR(ui.Yellow, "build on artfs\n"))
+		ui.Default.PrintLines(ui.SGR(ui.Yellow, "build on artfs"))
 		c.fsopt.ArtFS = artfs
 	}
 
@@ -730,11 +730,11 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	if c.fsopt.KeepTainted {
 		tainted := hashFS.TaintedFiles()
 		if len(tainted) == 0 {
-			ui.Default.PrintLines(ui.SGR(ui.Yellow, "no tainted generated files:\n"))
+			ui.Default.PrintLines(ui.SGR(ui.Yellow, "no tainted generated files"))
 		} else if len(tainted) < 5 {
-			ui.Default.PrintLines(ui.SGR(ui.Yellow, fmt.Sprintf("keep %d tainted files:\n %s\n", len(tainted), strings.Join(tainted, "\n "))))
+			ui.Default.PrintLines(ui.SGR(ui.Yellow, fmt.Sprintf("keep %d tainted files: %s", len(tainted), strings.Join(tainted, ", "))))
 		} else {
-			ui.Default.PrintLines(ui.SGR(ui.Yellow, fmt.Sprintf("keep %d tainted files:\n %s\n ...more\n", len(tainted), strings.Join(tainted, "\n "))))
+			ui.Default.PrintLines(ui.SGR(ui.Yellow, fmt.Sprintf("keep %d tainted files: %s ... more", len(tainted), strings.Join(tainted, ", "))))
 		}
 	}
 
@@ -787,7 +787,7 @@ func runNinja(ctx context.Context, fname string, graph *ninjabuild.Graph, bopts 
 		log.Infof("build starts")
 		if len(nopts.checkFailedTargets) > 0 {
 			failedTargets := nopts.checkFailedTargets
-			ui.Default.PrintLines(fmt.Sprintf("Building last failed targets: %s...\n", failedTargets))
+			ui.Default.PrintLines(fmt.Sprintf("Building last failed targets: %s...", failedTargets))
 			var err error
 			stats, err = doBuild(ctx, graph, bopts, nopts, failedTargets...)
 			if errors.Is(err, build.ErrManifestModified) {
@@ -802,7 +802,6 @@ func runNinja(ctx context.Context, fname string, graph *ninjabuild.Graph, bopts 
 					return stats, err
 				}
 				spin.Stop(nil)
-				ui.Default.PrintLines("\n", "\n")
 				log.Infof("reload done. build retry")
 				continue
 			}
@@ -816,9 +815,9 @@ func runNinja(ctx context.Context, fname string, graph *ninjabuild.Graph, bopts 
 			}
 			nopts.checkFailedTargets = nil
 			if err != nil {
-				ui.Default.PrintLines(fmt.Sprintf(" %s: %s: %v\n\n", ui.SGR(ui.Yellow, "err in last failed targets, rebuild again"), failedTargets, err))
+				ui.Default.PrintLines(fmt.Sprintf(" %s: %s: %v", ui.SGR(ui.Yellow, "err in last failed targets, rebuild again"), failedTargets, err))
 			} else {
-				ui.Default.PrintLines(fmt.Sprintf(" %s: %s\n\n", ui.SGR(ui.Green, "last failed targets fixed"), failedTargets))
+				ui.Default.PrintLines(fmt.Sprintf(" %s: %s", ui.SGR(ui.Green, "last failed targets fixed"), failedTargets))
 			}
 			err = graph.Reset(ctx)
 			if err != nil {
@@ -939,7 +938,7 @@ func (c *ninjaCmdRun) initWorkdirs() (string, error) {
 	// Don't print this if a tool is being used, so that tool output
 	// can be piped into a file without this string showing up.
 	if c.subtool == "" && c.dir != "." {
-		ui.Default.PrintLines(fmt.Sprintf("ninja: Entering directory `%s'\n\n", c.dir))
+		ui.Default.PrintLines(fmt.Sprintf("ninja: Entering directory `%s'", c.dir))
 	}
 	err = os.Chdir(c.dir)
 	if err != nil {
@@ -978,7 +977,7 @@ func (c *ninjaCmdRun) initWorkdirs() (string, error) {
 	c.dir = rdir
 	log.Infof("working_directory in exec_root: %s", c.dir)
 	if c.startDir != execRoot {
-		ui.Default.PrintLines(fmt.Sprintf("exec_root=%s dir=%s\n", execRoot, c.dir))
+		ui.Default.PrintLines(fmt.Sprintf("exec_root=%s dir=%s", execRoot, c.dir))
 	}
 	_, err = os.Stat(c.fname)
 	if errors.Is(err, fs.ErrNotExist) {
