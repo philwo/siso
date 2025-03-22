@@ -106,14 +106,12 @@ func (d *digester) worker() {
 
 func (d *digester) stop() {
 	close(d.quit)
-	log.Infof("wait for workers")
 	<-d.done
 	d.mu.Lock()
 	q := d.q
 	d.q = nil
 	d.mu.Unlock()
 	close(q)
-	log.Infof("run pending digest chan:%d + queue:%d", len(d.q), len(d.queue))
 	for req := range q {
 		d.compute(req.ctx, req.fname, req.e)
 	}
@@ -121,7 +119,6 @@ func (d *digester) stop() {
 		d.compute(req.ctx, req.fname, req.e)
 	}
 	d.queue = nil
-	log.Infof("finish digester")
 }
 
 func (d *digester) lazyCompute(ctx context.Context, fname string, e *entry) {

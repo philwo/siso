@@ -327,7 +327,6 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 				err = fmt.Errorf("panic in build: %v", r)
 			}
 		}
-		log.Infof("build %v", err)
 	}()
 
 	if b.rebuildManifest == "" && b.reapiclient != nil {
@@ -359,7 +358,6 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 
 	stat := b.Stats()
 	if stat.Total == 0 {
-		log.Infof("nothing to build for %q", args)
 		ui.Default.PrintLines(ninjaNoWorkToDo)
 		return nil
 	}
@@ -386,7 +384,6 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 			v = localLimit
 		}
 		b.poolSemas[k] = semaphore.New(name, v)
-		log.Infof("limit %s -> %s=%d", k, name, v)
 	}
 
 	var mftime time.Time
@@ -471,7 +468,6 @@ loop:
 		select {
 		case step, ok = <-b.plan.q:
 			if !ok {
-				log.Infof("q is closed")
 				done(nil)
 				break loop
 			}
@@ -479,7 +475,6 @@ loop:
 			done(err)
 			var shouldFail bool
 			if err != nil {
-				log.Infof("err from errch: %v", err)
 				shouldFail = b.failures.shouldFail(err)
 			}
 			numServs := b.stepSema.NumServs()
@@ -489,7 +484,6 @@ loop:
 				stuck = numServs == 0 && !hasReady
 			}
 			if shouldFail || stuck {
-				log.Infof("unable to proceed nerrs=%d numServs=%d hasReady=%t stuck=%t", b.failures.n, numServs, hasReady, stuck)
 				cancel()
 				break loop
 			}
@@ -581,7 +575,6 @@ loop:
 	metrics.Duration = IntervalMetric(time.Since(b.start))
 	metrics.Err = err != nil
 	b.recordMetrics(metrics)
-	log.Infof("%s finished: %v", name, err)
 	if b.rebuildManifest == "" && !ui.IsTerminal() && b.failureSummaryWriter != nil {
 		// non batch mode (ui.IsTerminal) may build last failed command
 		// so should not trigger this check at the end of build.
@@ -611,7 +604,6 @@ loop:
 }
 
 func (b *Builder) uploadBuildNinja(ctx context.Context) {
-	started := time.Now()
 	inputs := b.graph.Filenames()
 	inputs = append(inputs, "args.gn")
 	ents, err := b.hashFS.Entries(ctx, filepath.Join(b.path.ExecRoot, b.path.Dir), inputs)
@@ -637,7 +629,6 @@ func (b *Builder) uploadBuildNinja(ctx context.Context) {
 		log.Warnf("failed to upload build files tree %s: %v", d, err)
 		return
 	}
-	log.Infof("uploaded build files tree %s (%d entries) in %s", d, len(ents), time.Since(started))
 }
 
 func (b *Builder) recordMetrics(m StepMetric) {

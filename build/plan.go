@@ -202,7 +202,6 @@ func targetPath(ctx context.Context, g Graph, t Target) string {
 func schedule(ctx context.Context, sched *scheduler, graph Graph, args ...string) error {
 	targets, err := graph.Targets(ctx, args...)
 	started := time.Now()
-	log.Infof("schedule targets: %v [%d]: %v", targets, graph.NumTargets(), err)
 	if err != nil {
 		if !experiments.Enabled("ignore-missing-targets", "") {
 			return TargetError{err: err, Suggests: suggestTargets(ctx, sched, graph, args...)}
@@ -273,7 +272,6 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 		defer func() {
 			if ignore {
 				targets[target].scan = scanStateIgnored
-				log.Infof("scan state ignore target %s", targetPath(ctx, graph, target))
 				return
 			}
 			targets[target].scan = scanStateDone
@@ -286,7 +284,6 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 		if ignore {
 			return nil
 		}
-		log.Infof("need to scan ignored target %s", targetPath(ctx, graph, target))
 		targets[target].scan = scanStateVisiting
 		defer func() {
 			targets[target].scan = scanStateDone
@@ -310,7 +307,6 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 		if scanState == scanStateIgnored {
 			// need to check again.
 			// It was ignored, but now required to generate *.h
-			log.Infof("need to sched dupliate step for %s", targetPath(ctx, graph, target))
 			break
 		}
 		// this step is already processed.
@@ -342,7 +338,6 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 	}
 
 	if ignore && sched.prepareHeaderOnly {
-		log.Infof("check outputs=%d for %s", len(outputs), targetPath(ctx, graph, target))
 		// If this step generates header (even if build dependency
 		// doesn't explicitly depend on the header), don't ignore this.
 		// b/358693473
@@ -354,7 +349,6 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 			}
 			switch filepath.Ext(fname) {
 			case ".h", ".hxx", ".hpp", ".inc":
-				log.Infof("need to schedule for %s", fname)
 				ignore = false
 				break outCheck
 			}
@@ -394,7 +388,6 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 				switch filepath.Ext(fname) {
 				case ".h", ".hxx", ".hpp", ".inc":
 				default:
-					log.Infof("may ignore schedule for %s", fname)
 					inIgnore = true
 				}
 			}
@@ -434,11 +427,10 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 		}
 	}
 	if ignore {
-		log.Infof("sched: ignore target %s", targetPath(ctx, graph, target))
 		return nil
 	}
 	step.outputs = outputs
-	sched.add(graph, step)
+	sched.add(step)
 	return nil
 }
 
@@ -446,16 +438,10 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 func newScheduler(opt schedulerOption) *scheduler {
 	var prepareHeaderOnly bool
 	if opt.Prepare {
-		log.Infof("schedule: prepare mode")
 		if experiments.Enabled("prepare-header-only", "prepare header only") {
-			log.Infof("schedule: prepare header only mode")
 			prepareHeaderOnly = true
 		}
 	}
-	if opt.EnableTrace {
-		log.Infof("schedule: enable trace")
-	}
-	log.Infof("schedule: new: targets=%d", opt.NumTargets)
 	return &scheduler{
 		path:   opt.Path,
 		hashFS: opt.HashFS,
@@ -492,8 +478,7 @@ func (s *scheduler) mark(ctx context.Context, graph Graph, target Target, next S
 }
 
 func (s *scheduler) progressReport(format string, args ...any) {
-	msg := fmt.Sprintf(format, args...)
-	ui.Default.PrintLines(msg)
+	ui.Default.PrintLines(fmt.Sprintf(format, args...))
 }
 
 // finish finishes the scheduling.
@@ -502,7 +487,6 @@ func (s *scheduler) finish(d time.Duration) {
 	defer s.plan.mu.Unlock()
 	nready := len(s.plan.q) + len(s.plan.ready)
 	npendings := s.plan.npendings
-	log.Infof("schedule finish pending:%d+ready:%d (node:%d edge:%d) in %s", npendings, nready, len(s.plan.targets), s.visited, d)
 	if d < ui.DurationThreshold {
 		return
 	}
@@ -510,7 +494,7 @@ func (s *scheduler) finish(d time.Duration) {
 }
 
 // add adds new stepDef to run.
-func (s *scheduler) add(graph Graph, step *Step) {
+func (s *scheduler) add(step *Step) {
 	s.plan.mu.Lock()
 	defer s.plan.mu.Unlock()
 	defer func() {
@@ -579,13 +563,12 @@ func (p *plan) hasReady() bool {
 	return len(p.q) > 0 || len(p.ready) > 0
 }
 
-func (p *plan) done(ctx context.Context, step *Step) {
+func (p *plan) done(step *Step) {
 	outs := step.outputs
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
 	if p.closed {
-		log.Infof("build already finished. nothing triggers")
 		return
 	}
 
@@ -644,7 +627,6 @@ func (p *plan) done(ctx context.Context, step *Step) {
 	p.ready = append(p.ready, ready...)
 	if len(p.ready) == 0 && p.npendings == 0 && !p.closed {
 		p.closed = true
-		log.Infof("no step in pending. closing q")
 		close(p.q)
 	}
 }
@@ -652,8 +634,6 @@ func (p *plan) done(ctx context.Context, step *Step) {
 func (p *plan) dump(ctx context.Context, graph Graph) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	log.Infof("queue = %d pendings=%d", len(p.q), p.npendings)
-	log.Infof("closed=%t", p.closed)
 	var steps []*Step
 	seen := make(map[*Step]bool)
 	waits := make(map[string]bool)
@@ -664,7 +644,6 @@ func (p *plan) dump(ctx context.Context, graph Graph) {
 		steps = append(steps, s)
 	}
 	waitTargets := 0
-	log.Infof("ready=%q", ready)
 	for node, ti := range p.targets {
 		ws := ti.waits
 		if len(ws) > 0 {
@@ -687,7 +666,6 @@ func (p *plan) dump(ctx context.Context, graph Graph) {
 	for _, s := range steps {
 		for _, o := range s.def.Outputs(ctx) {
 			if !waits[o] {
-				log.Infof("step %s output:%s no trigger", s, o)
 				continue
 			}
 			delete(waits, o)
@@ -698,8 +676,6 @@ func (p *plan) dump(ctx context.Context, graph Graph) {
 		outs = append(outs, out)
 	}
 	sort.Strings(outs)
-	log.Infof("waits=%d no-trigger=%d", waitTargets, len(outs))
-	log.Infof("no steps will trigger %q", outs)
 }
 
 func suggestTargets(ctx context.Context, sched *scheduler, graph Graph, args ...string) []string {

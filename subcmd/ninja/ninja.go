@@ -841,7 +841,6 @@ func runNinja(ctx context.Context, fname string, graph *ninjabuild.Graph, bopts 
 			log.Infof("reload done. build retry")
 			continue
 		}
-		log.Infof("build finished: %v", err)
 		return stats, err
 	}
 }

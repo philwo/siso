@@ -363,7 +363,7 @@ func newCmd(ctx context.Context, b *Builder, stepDef StepDef) *execute.Cmd {
 		CmdHash:        calculateCmdHash(cmdline, rspfileContent),
 		ExecRoot:       b.path.ExecRoot, // use step binding?
 		Dir:            b.path.Dir,
-		Inputs:         stepInputs(ctx, b, stepDef),
+		Inputs:         stepInputs(ctx, stepDef),
 		ToolInputs:     stepDef.ToolInputs(ctx),
 		Outputs:        outputs,
 		// TODO(b/266518906): enable UseSystemInput
@@ -426,7 +426,7 @@ func stepTimeout(d string) time.Duration {
 	return dur
 }
 
-func stepInputs(ctx context.Context, b *Builder, stepDef StepDef) []string {
+func stepInputs(ctx context.Context, stepDef StepDef) []string {
 	seen := make(map[string]bool)
 	var inputs []string
 	for _, in := range stepDef.Inputs(ctx) {
