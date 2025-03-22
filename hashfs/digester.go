@@ -161,7 +161,7 @@ func (d *digester) compute(ctx context.Context, fname string, e *entry) {
 	if !ed.IsZero() {
 		return
 	}
-	err := DigestSemaphore.Do(ctx, func(ctx context.Context) error {
+	err := DigestSemaphore.Do(ctx, func() error {
 		select {
 		case <-ctx.Done():
 			log.Warnf("ignore compute %s: %v", fname, context.Cause(ctx))

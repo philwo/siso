@@ -40,7 +40,7 @@ func New(client *reapi.Client) *RemoteExec {
 
 func (re *RemoteExec) prepareInputs(ctx context.Context, cmd *execute.Cmd) (digest.Digest, error) {
 	var actionDigest digest.Digest
-	err := Semaphore.Do(ctx, func(ctx context.Context) error {
+	err := Semaphore.Do(ctx, func() error {
 		var err error
 		ds := digest.NewStore()
 		actionDigest, err = cmd.Digest(ctx, ds)

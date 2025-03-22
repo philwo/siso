@@ -36,7 +36,7 @@ func (b *Builder) execRemote(ctx context.Context, step *Step) error {
 	var reExecDur time.Duration
 	err := retry.Do(ctx, func() error {
 		step.setPhase(phase.wait())
-		err := b.remoteSema.Do(ctx, func(ctx context.Context) error {
+		err := b.remoteSema.Do(ctx, func() error {
 			step.setPhase(phase)
 			if phase == stepRetryRun {
 				step.metrics.RemoteRetry++
@@ -101,7 +101,7 @@ func (b *Builder) execRemote(ctx context.Context, step *Step) error {
 }
 
 func (b *Builder) execRemoteCache(ctx context.Context, step *Step) error {
-	err := b.cacheSema.Do(ctx, func(ctx context.Context) error {
+	err := b.cacheSema.Do(ctx, func() error {
 		start := time.Now()
 		step.metrics.ActionStartTime = IntervalMetric(start.Sub(b.start))
 		err := b.cache.GetActionResult(ctx, step.cmd)

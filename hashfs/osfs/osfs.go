@@ -92,7 +92,7 @@ func (ofs *OSFS) FileSource(name string, size int64) FileSource {
 // Lstat returns a FileInfo describing the named file.
 func (ofs *OSFS) Lstat(ctx context.Context, fname string) (fs.FileInfo, error) {
 	var fi fs.FileInfo
-	err := LstatSemaphore.Do(ctx, func(ctx context.Context) error {
+	err := LstatSemaphore.Do(ctx, func() error {
 		var err error
 		fi, err = os.Lstat(fname)
 		return err

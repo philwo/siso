@@ -760,7 +760,7 @@ func (hfs *HashFS) ForgetMissingsInDir(ctx context.Context, root, dir string) {
 		}
 		needCheck = append(needCheck, fname)
 	}
-	err := ForgetMissingsSemaphore.Do(ctx, func(ctx context.Context) error {
+	err := ForgetMissingsSemaphore.Do(ctx, func() error {
 		for _, fname := range needCheck {
 			fullname := filepath.Join(root, fname)
 			fullname = filepath.ToSlash(fullname)
@@ -800,7 +800,7 @@ func (hfs *HashFS) ForgetMissings(ctx context.Context, root string, inputs []str
 		needCheck = append(needCheck, fname)
 	}
 
-	err := ForgetMissingsSemaphore.Do(ctx, func(ctx context.Context) error {
+	err := ForgetMissingsSemaphore.Do(ctx, func() error {
 		for _, fname := range needCheck {
 			fullname := filepath.Join(root, fname)
 			fullname = filepath.ToSlash(fullname)
@@ -1342,12 +1342,12 @@ func (hfs *HashFS) Flush(ctx context.Context, execRoot string, files []string) e
 			return fmt.Errorf("flush %s: %w", fname, context.Cause(ctx))
 		}
 		hfs.digester.compute(ctx, fname, e)
-		ctx, done, err := FlushSemaphore.WaitAcquire(ctx)
+		done, err := FlushSemaphore.WaitAcquire(ctx)
 		if err != nil {
 			return fmt.Errorf("flush %s: %w", fname, err)
 		}
 		eg.Go(func() (err error) {
-			defer func() { done(err) }()
+			defer done()
 			return e.flush(ctx, fname, hfs.OS)
 		})
 	}

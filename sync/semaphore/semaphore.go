@@ -17,9 +17,6 @@ type Semaphore struct {
 	name string
 	ch   chan int
 
-	waitSpanName string
-	servSpanName string
-
 	waits atomic.Int64
 	reqs  atomic.Int64
 }
@@ -31,27 +28,25 @@ func New(name string, n int) *Semaphore {
 		ch <- i + 1 // tid
 	}
 	s := &Semaphore{
-		name:         fmt.Sprintf("%s/%d", name, n),
-		ch:           ch,
-		waitSpanName: fmt.Sprintf("wait:%s/%d", name, n),
-		servSpanName: fmt.Sprintf("serv:%s/%d", name, n),
+		name: fmt.Sprintf("%s/%d", name, n),
+		ch:   ch,
 	}
 	return s
 }
 
 // WaitAcquire acquires a semaphore.
 // It returns a context for acquired semaphore and func to release it.
-func (s *Semaphore) WaitAcquire(ctx context.Context) (context.Context, func(error), error) {
+func (s *Semaphore) WaitAcquire(ctx context.Context) (func(), error) {
 	s.waits.Add(1)
 	defer s.waits.Add(-1)
 	select {
 	case tid := <-s.ch:
 		s.reqs.Add(1)
-		return ctx, func(err error) {
+		return func() {
 			s.ch <- tid
 		}, nil
 	case <-ctx.Done():
-		return ctx, func(error) {}, context.Cause(ctx)
+		return func() {}, context.Cause(ctx)
 	}
 }
 
@@ -59,15 +54,15 @@ var errNotAvailable = errors.New("semaphore: not available")
 
 // TryAcquire acquires a semaphore if available, or return error.
 // It returns a context for acquired semaphore and func to release it.
-func (s *Semaphore) TryAcquire(ctx context.Context) (context.Context, func(error), error) {
+func (s *Semaphore) TryAcquire(ctx context.Context) (func(), error) {
 	select {
 	case tid := <-s.ch:
 		s.reqs.Add(1)
-		return ctx, func(err error) {
+		return func() {
 			s.ch <- tid
 		}, nil
 	default:
-		return ctx, func(error) {}, errNotAvailable
+		return func() {}, errNotAvailable
 	}
 }
 
@@ -97,13 +92,11 @@ func (s *Semaphore) NumRequests() int {
 }
 
 // Do runs f under semaphore.
-func (s *Semaphore) Do(ctx context.Context, f func(ctx context.Context) error) (err error) {
-	var done func(error)
-	ctx, done, err = s.WaitAcquire(ctx)
+func (s *Semaphore) Do(ctx context.Context, f func() error) error {
+	done, err := s.WaitAcquire(ctx)
 	if err != nil {
 		return err
 	}
-	defer func() { done(err) }()
-	err = f(ctx)
-	return err
+	defer done()
+	return f()
 }
