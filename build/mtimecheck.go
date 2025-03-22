@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/charmbracelet/log"
 	"github.com/golang/glog"
 )
 
@@ -35,7 +36,7 @@ func (b *Builder) needToRun(ctx context.Context, stepDef StepDef, stepManifest *
 				dirtyErr: dirtyErr,
 				mtime:    mtime,
 			})
-			if dirtyErr != nil || glog.V(1) {
+			if dirtyErr != nil {
 				glog.Infof("phony output %s dirty=%v mtime=%v", outpath, dirtyErr, mtime)
 			}
 		}
@@ -58,7 +59,7 @@ func (b *Builder) checkUpToDate(ctx context.Context, stepDef StepDef, stepManife
 	outname := b.path.MaybeToWD(ctx, out0)
 	lastInName := b.path.MaybeToWD(ctx, lastIn)
 	if err != nil {
-		glog.Infof("need %v", err)
+		log.Infof("need %v", err)
 		reason := "missing-inputs"
 		switch {
 		case errors.Is(err, ErrMissingDeps):
@@ -72,12 +73,12 @@ func (b *Builder) checkUpToDate(ctx context.Context, stepDef StepDef, stepManife
 		return false
 	}
 	if outmtime.IsZero() {
-		glog.Infof("need: output doesn't exist")
+		log.Infof("need: output doesn't exist")
 		fmt.Fprintf(b.explainWriter, "output %s doesn't exist\n", outname)
 		return false
 	}
 	if inmtime.After(outmtime) {
-		glog.Infof("need: in:%s > out:%s %s: in:%s out:%s", lastIn, out0, inmtime.Sub(outmtime), inmtime, outmtime)
+		log.Infof("need: in:%s > out:%s %s: in:%s out:%s", lastIn, out0, inmtime.Sub(outmtime), inmtime, outmtime)
 		fmt.Fprintf(b.explainWriter, "output %s older than most recent input %s: out:%s in:+%s\n", outname, lastInName, outmtime.Format(time.RFC3339), inmtime.Sub(outmtime))
 		return false
 	}
@@ -105,7 +106,7 @@ func (b *Builder) checkUpToDate(ctx context.Context, stepDef StepDef, stepManife
 		return false
 	}
 	if b.clobber {
-		glog.Infof("need: clobber")
+		log.Infof("need: clobber")
 		// explain once at the beginning of the build.
 		return false
 	}
@@ -139,19 +140,15 @@ func (b *Builder) checkUpToDate(ctx context.Context, stepDef StepDef, stepManife
 		if len(localOutputs) > 0 {
 			err := b.hashFS.Flush(ctx, b.path.ExecRoot, localOutputs)
 			if err != nil {
-				glog.Infof("need: no local outputs %q: %v", localOutputs, err)
+				log.Infof("need: no local outputs %q: %v", localOutputs, err)
 				fmt.Fprintf(b.explainWriter, "output %s flush error %s: %v", outname, localOutputs, err)
 				return false
 			}
-			if glog.V(1) {
-				glog.Infof("flush all outputs %s", localOutputs)
-			}
+			log.Debugf("flush all outputs %s", localOutputs)
 		}
 	}
 
-	if glog.V(1) {
-		glog.Infof("skip: in:%s < out:%s %s", lastIn, out0, outmtime.Sub(inmtime))
-	}
+	log.Debugf("skip: in:%s < out:%s %s", lastIn, out0, outmtime.Sub(inmtime))
 	return true
 }
 
@@ -172,17 +169,13 @@ func outputMtime(ctx context.Context, b *Builder, outputs []string, restat bool)
 			}
 			continue
 		}
-		if glog.V(1) {
-			glog.Infof("out-cmdhash %d:%s %s", i, outPath, base64.StdEncoding.EncodeToString(fi.CmdHash()))
-		}
+		log.Debugf("out-cmdhash %d:%s %s", i, outPath, base64.StdEncoding.EncodeToString(fi.CmdHash()))
 		if i == 0 {
 			outcmdhash = fi.CmdHash()
 			edgehash = fi.EdgeHash()
 		}
 		if !bytes.Equal(outcmdhash, fi.CmdHash()) {
-			if glog.V(1) {
-				glog.Infof("out-cmdhash differ %s %s->%s", outPath, base64.StdEncoding.EncodeToString(outcmdhash), base64.StdEncoding.EncodeToString(fi.CmdHash()))
-			}
+			log.Debugf("out-cmdhash differ %s %s->%s", outPath, base64.StdEncoding.EncodeToString(outcmdhash), base64.StdEncoding.EncodeToString(fi.CmdHash()))
 			outcmdhash = nil
 		}
 		var t time.Time

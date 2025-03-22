@@ -11,7 +11,7 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/golang/glog"
+	"github.com/charmbracelet/log"
 	starjson "go.starlark.net/lib/json"
 	starmath "go.starlark.net/lib/math"
 	starproto "go.starlark.net/lib/proto"
@@ -47,10 +47,10 @@ func builtinModule(ctx context.Context) map[string]starlark.Value {
 	cmd := exec.Command("git", "ls-remote", "--get-url", "origin")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		glog.Warningf("failed to get git origin url: %v\n%s", err, out)
+		log.Warnf("failed to get git origin url: %v\n%s", err, out)
 	} else {
 		origin = strings.TrimSpace(string(out))
-		glog.Infof("git.origin=%q", origin)
+		log.Infof("git.origin=%q", origin)
 	}
 	checkoutModule.Members["git"] = starlarkstruct.FromStringDict(
 		starlark.String("git"),

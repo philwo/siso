@@ -11,7 +11,7 @@ import (
 	"io/fs"
 
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
-	"github.com/golang/glog"
+	"github.com/charmbracelet/log"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -62,7 +62,7 @@ func (lc *LayeredCache) GetActionResult(ctx context.Context, d digest.Digest) (a
 		// If a valid cache exists in a slow cache, write it to all faster caches.
 		for j := range i {
 			if err := lc.caches[j].SetActionResult(ctx, d, ar); err != nil {
-				glog.Warningf("failed to write action result with digest %s to cache: %v", d.String(), err)
+				log.Warnf("failed to write action result with digest %s to cache: %v", d.String(), err)
 			}
 		}
 		return ar, err
@@ -97,7 +97,7 @@ func (lc *LayeredCache) GetContent(ctx context.Context, d digest.Digest, f strin
 		// If it exists in a slow cache, write it to all faster caches.
 		for j := range i {
 			if err := lc.caches[j].SetContent(ctx, d, f, content); err != nil {
-				glog.Warningf("failed to write digest %s to cache: %v", d.String(), err)
+				log.Warnf("failed to write digest %s to cache: %v", d.String(), err)
 			}
 		}
 		return content, err

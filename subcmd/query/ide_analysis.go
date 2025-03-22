@@ -18,7 +18,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/golang/glog"
+	"github.com/charmbracelet/log"
 	"github.com/maruel/subcommands"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/protobuf/encoding/prototext"
@@ -180,7 +180,7 @@ func (c *ideAnalysisRun) analyze(ctx context.Context, args []string) (*pb.IdeAna
 	eg.Go(func() (finalErr error) {
 		started := time.Now()
 		defer func() {
-			glog.Infof("hashfs in %s: %v", time.Since(started), finalErr)
+			log.Infof("hashfs in %s: %v", time.Since(started), finalErr)
 		}()
 		fsstate, err := hashfs.Load(gctx, hashfs.Option{StateFile: c.fsopt.StateFile})
 		if err != nil {
@@ -197,7 +197,7 @@ func (c *ideAnalysisRun) analyze(ctx context.Context, args []string) (*pb.IdeAna
 		analyzer.state = ninjautil.NewState()
 		p := ninjautil.NewManifestParser(analyzer.state)
 		err := p.Load(gctx, c.fname)
-		glog.Infof("ninja build in %s: %v", time.Since(started), err)
+		log.Infof("ninja build in %s: %v", time.Since(started), err)
 		fmt.Fprintf(os.Stderr, "load ninja build in %s\n", ui.FormatDuration(time.Since(started)))
 		return err
 	})
@@ -232,10 +232,10 @@ type ideAnalyzer struct {
 }
 
 func (a *ideAnalyzer) Close(ctx context.Context) {
-	glog.Infof("close ideAnalys")
+	log.Infof("close ideAnalys")
 	err := a.hashFS.Close(ctx)
 	if err != nil {
-		glog.Warningf("close hashFS: %v", err)
+		log.Warnf("close hashFS: %v", err)
 	}
 }
 
@@ -330,7 +330,7 @@ func (a *ideAnalyzer) analyzeTarget(ctx context.Context, target string) (*pb.Ana
 	case ".java":
 		return a.analyzeJava(ctx, inEdge, result)
 	default:
-		glog.Infof("analyze unknown %s", result.SourceFilePath)
+		log.Infof("analyze unknown %s", result.SourceFilePath)
 	}
 	// TODO: what should we return?
 	return result, nil
@@ -348,18 +348,18 @@ func (a *ideAnalyzer) targetForCPP(ctx context.Context, target string) ([]*ninja
 		hname := strings.TrimSuffix(target, "^")
 		_, serr := os.Stat(hname)
 		if serr != nil {
-			glog.Warningf("file not exist: %v", serr)
+			log.Warnf("file not exist: %v", serr)
 			return nil, err
 		}
 		// fallback to any *.cc file in the directory.
 		// language service need to know include directories and
 		// flags that affects compiler's behavior, but doesn't care
 		// *.cc includes given header.
-		glog.Infof("fallback. target not found: %v", err)
+		log.Infof("fallback. target not found: %v", err)
 		dirname := filepath.Dir(target)
 		dirents, derr := os.ReadDir(dirname)
 		if derr != nil {
-			glog.Warningf("readdir %q: %v", dirname, derr)
+			log.Warnf("readdir %q: %v", dirname, derr)
 			return nil, err
 		}
 		files := make(map[string]*ninjautil.Node)
@@ -373,7 +373,7 @@ func (a *ideAnalyzer) targetForCPP(ctx context.Context, target string) ([]*ninja
 					continue
 				}
 				files[fpath] = nodes[0]
-				glog.Infof("candidate: %s", fpath)
+				log.Infof("candidate: %s", fpath)
 			}
 		}
 		if len(files) == 0 {
@@ -400,7 +400,7 @@ func selectNodeByExt(nodes []*ninjautil.Node, exts ...string) *ninjautil.Node {
 }
 
 func (a *ideAnalyzer) analyzeCPP(ctx context.Context, edge *ninjautil.Edge, result *pb.AnalysisResult) (*pb.AnalysisResult, map[string]*pb.BuildableUnit) {
-	glog.Infof("analyze cpp %s", result.SourceFilePath)
+	log.Infof("analyze cpp %s", result.SourceFilePath)
 	deps := map[string]*pb.BuildableUnit{}
 
 	// get command line from edge
@@ -441,7 +441,7 @@ func (a *ideAnalyzer) analyzeCPP(ctx context.Context, edge *ninjautil.Edge, resu
 		Sysroots:   params.Sysroots,
 	}
 	started := time.Now()
-	glog.Infof("scandeps %#v", req)
+	log.Infof("scandeps %#v", req)
 	incs, err := a.scanDeps.Scan(ctx, a.path.ExecRoot, req)
 	if err != nil {
 		result.Status = &pb.AnalysisResult_Status{
@@ -450,7 +450,7 @@ func (a *ideAnalyzer) analyzeCPP(ctx context.Context, edge *ninjautil.Edge, resu
 		}
 		return result, nil
 	}
-	glog.Infof("scandeps results: %q", incs)
+	log.Infof("scandeps results: %q", incs)
 	fmt.Fprintf(os.Stderr, "%s scandeps in %s\n", result.SourceFilePath, ui.FormatDuration(time.Since(started)))
 	started = time.Now()
 
@@ -458,12 +458,12 @@ func (a *ideAnalyzer) analyzeCPP(ctx context.Context, edge *ninjautil.Edge, resu
 		incTarget := a.path.MaybeToWD(ctx, inc)
 		node, ok := a.state.LookupNodeByPath(incTarget)
 		if !ok {
-			glog.Infof("not in build graph: %s", incTarget)
+			log.Infof("not in build graph: %s", incTarget)
 			continue
 		}
 		inEdge, ok := node.InEdge()
 		if !ok {
-			glog.Infof("not generated file: %s", incTarget)
+			log.Infof("not generated file: %s", incTarget)
 			continue
 		}
 		// for each generated files
@@ -472,7 +472,7 @@ func (a *ideAnalyzer) analyzeCPP(ctx context.Context, edge *ninjautil.Edge, resu
 			path := out.Path()
 			buf, err := a.hashFS.ReadFile(ctx, a.path.ExecRoot, a.path.MaybeFromWD(ctx, path))
 			if err != nil {
-				glog.Infof("not exist generated file %q: %v", path, err)
+				log.Infof("not exist generated file %q: %v", path, err)
 				continue
 			}
 			generatedFiles = append(generatedFiles, &pb.GeneratedFile{
@@ -512,7 +512,7 @@ func edgeCmdArgs(edge *ninjautil.Edge) []string {
 
 func (a *ideAnalyzer) buildableUnit(ctx context.Context, edge *ninjautil.Edge, language pb.Language, cmdArgs []string, outputs []*pb.GeneratedFile, depIDs []string) *pb.BuildableUnit {
 	outPath := edge.Outputs()[0].Path()
-	glog.Infof("buildableUnit for %s: lang=%s", outPath, language)
+	log.Infof("buildableUnit for %s: lang=%s", outPath, language)
 
 	seen := make(map[string]bool)
 	var sourceFiles []string
@@ -523,7 +523,7 @@ func (a *ideAnalyzer) buildableUnit(ctx context.Context, edge *ninjautil.Edge, l
 		seen[in.Path()] = true
 		_, ok := in.InEdge()
 		if ok {
-			glog.Infof("generated source file: %s", in.Path())
+			log.Infof("generated source file: %s", in.Path())
 			continue
 		}
 		switch language {
@@ -536,7 +536,7 @@ func (a *ideAnalyzer) buildableUnit(ctx context.Context, edge *ninjautil.Edge, l
 				// of computed index b/392977625
 				continue
 			default:
-				glog.Infof("ignore non java source: %s", in.Path())
+				log.Infof("ignore non java source: %s", in.Path())
 				continue
 			}
 		}
@@ -568,12 +568,12 @@ func (a *ideAnalyzer) invalidation(ctx context.Context) *pb.Invalidation {
 	}
 	buf, err := a.hashFS.ReadFile(ctx, a.path.ExecRoot, filepath.Join(a.path.Dir, "build.ninja.d"))
 	if err != nil {
-		glog.Warningf("failed to read build.ninja.d: %v", err)
+		log.Warnf("failed to read build.ninja.d: %v", err)
 		return inv
 	}
 	bdeps, err := makeutil.ParseDeps(ctx, buf)
 	if err != nil {
-		glog.Warningf("failed to parse build.ninja.d: %v", err)
+		log.Warnf("failed to parse build.ninja.d: %v", err)
 		return inv
 	}
 	for _, d := range bdeps {

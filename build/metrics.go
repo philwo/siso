@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/golang/glog"
+	"github.com/charmbracelet/log"
 	epb "go.chromium.org/infra/build/siso/execute/proto"
 )
 
@@ -170,7 +170,7 @@ func (m *StepMetric) done(ctx context.Context, step *Step, buildStart time.Time)
 
 	result, cached := step.cmd.ActionResult()
 	m.Cached = cached
-	glog.Infof("cached=%t", cached)
+	log.Infof("cached=%t", cached)
 	md := result.GetExecutionMetadata()
 	if !m.Cached {
 		m.QueueTime = IntervalMetric(md.GetWorkerStartTimestamp().AsTime().Sub(md.GetQueuedTimestamp().AsTime()))

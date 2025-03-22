@@ -9,7 +9,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/golang/glog"
+	"github.com/charmbracelet/log"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -69,6 +69,6 @@ func Do(ctx context.Context, f func() error) error {
 		}
 		return err
 	}, func(err error, backoff time.Duration) {
-		glog.Warningf("retry backoff:%s: %v", backoff, err)
+		log.Warnf("retry backoff:%s: %v", backoff, err)
 	})
 }

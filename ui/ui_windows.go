@@ -7,7 +7,7 @@ package ui
 import (
 	"os"
 
-	"github.com/golang/glog"
+	"github.com/charmbracelet/log"
 	"golang.org/x/sys/windows"
 )
 
@@ -19,19 +19,19 @@ func Init() {
 	var mode uint32
 	err := windows.GetConsoleMode(windows.Handle(os.Stdout.Fd()), &mode)
 	if err != nil {
-		glog.Warningf("GetConsoleMode %v", err)
+		log.Warnf("GetConsoleMode %v", err)
 		return
 	}
-	glog.Infof("console mode=0x%x", mode)
+	log.Infof("console mode=0x%x", mode)
 	consoleMode = mode
 	if mode&windows.ENABLE_VIRTUAL_TERMINAL_PROCESSING != 0 {
 		return
 	}
 	mode |= windows.ENABLE_VIRTUAL_TERMINAL_PROCESSING
 	err = windows.SetConsoleMode(windows.Handle(os.Stdout.Fd()), mode)
-	glog.Infof("set console mode 0x%0x: %v", mode, err)
+	log.Infof("set console mode 0x%0x: %v", mode, err)
 	if err != nil {
-		glog.Errorf("SetConsoleMode 0x%x: %v", mode, err)
+		log.Errorf("SetConsoleMode 0x%x: %v", mode, err)
 	}
 }
 
@@ -42,6 +42,6 @@ func Restore() {
 	}
 	err := windows.SetConsoleMode(windows.Handle(os.Stdout.Fd()), consoleMode)
 	if err != nil {
-		glog.Errorf("SetConsoleMode 0x%x: %v", consoleMode, err)
+		log.Errorf("SetConsoleMode 0x%x: %v", consoleMode, err)
 	}
 }

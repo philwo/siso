@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/golang/glog"
+	"github.com/charmbracelet/log"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -66,9 +66,7 @@ func (p *fileParser) parseFile(ctx context.Context, fname string) error {
 	t := time.Now()
 	var err error
 	p.buf, err = p.readFile(ctx, fname)
-	if glog.V(1) {
-		glog.Infof("read %s %v: %s", fname, err, time.Since(t))
-	}
+	log.Debugf("read %s %v: %s", fname, err, time.Since(t))
 	if err != nil {
 		return err
 	}
@@ -77,9 +75,7 @@ func (p *fileParser) parseFile(ctx context.Context, fname string) error {
 	if err != nil {
 		return fmt.Errorf("%s: %w", fname, err)
 	}
-	if glog.V(1) {
-		glog.Infof("parseContent %s %v: %s", p.fname, err, time.Since(t))
-	}
+	log.Debugf("parseContent %s %v: %s", p.fname, err, time.Since(t))
 	return nil
 }
 
@@ -134,48 +130,36 @@ func (p *fileParser) readFile(ctx context.Context, fname string) ([]byte, error)
 func (p *fileParser) parseContent(ctx context.Context) error {
 	t := time.Now()
 	p.chunks = splitIntoChunks(ctx, p.buf)
-	if glog.V(1) {
-		glog.Infof("split %s %d: %s", p.fname, len(p.chunks), time.Since(t))
-	}
+	log.Debugf("split %s %d: %s", p.fname, len(p.chunks), time.Since(t))
 
 	t = time.Now()
 	err := p.parseChunks(ctx)
-	if glog.V(1) {
-		glog.Infof("parse chunks %s %v: %s", p.fname, err, time.Since(t))
-	}
+	log.Debugf("parse chunks %s %v: %s", p.fname, err, time.Since(t))
 	if err != nil {
 		return err
 	}
 
 	t = time.Now()
 	p.alloc(ctx)
-	if glog.V(1) {
-		glog.Infof("alloc %s: %s", p.fname, time.Since(t))
-	}
+	log.Debugf("alloc %s: %s", p.fname, time.Since(t))
 
 	t = time.Now()
 	err = p.setup(ctx)
-	if glog.V(1) {
-		glog.Infof("setup %s %v: %s", p.fname, err, time.Since(t))
-	}
+	log.Debugf("setup %s %v: %s", p.fname, err, time.Since(t))
 	if err != nil {
 		return err
 	}
 
 	t = time.Now()
 	err = p.buildGraph(ctx)
-	if glog.V(1) {
-		glog.Infof("build graph %s %v: %s", p.fname, err, time.Since(t))
-	}
+	log.Debugf("build graph %s %v: %s", p.fname, err, time.Since(t))
 	if err != nil {
 		return err
 	}
 
 	t = time.Now()
 	err = p.finalize(ctx)
-	if glog.V(1) {
-		glog.Infof("finalize %s %v: %s", p.fname, err, time.Since(t))
-	}
+	log.Debugf("finalize %s %v: %s", p.fname, err, time.Since(t))
 	if err != nil {
 		return err
 	}
@@ -228,9 +212,7 @@ func (p *fileParser) alloc(ctx context.Context) {
 	p.scope.rules = newRuleMap(p.full.nrule)
 	p.scope.bindings = newShardBindings(p.full.nvar)
 
-	if glog.V(1) {
-		glog.Infof("alloc rule=%d edge=%d pool=%d var=%d binding=%d+%d", p.full.nrule, p.full.nbuild, p.full.npool, p.full.nvar, p.full.nrulevar, p.full.nbuildvar)
-	}
+	log.Debugf("alloc rule=%d edge=%d pool=%d var=%d binding=%d+%d", p.full.nrule, p.full.nbuild, p.full.npool, p.full.nvar, p.full.nrulevar, p.full.nbuildvar)
 
 	for i := range p.chunks {
 		ch := &p.chunks[i]
@@ -247,9 +229,7 @@ func (p *fileParser) alloc(ctx context.Context) {
 		ch.validationPaths = make([]evalString, 0, 4)
 		ch.edgePathSlab = newSlab[*Node](ch.nbuild)
 
-		if glog.V(2) {
-			glog.Infof("chunk#%d edge:%d", i, ch.edgeArena.len())
-		}
+		log.Debugf("chunk#%d edge:%d", i, ch.edgeArena.len())
 	}
 }
 

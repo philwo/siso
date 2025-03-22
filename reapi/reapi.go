@@ -19,6 +19,7 @@ import (
 	"time"
 
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
+	"github.com/charmbracelet/log"
 	"github.com/golang/glog"
 	"google.golang.org/api/option"
 	gtransport "google.golang.org/api/transport/grpc"
@@ -255,14 +256,14 @@ func New(ctx context.Context, cred cred.Cred, opt Option) (*Client, error) {
 	if isRBE(opt.Address) && opt.Instance == "" {
 		return nil, errors.New("no reapi instance")
 	}
-	glog.Infof("address: %q instance: %q", opt.Address, opt.Instance)
+	log.Infof("address: %q instance: %q", opt.Address, opt.Instance)
 	conn, err := newConn(ctx, opt.Address, cred, opt)
 	if err != nil {
 		return nil, err
 	}
 	casConn := conn
 	if opt.CASAddress != "" {
-		glog.Infof("cas address: %q", opt.CASAddress)
+		log.Infof("cas address: %q", opt.CASAddress)
 		casConn, err = newConn(ctx, opt.CASAddress, cred, opt)
 		if err != nil {
 			conn.Close()
@@ -290,7 +291,7 @@ func newConn(ctx context.Context, addr string, cred cred.Cred, opt Option) (grpc
 		if strings.HasSuffix(addr, ".googleapis.com:443") {
 			return nil, errors.New("insecure mode is not supported for RBE")
 		}
-		glog.Warningf("insecure mode")
+		log.Warnf("insecure mode")
 		copts = append(copts, option.WithoutAuthentication())
 		dopts = append(dopts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 		for _, dopt := range dopts {
@@ -304,7 +305,7 @@ func newConn(ctx context.Context, addr string, cred cred.Cred, opt Option) (grpc
 		// use mTLS certificates for authentication.
 		copts = append(copts, cred.ClientOptions()...)
 
-		glog.Infof("using mTLS: cert=%q key=%q", opt.TLSClientAuthCert, opt.TLSClientAuthKey)
+		log.Infof("using mTLS: cert=%q key=%q", opt.TLSClientAuthCert, opt.TLSClientAuthKey)
 		cert, err := tls.LoadX509KeyPair(opt.TLSClientAuthCert, opt.TLSClientAuthKey)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read mTLS cert pair (%q, %q): %w", opt.TLSClientAuthCert, opt.TLSClientAuthKey, err)
@@ -346,12 +347,12 @@ func NewFromConn(ctx context.Context, opt Option, conn, casConn grpcClientConn) 
 		conn.Close()
 		return nil, err
 	}
-	glog.Infof("capabilities of %s: %s", opt.Instance, capa)
+	log.Infof("capabilities of %s: %s", opt.Instance, capa)
 	if opt.CompressedBlob > 0 {
 		if c := selectCompressor(capa.GetCacheCapabilities().GetSupportedCompressors()); c != rpb.Compressor_IDENTITY {
 			glog.Infof("compressed-blobs/%s for > %d", strings.ToLower(c.String()), opt.CompressedBlob)
 		} else {
-			glog.Infof("compressed-blobs is not supported")
+			log.Infof("compressed-blobs is not supported")
 			opt.CompressedBlob = 0
 		}
 	}
@@ -414,7 +415,7 @@ func NewContext(ctx context.Context, rmd *rpb.RequestMetadata) context.Context {
 	// https://github.com/bazelbuild/remote-apis/blob/8f539af4b407a4f649707f9632fc2b715c9aa065/build/bazel/remote/execution/v2/remote_execution.proto#L2034-L2045
 	b, err := proto.Marshal(rmd)
 	if err != nil {
-		glog.Warningf("marshal %v: %v", rmd, err)
+		log.Warnf("marshal %v: %v", rmd, err)
 		return ctx
 	}
 	return metadata.AppendToOutgoingContext(ctx,

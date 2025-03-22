@@ -8,7 +8,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/golang/glog"
+	"github.com/charmbracelet/log"
 	"go.chromium.org/infra/build/siso/execute"
 	"go.chromium.org/infra/build/siso/toolsupport/makeutil"
 )
@@ -35,14 +35,14 @@ func (depsDepfile) DepsAfterRun(ctx context.Context, b *Builder, step *Step) ([]
 	if err != nil {
 		return nil, fmt.Errorf("error in depfile %q: %w", step.cmd.Depfile, err)
 	}
-	glog.Infof("depfile %s: %d", step.cmd.Depfile, len(depins))
+	log.Infof("depfile %s: %d", step.cmd.Depfile, len(depins))
 	return depins, nil
 }
 
 func (depsDepfile) DepsCmd(ctx context.Context, b *Builder, step *Step) ([]string, error) {
 	// depfile can use "remote" only for fastDeps case.
 	// Otherwise, should disable "remote"
-	glog.Infof("deps= depfile=%s. no pure, no remote", step.cmd.Depfile)
+	log.Infof("deps= depfile=%s. no pure, no remote", step.cmd.Depfile)
 	step.cmd.Pure = false
 	return step.cmd.Inputs, nil
 }

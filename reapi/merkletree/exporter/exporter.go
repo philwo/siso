@@ -13,7 +13,7 @@ import (
 	"path/filepath"
 
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
-	"github.com/golang/glog"
+	"github.com/charmbracelet/log"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/protobuf/proto"
 
@@ -55,7 +55,7 @@ func (e *Exporter) Export(ctx context.Context, dir string, d digest.Digest, w io
 }
 
 func (e *Exporter) exportDir(ctx context.Context, dir string, d digest.Digest, w io.Writer) error {
-	glog.Infof("export dir: %s %s", dir, d)
+	log.Infof("export dir: %s %s", dir, d)
 	if w == nil {
 		err := os.MkdirAll(dir, 0755)
 		if err != nil {
@@ -89,7 +89,7 @@ func (e *Exporter) exportDir(ctx context.Context, dir string, d digest.Digest, w
 	}
 	for _, s := range curdir.Symlinks {
 		fname := filepath.Join(dir, s.Name)
-		glog.Infof("symlink %s -> %s", fname, s.Target)
+		log.Infof("symlink %s -> %s", fname, s.Target)
 		if w == nil {
 			err := os.Symlink(s.Target, fname)
 			if err != nil {
@@ -103,7 +103,7 @@ func (e *Exporter) exportDir(ctx context.Context, dir string, d digest.Digest, w
 }
 
 func (e *Exporter) exportFile(ctx context.Context, fname string, d digest.Digest, isExecutable bool, w io.Writer) error {
-	glog.Infof("file:%s %s x:%t", fname, d, isExecutable)
+	log.Infof("file:%s %s x:%t", fname, d, isExecutable)
 	if w != nil {
 		if isExecutable {
 			fmt.Fprintf(w, "%s\t%s\texecutable\n", fname, d)

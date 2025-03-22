@@ -17,8 +17,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/charmbracelet/log"
 	"github.com/golang/glog"
-
 	"go.chromium.org/infra/build/siso/reapi/digest"
 	"go.chromium.org/infra/build/siso/reapi/merkletree"
 )
@@ -32,7 +32,7 @@ func treeInputs(ctx context.Context, fn func(context.Context, string) (merkletre
 			defer wg.Done()
 			ti, err := fn(ctx, dir)
 			if err != nil {
-				glog.Warningf("treeinput[precomputed] %s: %v", dir, err)
+				log.Warnf("treeinput[precomputed] %s: %v", dir, err)
 				return
 			}
 			treeEntries[i] = ti
@@ -44,9 +44,7 @@ func treeInputs(ctx context.Context, fn func(context.Context, string) (merkletre
 			defer wg.Done()
 			ti, err := fn(ctx, dir)
 			if err != nil {
-				if glog.V(1) {
-					glog.Infof("treeinput[dir] %s: %v", dir, err)
-				}
+				log.Debugf("treeinput[dir] %s: %v", dir, err)
 				return
 			}
 			treeEntries[i0+i] = ti
@@ -72,17 +70,11 @@ func (b *Builder) resolveSymlinkForInputDeps(ctx context.Context, dir, labelSuff
 				dir = filepath.Join(b.path.ExecRoot, dir)
 			}
 		}
-		if glog.V(1) {
-			glog.Infof("check input deps %q", dir+labelSuffix)
-		}
 		files, ok := inputDeps[dir+labelSuffix]
 		if ok {
 			return dir, files, nil
 		}
 		fi, err := b.hashFS.Stat(ctx, root, dir)
-		if glog.V(1) {
-			glog.Infof("input deps stat %q %q: %v", root, dir, err)
-		}
 		if err != nil {
 			return "", nil, fmt.Errorf("not in input_deps, and stat err %s: %w", dir, err)
 		}
@@ -105,11 +97,7 @@ func (b *Builder) treeInput(ctx context.Context, dir, labelSuffix string, fixFn 
 	m := b.graph.InputDeps(ctx)
 	if !filepath.IsLocal(dir) {
 		// only allowed for dockerChrootPath=. in platform container image
-		absdir := filepath.ToSlash(filepath.Join(b.path.ExecRoot, dir))
-		if glog.V(1) {
-			glog.Infof("tree dir: %q %q -> %q", b.path.ExecRoot, dir, absdir)
-		}
-		dir = absdir
+		dir = filepath.ToSlash(filepath.Join(b.path.ExecRoot, dir))
 	}
 	dir, files, err := b.resolveSymlinkForInputDeps(ctx, dir, labelSuffix, m)
 	if err != nil {
@@ -157,7 +145,7 @@ func (st *subtree) init(ctx context.Context, b *Builder, dir string, files []str
 		glog.Infof("tree init root dir: %q (%q %q)", rootDir, b.path.ExecRoot, dir)
 		ents, err := b.hashFS.Entries(ctx, rootDir, inputs)
 		if err != nil {
-			glog.Warningf("failed to get subtree entries %s: %v", dir, err)
+			log.Warnf("failed to get subtree entries %s: %v", dir, err)
 			st.err = err
 			return
 		}
@@ -167,14 +155,14 @@ func (st *subtree) init(ctx context.Context, b *Builder, dir string, files []str
 		for _, ent := range ents {
 			err := mt.Set(ent)
 			if err != nil {
-				glog.Warningf("failed to set %v: %v", ent, err)
+				log.Warnf("failed to set %v: %v", ent, err)
 				st.err = err
 				return
 			}
 		}
 		st.d, err = mt.Build(ctx)
 		if err != nil {
-			glog.Warningf("failed to build subtree %s: %v", dir, err)
+			log.Warnf("failed to build subtree %s: %v", dir, err)
 			st.err = err
 			return
 		}
@@ -186,7 +174,7 @@ func (st *subtree) init(ctx context.Context, b *Builder, dir string, files []str
 		rootDS := digest.NewStore()
 		data, ok := ds.Get(st.d)
 		if !ok {
-			glog.Warningf("no tree root digest in store? %s", st.d)
+			log.Warnf("no tree root digest in store? %s", st.d)
 			st.err = fmt.Errorf("no tree root digst in store")
 			return
 		}
@@ -198,7 +186,7 @@ func (st *subtree) init(ctx context.Context, b *Builder, dir string, files []str
 			// upload non-root digest first
 			n, err := b.reapiclient.UploadAll(ctx, ds)
 			if err != nil {
-				glog.Warningf("failed to upload subtree data %s: %v", dir, err)
+				log.Warnf("failed to upload subtree data %s: %v", dir, err)
 				st.mu.Lock()
 				defer st.mu.Unlock()
 				st.err = err
@@ -206,13 +194,13 @@ func (st *subtree) init(ctx context.Context, b *Builder, dir string, files []str
 			}
 			// upload root digest last.
 			m, err := b.reapiclient.UploadAll(ctx, rootDS)
-			glog.Infof("upload subtree data %s %d+%d in %s: %v", dir, n, m, time.Since(started), err)
+			log.Infof("upload subtree data %s %d+%d in %s: %v", dir, n, m, time.Since(started), err)
 			st.mu.Lock()
 			defer st.mu.Unlock()
 			st.err = err
 		}
 		if err == nil && len(missings) == 0 {
-			glog.Infof("subtree data is ready %s %s", dir, st.d)
+			log.Infof("subtree data is ready %s %s", dir, st.d)
 			go func() {
 				// make sure all data are uploaded in background.
 				ctx := context.WithoutCancel(ctx)
@@ -220,7 +208,7 @@ func (st *subtree) init(ctx context.Context, b *Builder, dir string, files []str
 			}()
 			return
 		}
-		glog.Infof("need to upload subtree data %s (missings=%d): %v", dir, len(missings), err)
+		log.Infof("need to upload subtree data %s (missings=%d): %v", dir, len(missings), err)
 		fullUpload(ctx)
 	})
 	st.mu.Lock()

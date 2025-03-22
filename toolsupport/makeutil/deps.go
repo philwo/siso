@@ -29,9 +29,6 @@ func ParseDepsFile(ctx context.Context, fsys fs.FS, fname string) ([]string, err
 		return nil, err
 	}
 	deps, err := ParseDeps(ctx, b)
-	if glog.V(1) {
-		glog.Infof("deps %s => %s: %v", fname, deps, err)
-	}
 	return deps, err
 }
 

@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/charmbracelet/log"
 	"github.com/golang/glog"
 	"go.chromium.org/infra/build/siso/build"
 	"go.chromium.org/infra/build/siso/ui"
@@ -40,7 +41,7 @@ func newStdoutURLSource(ctx context.Context, stdoutURL string) (*stdoutURLSource
 		cmd := exec.Command("luci-auth", "token")
 		out, err := cmd.Output()
 		if err != nil {
-			glog.Warningf("failed to get credential by 'luch-auth token': %v", err)
+			log.Warnf("failed to get credential by 'luch-auth token': %v", err)
 		} else {
 			authorization = "Bearer " + strings.TrimSpace(string(out))
 		}
@@ -80,14 +81,14 @@ func (s *stdoutURLSource) run(ctx context.Context, body io.ReadCloser) {
 	defer func() {
 		err := body.Close()
 		if err != nil {
-			glog.Warningf("close %v", err)
+			log.Warnf("close %v", err)
 		}
 	}()
 	rd := bufio.NewReader(body)
 	for {
 		buf, err := rd.ReadBytes('\n')
 		if err != nil {
-			glog.Errorf("read %v", err)
+			log.Errorf("read %v", err)
 			close(s.done)
 			return
 		}
@@ -101,7 +102,7 @@ func (s *stdoutURLSource) run(ctx context.Context, body io.ReadCloser) {
 		fields := strings.SplitN(line, " ", 4)
 		dur, err := time.ParseDuration(fields[1])
 		if err != nil {
-			glog.Warningf("%s: dur=%q: %v", fields[3], fields[1], err)
+			log.Warnf("%s: dur=%q: %v", fields[3], fields[1], err)
 		}
 		s.mu.Lock()
 		started := time.Now().Add(-dur)
@@ -115,7 +116,7 @@ func (s *stdoutURLSource) run(ctx context.Context, body io.ReadCloser) {
 		case "F", "c":
 			s.steps.Delete(fields[3])
 		default:
-			glog.Warningf("%s: unknown state=%s", fields[3], fields[2])
+			log.Warnf("%s: unknown state=%s", fields[3], fields[2])
 		}
 	}
 }

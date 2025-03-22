@@ -13,6 +13,7 @@ import (
 
 	"cloud.google.com/go/longrunning/autogen/longrunningpb"
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
+	"github.com/charmbracelet/log"
 	"github.com/golang/glog"
 	spb "google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/grpc"
@@ -28,7 +29,7 @@ var ErrBadPlatformContainerImage = errors.New("reapi: bad platform container ima
 
 // ExecuteAndWait executes a cmd and waits for the result.
 func (c *Client) ExecuteAndWait(ctx context.Context, req *rpb.ExecuteRequest, opts ...grpc.CallOption) (string, *rpb.ExecuteResponse, error) {
-	glog.Infof("execute action")
+	log.Infof("execute action")
 
 	if req.InstanceName == "" {
 		req.InstanceName = c.opt.Instance
@@ -70,7 +71,7 @@ retryLoop:
 				}
 				if opName == "" {
 					opName = op.GetName()
-					glog.Infof("operation starts: %s", opName)
+					log.Infof("operation starts: %s", opName)
 				}
 				if !op.GetDone() {
 					waitReq = &rpb.WaitExecutionRequest{
@@ -80,21 +81,18 @@ retryLoop:
 					metadata := &rpb.ExecuteOperationMetadata{}
 					err = op.GetMetadata().UnmarshalTo(metadata)
 					if err != nil {
-						glog.Warningf("failed to unmarshal metadata: %v", err)
+						log.Warnf("failed to unmarshal metadata: %v", err)
 					} else {
 						glog.Infof("operation stage: %v %s", metadata.GetStage(), ongoingDetails(metadata.GetPartialExecutionMetadata()))
-						if glog.V(1) {
-							glog.Infof("operation metadata: %v", metadata)
-						}
 					}
 					continue
 				}
-				glog.Infof("operation done: %s", opName)
+				log.Infof("operation done: %s", opName)
 				waitReq = nil
 				err = op.GetResponse().UnmarshalTo(resp)
 				if err != nil {
 					err = status.Errorf(codes.Internal, "op %s response bad type %T: %v", op.GetName(), op.GetResponse(), err)
-					glog.Warningf("action digest: %s failed %v", req.ActionDigest, err)
+					log.Warnf("action digest: %s failed %v", req.ActionDigest, err)
 					return err
 				}
 				return erespErr(ctx, resp)
@@ -126,29 +124,29 @@ retryLoop:
 		}
 		select {
 		case <-pctx.Done():
-			glog.Warningf("pctx done: %v", context.Cause(pctx))
+			log.Warnf("pctx done: %v", context.Cause(pctx))
 			break retryLoop
 		default:
 			if unknownErr {
-				glog.Infof("pctx is not done: ctx=%v: %v", context.Cause(ctx), err)
+				log.Infof("pctx is not done: ctx=%v: %v", context.Cause(ctx), err)
 			}
 		}
 		if status.Code(err) == codes.DeadlineExceeded {
 			s, ok := status.FromError(err)
 			if ok && s.Message() == "execution timeout exceeded" {
 				// action timed out. no retry.
-				glog.Warningf("action timed out: %v", err)
+				log.Warnf("action timed out: %v", err)
 				return opName, resp, err
 			}
 			// no need to backoff for deadline exceeded
-			glog.Infof("retry exec call again: %v", err)
+			log.Infof("retry exec call again: %v", err)
 			continue retryLoop
 		}
 		delay := backoff.Next(ctx, err)
 		if delay == retry.Stop {
 			break
 		}
-		glog.Infof("backoff %s for %v", delay, err)
+		log.Infof("backoff %s for %v", delay, err)
 		select {
 		case <-pctx.Done():
 			return opName, resp, context.Cause(pctx)
@@ -171,16 +169,16 @@ retryLoop:
 func erespErr(ctx context.Context, eresp *rpb.ExecuteResponse) error {
 	st := eresp.GetStatus()
 	if codes.Code(st.GetCode()) != codes.OK && len(st.GetDetails()) > 0 {
-		glog.Warningf("error details for %v: %v", codes.Code(st.GetCode()), st.GetDetails())
+		log.Warnf("error details for %v: %v", codes.Code(st.GetCode()), st.GetDetails())
 	}
 	switch codes.Code(st.GetCode()) {
 	case codes.OK:
 	case codes.ResourceExhausted, codes.FailedPrecondition, codes.DeadlineExceeded:
-		glog.Warningf("execute response: status=%s", st)
+		log.Warnf("execute response: status=%s", st)
 		return status.FromProto(st).Err()
 
 	case codes.Internal:
-		glog.Warningf("execute response: status=%s", st)
+		log.Warnf("execute response: status=%s", st)
 		if strings.Contains(st.GetMessage(), "CreateProcess: failure in a Windows system call") {
 			return status.FromProto(st).Err()
 		}
@@ -203,7 +201,7 @@ func erespErr(ctx context.Context, eresp *rpb.ExecuteResponse) error {
 		return status.FromProto(st).Err()
 
 	case codes.Unauthenticated:
-		glog.Warningf("execute response: status=%s", st)
+		log.Warnf("execute response: status=%s", st)
 		if strings.Contains(st.GetMessage(), "Request had invalid authentication credentials.") {
 			// may expire access token?
 			st = proto.Clone(st).(*spb.Status)
@@ -217,7 +215,7 @@ func erespErr(ctx context.Context, eresp *rpb.ExecuteResponse) error {
 			// ctx is not canceled, but returned
 			// code = Aborted, context canceled
 			// in this case, it would be retriable.
-			glog.Warningf("execute response: aborted %s, but ctx is still active", st)
+			log.Warnf("execute response: aborted %s, but ctx is still active", st)
 			if st.GetMessage() == "context canceled" {
 				st = proto.Clone(st).(*spb.Status)
 				// codes.Unavailable, so that rpc.Retry will retry.
@@ -229,7 +227,7 @@ func erespErr(ctx context.Context, eresp *rpb.ExecuteResponse) error {
 		}
 		fallthrough
 	default:
-		glog.Errorf("execute response: status %s", st)
+		log.Errorf("execute response: status %s", st)
 		return status.FromProto(st).Err()
 	}
 	return nil

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/golang/glog"
+	"github.com/charmbracelet/log"
 )
 
 // CPPScan scans C preprocessor directives for #include/#define in buf.
@@ -37,10 +37,8 @@ func CPPScan(ctx context.Context, fname string, buf []byte) ([]string, map[strin
 		lineStart := line
 		if line[0] != '#' {
 			// not directive line
-			if glog.V(3) {
-				logLine := line
-				glog.Infof("skip %q", logLine)
-			}
+			logLine := line
+			log.Debugf("skip %q", logLine)
 			continue
 		}
 		// skip #
@@ -58,10 +56,8 @@ func CPPScan(ctx context.Context, fname string, buf []byte) ([]string, map[strin
 			case line[0] == '\t':
 			default:
 				// not '#include ' nor '#include_next ' ?
-				if glog.V(2) {
-					logLineStart := lineStart
-					glog.Infof("skip %q", logLineStart)
-				}
+				logLineStart := lineStart
+				log.Debugf("skip %q", logLineStart)
 				continue
 			}
 		case bytes.HasPrefix(line, []byte("import")):
@@ -69,10 +65,8 @@ func CPPScan(ctx context.Context, fname string, buf []byte) ([]string, map[strin
 			switch line[0] {
 			case ' ', '\t':
 			default:
-				if glog.V(2) {
-					logLineStart := lineStart
-					glog.Infof("skip %q", logLineStart)
-				}
+				logLineStart := lineStart
+				log.Debugf("skip %q", logLineStart)
 				continue
 			}
 
@@ -82,10 +76,8 @@ func CPPScan(ctx context.Context, fname string, buf []byte) ([]string, map[strin
 			case ' ', '\t':
 			default:
 				// not '#define '
-				if glog.V(2) {
-					logLineStart := lineStart
-					glog.Infof("skip %q", logLineStart)
-				}
+				logLineStart := lineStart
+				log.Debugf("skip %q", logLineStart)
 				continue
 			}
 			line = bytes.TrimSpace(line)
@@ -93,26 +85,22 @@ func CPPScan(ctx context.Context, fname string, buf []byte) ([]string, map[strin
 			continue
 		default:
 			// ignore other directives
-			if glog.V(3) {
-				logLineStart := lineStart
-				glog.Infof("skip %q", logLineStart)
-			}
+			logLineStart := lineStart
+			log.Debugf("skip %q", logLineStart)
 			continue
 		}
 		line = bytes.TrimSpace(line)
 		if len(line) == 0 {
 			// no path for #include?
-			if glog.V(2) {
-				logLineStart := lineStart
-				glog.Infof("skip %q", logLineStart)
-			}
+			logLineStart := lineStart
+			log.Debugf("skip %q", logLineStart)
 			continue
 		}
 		includes = addInclude(ctx, includes, line)
 	}
 	dur := time.Since(started)
 	if dur > time.Second {
-		glog.Infof("slow cppScan %s %s", fname, dur)
+		log.Infof("slow cppScan %s %s", fname, dur)
 	}
 	return includes, defines, nil
 }
@@ -131,17 +119,13 @@ func cppExpandMacros(ctx context.Context, paths []string, incname string, macros
 	for _, v := range values {
 		paths = cppExpandMacros(ctx, paths, v, macros)
 	}
-	if glog.V(1) {
-		glog.Infof("expand %q -> %q", incname, paths)
-	}
+	log.Debugf("expand %q -> %q", incname, paths)
 	return paths
 }
 
 func addInclude(ctx context.Context, paths []string, incpath []byte) []string {
-	if glog.V(1) {
-		logIncpath := incpath
-		glog.Infof("addInclude %q", logIncpath)
-	}
+	logIncpath := incpath
+	log.Debugf("addInclude %q", logIncpath)
 	delim := string(incpath[0])
 	switch delim {
 	case `"`:
@@ -154,10 +138,8 @@ func addInclude(ctx context.Context, paths []string, incpath []byte) []string {
 	if i < 0 {
 		if delim == ">" || delim == `"` {
 			// unclosed path?
-			if glog.V(1) {
-				logIncpath := incpath
-				glog.Infof("unclosed path? %q", logIncpath)
-			}
+			logIncpath := incpath
+			log.Debugf("unclosed path? %q", logIncpath)
 			return paths
 		}
 		// otherwise, use rest of line as token.
@@ -170,10 +152,8 @@ func addInclude(ctx context.Context, paths []string, incpath []byte) []string {
 		// not <>, "", nor upper macros?
 		return paths
 	}
-	if glog.V(1) {
-		logIncpath := incpath
-		glog.Infof("include %q", logIncpath)
-	}
+	logIncpath = incpath
+	log.Debugf("include %q", logIncpath)
 	return append(paths, strings.Clone(string(incpath)))
 }
 
@@ -184,26 +164,20 @@ func addDefine(ctx context.Context, defines map[string][]string, fname string, l
 	i := bytes.IndexAny(line, " \t")
 	if i < 0 {
 		// no macro name
-		if glog.V(1) {
-			logLine := line
-			glog.Infof("no macro name: %q", logLine)
-		}
+		logLine := line
+		log.Debugf("no macro name: %q", logLine)
 		return
 	}
 	macro := strings.Clone(string(line[:i]))
 	if strings.Contains(macro, "(") {
-		if glog.V(1) {
-			logMacro := macro
-			glog.Infof("ignore func maro: %q", logMacro)
-		}
+		logMacro := macro
+		log.Debugf("ignore func maro: %q", logMacro)
 		return
 	}
 	line = bytes.TrimSpace(line[i+1:])
 	if len(line) == 0 {
-		if glog.V(1) {
-			logMacro := macro
-			glog.Infof("no macro value for %q?", logMacro)
-		}
+		logMacro := macro
+		log.Debugf("no macro value for %q?", logMacro)
 		return
 	}
 	switch line[0] {
@@ -215,13 +189,11 @@ func addDefine(ctx context.Context, defines map[string][]string, fname string, l
 		i = bytes.IndexByte(line[1:], delim)
 		if i < 0 {
 			// unclosed path?
-			if glog.V(1) {
-				lv := struct {
-					macro string
-					line  []byte
-				}{macro: macro, line: line}
-				glog.Infof("unclosed path for macro %q: %q", lv.macro, lv.line)
-			}
+			lv := struct {
+				macro string
+				line  []byte
+			}{macro: macro, line: line}
+			log.Debugf("unclosed path for macro %q: %q", lv.macro, lv.line)
 			return
 		}
 		value := strings.Clone(string(line[:i+2])) // include delim at both side
@@ -240,30 +212,26 @@ func addDefine(ctx context.Context, defines map[string][]string, fname string, l
 			value = value[:i]
 		}
 		if len(value) == 0 {
-			if glog.V(2) {
-				logMacro := macro
-				glog.Infof("just define macro %s?", logMacro)
-			}
+			logMacro := macro
+			log.Debugf("just define macro %s?", logMacro)
 			return
 		}
 		if bytes.IndexByte(value, '(') >= 0 {
-			if glog.V(1) {
-				lv := struct {
-					macro string
-					value []byte
-				}{macro: macro, value: value}
-				glog.Infof("ignore func maro: %q=%q", lv.macro, lv.value)
-			}
+			lv := struct {
+				macro string
+				value []byte
+			}{macro: macro, value: value}
+			log.Debugf("ignore func maro: %q=%q", lv.macro, lv.value)
 			return
 		}
 		if value[0] >= 'A' && value[0] <= 'Z' {
 			defines[macro] = append(defines[macro], strings.Clone(string(value)))
-		} else if glog.V(1) {
+		} else {
 			lv := struct {
 				macro string
 				line  []byte
 			}{macro: macro, line: line}
-			glog.Infof("ignore macro %s=%s", lv.macro, lv.line)
+			log.Debugf("ignore macro %s=%s", lv.macro, lv.line)
 		}
 	}
 }

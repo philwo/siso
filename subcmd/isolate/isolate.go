@@ -18,6 +18,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/charmbracelet/log"
 	"github.com/golang/glog"
 	"github.com/google/uuid"
 	"github.com/maruel/subcommands"
@@ -157,7 +158,7 @@ func (c *run) run(ctx context.Context) error {
 	defer func() {
 		err := client.Close()
 		if err != nil {
-			glog.Errorf("close reapi client: %v", err)
+			log.Errorf("close reapi client: %v", err)
 		}
 	}()
 	artifactStore := client.CacheStore()
@@ -175,7 +176,7 @@ func (c *run) run(ctx context.Context) error {
 	defer func() {
 		err := casClient.Close()
 		if err != nil {
-			glog.Errorf("close cas client: %v", err)
+			log.Errorf("close cas client: %v", err)
 		}
 	}()
 
@@ -252,17 +253,17 @@ func (c *run) initWorkdirs(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	glog.Infof("wd: %s", execRoot)
+	log.Infof("wd: %s", execRoot)
 	err = os.Chdir(c.dir)
 	if err != nil {
 		return "", err
 	}
-	glog.Infof("change dir to %s", c.dir)
+	log.Infof("change dir to %s", c.dir)
 	cwd, err := os.Getwd()
 	if err != nil {
 		return "", err
 	}
-	glog.Infof("exec_root: %s", execRoot)
+	log.Infof("exec_root: %s", execRoot)
 
 	// recalculate dir as relative to exec_root.
 	// recipe may use absolute path for -C.
@@ -274,7 +275,7 @@ func (c *run) initWorkdirs(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("dir %q is out of exec root %q", cwd, execRoot)
 	}
 	c.dir = rdir
-	glog.Infof("working_directory in exec_root: %s", c.dir)
+	log.Infof("working_directory in exec_root: %s", c.dir)
 	return execRoot, err
 }
 
@@ -335,7 +336,7 @@ func upload(ctx context.Context, execRoot, buildDir string, hashFS *hashfs.HashF
 			fnames = append(fnames, fname)
 			continue
 		}
-		glog.Infof("expand dir %s", pathname)
+		log.Infof("expand dir %s", pathname)
 		fsys := hashFS.FileSystem(ctx, filepath.Join(execRoot, pathname))
 		err = fs.WalkDir(fsys, ".", func(path string, d fs.DirEntry, err error) error {
 			if err != nil {

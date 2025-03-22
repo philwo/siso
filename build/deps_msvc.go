@@ -15,8 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/golang/glog"
-
+	"github.com/charmbracelet/log"
 	"go.chromium.org/infra/build/siso/execute"
 	"go.chromium.org/infra/build/siso/reapi/merkletree"
 	"go.chromium.org/infra/build/siso/scandeps"
@@ -73,12 +72,12 @@ func (msvc depsMSVC) fixCmdInputs(ctx context.Context, b *Builder, cmd *execute.
 
 	var fixFn func(context.Context, []string) []string
 	if cmd.Platform["OSFamily"] != "Windows" {
-		glog.Infof("expand case sensitive includes")
+		log.Infof("expand case sensitive includes")
 		fixFn = func(ctx context.Context, files []string) []string {
 			return expandCPPCaseSensitiveIncludes(ctx, b, files)
 		}
 	} else {
-		glog.Infof("cmd platform=%q", cmd.Platform)
+		log.Infof("cmd platform=%q", cmd.Platform)
 		// filegroups may contain case sensitive filenames,
 		// but if we use it with OSFamily=Windows, need to
 		// deduplicate such case sensitive filenames.
@@ -94,7 +93,7 @@ func (msvc depsMSVC) fixCmdInputs(ctx context.Context, b *Builder, cmd *execute.
 		fn = msvc.treeInput
 	}
 	cmd.TreeInputs = append(cmd.TreeInputs, treeInputs(ctx, fn, params.Sysroots, params.Dirs)...)
-	glog.Infof("treeInputs=%v", cmd.TreeInputs)
+	log.Infof("treeInputs=%v", cmd.TreeInputs)
 	return inputs, nil
 }
 
@@ -159,7 +158,7 @@ func (depsMSVC) DepsAfterRun(ctx context.Context, b *Builder, step *Step) ([]str
 			deps = append(deps, arg)
 		}
 	}
-	glog.Infof("deps-for-msvc stdout=%d stderr=%d -> deps=%d inputs=%d extra=%q", len(step.cmd.Stdout()), len(step.cmd.Stderr()), len(deps), len(step.cmd.Inputs), filteredOutput)
+	log.Infof("deps-for-msvc stdout=%d stderr=%d -> deps=%d inputs=%d extra=%q", len(step.cmd.Stdout()), len(step.cmd.Stderr()), len(deps), len(step.cmd.Inputs), filteredOutput)
 	return deps, nil
 }
 
@@ -233,18 +232,14 @@ func (depsMSVC) scandeps(ctx context.Context, b *Builder, step *Step) ([]string,
 			// no-fallback has longer timeout for scandeps
 			req.Timeout = 2 * req.Timeout
 		}
-		if glog.V(1) {
-			glog.Infof("scandeps req=%#v", req)
-		}
+		log.Debugf("scandeps req=%#v", req)
 		started := time.Now()
 		var err error
 		ins, err = b.scanDeps.Scan(ctx, b.path.ExecRoot, req)
-		if glog.V(1) {
-			glog.Infof("scandeps %d %s: %v", len(ins), time.Since(started), err)
-		}
+		log.Debugf("scandeps %d %s: %v", len(ins), time.Since(started), err)
 		if err != nil {
 			buf, berr := json.Marshal(req)
-			glog.Warningf("scandeps failed Request %s %v: %v", buf, berr, err)
+			log.Warnf("scandeps failed Request %s %v: %v", buf, berr, err)
 			return err
 		}
 		ins = append(ins, params.Files...)
@@ -273,12 +268,12 @@ func fixCaseSensitiveIncludes(ctx context.Context, b *Builder, files []string) [
 	if len(files) == len(newFiles) {
 		return files
 	}
-	glog.Infof("fix cs %d -> %d", len(files), len(newFiles))
+	log.Infof("fix cs %d -> %d", len(files), len(newFiles))
 	return slices.Clip(newFiles)
 }
 
 func expandCPPCaseSensitiveIncludes(ctx context.Context, b *Builder, files []string) []string {
-	glog.Infof("expand cs %d", len(files))
+	log.Infof("expand cs %d", len(files))
 	seen := make(map[string]bool)
 	includeNames := make(map[string]bool)
 	includePaths := make(map[string][]string)
@@ -289,9 +284,9 @@ func expandCPPCaseSensitiveIncludes(ctx context.Context, b *Builder, files []str
 		seen[f] = true
 		switch strings.ToLower(filepath.Ext(f)) {
 		case ".h", ".hxx", ".hpp", ".inc":
-			glog.Infof("expand cs %s -> header", f)
+			log.Infof("expand cs %s -> header", f)
 		default:
-			glog.Infof("expand cs %s -> ignore", f)
+			log.Infof("expand cs %s -> ignore", f)
 			continue
 		}
 
@@ -302,12 +297,12 @@ func expandCPPCaseSensitiveIncludes(ctx context.Context, b *Builder, files []str
 
 		buf, err := b.hashFS.ReadFile(ctx, b.path.ExecRoot, f)
 		if err != nil {
-			glog.Warningf("expand cs: failed to read %s: %v", f, err)
+			log.Warnf("expand cs: failed to read %s: %v", f, err)
 			continue
 		}
 		includes, _, err := scandeps.CPPScan(ctx, f, buf)
 		if err != nil {
-			glog.Warningf("expand cs: failed to scan %s: %v", f, err)
+			log.Warnf("expand cs: failed to scan %s: %v", f, err)
 			continue
 		}
 		for _, inc := range includes {
@@ -324,7 +319,7 @@ func expandCPPCaseSensitiveIncludes(ctx context.Context, b *Builder, files []str
 		}
 	}
 	for inc := range includeNames {
-		glog.Infof("expand cs for inc:%s", inc)
+		log.Infof("expand cs for inc:%s", inc)
 		switch strings.Count(inc, "/") {
 		case 0, 1:
 			for _, dir := range includePaths[strings.ToLower(inc)] {
@@ -333,7 +328,7 @@ func expandCPPCaseSensitiveIncludes(ctx context.Context, b *Builder, files []str
 					continue
 				}
 				seen[f] = true
-				glog.Infof("expand cs %s -> %s", inc, f)
+				log.Infof("expand cs %s -> %s", inc, f)
 				files = append(files, f)
 			}
 		default:
@@ -345,7 +340,7 @@ func expandCPPCaseSensitiveIncludes(ctx context.Context, b *Builder, files []str
 						continue
 					}
 					seen[f] = true
-					glog.Infof("expand cs %s -> %s", inc, f)
+					log.Infof("expand cs %s -> %s", inc, f)
 					files = append(files, f)
 				}
 			}

@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/golang/glog"
+	"github.com/charmbracelet/log"
 	"go.chromium.org/infra/build/siso/reapi"
 	"go.chromium.org/infra/build/siso/toolsupport/msvcutil"
 	"go.chromium.org/infra/build/siso/ui"
@@ -113,19 +113,19 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 		if !experiments.Enabled("keep-going-handle-error", "handle %s failed: %v", step, err) {
 			res := cmdOutput(ctx, cmdOutputResultFAILED, "handle", step.cmd, step.def.Binding("command"), step.def.RuleName(), err)
 			step.cmd.SetOutputResult(b.logOutput(ctx, res, step.cmd.Console))
-			glog.Warningf("Failed to exec(handle): %v", err)
+			log.Warnf("Failed to exec(handle): %v", err)
 			return fmt.Errorf("failed to run handler for %s: %w", step, err)
 		}
 	} else if exited {
 		// store handler generated outputs to local disk.
 		// better to upload to CAS, or store in fs_state?
-		glog.Infof("outputs[handler] %d", len(step.cmd.Outputs))
+		log.Infof("outputs[handler] %d", len(step.cmd.Outputs))
 		err = b.hashFS.Flush(ctx, step.cmd.ExecRoot, step.cmd.Outputs)
 		if err == nil {
 			b.plan.done(ctx, step)
 			return nil
 		}
-		glog.Warningf("handle step failure: %v", err)
+		log.Warnf("handle step failure: %v", err)
 	}
 	err = b.setupRSP(ctx, step)
 	if err != nil {
@@ -137,7 +137,7 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 		if err != nil && !errors.Is(err, context.Canceled) {
 			// force flush to disk
 			ferr := b.hashFS.Flush(ctx, step.cmd.ExecRoot, []string{step.cmd.RSPFile})
-			glog.Warningf("failed to exec %v: preserve rsp=%s flush:%v", err, step.cmd.RSPFile, ferr)
+			log.Warnf("failed to exec %v: preserve rsp=%s flush:%v", err, step.cmd.RSPFile, ferr)
 			return
 		}
 		b.teardownRSP(ctx, step)
@@ -149,7 +149,7 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 
 	runCmd := b.runStrategy(ctx, step)
 	err = runCmd(ctx, step)
-	glog.Infof("done err=%v", err)
+	log.Infof("done err=%v", err)
 	if err != nil {
 		if ctx.Err() != nil {
 			err = fmt.Errorf("ctx err: %w: %w", ctx.Err(), err)
@@ -191,7 +191,7 @@ func (b *Builder) prevStepOut(ctx context.Context, step *Step) string {
 	}
 	s, err := b.graph.TargetPath(ctx, step.prevStepOut)
 	if err != nil {
-		glog.Warningf("failed to get target path: %v", err)
+		log.Warnf("failed to get target path: %v", err)
 		return ""
 	}
 	return s
@@ -238,7 +238,7 @@ func (b *Builder) outputFailureSummary(ctx context.Context, step *Step, err erro
 	fmt.Fprintf(&buf, "%v\n", err)
 	_, err = b.failureSummaryWriter.Write(buf.Bytes())
 	if err != nil {
-		glog.Warningf("failed to write failure_summary: %v", err)
+		log.Warnf("failed to write failure_summary: %v", err)
 	}
 }
 
@@ -260,6 +260,6 @@ func (b *Builder) outputFailedCommands(ctx context.Context, step *Step, err erro
 	fmt.Fprint(&buf, newline)
 	_, err = b.failedCommandsWriter.Write(buf.Bytes())
 	if err != nil {
-		glog.Warningf("failed to write failed commands: %v", err)
+		log.Warnf("failed to write failed commands: %v", err)
 	}
 }
