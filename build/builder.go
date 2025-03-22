@@ -219,10 +219,8 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 	var le localexec.LocalExec
 	var re *remoteexec.RemoteExec
 	if opts.REAPIClient != nil {
-		log.Infof("enable built-in remote exec")
+		log.Infof("remote execution enabled")
 		re = remoteexec.New(opts.REAPIClient)
-	} else {
-		log.Infof("disable built-in remote exec")
 	}
 	experiments.ShowOnce()
 	numCPU := runtimex.NumCPU()
@@ -239,8 +237,6 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 		maxThreads = 10000
 	}
 	log.Infof("numcpu=%d threads:%d - limits=%#v", numCPU, maxThreads, opts.Limits)
-	log.Infof("correlated_invocations_id: %s", opts.JobID)
-	log.Infof("tool_invocation_id: %s", opts.ID)
 
 	var fastLocalSema *semaphore.Semaphore
 	if opts.Limits.FastLocal > 0 {
@@ -472,16 +468,10 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 
 loop:
 	for {
-		t := time.Now()
 		ctx, done, err := b.stepSema.WaitAcquire(ctx)
 		if err != nil {
-			log.Warnf("wait acquire: %v", err)
 			cancel()
 			return err
-		}
-		dur := time.Since(t)
-		if dur > 1*time.Millisecond {
-			log.Infof("step sema wait %s", dur)
 		}
 
 		var step *Step
@@ -557,7 +547,6 @@ loop:
 			}
 		}(step)
 	}
-	log.Infof("all pendings becomes ready")
 	errdone := make(chan error)
 	go func() {
 		var canceled bool
@@ -714,7 +703,6 @@ func dedupInputs(cmd *execute.Cmd) {
 func (b *Builder) outputs(ctx context.Context, step *Step) error {
 	outputs := step.cmd.Outputs
 	if step.def.Binding("phony_outputs") != "" {
-		log.Infof("phony_outputs. no check output files %q", outputs)
 		return nil
 	}
 
@@ -737,7 +725,6 @@ func (b *Builder) outputs(ctx context.Context, step *Step) error {
 		seen[o] = true
 	}
 
-	log.Infof("outputs %d->%d", len(outputs), len(localOutputs))
 	defOutputs := step.def.Outputs(ctx)
 	// need to check against step.cmd.Outputs, not step.def.Outputs, since
 	// handler may add to step.cmd.Outputs.
@@ -756,7 +743,6 @@ func (b *Builder) outputs(ctx context.Context, step *Step) error {
 			// as other future step would access it locally.
 			_, err := b.hashFS.OS.Lstat(ctx, filepath.Join(step.cmd.ExecRoot, out))
 			if err == nil {
-				log.Infof("output_local=false but local exists: %q", out)
 				localOutputs = append(localOutputs, out)
 				local = true
 			}
@@ -842,11 +828,10 @@ func (b *Builder) updateDeps(ctx context.Context, step *Step) error {
 	if err != nil {
 		return err
 	}
-	updated, err := step.def.RecordDeps(ctx, output, fi.ModTime(), deps)
+	_, err = step.def.RecordDeps(ctx, output, fi.ModTime(), deps)
 	if err != nil {
 		log.Warnf("update deps: failed to record deps %s, %s, %s, %s: %v", output, base64.StdEncoding.EncodeToString(step.cmd.CmdHash), fi.ModTime(), deps, err)
 	}
-	log.Infof("update deps=%s: %s %s %d updated:%t pure:%t/%t->true", step.cmd.Deps, output, base64.StdEncoding.EncodeToString(step.cmd.CmdHash), len(deps), updated, step.cmd.Pure, step.cmd.Pure)
 	canonicalizedDeps := make([]string, 0, len(deps))
 	for _, dep := range deps {
 		canonicalizedDeps = append(canonicalizedDeps, b.path.MaybeFromWD(dep))
@@ -856,7 +841,6 @@ func (b *Builder) updateDeps(ctx context.Context, step *Step) error {
 }
 
 func (b *Builder) prepareAllOutDirs(ctx context.Context) error {
-	started := time.Now()
 	seen := make(map[string]struct{})
 	// Collect only the deepest directories to avoid redundant `os.MkdirAll`.
 	for target, ti := range b.plan.targets {
@@ -873,7 +857,6 @@ func (b *Builder) prepareAllOutDirs(ctx context.Context) error {
 	for dir := range seen {
 		dirs = append(dirs, dir)
 	}
-	ndirs := len(dirs)
 	sort.Strings(dirs)
 	// Delete intermediate directories of `dir` from `seen`, because
 	// `os.MkdirAll` will create the intermediate directories anyway.
@@ -893,7 +876,6 @@ func (b *Builder) prepareAllOutDirs(ctx context.Context) error {
 		dirs = append(dirs, dir)
 	}
 	sort.Strings(dirs)
-	log.Infof("prepare out dirs: targets:%d -> %d -> %d ", len(b.plan.targets), ndirs, len(dirs))
 	for _, dir := range dirs {
 		// we don't use hashfs here for performance.
 		// just create dirs on local disk, so local process
@@ -903,7 +885,6 @@ func (b *Builder) prepareAllOutDirs(ctx context.Context) error {
 			return err
 		}
 	}
-	log.Infof("prepare out dirs %d in %s", len(dirs), time.Since(started))
 	return nil
 }
 

@@ -185,7 +185,6 @@ func (b *Builder) runRemoteStep(ctx context.Context, step *Step, cacheCheck bool
 		if err == nil {
 			return nil
 		}
-		log.Infof("cmd cache miss: %v", err)
 	}
 	return b.execRemote(ctx, step)
 }

@@ -80,7 +80,6 @@ func (c *run) run(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer signals.HandleInterrupt(cancel)()
 
-	log.Infof("dir %s", c.dir)
 	err := os.Chdir(c.dir)
 	if err != nil {
 		return err
@@ -122,14 +121,12 @@ func (c *run) collect(ctx context.Context) (map[string]digest.Data, error) {
 				}
 				localFname = string(buf)
 				fname = strings.TrimSuffix(fname, ".redirected")
-				log.Infof("%s -> %s", fname, localFname)
 			}
 			src := osfs.FileSource(localFname, -1)
 			data, err := digest.FromLocalFile(ctx, src)
 			if err != nil {
 				log.Errorf("Error to calculate digest %s: %v", fname, err)
 			} else {
-				log.Infof("add %s %s", fname, data.Digest())
 				report[fname] = data
 			}
 		}
