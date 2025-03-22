@@ -10,7 +10,6 @@ import (
 	"time"
 
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
-	"github.com/charmbracelet/log"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -37,9 +36,6 @@ type Cache struct {
 
 // NewCache creates new cache.
 func NewCache(opts CacheOptions) (*Cache, error) {
-	log.Infof("cache store=%v read=%t",
-		opts.Store,
-		opts.EnableRead)
 	if opts.Store == nil {
 		return nil, errors.New("cache: store is not set")
 	}
@@ -83,7 +79,6 @@ func (c *Cache) GetActionResult(ctx context.Context, cmd *execute.Cmd) error {
 	c.setActionResultStderr(ctx, cmd, result)
 	err = cmd.RecordOutputs(ctx, c.store, now)
 	if err != nil {
-		log.Infof("cache get %s: %v", time.Since(now), err)
 		return err
 	}
 	return nil
