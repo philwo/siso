@@ -155,7 +155,6 @@ func run(ctx context.Context, cmd *execute.Cmd) (*rpb.ActionResult, error) {
 			}
 		}
 		st.Close()
-		log.Debugf("%s filetrace=false n_traced_inputs=%d n_traced_outputs=%d err=%v", cmd.ID, len(cmd.Inputs), len(cmd.Outputs), err)
 	} else {
 		err = forkSema.Do(ctx, func(ctx context.Context) error {
 			return c.Start()
@@ -166,7 +165,6 @@ func run(ctx context.Context, cmd *execute.Cmd) (*rpb.ActionResult, error) {
 		if err == nil {
 			ru = rusage(c)
 		}
-		log.Debugf("%s filetrace=false %v", cmd.ID, err)
 	}
 	if cmd.Console {
 		consoleCancel()

@@ -43,7 +43,6 @@ func treeInputs(ctx context.Context, fn func(context.Context, string) (merkletre
 			defer wg.Done()
 			ti, err := fn(ctx, dir)
 			if err != nil {
-				log.Debugf("treeinput[dir] %s: %v", dir, err)
 				return
 			}
 			treeEntries[i0+i] = ti

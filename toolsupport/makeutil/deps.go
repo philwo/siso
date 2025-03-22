@@ -10,8 +10,6 @@ import (
 	"fmt"
 	"io/fs"
 	"strings"
-
-	"github.com/charmbracelet/log"
 )
 
 // ParseDepsFile parses *.d file in fname on fsys.
@@ -24,7 +22,6 @@ func ParseDepsFile(fsys fs.FS, fname string) ([]string, error) {
 		return nil, err
 	}
 	deps, err := ParseDeps(b)
-	log.Debugf("deps %s => %s: %v", fname, deps, err)
 	return deps, err
 }
 

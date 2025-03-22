@@ -72,7 +72,6 @@ func (b *Builder) checkTrace(ctx context.Context, step *Step, dur time.Duration)
 	if len(inadds) == 0 && len(indels) == 0 && len(inerrs) == 0 &&
 		len(outadds) == 0 && len(outdels) == 0 && len(outerrs) == 0 {
 		log.Infof("trace-diff pure")
-		log.Debugf("trace-diff-platform %s\ninputs\n %s\noutputs\n %s", step, strings.Join(inplatforms, "\n "), strings.Join(outplatforms, "\n "))
 		var buf bytes.Buffer
 		fmt.Fprintf(&buf, `cmd: %s pure:%t/true restat:%t %s
 action: %s %s
@@ -93,8 +92,6 @@ inerr:%d outerr:%d
 	if len(inadds) == 0 && len(inerrs) == 0 &&
 		len(outadds) == 0 && len(outerrs) == 0 {
 		log.Infof("trace-diff can-be-pure")
-		log.Debugf("%s trace-diff\ninputs\n-%s\noutputs\n-%s", step, strings.Join(indels, "\n-"), strings.Join(outdels, "\n-"))
-		log.Debugf("%s trace-diff-platform\ninputs\n %s\noutputs\n %s", step, strings.Join(inplatforms, "\n "), strings.Join(outplatforms, "\n "))
 
 		var buf bytes.Buffer
 		fmt.Fprintf(&buf, `cmd: %s pure:%t/can-be-true restat:%t %s
@@ -117,14 +114,6 @@ outputs:
 		return nil
 	}
 	log.Infof("trace-diff impure")
-	log.Debugf("%s trace-diff\ninputs\n+%s\n-%s\n?%s\noutputs\n+%s\n-%s\n?%s", step,
-		strings.Join(inadds, "\n+"),
-		strings.Join(indels, "\n-"),
-		strings.Join(inerrs, "\n?"),
-		strings.Join(outadds, "\n+"),
-		strings.Join(outdels, "\n-"),
-		strings.Join(outerrs, "\n?"))
-	log.Debugf("%s trace-diff-platform\ninputs\n %s\noutputs\n %s", step, strings.Join(inplatforms, "\n "), strings.Join(outplatforms, "\n "))
 
 	ruleBuf := step.def.RuleFix(ctx, inadds, outadds)
 
@@ -221,7 +210,6 @@ func filesDiff(ctx context.Context, b *Builder, x, opts, y []string, ignorePatte
 		}
 		fi, err := b.hashFS.Stat(ctx, b.path.ExecRoot, relname)
 		if errors.Is(err, os.ErrNotExist) {
-			log.Debugf("%s: stat %v", name, err)
 			continue
 		}
 		if err != nil {

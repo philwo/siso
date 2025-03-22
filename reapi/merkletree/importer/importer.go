@@ -12,7 +12,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/charmbracelet/log"
 	"go.chromium.org/infra/build/siso/hashfs/osfs"
 	"go.chromium.org/infra/build/siso/reapi/digest"
 	"go.chromium.org/infra/build/siso/reapi/merkletree"
@@ -35,7 +34,6 @@ func (Importer) Import(ctx context.Context, dir string, ds *digest.Store) (diges
 		}
 		name := strings.TrimPrefix(path, dir+"/")
 		if d.IsDir() {
-			log.Debugf("add dir %s", name)
 			entries = append(entries, merkletree.Entry{
 				Name: name,
 			})
@@ -46,7 +44,6 @@ func (Importer) Import(ctx context.Context, dir string, ds *digest.Store) (diges
 			if err != nil {
 				return err
 			}
-			log.Debugf("add symlink %s ->%s", name, target)
 			entries = append(entries, merkletree.Entry{
 				Name:   name,
 				Target: target,
@@ -64,7 +61,6 @@ func (Importer) Import(ctx context.Context, dir string, ds *digest.Store) (diges
 		if err != nil {
 			return err
 		}
-		log.Debugf("add file %s %v", name, data.Digest())
 		entries = append(entries, merkletree.Entry{
 			Name:         name,
 			Data:         data,
@@ -78,7 +74,6 @@ func (Importer) Import(ctx context.Context, dir string, ds *digest.Store) (diges
 
 	inputTree := merkletree.New(ds)
 	for _, ent := range entries {
-		log.Debugf("set %s", ent.Name)
 		err = inputTree.Set(ent)
 		if err != nil {
 			return digest.Digest{}, err

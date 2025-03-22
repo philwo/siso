@@ -198,7 +198,6 @@ func depsCmd(ctx context.Context, b *Builder, step *Step) error {
 func depsAfterRun(ctx context.Context, b *Builder, step *Step) ([]string, error) {
 	ds, found := depsProcessors[step.cmd.Deps]
 	if !found {
-		log.Debugf("update deps; unexpected deps=%q", step.cmd.Deps)
 		// deps= is not set, but depfile= is set.
 		if step.cmd.Depfile != "" {
 			err := checkDepfile(ctx, b, step)
