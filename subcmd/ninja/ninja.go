@@ -1223,13 +1223,13 @@ func (c *ninjaCmdRun) logFilename(fname, startDir string) string {
 }
 
 // glogFilename returns filename of glog logfile. i.e. siso.INFO.
-func (c *ninjaCmdRun) glogFilename() string {
-	logFilename := "siso.INFO"
-	if runtime.GOOS == "windows" {
-		logFilename = "siso.exe.INFO"
-	}
-	return filepath.Join(c.logDir, logFilename)
-}
+// func (c *ninjaCmdRun) glogFilename() string {
+// 	logFilename := "siso.INFO"
+// 	if runtime.GOOS == "windows" {
+// 		logFilename = "siso.exe.INFO"
+// 	}
+// 	return filepath.Join(c.logDir, logFilename)
+// }
 
 func (c *ninjaCmdRun) logWriter(ctx context.Context, fname string) (io.Writer, func(errp *error), error) {
 	fname = c.logFilename(fname, "")
@@ -1559,30 +1559,6 @@ func checkTargets(ctx context.Context, lastTargetsFilename string, targets []str
 		}
 	}
 	return failed, true
-}
-
-func argsGN(args, key string) string {
-	for _, line := range strings.Split(args, "\n") {
-		i := strings.Index(line, "#")
-		if i >= 0 {
-			line = line[:i]
-		}
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		if !strings.HasPrefix(line, key) {
-			continue
-		}
-		value := strings.TrimPrefix(line, key)
-		value = strings.TrimSpace(value)
-		if !strings.HasPrefix(value, "=") {
-			continue
-		}
-		value = strings.TrimPrefix(value, "=")
-		return strings.TrimSpace(value)
-	}
-	return ""
 }
 
 func cpuinfo() string {

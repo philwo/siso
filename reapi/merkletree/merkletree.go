@@ -435,12 +435,3 @@ func (m *MerkleTree) buildTree(ctx context.Context, curdir *rpb.Directory, dirna
 	}
 	return data.Digest().Proto(), nil
 }
-
-// Directories returns directories in the merkle tree.
-func (m *MerkleTree) Directories() []*rpb.Directory {
-	dirs := make([]*rpb.Directory, 0, len(m.m))
-	for _, d := range m.m {
-		dirs = append(dirs, d)
-	}
-	return dirs
-}

@@ -50,11 +50,6 @@ type Experiments struct {
 
 var experiments Experiments
 
-// SetExperimentForTest sets experiments for testing.
-func SetExperimentForTest(v string) {
-	experiments.set(v)
-}
-
 const experimentEnv = "SISO_EXPERIMENTS"
 
 func (e *Experiments) init() {
@@ -120,13 +115,4 @@ func (e *Experiments) Enabled(k, format string, args ...any) bool {
 // Hint shows hint message for experimental feature k.
 func (e *Experiments) Hint(k string) string {
 	return knownExperiments[k]
-}
-
-// Suggest returns suggest message to enable experimental feature k.
-func (e *Experiments) Suggest(k string) string {
-	hint := knownExperiments[k]
-	if hint != "" {
-		return fmt.Sprintf("need %s=%s or %s", experimentEnv, k, hint)
-	}
-	return fmt.Sprintf("need %s=%s", experimentEnv, k)
 }

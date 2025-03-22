@@ -128,29 +128,6 @@ func DefaultLimits(ctx context.Context) Limits {
 	return defaultLimits
 }
 
-// UnitTestLimits returns limits used in unit tests.
-// It sets 2 for all limits.
-// Otherwise, builder will start many steps, so hard to
-// test !hasReady before b.failuresAllowed in Build func in builder.go
-func UnitTestLimits(ctx context.Context) Limits {
-	log.Infof("UnitTest mode. limit to 2")
-	return Limits{
-		Step:     2,
-		Preproc:  2,
-		ScanDeps: 2,
-		Local:    2,
-		Remote:   2,
-		REWrap:   2,
-		Cache:    2,
-	}
-}
-
-// SetDefaultForTest updates default limits for test.
-// Test should restore the original value after the test.
-func SetDefaultForTest(limits Limits) {
-	defaultLimits = limits
-}
-
 func limitForStep(ctx context.Context, numCPU int) int {
 	limit := stepLimitFactor * numCPU
 	// limit step for reproxy to protect from thread exceeeds.

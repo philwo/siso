@@ -24,8 +24,6 @@ import (
 	"time"
 
 	"github.com/charmbracelet/log"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 
 	"go.chromium.org/infra/build/siso/build/metadata"
 	"go.chromium.org/infra/build/siso/execute"
@@ -339,32 +337,6 @@ func (b *Builder) Stats() Stats {
 
 // ErrManifestModified is an error to indicate that manifest is modified.
 var ErrManifestModified = errors.New("manifest modified")
-
-type numBytes int64
-
-var bytesUnit = map[int64]string{
-	1 << 10: "KiB",
-	1 << 20: "MiB",
-	1 << 30: "GiB",
-	1 << 40: "TiB",
-}
-
-func (b numBytes) String() string {
-	var n []int64
-	for k := range bytesUnit {
-		n = append(n, k)
-	}
-	sort.Slice(n, func(i, j int) bool {
-		return n[i] > n[j]
-	})
-	i := int64(b)
-	for _, k := range n {
-		if i >= k {
-			return fmt.Sprintf("%.02f%s", float64(i)/float64(k), bytesUnit[k])
-		}
-	}
-	return fmt.Sprintf("%dB", i)
-}
 
 // Build builds args with the name.
 func (b *Builder) Build(ctx context.Context, name string, args ...string) (err error) {
@@ -733,24 +705,6 @@ func (b *Builder) recordNinjaLogs(ctx context.Context, s *Step) {
 		outputs = append(outputs, strings.TrimPrefix(output, buildDir))
 	}
 	ninjautil.WriteNinjaLogEntries(ctx, b.ninjaLogWriter, start, end, s.endTime, outputs, s.cmd.Args)
-}
-
-func isCanceled(ctx context.Context, err error) bool {
-	if errors.Is(err, context.Canceled) {
-		return true
-	}
-	st, ok := status.FromError(err)
-	if ok {
-		if st.Code() == codes.Canceled {
-			return true
-		}
-	}
-	select {
-	case <-ctx.Done():
-		return true
-	default:
-	}
-	return false
 }
 
 // dedupInputs deduplicates inputs.
