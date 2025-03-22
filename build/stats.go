@@ -8,7 +8,7 @@ import (
 	"context"
 	"sync"
 
-	"go.chromium.org/infra/build/siso/o11y/clog"
+	"github.com/golang/glog"
 )
 
 type stats struct {
@@ -45,7 +45,7 @@ func (s *stats) update(ctx context.Context, m *StepMetric, pure bool) {
 		s.s.Local++
 	case m.Err: // maybe canceled?
 	default:
-		clog.Warningf(ctx, "unexpected metrics? %#v", m)
+		glog.Warningf("unexpected metrics? %#v", m)
 	}
 
 	if m.Fallback {

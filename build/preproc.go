@@ -9,16 +9,14 @@ import (
 	"sort"
 	"strings"
 
-	log "github.com/golang/glog"
-
-	"go.chromium.org/infra/build/siso/o11y/clog"
+	"github.com/golang/glog"
 )
 
 func fastDepsCmd(ctx context.Context, b *Builder, step *Step) (*Step, bool) {
 	fastStep, err := depsFastStep(ctx, b, step)
 	if err != nil {
-		if log.V(1) {
-			clog.Infof(ctx, "no fast-deps %s: %v", step.cmd.Deps, err)
+		if glog.V(1) {
+			glog.Infof("no fast-deps %s: %v", step.cmd.Deps, err)
 		}
 		return nil, false
 	}

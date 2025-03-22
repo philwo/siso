@@ -18,13 +18,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/golang/glog"
 	"github.com/maruel/subcommands"
 
 	"go.chromium.org/luci/common/cli"
 	"go.chromium.org/luci/common/system/signals"
 
 	"go.chromium.org/infra/build/siso/hashfs/osfs"
-	"go.chromium.org/infra/build/siso/o11y/clog"
 	"go.chromium.org/infra/build/siso/reapi/digest"
 	"go.chromium.org/infra/build/siso/ui"
 )
@@ -80,7 +80,7 @@ func (c *run) run(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer signals.HandleInterrupt(cancel)()
 
-	clog.Infof(ctx, "dir %s", c.dir)
+	glog.Infof("dir %s", c.dir)
 	err := os.Chdir(c.dir)
 	if err != nil {
 		return err
@@ -117,19 +117,19 @@ func (c *run) collect(ctx context.Context) (map[string]digest.Data, error) {
 			if strings.HasSuffix(fname, ".redirected") {
 				buf, err := os.ReadFile(fname)
 				if err != nil {
-					clog.Warningf(ctx, "failed to read %s: %v", fname, err)
+					glog.Warningf("failed to read %s: %v", fname, err)
 					continue
 				}
 				localFname = string(buf)
 				fname = strings.TrimSuffix(fname, ".redirected")
-				clog.Infof(ctx, "%s -> %s", fname, localFname)
+				glog.Infof("%s -> %s", fname, localFname)
 			}
 			src := osfs.FileSource(localFname, -1)
 			data, err := digest.FromLocalFile(ctx, src)
 			if err != nil {
-				clog.Errorf(ctx, "Error to calculate digest %s: %v", fname, err)
+				glog.Errorf("Error to calculate digest %s: %v", fname, err)
 			} else {
-				clog.Infof(ctx, "add %s %s", fname, data.Digest())
+				glog.Infof("add %s %s", fname, data.Digest())
 				report[fname] = data
 			}
 		}
@@ -139,7 +139,7 @@ func (c *run) collect(ctx context.Context) (map[string]digest.Data, error) {
 	// .reproxy_tmp/cache may exist, but must not collect reproxy.creds.
 	_, err = os.Stat(".reproxy_tmp/logs")
 	if err != nil {
-		clog.Infof(ctx, "no .reproxy_tmp/logs: %v", err)
+		glog.Infof("no .reproxy_tmp/logs: %v", err)
 		return report, nil
 	}
 	err = fs.WalkDir(fsys, ".reproxy_tmp/logs", func(fname string, d fs.DirEntry, err error) error {
@@ -153,10 +153,10 @@ func (c *run) collect(ctx context.Context) (map[string]digest.Data, error) {
 		src := osfs.FileSource(fname, -1)
 		data, err := digest.FromLocalFile(ctx, src)
 		if err != nil {
-			clog.Errorf(ctx, "Error to calculate digest %s: %v", fname, err)
+			glog.Errorf("Error to calculate digest %s: %v", fname, err)
 			return nil
 		}
-		clog.Infof(ctx, "add %s %s", fname, data.Digest())
+		glog.Infof("add %s %s", fname, data.Digest())
 		report[fname] = data
 		return nil
 	})

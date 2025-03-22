@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"go.chromium.org/infra/build/siso/o11y/clog"
+	"github.com/golang/glog"
 	"go.chromium.org/infra/build/siso/reapi/digest"
 	"go.chromium.org/infra/build/siso/runtimex"
 	"go.chromium.org/infra/build/siso/sync/semaphore"
@@ -43,7 +43,7 @@ func localDigest(ctx context.Context, src digest.Source, fname string) (digest.D
 	started := time.Now()
 	d, err := digest.FromLocalFile(ctx, src)
 	if dur := time.Since(started); dur >= 10*time.Second {
-		clog.Warningf(ctx, "too slow local digest %s %s in %s, err=%v", fname, d.Digest(), dur, err)
+		glog.Warningf("too slow local digest %s %s in %s, err=%v", fname, d.Digest(), dur, err)
 	}
 	return d, err
 
@@ -106,14 +106,14 @@ func (d *digester) worker() {
 
 func (d *digester) stop(ctx context.Context) {
 	close(d.quit)
-	clog.Infof(ctx, "wait for workers")
+	glog.Infof("wait for workers")
 	<-d.done
 	d.mu.Lock()
 	q := d.q
 	d.q = nil
 	d.mu.Unlock()
 	close(q)
-	clog.Infof(ctx, "run pending digest chan:%d + queue:%d", len(d.q), len(d.queue))
+	glog.Infof("run pending digest chan:%d + queue:%d", len(d.q), len(d.queue))
 	for req := range q {
 		d.compute(req.ctx, req.fname, req.e)
 	}
@@ -121,7 +121,7 @@ func (d *digester) stop(ctx context.Context) {
 		d.compute(req.ctx, req.fname, req.e)
 	}
 	d.queue = nil
-	clog.Infof(ctx, "finish digester")
+	glog.Infof("finish digester")
 }
 
 func (d *digester) lazyCompute(ctx context.Context, fname string, e *entry) {
@@ -133,7 +133,7 @@ func (d *digester) lazyCompute(ctx context.Context, fname string, e *entry) {
 	}
 	select {
 	case <-ctx.Done():
-		clog.Warningf(ctx, "ignore lazyCompute %s: %v", fname, context.Cause(ctx))
+		glog.Warningf("ignore lazyCompute %s: %v", fname, context.Cause(ctx))
 		return
 	default:
 	}
@@ -167,13 +167,13 @@ func (d *digester) compute(ctx context.Context, fname string, e *entry) {
 	err := DigestSemaphore.Do(ctx, func(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
-			clog.Warningf(ctx, "ignore compute %s: %v", fname, context.Cause(ctx))
+			glog.Warningf("ignore compute %s: %v", fname, context.Cause(ctx))
 			return context.Cause(ctx)
 		default:
 		}
 		return e.compute(ctx, fname)
 	})
 	if err != nil {
-		clog.Warningf(ctx, "failed to compute digest %s: %v", fname, err)
+		glog.Warningf("failed to compute digest %s: %v", fname, err)
 	}
 }

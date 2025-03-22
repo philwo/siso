@@ -16,7 +16,7 @@ import (
 	"runtime/pprof"
 	"runtime/trace"
 
-	log "github.com/golang/glog"
+	"github.com/golang/glog"
 	"github.com/maruel/subcommands"
 
 	"go.chromium.org/luci/auth/client/authcli"
@@ -136,7 +136,7 @@ Use "siso help -advanced" to display all commands.
 	flag.Parse()
 
 	// Flush the log on exit to not lose any messages.
-	defer log.Flush()
+	defer glog.Flush()
 
 	// Print a stack trace when a panic occurs.
 	defer func() {
@@ -144,7 +144,7 @@ Use "siso help -advanced" to display all commands.
 			const size = 64 << 10
 			buf := make([]byte, size)
 			buf = buf[:runtime.Stack(buf, false)]
-			log.Fatalf("panic: %v\n%s", r, buf)
+			glog.Fatalf("panic: %v\n%s", r, buf)
 		}
 	}()
 
@@ -168,7 +168,7 @@ Use "siso help -advanced" to display all commands.
 		// https://pkg.go.dev/net/http/pprof
 		fmt.Fprintf(os.Stderr, "pprof is enabled, listening at http://%s/debug/pprof/\n", pprofAddr)
 		go func() {
-			log.Infof("pprof http listener: %v", http.ListenAndServe(pprofAddr, nil))
+			glog.Infof("pprof http listener: %v", http.ListenAndServe(pprofAddr, nil))
 		}()
 		defer func() {
 			fmt.Fprintf(os.Stderr, "pprof is still listening at http://%s/debug/pprof/\n", pprofAddr)
@@ -183,11 +183,11 @@ Use "siso help -advanced" to display all commands.
 	if cpuprofile != "" {
 		f, err := os.Create(cpuprofile)
 		if err != nil {
-			log.Fatalf("failed to create cpuprofile file: %v", err)
+			glog.Fatalf("failed to create cpuprofile file: %v", err)
 		}
 		err = pprof.StartCPUProfile(f)
 		if err != nil {
-			log.Errorf("failed to start CPU profiler: %v", err)
+			glog.Errorf("failed to start CPU profiler: %v", err)
 		}
 		defer pprof.StopCPUProfile()
 	}
@@ -196,12 +196,12 @@ Use "siso help -advanced" to display all commands.
 	if memprofile != "" {
 		f, err := os.Create(memprofile)
 		if err != nil {
-			log.Fatalf("failed to create memprofile file: %v", err)
+			glog.Fatalf("failed to create memprofile file: %v", err)
 		}
 		defer func() {
 			err := pprof.WriteHeapProfile(f)
 			if err != nil {
-				log.Errorf("failed to write heap profile: %v", err)
+				glog.Errorf("failed to write heap profile: %v", err)
 			}
 		}()
 	}
@@ -211,17 +211,17 @@ Use "siso help -advanced" to display all commands.
 		fmt.Fprintf(os.Stderr, "enable go trace in %q\n", traceFile)
 		f, err := os.Create(traceFile)
 		if err != nil {
-			log.Fatalf("Failed to create go trace output file: %v", err)
+			glog.Fatalf("Failed to create go trace output file: %v", err)
 		}
 		defer func() {
 			fmt.Fprintf(os.Stderr, "go trace: go tool trace %s\n", traceFile)
 			cerr := f.Close()
 			if cerr != nil {
-				log.Fatalf("Failed to close go trace output file: %v", cerr)
+				glog.Fatalf("Failed to close go trace output file: %v", cerr)
 			}
 		}()
 		if err := trace.Start(f); err != nil {
-			log.Fatalf("Failed to start go trace: %v", err)
+			glog.Fatalf("Failed to start go trace: %v", err)
 		}
 		defer trace.Stop()
 	}

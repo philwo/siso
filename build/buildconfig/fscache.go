@@ -9,10 +9,8 @@ import (
 	"io/fs"
 	"sync"
 
-	log "github.com/golang/glog"
+	"github.com/golang/glog"
 	"golang.org/x/sync/singleflight"
-
-	"go.chromium.org/infra/build/siso/o11y/clog"
 )
 
 // fscache is a cache of contents from fs (hashfs).
@@ -29,8 +27,8 @@ func (c *fscache) Get(ctx context.Context, fsys fs.FS, fname string) ([]byte, er
 	buf, ok := c.m[fname]
 	c.mu.Unlock()
 	if ok {
-		if log.V(1) {
-			clog.Infof(ctx, "fscache hit %s: %d", fname, len(buf))
+		if glog.V(1) {
+			glog.Infof("fscache hit %s: %d", fname, len(buf))
 		}
 		return buf, nil
 	}
@@ -39,7 +37,7 @@ func (c *fscache) Get(ctx context.Context, fsys fs.FS, fname string) ([]byte, er
 		if err != nil {
 			return buf, err
 		}
-		clog.Infof(ctx, "fscache set %s: %d", fname, len(buf))
+		glog.Infof("fscache set %s: %d", fname, len(buf))
 		c.mu.Lock()
 		c.m[fname] = buf
 		c.mu.Unlock()

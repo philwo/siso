@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"go.chromium.org/infra/build/siso/o11y/clog"
+	"github.com/golang/glog"
 )
 
 // File name of ninja log.
@@ -33,7 +33,7 @@ func OpenNinjaLog(ctx context.Context) (*os.File, error) {
 	if err != nil {
 		e := f.Close()
 		if e != nil {
-			clog.Errorf(ctx, "%v", e)
+			glog.Errorf("%v", e)
 		}
 		return nil, err
 	}

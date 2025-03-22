@@ -10,13 +10,12 @@ import (
 	"time"
 
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
-	log "github.com/golang/glog"
+	"github.com/golang/glog"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	"go.chromium.org/infra/build/siso/build/cachestore"
 	"go.chromium.org/infra/build/siso/execute"
-	"go.chromium.org/infra/build/siso/o11y/clog"
 	"go.chromium.org/infra/build/siso/reapi/digest"
 	"go.chromium.org/infra/build/siso/runtimex"
 	"go.chromium.org/infra/build/siso/sync/semaphore"
@@ -38,7 +37,7 @@ type Cache struct {
 
 // NewCache creates new cache.
 func NewCache(ctx context.Context, opts CacheOptions) (*Cache, error) {
-	clog.Infof(ctx, "cache store=%v read=%t",
+	glog.Infof("cache store=%v read=%t",
 		opts.Store,
 		opts.EnableRead)
 	if opts.Store == nil {
@@ -76,8 +75,8 @@ func (c *Cache) GetActionResult(ctx context.Context, cmd *execute.Cmd) error {
 	if err != nil {
 		return err
 	}
-	if log.V(1) {
-		clog.Infof(ctx, "cached result: %s", result)
+	if glog.V(1) {
+		glog.Infof("cached result: %s", result)
 	}
 
 	// copy the action result into cmd.
@@ -87,7 +86,7 @@ func (c *Cache) GetActionResult(ctx context.Context, cmd *execute.Cmd) error {
 	c.setActionResultStderr(ctx, cmd, result)
 	err = cmd.RecordOutputs(ctx, c.store, now)
 	if err != nil {
-		clog.Infof(ctx, "cache get %s: %v", time.Since(now), err)
+		glog.Infof("cache get %s: %v", time.Since(now), err)
 		return err
 	}
 	return nil

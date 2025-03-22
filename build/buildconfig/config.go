@@ -12,7 +12,7 @@ import (
 	"io/fs"
 	"time"
 
-	log "github.com/golang/glog"
+	"github.com/golang/glog"
 	"go.starlark.net/resolve"
 	"go.starlark.net/starlark"
 	"go.starlark.net/starlarkstruct"
@@ -21,7 +21,6 @@ import (
 	"go.chromium.org/infra/build/siso/build/metadata"
 	"go.chromium.org/infra/build/siso/execute"
 	"go.chromium.org/infra/build/siso/hashfs"
-	"go.chromium.org/infra/build/siso/o11y/clog"
 )
 
 const configEntryPoint = "init"
@@ -66,27 +65,27 @@ func New(ctx context.Context, fname string, flags map[string]string, repos map[s
 		repos:       repos,
 		predeclared: builtinModule(ctx),
 	}
-	clog.Infof(ctx, "enable starlark recursion")
+	glog.Infof("enable starlark recursion")
 	resolve.AllowRecursion = true
 
 	thread := &starlark.Thread{
 		Name: "load",
 		Print: func(thread *starlark.Thread, msg string) {
-			clog.Infof(ctx, "thread:%s %s", thread.Name, msg)
+			glog.Infof("thread:%s %s", thread.Name, msg)
 		},
 		Load: loader.Load,
 	}
 	thread.SetLocal("modulename", fname)
 	globals, err := loader.Load(thread, fname)
 	if err != nil {
-		clog.Warningf(ctx, "thread:%s failed to exec file %s: %v", thread.Name, fname, err)
+		glog.Warningf("thread:%s failed to exec file %s: %v", thread.Name, fname, err)
 		var eerr *starlark.EvalError
 		if errors.As(err, &eerr) {
-			clog.Warningf(ctx, "stacktrace:\n%s", eerr.Backtrace())
+			glog.Warningf("stacktrace:\n%s", eerr.Backtrace())
 		}
 		return nil, err
 	}
-	clog.Infof(ctx, "config: %s", globals)
+	glog.Infof("config: %s", globals)
 	v, ok := globals[configEntryPoint]
 	if !ok {
 		return nil, fmt.Errorf("%s is not defined in %s", configEntryPoint, fname)
@@ -139,7 +138,7 @@ func (cfg *Config) Init(ctx context.Context, hashFS *hashfs.HashFS, buildPath *b
 	thread := &starlark.Thread{
 		Name: configEntryPoint,
 		Print: func(thread *starlark.Thread, msg string) {
-			clog.Infof(ctx, "thread:%s %s", thread.Name, msg)
+			glog.Infof("thread:%s %s", thread.Name, msg)
 		},
 		Load: func(*starlark.Thread, string) (starlark.StringDict, error) {
 			return nil, fmt.Errorf("load is not allowed in init")
@@ -153,13 +152,13 @@ func (cfg *Config) Init(ctx context.Context, hashFS *hashfs.HashFS, buildPath *b
 		// want "envs" ?
 		"fs": starFS(ctx, hashFS.FileSystem(ctx, buildPath.ExecRoot), buildPath, cfg.fscache),
 	})
-	clog.Infof(ctx, "hctx: %v", hctx)
+	glog.Infof("hctx: %v", hctx)
 	ret, err := starlark.Call(thread, fun, starlark.Tuple([]starlark.Value{hctx}), nil)
 	if err != nil {
-		clog.Warningf(ctx, "thread:%s failed to run %s: %v", thread.Name, configEntryPoint, err)
+		glog.Warningf("thread:%s failed to run %s: %v", thread.Name, configEntryPoint, err)
 		var eerr *starlark.EvalError
 		if errors.As(err, &eerr) {
-			clog.Warningf(ctx, "stacktrace:\n%s", eerr.Backtrace())
+			glog.Warningf("stacktrace:\n%s", eerr.Backtrace())
 			return "", HandlerError{entry: configEntryPoint, fn: fun, err: eerr}
 		}
 		return "", fmt.Errorf("failed to run %s: %w", configEntryPoint, err)
@@ -201,12 +200,12 @@ func (cfg *Config) Init(ctx context.Context, hashFS *hashfs.HashFS, buildPath *b
 // Func returns a function for the handler name.
 func (cfg *Config) Func(ctx context.Context, handler string) (starlark.Value, bool) {
 	if cfg.handlers == nil {
-		clog.Warningf(ctx, "no handlers")
+		glog.Warningf("no handlers")
 		return starlark.None, false
 	}
 	fun, ok, err := cfg.handlers.Get(starlark.String(handler))
 	if !ok || err != nil {
-		clog.Warningf(ctx, "no handler:%q ok:%t err:%v dict:%v keys:%v", handler, ok, err, cfg.handlers, cfg.handlers.Keys())
+		glog.Warningf("no handler:%q ok:%t err:%v dict:%v keys:%v", handler, ok, err, cfg.handlers, cfg.handlers.Keys())
 	}
 	return fun, ok && err == nil
 }
@@ -219,12 +218,12 @@ func (cfg *Config) Handle(ctx context.Context, handler string, bpath *build.Path
 	}
 	started := time.Now()
 	defer func() {
-		clog.Infof(ctx, "handle:%s %s", handler, time.Since(started))
+		glog.Infof("handle:%s %s", handler, time.Since(started))
 	}()
 	thread := &starlark.Thread{
 		Name: "handler:" + handler,
 		Print: func(thread *starlark.Thread, msg string) {
-			clog.Infof(ctx, "thread:%s %s", thread.Name, msg)
+			glog.Infof("thread:%s %s", thread.Name, msg)
 		},
 		Load: func(*starlark.Thread, string) (starlark.StringDict, error) {
 			return nil, fmt.Errorf("load is not allowed in handler")
@@ -237,24 +236,24 @@ func (cfg *Config) Handle(ctx context.Context, handler string, bpath *build.Path
 		"flags":    starFlags(cfg.flags),
 		"fs":       starFS(ctx, cmd.HashFS.FileSystem(ctx, cmd.ExecRoot), bpath, cfg.fscache),
 	})
-	if log.V(1) {
-		clog.Infof(ctx, "hctx: %v", hctx)
+	if glog.V(1) {
+		glog.Infof("hctx: %v", hctx)
 	}
 
 	hcmd, err := packCmd(ctx, cmd, expandedInputs)
 	if err != nil {
 		return fmt.Errorf("failed to pack cmd: %w", err)
 	}
-	if log.V(1) {
-		clog.Infof(ctx, "hcmd: %v", hcmd)
+	if glog.V(1) {
+		glog.Infof("hcmd: %v", hcmd)
 	}
 	// hctx and hcmd will be frozen, so fun may not mutate hcmd.
 	_, err = starlark.Call(thread, fun, starlark.Tuple([]starlark.Value{hctx, hcmd}), nil)
 	if err != nil {
-		clog.Warningf(ctx, "thread:%s failed to run %s: %v", thread.Name, handler, err)
+		glog.Warningf("thread:%s failed to run %s: %v", thread.Name, handler, err)
 		var eerr *starlark.EvalError
 		if errors.As(err, &eerr) {
-			clog.Warningf(ctx, "stacktrace:\n%s", eerr.Backtrace())
+			glog.Warningf("stacktrace:\n%s", eerr.Backtrace())
 			return HandlerError{entry: handler, fn: fun, err: eerr}
 
 		}

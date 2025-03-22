@@ -22,13 +22,13 @@ import (
 	"github.com/bazelbuild/remote-apis-sdks/go/pkg/command"
 	"github.com/bazelbuild/remote-apis-sdks/go/pkg/retry"
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
+	"github.com/golang/glog"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	"go.chromium.org/infra/build/siso/execute"
 	"go.chromium.org/infra/build/siso/hashfs/osfs"
-	"go.chromium.org/infra/build/siso/o11y/clog"
 	"go.chromium.org/infra/build/siso/reapi"
 	"go.chromium.org/infra/build/siso/reapi/digest"
 )
@@ -182,7 +182,7 @@ func (re *REProxyExec) Run(ctx context.Context, cmd *execute.Cmd) error {
 	}
 	err = processResponse(ctx, cmd, resp)
 	if err != nil {
-		clog.Warningf(ctx, "Command failed for cmd %q: %v", cmd.Desc, err)
+		glog.Warningf("Command failed for cmd %q: %v", cmd.Desc, err)
 	}
 	return err
 }
@@ -330,14 +330,14 @@ func processResponse(ctx context.Context, cmd *execute.Cmd, response *ppb.RunRes
 	}
 
 	// Log Reproxy's execution ID to associate it with Siso's command ID for debugging purposes.
-	clog.Infof(ctx, "RunResponse.ExecutionId=%s", response.GetExecutionId())
+	glog.Infof("RunResponse.ExecutionId=%s", response.GetExecutionId())
 
 	al := response.GetActionLog()
 	cached := response.GetResult().GetStatus() == cpb.CommandResultStatus_CACHE_HIT
 	if response.GetResult().GetExitCode() == 0 {
-		clog.Infof(ctx, "exit=%d cache=%t completion_status=%s action=%s", response.GetResult().GetExitCode(), cached, al.GetCompletionStatus(), al.GetRemoteMetadata().GetActionDigest())
+		glog.Infof("exit=%d cache=%t completion_status=%s action=%s", response.GetResult().GetExitCode(), cached, al.GetCompletionStatus(), al.GetRemoteMetadata().GetActionDigest())
 	} else {
-		clog.Warningf(ctx, "exit=%d cache=%t response=%v", response.GetResult().GetExitCode(), cached, response)
+		glog.Warningf("exit=%d cache=%t response=%v", response.GetResult().GetExitCode(), cached, response)
 	}
 
 	// TODO(b/273407069): this is nowhere near a complete ActionResult. LogRecord has lots of info, add that info.

@@ -11,11 +11,11 @@ import (
 	"io/fs"
 	"strings"
 
+	"github.com/golang/glog"
 	"go.starlark.net/starlark"
 
 	"go.chromium.org/infra/build/siso/build"
 	"go.chromium.org/infra/build/siso/hashfs"
-	"go.chromium.org/infra/build/siso/o11y/clog"
 )
 
 func parseFilegroups(ctx context.Context, v starlark.Value) (map[string]filegroupUpdater, error) {
@@ -115,7 +115,7 @@ func (cfg *Config) UpdateFilegroups(ctx context.Context, hashFS *hashfs.HashFS, 
 		Filegroups: make(map[string][]string),
 	}
 	for k, g := range cfg.filegroups {
-		clog.Infof(ctx, "filegroup %s", k)
+		glog.Infof("filegroup %s", k)
 		v := filegroup{
 			etag:  filegroups.ETags[k],
 			files: filegroups.Filegroups[k],

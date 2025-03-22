@@ -12,7 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"go.chromium.org/infra/build/siso/o11y/clog"
+	"github.com/golang/glog"
 )
 
 // Semaphore is a semaphore.
@@ -52,7 +52,7 @@ func (s *Semaphore) WaitAcquire(ctx context.Context) (context.Context, func(erro
 	case tid := <-s.ch:
 		s.reqs.Add(1)
 		if dur := time.Since(now); dur > 1*time.Second {
-			clog.Infof(ctx, "wait %s for %s", s.name, dur)
+			glog.Infof("wait %s for %s", s.name, dur)
 		}
 		return ctx, func(err error) {
 			s.ch <- tid

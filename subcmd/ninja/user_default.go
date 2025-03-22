@@ -10,13 +10,13 @@ import (
 	"context"
 	"os/user"
 
-	"go.chromium.org/infra/build/siso/o11y/clog"
+	"github.com/golang/glog"
 )
 
 func lookupUser(ctx context.Context) string {
 	current, err := user.Current()
 	if err != nil {
-		clog.Warningf(ctx, "failed to get current user: %v", err)
+		glog.Warningf("failed to get current user: %v", err)
 		return "unknownuser"
 	}
 	return current.Username

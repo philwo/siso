@@ -12,10 +12,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	log "github.com/golang/glog"
+	"github.com/golang/glog"
 
 	"go.chromium.org/infra/build/siso/hashfs/osfs"
-	"go.chromium.org/infra/build/siso/o11y/clog"
 	"go.chromium.org/infra/build/siso/reapi/digest"
 	"go.chromium.org/infra/build/siso/reapi/merkletree"
 )
@@ -37,8 +36,8 @@ func (Importer) Import(ctx context.Context, dir string, ds *digest.Store) (diges
 		}
 		name := strings.TrimPrefix(path, dir+"/")
 		if d.IsDir() {
-			if log.V(3) {
-				clog.Infof(ctx, "add dir %s", name)
+			if glog.V(3) {
+				glog.Infof("add dir %s", name)
 			}
 			entries = append(entries, merkletree.Entry{
 				Name: name,
@@ -50,8 +49,8 @@ func (Importer) Import(ctx context.Context, dir string, ds *digest.Store) (diges
 			if err != nil {
 				return err
 			}
-			if log.V(3) {
-				clog.Infof(ctx, "add symlink %s ->%s", name, target)
+			if glog.V(3) {
+				glog.Infof("add symlink %s ->%s", name, target)
 			}
 			entries = append(entries, merkletree.Entry{
 				Name:   name,
@@ -70,8 +69,8 @@ func (Importer) Import(ctx context.Context, dir string, ds *digest.Store) (diges
 		if err != nil {
 			return err
 		}
-		if log.V(3) {
-			clog.Infof(ctx, "add file %s %v", name, data.Digest())
+		if glog.V(3) {
+			glog.Infof("add file %s %v", name, data.Digest())
 		}
 		entries = append(entries, merkletree.Entry{
 			Name:         name,
@@ -86,7 +85,7 @@ func (Importer) Import(ctx context.Context, dir string, ds *digest.Store) (diges
 
 	inputTree := merkletree.New(ds)
 	for _, ent := range entries {
-		log.V(3).Infof("set %s", ent.Name)
+		glog.V(3).Infof("set %s", ent.Name)
 		err = inputTree.Set(ent)
 		if err != nil {
 			return digest.Digest{}, err

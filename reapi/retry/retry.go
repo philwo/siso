@@ -9,14 +9,13 @@ import (
 	"context"
 	"time"
 
+	"github.com/golang/glog"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	"go.chromium.org/luci/common/errors"
 	"go.chromium.org/luci/common/retry"
 	"go.chromium.org/luci/common/retry/transient"
-
-	"go.chromium.org/infra/build/siso/o11y/clog"
 )
 
 func retriableError(err error, authRetry *int) bool {
@@ -71,6 +70,6 @@ func Do(ctx context.Context, f func() error) error {
 		}
 		return err
 	}, func(err error, backoff time.Duration) {
-		clog.Warningf(ctx, "retry backoff:%s: %v", backoff, err)
+		glog.Warningf("retry backoff:%s: %v", backoff, err)
 	})
 }

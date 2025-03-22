@@ -10,6 +10,7 @@ import (
 	"crypto/tls"
 	"fmt"
 
+	"github.com/golang/glog"
 	"golang.org/x/oauth2"
 	"google.golang.org/api/option"
 	"google.golang.org/grpc"
@@ -18,8 +19,6 @@ import (
 
 	"go.chromium.org/luci/auth"
 	"go.chromium.org/luci/hardcoded/chromeinfra"
-
-	"go.chromium.org/infra/build/siso/o11y/clog"
 )
 
 // Cred holds credentials and derived values.
@@ -93,7 +92,7 @@ func New(ctx context.Context, opts Options) (Cred, error) {
 		}
 		t, _ := tok.Extra("x-token-source").(string)
 		email, _ := tok.Extra("x-token-email").(string)
-		clog.Infof(ctx, "use auth %v email: %s", t, email)
+		glog.Infof("use auth %v email: %s", t, email)
 		ts := oauth2.ReuseTokenSource(tok, opts.TokenSource)
 		return Cred{
 			Type:  t,
@@ -120,7 +119,7 @@ func New(ctx context.Context, opts Options) (Cred, error) {
 		return Cred{}, err
 	}
 
-	clog.Infof(ctx, "use luci-auth email: %s", email)
+	glog.Infof("use luci-auth email: %s", email)
 	return Cred{
 		Type:           t,
 		Email:          email,

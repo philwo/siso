@@ -13,10 +13,9 @@ import (
 	"sync"
 	"syscall"
 
-	log "github.com/golang/glog"
+	"github.com/golang/glog"
 
 	"go.chromium.org/infra/build/siso/hashfs"
-	"go.chromium.org/infra/build/siso/o11y/clog"
 )
 
 // filesystem is mirror of hashfs to optimize for scandeps access pattern.
@@ -48,8 +47,8 @@ type dircache struct {
 
 // update updates filesystem modification by fi.
 func (fsys *filesystem) update(ctx context.Context, fi *hashfs.FileInfo) {
-	if log.V(1) {
-		clog.Infof(ctx, "update %s dir:%t", fi.Path(), fi.IsDir())
+	if glog.V(1) {
+		glog.Infof("update %s dir:%t", fi.Path(), fi.IsDir())
 	}
 	var dname string
 	var base string
@@ -73,7 +72,7 @@ func (fsys *filesystem) update(ctx context.Context, fi *hashfs.FileInfo) {
 		select {
 		case <-dc.ready:
 		default:
-			clog.Infof(ctx, "update race ReadDir&update %s", fi.Path())
+			glog.Infof("update race ReadDir&update %s", fi.Path())
 			fsys.dircache.Delete(dname)
 			base = filepath.Base(dname)
 			dname = filepath.ToSlash(filepath.Dir(dname))
@@ -81,7 +80,7 @@ func (fsys *filesystem) update(ctx context.Context, fi *hashfs.FileInfo) {
 		}
 		if dc.err != nil {
 			// negative cache?
-			clog.Infof(ctx, "update clear negative cache %s %v", fi.Path(), dc.err)
+			glog.Infof("update clear negative cache %s %v", fi.Path(), dc.err)
 			fsys.dircache.Delete(dname)
 			base = filepath.Base(dname)
 			dname = filepath.ToSlash(filepath.Dir(dname))
@@ -134,8 +133,8 @@ func (fsys *filesystem) ReadDir(ctx context.Context, execRoot, dname string) (*s
 	dc := dv.(*dircache)
 	if !loaded {
 		go func() {
-			if log.V(1) {
-				clog.Infof(ctx, "fsys readdir %s", dname)
+			if glog.V(1) {
+				glog.Infof("fsys readdir %s", dname)
 			}
 			symlinkErr := fmt.Errorf("readdir %s: %w", dname, syscall.ELOOP)
 			const maxSymlinks = 40
@@ -149,11 +148,11 @@ func (fsys *filesystem) ReadDir(ctx context.Context, execRoot, dname string) (*s
 				// may be symlink?
 				fi, serr := fsys.hashfs.Stat(ctx, execRoot, dname)
 				if serr != nil {
-					clog.Warningf(ctx, "stat %s: %v", dname, serr)
+					glog.Warningf("stat %s: %v", dname, serr)
 					break
 				}
 				if fi.Target() == "" {
-					clog.Warningf(ctx, "not symlink? %s", dname)
+					glog.Warningf("not symlink? %s", dname)
 					break
 				}
 				target := filepath.Join(filepath.Dir(dname), fi.Target())
@@ -162,13 +161,13 @@ func (fsys *filesystem) ReadDir(ctx context.Context, execRoot, dname string) (*s
 					dname = filepath.Join(execRoot, target)
 					execRoot = ""
 				}
-				clog.Infof(ctx, "symlink dir: %s -> %s", dname, target)
+				glog.Infof("symlink dir: %s -> %s", dname, target)
 				err = symlinkErr
 			}
 			dc.err = err
 			for _, de := range dents {
-				if log.V(1) {
-					clog.Infof(ctx, "dirent %q %q", fullpath, de.Name())
+				if glog.V(1) {
+					glog.Infof("dirent %q %q", fullpath, de.Name())
 				}
 				dc.m.Store(fsys.pathIntern(de.Name()), true)
 			}
@@ -257,27 +256,27 @@ type hmapresult struct {
 // getHmap returns hmap and success flag.
 // If the same hamp has been computed, the results are returned from cache.
 func (fsys *filesystem) getHmap(ctx context.Context, execRoot, fname string) (map[string]string, bool) {
-	clog.Infof(ctx, "check hmap %s", fname)
+	glog.Infof("check hmap %s", fname)
 	v, _ := fsys.hmaps.LoadOrStore(filepath.ToSlash(filepath.Join(execRoot, fname)), new(hmapresult))
 	hr := v.(*hmapresult)
 	hr.mu.Lock()
 	defer hr.mu.Unlock()
 	defer func() { hr.done = true }()
 	if hr.done {
-		clog.Infof(ctx, "check hmap %s: reuse ok=%t", fname, hr.ok)
+		glog.Infof("check hmap %s: reuse ok=%t", fname, hr.ok)
 		return hr.m, hr.ok
 	}
 	buf, err := fsys.hashfs.ReadFile(ctx, execRoot, fname)
 	if err != nil {
-		clog.Warningf(ctx, "missing hmap %s: %v", fname, err)
+		glog.Warningf("missing hmap %s: %v", fname, err)
 		return nil, false
 	}
 	m, err := ParseHeaderMap(ctx, buf)
 	if err != nil {
-		clog.Warningf(ctx, "failed to parse hmap %s: %v", fname, err)
+		glog.Warningf("failed to parse hmap %s: %v", fname, err)
 		return nil, false
 	}
-	clog.Infof(ctx, "hmap %s %d => %v", fname, len(buf), m)
+	glog.Infof("hmap %s %d => %v", fname, len(buf), m)
 	hr.m = m
 	hr.ok = true
 	return hr.m, hr.ok

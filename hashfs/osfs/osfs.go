@@ -16,9 +16,9 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/golang/glog"
 	"github.com/pkg/xattr"
 
-	"go.chromium.org/infra/build/siso/o11y/clog"
 	"go.chromium.org/infra/build/siso/reapi/digest"
 	"go.chromium.org/infra/build/siso/reapi/retry"
 	"go.chromium.org/infra/build/siso/runtimex"
@@ -59,7 +59,7 @@ func New(ctx context.Context, name string, opt Option) *OSFS {
 		opt.DigestXattrName = ""
 	}
 	if opt.DigestXattrName != "" {
-		clog.Infof(ctx, "use xattr %s for file digest", opt.DigestXattrName)
+		glog.Infof("use xattr %s for file digest", opt.DigestXattrName)
 	}
 	return &OSFS{
 		digestXattrName: opt.DigestXattrName,
@@ -69,7 +69,7 @@ func New(ctx context.Context, name string, opt Option) *OSFS {
 func logSlow(ctx context.Context, name string, dur time.Duration, err error) {
 	buf := make([]byte, 4*1024)
 	n := runtime.Stack(buf, false)
-	clog.Warningf(ctx, "slow op %s: %s %v\n%s", name, dur, err, buf[:n])
+	glog.Warningf("slow op %s: %s %v\n%s", name, dur, err, buf[:n])
 }
 
 // Chmod changes the mode of the named file to mode.

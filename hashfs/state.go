@@ -24,14 +24,13 @@ import (
 	"time"
 
 	"github.com/biogo/hts/bgzf"
-	log "github.com/golang/glog"
+	"github.com/golang/glog"
 	"github.com/klauspost/compress/zstd"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/protobuf/proto"
 
 	"go.chromium.org/infra/build/siso/hashfs/osfs"
 	pb "go.chromium.org/infra/build/siso/hashfs/proto"
-	"go.chromium.org/infra/build/siso/o11y/clog"
 	"go.chromium.org/infra/build/siso/reapi/digest"
 	"go.chromium.org/infra/build/siso/runtimex"
 	"go.chromium.org/infra/build/siso/toolsupport/artfsutil"
@@ -107,7 +106,7 @@ func loadFile(ctx context.Context, opts Option) ([]byte, error) {
 	}
 	defer func() {
 		if err := f.Close(); err != nil {
-			clog.Warningf(ctx, "Failed to close %s: %v", opts.StateFile, err)
+			glog.Warningf("Failed to close %s: %v", opts.StateFile, err)
 		}
 	}()
 
@@ -127,7 +126,7 @@ func loadFile(ctx context.Context, opts Option) ([]byte, error) {
 
 	var r io.ReadCloser
 	if isZstd(magicBytes) {
-		clog.Infof(ctx, "fs_state is zstd compressed")
+		glog.Infof("fs_state is zstd compressed")
 		var zd *zstd.Decoder
 		zd, err = zstd.NewReader(f)
 		if err != nil {
@@ -135,15 +134,15 @@ func loadFile(ctx context.Context, opts Option) ([]byte, error) {
 		}
 		r = zd.IOReadCloser()
 	} else if isGzip(magicBytes) {
-		clog.Infof(ctx, "fs_state is gzip compressed")
+		glog.Infof("fs_state is gzip compressed")
 		if opts.GzipUsesBgzf {
 			r, err = bgzf.NewReader(f, 0)
 			if err == nil {
-				clog.Infof(ctx, "using bgzf for faster gzip decompression")
+				glog.Infof("using bgzf for faster gzip decompression")
 			} else if errors.Is(err, bgzf.ErrNoBlockSize) {
 				// bgzf refuses to decompress regular gzip files, so we need to
 				// check for this case and retry with a regular gzip reader.
-				clog.Infof(ctx, "not bgzf, retrying as regular gzip")
+				glog.Infof("not bgzf, retrying as regular gzip")
 				if _, err := f.Seek(0, io.SeekStart); err != nil {
 					return nil, err
 				}
@@ -193,7 +192,7 @@ func Load(ctx context.Context, opts Option) (*pb.State, error) {
 		return nil, err
 	}
 	durUnmarshal := time.Since(start)
-	clog.Infof(ctx, "Load fs state from %s: read/uncompress %s + unmarshal %s = total %s", opts.StateFile, durUncompress, durUnmarshal, durUncompress+durUnmarshal)
+	glog.Infof("Load fs state from %s: read/uncompress %s + unmarshal %s = total %s", opts.StateFile, durUncompress, durUnmarshal, durUncompress+durUnmarshal)
 
 	return state, nil
 }
@@ -238,18 +237,18 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 	if state.BuildTargets != nil {
 		hfs.buildTargets = make([]string, len(state.BuildTargets.Targets))
 		copy(hfs.buildTargets, state.BuildTargets.Targets)
-		clog.Infof(ctx, "build targets=%q", hfs.buildTargets)
+		glog.Infof("build targets=%q", hfs.buildTargets)
 	} else {
 		hfs.buildTargets = nil
-		clog.Infof(ctx, "no build targets")
+		glog.Infof("no build targets")
 	}
 	var fsm FileInfoer = osfsInfoer{}
 	if hfs.opt.FSMonitor != nil && state.LastChecked != "" {
 		f, err := hfs.opt.FSMonitor.Scan(ctx, state.LastChecked)
 		if err != nil {
-			clog.Warningf(ctx, "failed to fsmonitor scan %q: %v", state.LastChecked, err)
+			glog.Warningf("failed to fsmonitor scan %q: %v", state.LastChecked, err)
 		} else {
-			clog.Infof(ctx, "use fsmonitor scan %q", state.LastChecked)
+			glog.Infof("use fsmonitor scan %q", state.LastChecked)
 			if logw != nil {
 				fmt.Fprintf(logw, "use fsmonitor scan %q\n", state.LastChecked)
 			}
@@ -284,7 +283,7 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 			}
 			ent.Name = filepath.ToSlash(ent.Name)
 			if hfs.opt.Ignore(ctx, ent.Name) {
-				clog.Infof(ctx, "ignore %q", ent.Name)
+				glog.Infof("ignore %q", ent.Name)
 				if logw != nil {
 					fmt.Fprintf(logw, "ignore %q\n", ent.Name)
 				}
@@ -292,12 +291,12 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 			}
 			fi, err := fsm.FileInfo(ctx, ent)
 			if errors.Is(err, fs.ErrNotExist) {
-				if log.V(1) {
-					clog.Infof(gctx, "not exist %q", ent.Name)
+				if glog.V(1) {
+					glog.Infof("not exist %q", ent.Name)
 				}
 				nnotexist.Add(1)
 				if len(h) == 0 {
-					clog.Infof(gctx, "not exist with no cmdhash: %q", ent.Name)
+					glog.Infof("not exist with no cmdhash: %q", ent.Name)
 					if logw != nil {
 						fmt.Fprintf(logw, "not exist with no cmd hash: %q\n", ent.Name)
 					}
@@ -306,7 +305,7 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 				if outputLocal(ctx, ent.Name) {
 					// command output file that is needed on the disk doesn't exist on the disk.
 					// need to forget to trigger steps for the output. b/298523549
-					clog.Warningf(gctx, "not exist output-needed file: %q", ent.Name)
+					glog.Warningf("not exist output-needed file: %q", ent.Name)
 					if logw != nil {
 						fmt.Fprintf(logw, "not exist output-needed file: %q\n", ent.Name)
 					}
@@ -322,7 +321,7 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 				return nil
 			}
 			if err != nil {
-				clog.Warningf(gctx, "Failed to stat %q: %v", ent.Name, err)
+				glog.Warningf("Failed to stat %q: %v", ent.Name, err)
 				nfail.Add(1)
 				dirty.Store(true)
 				if logw != nil {
@@ -331,7 +330,7 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 				return nil
 			}
 			if now := time.Now(); fi.ModTime().After(now) {
-				clog.Warningf(gctx, "future timestamp on %q: mtime=%s now=%s", ent.Name, fi.ModTime(), now)
+				glog.Warningf("future timestamp on %q: mtime=%s now=%s", ent.Name, fi.ModTime(), now)
 				return fmt.Errorf("future timestamp on %q: mtime=%s now=%s", ent.Name, fi.ModTime(), now)
 			}
 			e, et := newStateEntry(ctx, ent, fi.ModTime(), hfs.opt.DataSource, hfs.OS)
@@ -341,7 +340,7 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 			if e.d.IsZero() && e.target == "" {
 				ftype = "dir"
 				if len(e.cmdhash) == 0 {
-					clog.Infof(gctx, "ignore %s %q", ftype, ent.Name)
+					glog.Infof("ignore %s %q", ftype, ent.Name)
 					if logw != nil {
 						fmt.Fprintf(logw, "ignore dir no cmd hash: %q\n", ent.Name)
 					}
@@ -351,7 +350,7 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 				ftype = "symlink"
 				t, err := os.Readlink(ent.Name)
 				if err != nil {
-					clog.Warningf(gctx, "failed to readlink %q: %v", ent.Name, err)
+					glog.Warningf("failed to readlink %q: %v", ent.Name, err)
 					nfail.Add(1)
 					dirty.Store(true)
 					if logw != nil {
@@ -360,7 +359,7 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 					return nil
 				}
 				if t != e.target {
-					clog.Warningf(gctx, "invalidate %s %q: target:%q->%q", ftype, ent.Name, e.target, t)
+					glog.Warningf("invalidate %s %q: target:%q->%q", ftype, ent.Name, e.target, t)
 					ninvalidate.Add(1)
 					dirty.Store(true)
 					if logw != nil {
@@ -378,12 +377,12 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 				if err == nil && data.Digest() == e.d {
 					et = entryEqLocal
 					err = hfs.OS.Chtimes(ctx, ent.Name, time.Now(), e.mtime)
-					clog.Infof(ctx, "reconcile mtime %q %v -> %v: %v", ent.Name, fi.ModTime(), e.mtime, err)
+					glog.Infof("reconcile mtime %q %v -> %v: %v", ent.Name, fi.ModTime(), e.mtime, err)
 					if logw != nil {
 						fmt.Fprintf(logw, "reconcile mtime %q %v -> %v: %v\n", ent.Name, fi.ModTime(), e.mtime, err)
 					}
 				} else {
-					clog.Warningf(ctx, "failed to reconcile mtime %q digest %s(state) != %s(local) err: %v", ent.Name, e.d, data.Digest(), err)
+					glog.Warningf("failed to reconcile mtime %q digest %s(state) != %s(local) err: %v", ent.Name, e.d, data.Digest(), err)
 					if logw != nil {
 						fmt.Fprintf(logw, "failed to reconcile mtime %q digest mismatch\n", ent.Name)
 					}
@@ -409,14 +408,14 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 					return nil
 				}
 
-				clog.Infof(gctx, "not exist %s %q cmdhash:%s", ftype, ent.Name, base64.StdEncoding.EncodeToString(e.cmdhash))
+				glog.Infof("not exist %s %q cmdhash:%s", ftype, ent.Name, base64.StdEncoding.EncodeToString(e.cmdhash))
 				if logw != nil {
 					fmt.Fprintf(logw, "no local output: %s %q\n", ftype, ent.Name)
 				}
 			case entryBeforeLocal:
 				ninvalidate.Add(1)
 				dirty.Store(true)
-				clog.Warningf(gctx, "invalidate %s %q: state:%s disk:%s", ftype, ent.Name, e.mtime, fi.ModTime())
+				glog.Warningf("invalidate %s %q: state:%s disk:%s", ftype, ent.Name, e.mtime, fi.ModTime())
 				if h == nil || !hfs.opt.KeepTainted {
 					if logw != nil {
 						fmt.Fprintf(logw, "invalidate %s %q: state:%s disk:%s\n", ftype, ent.Name, e.mtime, fi.ModTime())
@@ -436,8 +435,8 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 				e = le
 			case entryEqLocal:
 				neq.Add(1)
-				if log.V(1) {
-					clog.Infof(gctx, "equal local %s %q: %s", ftype, ent.Name, e.mtime)
+				if glog.V(1) {
+					glog.Infof("equal local %s %q: %s", ftype, ent.Name, e.mtime)
 				}
 				if logw != nil {
 					fmt.Fprintf(logw, "equal local %s %q: %s\n", ftype, ent.Name, e.mtime)
@@ -451,13 +450,13 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 					}
 					return nil
 				}
-				clog.Infof(gctx, "old local %s %q: state:%s disk:%s cmdhash:%s", ftype, ent.Name, e.mtime, fi.ModTime(), base64.StdEncoding.EncodeToString(e.cmdhash))
+				glog.Infof("old local %s %q: state:%s disk:%s cmdhash:%s", ftype, ent.Name, e.mtime, fi.ModTime(), base64.StdEncoding.EncodeToString(e.cmdhash))
 				if logw != nil {
 					fmt.Fprintf(logw, "old local %s %q: state:%s disk:%s cmdhash:%s\n", ftype, ent.Name, e.mtime, fi.ModTime(), base64.StdEncoding.EncodeToString(e.cmdhash))
 				}
 			}
-			if log.V(1) {
-				clog.Infof(gctx, "set state %q: d:%s %s s:%s m:%s cmdhash:%s action:%s", ent.Name, e.d, e.mode, e.target, e.mtime, base64.StdEncoding.EncodeToString(e.cmdhash), e.action)
+			if glog.V(1) {
+				glog.Infof("set state %q: d:%s %s s:%s m:%s cmdhash:%s action:%s", ent.Name, e.d, e.mode, e.target, e.mtime, base64.StdEncoding.EncodeToString(e.cmdhash), e.action)
 			}
 			if ftype == "dir" {
 				dirs[i] = e
@@ -473,7 +472,7 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 	}
 	err := eg.Wait()
 	if err != nil {
-		clog.Warningf(ctx, "failed in SetState: %v", err)
+		glog.Warningf("failed in SetState: %v", err)
 		return err
 	}
 	for i, ent := range state.Entries {
@@ -522,10 +521,10 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 			}
 		}
 		hfs.loaded.Store(true)
-		clog.Infof(ctx, "set state done: clean:%t loaded:true: %s", hfs.clean.Load(), time.Since(start))
+		glog.Infof("set state done: clean:%t loaded:true: %s", hfs.clean.Load(), time.Since(start))
 		hfs.setStateCh <- nil
 	}()
-	clog.Infof(ctx, "load state done: eq:%d new:%d not-exist:%d fail:%d invalidate:%d: tainted:%d %s", neq.Load(), nnew.Load(), nnotexist.Load(), nfail.Load(), ninvalidate.Load(), len(hfs.taintedFiles), time.Since(start))
+	glog.Infof("load state done: eq:%d new:%d not-exist:%d fail:%d invalidate:%d: tainted:%d %s", neq.Load(), nnew.Load(), nnotexist.Load(), nfail.Load(), ninvalidate.Load(), len(hfs.taintedFiles), time.Since(start))
 	return nil
 }
 
@@ -602,10 +601,10 @@ func saveFile(ctx context.Context, data []byte, opts Option) (retErr error) {
 			_ = os.Remove(f.Name())
 		}
 	}()
-	clog.Infof(ctx, "save fs_state in temp %s", f.Name())
+	glog.Infof("save fs_state in temp %s", f.Name())
 	var w io.WriteCloser
 	if opts.CompressZstd {
-		clog.Infof(ctx, "using zstd compression (level %d)", opts.CompressLevel)
+		glog.Infof("using zstd compression (level %d)", opts.CompressLevel)
 		opts := []zstd.EOption{
 			zstd.WithEncoderCRC(true),
 			zstd.WithEncoderConcurrency(compressThreads),
@@ -614,9 +613,9 @@ func saveFile(ctx context.Context, data []byte, opts Option) (retErr error) {
 		}
 		w, err = zstd.NewWriter(f, opts...)
 	} else {
-		clog.Infof(ctx, "using gzip compression (level %d)", opts.CompressLevel)
+		glog.Infof("using gzip compression (level %d)", opts.CompressLevel)
 		if opts.GzipUsesBgzf {
-			clog.Infof(ctx, "using bgzf for faster gzip compression (threads=%d)", compressThreads)
+			glog.Infof("using bgzf for faster gzip compression (threads=%d)", compressThreads)
 			w, err = bgzf.NewWriterLevel(f, opts.CompressLevel, compressThreads)
 		} else {
 			w, err = gzip.NewWriterLevel(f, opts.CompressLevel)
@@ -648,7 +647,7 @@ func saveFile(ctx context.Context, data []byte, opts Option) (retErr error) {
 		return err
 	}
 	err = os.Rename(f.Name(), opts.StateFile)
-	clog.Infof(ctx, "replace %s: %v", opts.StateFile, err)
+	glog.Infof("replace %s: %v", opts.StateFile, err)
 	return err
 }
 
@@ -660,10 +659,7 @@ func Save(ctx context.Context, state *pb.State, opts Option) error {
 			return
 		}
 		// state is broken?? panic in proto.Marshal b/323265794
-		// use glog, not cloud logging
-		// because siso terminates before cloud logging entries
-		// are uploaded.
-		log.Errorf("state: %d entries", len(state.Entries))
+		glog.Errorf("state: %d entries", len(state.Entries))
 		for i, ent := range state.Entries {
 			err := func(ent *pb.Entry) (err error) {
 				defer func() {
@@ -675,9 +671,9 @@ func Save(ctx context.Context, state *pb.State, opts Option) error {
 				_, err = proto.Marshal(ent)
 				return err
 			}(ent)
-			log.Errorf("entries[%d] = %v: %v", i, ent, err)
+			glog.Errorf("entries[%d] = %v: %v", i, ent, err)
 		}
-		log.Flush()
+		glog.Flush()
 		panic(r)
 	}()
 	start := time.Now()
@@ -694,7 +690,7 @@ func Save(ctx context.Context, state *pb.State, opts Option) error {
 	}
 	durSave := time.Since(start)
 
-	clog.Infof(ctx, "Save fs state to %s: marshal %s + compress/save %s = total %s", opts.StateFile, durMarshal, durSave, durMarshal+durSave)
+	glog.Infof("Save fs state to %s: marshal %s + compress/save %s = total %s", opts.StateFile, durMarshal, durSave, durMarshal+durSave)
 
 	// Journal data are already included in state.
 	// Remove journal file as it is not needed to reconcile in next build.
@@ -719,8 +715,8 @@ func (hfs *HashFS) State(ctx context.Context) *pb.State {
 		dir := dirs[0]
 		dirs = dirs[1:]
 		var names []string
-		if log.V(1) {
-			clog.Infof(ctx, "state dir=%s dirs=%d", dir.name, len(dirs))
+		if glog.V(1) {
+			glog.Infof("state dir=%s dirs=%d", dir.name, len(dirs))
 		}
 		// TODO(b/254182269): need mutex here?
 		dir.dir.m.Range(func(k, _ any) bool {
@@ -729,19 +725,19 @@ func (hfs *HashFS) State(ctx context.Context) *pb.State {
 			return true
 		})
 		sort.Strings(names)
-		if log.V(1) {
-			clog.Infof(ctx, "state dir=%s -> %q", dir.name, names)
+		if glog.V(1) {
+			glog.Infof("state dir=%s -> %q", dir.name, names)
 		}
 		for _, name := range names {
 			v, ok := dir.dir.m.Load(filepath.Base(name))
 			if !ok {
-				clog.Errorf(ctx, "dir:%s name:%s entries:%v", dir.name, name, dir.dir)
+				glog.Errorf("dir:%s name:%s entries:%v", dir.name, name, dir.dir)
 				continue
 			}
 			e := v.(*entry)
 			if e.err != nil {
-				if bool(log.V(1)) || !errors.Is(e.err, fs.ErrNotExist) {
-					clog.Infof(ctx, "ignore %s: err:%v", name, e.err)
+				if bool(glog.V(1)) || !errors.Is(e.err, fs.ErrNotExist) {
+					glog.Infof("ignore %s: err:%v", name, e.err)
 				}
 				continue
 			}
@@ -757,9 +753,9 @@ func (hfs *HashFS) State(ctx context.Context) *pb.State {
 			}
 			if e.mtime.IsZero() {
 				if len(e.cmdhash) > 0 {
-					clog.Warningf(ctx, "wrong entry for %s: mtime is zero, but cmdhash set %s", name, e.cmdhash)
-				} else if log.V(1) {
-					clog.Infof(ctx, "ignore %s: no mtime", name)
+					glog.Warningf("wrong entry for %s: mtime is zero, but cmdhash set %s", name, e.cmdhash)
+				} else if glog.V(1) {
+					glog.Infof("ignore %s: no mtime", name)
 				}
 				continue
 			}
@@ -768,11 +764,11 @@ func (hfs *HashFS) State(ctx context.Context) *pb.State {
 				if e.directory == nil && e.target == "" && e.d.IsZero() {
 					// digest is not calculated yet?
 					if e.src == nil {
-						clog.Warningf(ctx, "wrong entry for %s?", name)
+						glog.Warningf("wrong entry for %s?", name)
 					} else {
 						err := e.compute(ctx, name)
 						if err != nil {
-							clog.Warningf(ctx, "failed to calculate digest for %s: %v", name, err)
+							glog.Warningf("failed to calculate digest for %s: %v", name, err)
 						}
 					}
 				}
@@ -806,16 +802,16 @@ func (hfs *HashFS) State(ctx context.Context) *pb.State {
 				})
 				e.mu.Unlock()
 			} else if len(e.cmdhash) > 0 {
-				clog.Warningf(ctx, "wrong entry for %s: cmdhash is set, but no digest?", name)
+				glog.Warningf("wrong entry for %s: cmdhash is set, but no digest?", name)
 			}
 		}
 	}
 	if hfs.opt.FSMonitor != nil {
 		token, err := hfs.opt.FSMonitor.ClockToken(ctx)
 		if err != nil {
-			clog.Warningf(ctx, "failed to get fsmonitor token: %v", err)
+			glog.Warningf("failed to get fsmonitor token: %v", err)
 		} else {
-			clog.Infof(ctx, "fsmonitor last checked = %q", token)
+			glog.Infof("fsmonitor last checked = %q", token)
 			state.LastChecked = token
 		}
 	}
@@ -824,7 +820,7 @@ func (hfs *HashFS) State(ctx context.Context) *pb.State {
 			Targets: hfs.buildTargets,
 		}
 	}
-	clog.Infof(ctx, "state %d entries token:%q buildTargets:%v: %s", len(state.Entries), state.LastChecked, state.BuildTargets, time.Since(started))
+	glog.Infof("state %d entries token:%q buildTargets:%v: %s", len(state.Entries), state.LastChecked, state.BuildTargets, time.Since(started))
 	return state
 }
 
@@ -841,9 +837,9 @@ func loadJournal(ctx context.Context, fname string, state *pb.State) bool {
 	b, err := os.ReadFile(fname)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			clog.Infof(ctx, "no fs state journal: %v", err)
+			glog.Infof("no fs state journal: %v", err)
 		} else {
-			clog.Warningf(ctx, "Failed to load journal: %v", err)
+			glog.Warningf("Failed to load journal: %v", err)
 		}
 		return false
 	}
@@ -855,13 +851,13 @@ func loadJournal(ctx context.Context, fname string, state *pb.State) bool {
 		ent := &pb.Entry{}
 		err := dec.Decode(&ent)
 		if err != nil {
-			clog.Warningf(ctx, "Failed to decode journal: %v", err)
+			glog.Warningf("Failed to decode journal: %v", err)
 			broken = true
 			break
 		}
 		m[ent.Name] = ent
-		if log.V(1) {
-			clog.Infof(ctx, "from journal %s", ent.Name)
+		if glog.V(1) {
+			glog.Infof("from journal %s", ent.Name)
 		}
 		cnt++
 	}
@@ -877,7 +873,7 @@ func loadJournal(ctx context.Context, fname string, state *pb.State) bool {
 	for _, k := range keys {
 		state.Entries = append(state.Entries, m[k])
 	}
-	clog.Infof(ctx, "reconcile from journal %d entries (broken=%t) in %s", cnt, broken, time.Since(started))
+	glog.Infof("reconcile from journal %d entries (broken=%t) in %s", cnt, broken, time.Since(started))
 	return true
 }
 
@@ -911,7 +907,7 @@ func (hfs *HashFS) journalEntry(ctx context.Context, fname string, e *entry) {
 	enc := json.NewEncoder(&buf)
 	err := enc.Encode(ent)
 	if err != nil {
-		clog.Warningf(ctx, "Failed to marshal journal entry %s: %v", fname, err)
+		glog.Warningf("Failed to marshal journal entry %s: %v", fname, err)
 		return
 	}
 	hfs.journalMu.Lock()
@@ -921,6 +917,6 @@ func (hfs *HashFS) journalEntry(ctx context.Context, fname string, e *entry) {
 	}
 	_, err = hfs.journal.Write(buf.Bytes())
 	if err != nil {
-		clog.Warningf(ctx, "Failed to write journal entry %s: %v", fname, err)
+		glog.Warningf("Failed to write journal entry %s: %v", fname, err)
 	}
 }
