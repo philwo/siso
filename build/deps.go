@@ -144,7 +144,6 @@ func depsExpandInputs(ctx context.Context, b *Builder, step *Step) {
 			}
 			inputs = append(inputs, in)
 		}
-		log.Infof("deps expands %d -> %d", len(step.cmd.Inputs), len(inputs))
 		step.cmd.Inputs = make([]string, len(inputs))
 		copy(step.cmd.Inputs, inputs)
 	}
@@ -171,7 +170,6 @@ func depsCmd(ctx context.Context, b *Builder, step *Step) error {
 
 	ds, found := depsProcessors[step.cmd.Deps]
 	if found {
-		start := time.Now()
 		// TODO: same as depsFastStep
 		var stepInputs []string
 		switch step.cmd.Deps {
@@ -185,7 +183,6 @@ func depsCmd(ctx context.Context, b *Builder, step *Step) error {
 		depsIns, err := ds.DepsCmd(ctx, b, step)
 		depsIns = step.def.ExpandedCaseSensitives(ctx, depsIns)
 		inputs := uniqueFiles(stepInputs, depsIns)
-		log.Infof("%s-deps %d %s: %v", step.cmd.Deps, len(inputs), time.Since(start), err)
 		if err != nil {
 			return err
 		}
@@ -230,7 +227,6 @@ func fixInputsByDeps(ctx context.Context, b *Builder, stepInputs, depsIns []stri
 	for _, ent := range entries {
 		inputs = append(inputs, b.path.Intern(ent.Name))
 		// no need to recursive expand?
-		// log.Infof("%s fix-input %s => %s", step, ent.Name, ent.Target)
 		if ent.Target != "" {
 			inputs = append(inputs, b.path.Intern(filepath.Join(filepath.Dir(ent.Name), ent.Target)))
 		}

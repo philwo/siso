@@ -463,7 +463,6 @@ loop:
 		}
 		return rule, !c.Impure
 	}
-	log.Infof("miss actionName:%q out:%q args0:%q", actionName, out, args0)
 	return StepRule{}, false
 }
 

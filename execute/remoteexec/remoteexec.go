@@ -47,11 +47,10 @@ func (re *RemoteExec) prepareInputs(ctx context.Context, cmd *execute.Cmd) (dige
 		if err != nil {
 			return err
 		}
-		n, err := re.client.UploadAll(ctx, ds)
+		_, err = re.client.UploadAll(ctx, ds)
 		if err != nil {
 			return fmt.Errorf("failed to upload all %s: %w", cmd, err)
 		}
-		log.Infof("upload %d/%d", n, ds.Size())
 		return nil
 	})
 	return actionDigest, err
@@ -69,11 +68,10 @@ func (re *RemoteExec) Run(ctx context.Context, cmd *execute.Cmd) error {
 		ctx, cancel = context.WithTimeoutCause(ctx, cmd.Timeout, fmt.Errorf("remote exec timeout=%v: %w", cmd.Timeout, context.DeadlineExceeded))
 		defer cancel()
 	}
-	opName, resp, err := re.client.ExecuteAndWait(ctx, &rpb.ExecuteRequest{
+	_, resp, err := re.client.ExecuteAndWait(ctx, &rpb.ExecuteRequest{
 		ActionDigest:    actionDigest.Proto(),
 		SkipCacheLookup: cmd.SkipCacheLookup,
 	})
-	log.Infof("digest: %s, skipCacheLookup:%t opName: %s", actionDigest, cmd.SkipCacheLookup, opName)
 	if err != nil {
 		log.Warnf("digest: %s, err: %v", actionDigest, err)
 	}
@@ -82,11 +80,11 @@ func (re *RemoteExec) Run(ctx context.Context, cmd *execute.Cmd) error {
 }
 
 func (re *RemoteExec) processResult(ctx context.Context, cmd *execute.Cmd, result *rpb.ActionResult, cached bool, err error) error {
-	if result.GetExitCode() == 0 && err == nil {
-		log.Infof("exit=%d cache=%t", result.GetExitCode(), cached)
-	} else {
-		log.Warnf("exit=%d cache=%t result=%v err:%v", result.GetExitCode(), cached, result, err)
-	}
+	// if result.GetExitCode() == 0 && err == nil {
+	// 	log.Infof("exit=%d cache=%t", result.GetExitCode(), cached)
+	// } else {
+	// 	log.Warnf("exit=%d cache=%t result=%v err:%v", result.GetExitCode(), cached, result, err)
+	// }
 	if result == nil {
 		if err != nil {
 			return err

@@ -11,7 +11,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/charmbracelet/log"
 	epb "go.chromium.org/infra/build/siso/execute/proto"
 )
 
@@ -167,7 +166,6 @@ func (m *StepMetric) done(step *Step, buildStart time.Time) {
 
 	result, cached := step.cmd.ActionResult()
 	m.Cached = cached
-	log.Infof("cached=%t", cached)
 	md := result.GetExecutionMetadata()
 	if !m.Cached {
 		m.QueueTime = IntervalMetric(md.GetWorkerStartTimestamp().AsTime().Sub(md.GetQueuedTimestamp().AsTime()))

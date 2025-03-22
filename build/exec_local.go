@@ -21,7 +21,6 @@ import (
 )
 
 func (b *Builder) execLocal(ctx context.Context, step *Step) error {
-	log.Infof("exec local %s", step.cmd.Desc)
 	step.cmd.RemoteWrapper = ""
 
 	step.setPhase(stepInput)
@@ -71,7 +70,6 @@ func (b *Builder) execLocal(ctx context.Context, step *Step) error {
 	var dur time.Duration
 	step.setPhase(phase.wait())
 	err = sema.Do(ctx, func(ctx context.Context) error {
-		log.Infof("step state: %s", stateMessage)
 		step.setPhase(phase)
 		if step.cmd.Console {
 			b.progress.startConsoleCmd(step.cmd)
@@ -131,9 +129,7 @@ func (b *Builder) execLocal(ctx context.Context, step *Step) error {
 
 func (b *Builder) prepareLocalInputs(ctx context.Context, step *Step) error {
 	inputs := step.cmd.AllInputs()
-	start := time.Now()
 	err := b.hashFS.Flush(ctx, step.cmd.ExecRoot, inputs)
-	log.Infof("prepare-local-inputs %d %s: %v", len(inputs), time.Since(start), err)
 	// now, all inputs are expected to be on disk.
 	// for local, no need to scan deps.
 	// but need to remove missing inputs from cmd.Inputs
@@ -149,7 +145,6 @@ func (b *Builder) prepareLocalInputs(ctx context.Context, step *Step) error {
 		inputs = b.hashFS.Availables(ctx, step.cmd.ExecRoot, step.cmd.Inputs)
 	}
 	if len(inputs) != len(step.cmd.Inputs) {
-		log.Infof("deps remove missing inputs %d -> %d", len(step.cmd.Inputs), len(inputs))
 		step.cmd.Inputs = inputs
 	}
 	return err
@@ -164,7 +159,6 @@ func (b *Builder) checkLocalOutputs(ctx context.Context, step *Step) error {
 		return nil
 	}
 	if step.def.Binding("phony_output") != "" {
-		log.Infof("phony_output. no check output files %q", step.cmd.Outputs)
 		return nil
 	}
 

@@ -68,7 +68,6 @@ func (fsys *filesystem) update(ctx context.Context, fi *hashfs.FileInfo) {
 		select {
 		case <-dc.ready:
 		default:
-			log.Infof("update race ReadDir&update %s", fi.Path())
 			fsys.dircache.Delete(dname)
 			base = filepath.Base(dname)
 			dname = filepath.ToSlash(filepath.Dir(dname))
@@ -76,7 +75,6 @@ func (fsys *filesystem) update(ctx context.Context, fi *hashfs.FileInfo) {
 		}
 		if dc.err != nil {
 			// negative cache?
-			log.Infof("update clear negative cache %s %v", fi.Path(), dc.err)
 			fsys.dircache.Delete(dname)
 			base = filepath.Base(dname)
 			dname = filepath.ToSlash(filepath.Dir(dname))
@@ -154,7 +152,6 @@ func (fsys *filesystem) ReadDir(ctx context.Context, execRoot, dname string) (*s
 					dname = filepath.Join(execRoot, target)
 					execRoot = ""
 				}
-				log.Infof("symlink dir: %s -> %s", dname, target)
 				err = symlinkErr
 			}
 			dc.err = err
@@ -246,14 +243,12 @@ type hmapresult struct {
 // getHmap returns hmap and success flag.
 // If the same hamp has been computed, the results are returned from cache.
 func (fsys *filesystem) getHmap(ctx context.Context, execRoot, fname string) (map[string]string, bool) {
-	log.Infof("check hmap %s", fname)
 	v, _ := fsys.hmaps.LoadOrStore(filepath.ToSlash(filepath.Join(execRoot, fname)), new(hmapresult))
 	hr := v.(*hmapresult)
 	hr.mu.Lock()
 	defer hr.mu.Unlock()
 	defer func() { hr.done = true }()
 	if hr.done {
-		log.Infof("check hmap %s: reuse ok=%t", fname, hr.ok)
 		return hr.m, hr.ok
 	}
 	buf, err := fsys.hashfs.ReadFile(ctx, execRoot, fname)
@@ -266,7 +261,6 @@ func (fsys *filesystem) getHmap(ctx context.Context, execRoot, fname string) (ma
 		log.Warnf("failed to parse hmap %s: %v", fname, err)
 		return nil, false
 	}
-	log.Infof("hmap %s %d => %v", fname, len(buf), m)
 	hr.m = m
 	hr.ok = true
 	return hr.m, hr.ok
