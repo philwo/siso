@@ -35,9 +35,6 @@ func (b *Builder) needToRun(ctx context.Context, stepDef StepDef, stepManifest *
 				dirtyErr: dirtyErr,
 				mtime:    mtime,
 			})
-			if dirtyErr != nil {
-				log.Infof("phony output %s dirty=%v mtime=%v", outpath, dirtyErr, mtime)
-			}
 		}
 		// nothing to run for phony target.
 		return false
@@ -58,7 +55,6 @@ func (b *Builder) checkUpToDate(ctx context.Context, stepDef StepDef, stepManife
 	outname := b.path.MaybeToWD(out0)
 	lastInName := b.path.MaybeToWD(lastIn)
 	if err != nil {
-		log.Infof("need %v", err)
 		reason := "missing-inputs"
 		switch {
 		case errors.Is(err, ErrMissingDeps):
@@ -72,12 +68,10 @@ func (b *Builder) checkUpToDate(ctx context.Context, stepDef StepDef, stepManife
 		return false
 	}
 	if outmtime.IsZero() {
-		log.Infof("need: output doesn't exist")
 		fmt.Fprintf(b.explainWriter, "output %s doesn't exist\n", outname)
 		return false
 	}
 	if inmtime.After(outmtime) {
-		log.Infof("need: in:%s > out:%s %s: in:%s out:%s", lastIn, out0, inmtime.Sub(outmtime), inmtime, outmtime)
 		fmt.Fprintf(b.explainWriter, "output %s older than most recent input %s: out:%s in:+%s\n", outname, lastInName, outmtime.Format(time.RFC3339), inmtime.Sub(outmtime))
 		return false
 	}
@@ -85,7 +79,6 @@ func (b *Builder) checkUpToDate(ctx context.Context, stepDef StepDef, stepManife
 		// TODO: remove old cmdhash support
 		oldCmdHash := calculateOldCmdHash(stepManifest.cmdline, stepManifest.rspfileContent)
 		if !bytes.Equal(cmdhash, oldCmdHash) {
-			log.Infof("need: cmdhash differ %q -> %q", base64.StdEncoding.EncodeToString(cmdhash), base64.StdEncoding.EncodeToString(stepManifest.cmdHash))
 			if len(cmdhash) == 0 {
 				fmt.Fprintf(b.explainWriter, "command line not found in log for %s\n", outname)
 			} else {
@@ -105,7 +98,6 @@ func (b *Builder) checkUpToDate(ctx context.Context, stepDef StepDef, stepManife
 		return false
 	}
 	if b.clobber {
-		log.Infof("need: clobber")
 		// explain once at the beginning of the build.
 		return false
 	}
@@ -139,7 +131,6 @@ func (b *Builder) checkUpToDate(ctx context.Context, stepDef StepDef, stepManife
 		if len(localOutputs) > 0 {
 			err := b.hashFS.Flush(ctx, b.path.ExecRoot, localOutputs)
 			if err != nil {
-				log.Infof("need: no local outputs %q: %v", localOutputs, err)
 				fmt.Fprintf(b.explainWriter, "output %s flush error %s: %v", outname, localOutputs, err)
 				return false
 			}

@@ -15,7 +15,6 @@ import (
 	"strings"
 	"sync"
 	"syscall"
-	"time"
 
 	"github.com/charmbracelet/log"
 	"go.chromium.org/infra/build/siso/reapi/digest"
@@ -180,9 +179,8 @@ func (st *subtree) init(ctx context.Context, b *Builder, dir string, files []str
 		ds.Delete(st.d)
 		missings, err := b.reapiclient.Missing(ctx, []digest.Digest{st.d})
 		fullUpload := func(ctx context.Context) {
-			started := time.Now()
 			// upload non-root digest first
-			n, err := b.reapiclient.UploadAll(ctx, ds)
+			_, err := b.reapiclient.UploadAll(ctx, ds)
 			if err != nil {
 				log.Warnf("failed to upload subtree data %s: %v", dir, err)
 				st.mu.Lock()
@@ -191,14 +189,12 @@ func (st *subtree) init(ctx context.Context, b *Builder, dir string, files []str
 				return
 			}
 			// upload root digest last.
-			m, err := b.reapiclient.UploadAll(ctx, rootDS)
-			log.Infof("upload subtree data %s %d+%d in %s: %v", dir, n, m, time.Since(started), err)
+			_, err = b.reapiclient.UploadAll(ctx, rootDS)
 			st.mu.Lock()
 			defer st.mu.Unlock()
 			st.err = err
 		}
 		if err == nil && len(missings) == 0 {
-			log.Infof("subtree data is ready %s %s", dir, st.d)
 			go func() {
 				// make sure all data are uploaded in background.
 				ctx := context.WithoutCancel(ctx)
@@ -206,7 +202,6 @@ func (st *subtree) init(ctx context.Context, b *Builder, dir string, files []str
 			}()
 			return
 		}
-		log.Infof("need to upload subtree data %s (missings=%d): %v", dir, len(missings), err)
 		fullUpload(ctx)
 	})
 	st.mu.Lock()

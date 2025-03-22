@@ -482,7 +482,6 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	if err != nil {
 		return stats, err
 	}
-	log.Infof("siso log dir=%s default=%t", c.logDir, isLogDirDefault)
 
 	resetCrashOutput, err := c.setupCrashOutput()
 	if err != nil {
@@ -600,7 +599,6 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		cwd := filepath.Join(execRoot, c.dir)
 		// ignore siso files not to be captured by ReadDir
 		// (i.g. scandeps for -I.)
-		log.Infof("ignore siso files in %s", cwd)
 		c.fsopt.Ignore = func(ctx context.Context, fname string) bool {
 			dir, base := filepath.Split(fname)
 			// allow siso prefix in other dir.
@@ -624,7 +622,6 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		}
 	} else {
 		// expect logDir is out of exec root.
-		log.Infof("ignore .ninja_log")
 		ninjaLogFname := filepath.Join(execRoot, c.dir, ".ninja_log")
 		c.fsopt.Ignore = func(ctx context.Context, fname string) bool {
 			return fname == ninjaLogFname
@@ -1281,7 +1278,6 @@ func (c *ninjaCmdRun) logWriter(fname string) (io.Writer, func(errp *error), err
 		return nil, func(*error) {}, err
 	}
 	return f, func(errp *error) {
-		log.Infof("close %s", fname)
 		cerr := f.Close()
 		if *errp == nil {
 			*errp = cerr

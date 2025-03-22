@@ -843,7 +843,6 @@ func (c *Cmd) RecordPreOutputs(ctx context.Context) {
 // RecordOutputs records cmd's outputs from action result in hashfs.
 func (c *Cmd) RecordOutputs(ctx context.Context, ds hashfs.DataSource, now time.Time) error {
 	entries, additionalEntries := c.entriesFromResult(ctx, ds, now)
-	log.Infof("output entries %d+%d", len(entries), len(additionalEntries))
 	entries = c.computeOutputEntries(entries, now, c.CmdHash)
 	err := c.HashFS.Update(ctx, c.ExecRoot, entries)
 	if err != nil {
@@ -865,15 +864,6 @@ func retrieveLocalOutputEntries(ctx context.Context, hfs *hashfs.HashFS, root st
 }
 
 func updateLocalOutputDir(ctx context.Context, hfs *hashfs.HashFS, root, dir string, outputs map[string]hashfs.UpdateEntry) (err error) {
-	started := time.Now()
-	defer func() {
-		if err != nil {
-			log.Warnf("failed to update local output dir %q: %v", dir, err)
-		} else {
-			log.Infof("update local output dir %q: %s", dir, time.Since(started))
-		}
-	}()
-
 	entriesFromLocalDir := func(dir string) ([]hashfs.UpdateEntry, error) {
 		dents, err := hfs.ReadDir(ctx, root, dir)
 		if err != nil {

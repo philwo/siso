@@ -255,10 +255,7 @@ func (c *run) call(ctx context.Context, reopt reapi.Option, credential cred.Cred
 		if err != nil {
 			return err
 		}
-		log.Infof("inputRoot: %s", inputRootDigest)
 		fmt.Printf("%s\n", inputRootDigest)
-	} else {
-		log.Infof("no root directory: %v", err)
 	}
 
 	var commandDigest digest.Digest
@@ -281,7 +278,7 @@ func (c *run) call(ctx context.Context, reopt reapi.Option, credential cred.Cred
 		fmt.Printf("%s\n", commandDigest)
 		ds.Set(data)
 	} else {
-		log.Infof("failed to access command.txt: %v", err)
+		log.Errorf("failed to access command.txt: %v", err)
 	}
 
 	action := &rpb.Action{}
@@ -305,7 +302,6 @@ func (c *run) call(ctx context.Context, reopt reapi.Option, credential cred.Cred
 	}
 	actionDigest := data.Digest()
 	log.Infof("action: %s", actionDigest)
-	fmt.Printf("Action: %s\n", actionDigest)
 	ds.Set(data)
 
 	n, err := client.UploadAll(ctx, ds)
@@ -373,7 +369,6 @@ func printActionResult(result *rpb.ActionResult) {
 			}
 			switch m := any.(type) {
 			case *rbepb.AuxiliaryMetadata:
-				log.Infof("metadata %T: %s", m, m)
 				fmt.Printf("    version: %s\n", m.GetVersions())
 				fmt.Printf("    pool: %s\n", m.GetPool())
 				fmt.Printf("    resource_usage:\n")

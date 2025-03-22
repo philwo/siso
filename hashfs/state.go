@@ -238,10 +238,8 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 	if state.BuildTargets != nil {
 		hfs.buildTargets = make([]string, len(state.BuildTargets.Targets))
 		copy(hfs.buildTargets, state.BuildTargets.Targets)
-		log.Infof("build targets=%q", hfs.buildTargets)
 	} else {
 		hfs.buildTargets = nil
-		log.Infof("no build targets")
 	}
 	var fsm FileInfoer = osfsInfoer{}
 	if hfs.opt.FSMonitor != nil && state.LastChecked != "" {
@@ -284,7 +282,6 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 			}
 			ent.Name = filepath.ToSlash(ent.Name)
 			if hfs.opt.Ignore(ctx, ent.Name) {
-				log.Infof("ignore %q", ent.Name)
 				if logw != nil {
 					fmt.Fprintf(logw, "ignore %q\n", ent.Name)
 				}
@@ -294,7 +291,6 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 			if errors.Is(err, fs.ErrNotExist) {
 				nnotexist.Add(1)
 				if len(h) == 0 {
-					log.Infof("not exist with no cmdhash: %q", ent.Name)
 					if logw != nil {
 						fmt.Fprintf(logw, "not exist with no cmd hash: %q\n", ent.Name)
 					}
@@ -342,7 +338,6 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 			if e.d.IsZero() && e.target == "" {
 				ftype = "dir"
 				if len(e.cmdhash) == 0 {
-					log.Infof("ignore %s %q", ftype, ent.Name)
 					if logw != nil {
 						fmt.Fprintf(logw, "ignore dir no cmd hash: %q\n", ent.Name)
 					}
@@ -379,7 +374,6 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 				if err == nil && data.Digest() == e.d {
 					et = entryEqLocal
 					err = hfs.OS.Chtimes(ent.Name, time.Now(), e.mtime)
-					log.Infof("reconcile mtime %q %v -> %v: %v", ent.Name, fi.ModTime(), e.mtime, err)
 					if logw != nil {
 						fmt.Fprintf(logw, "reconcile mtime %q %v -> %v: %v\n", ent.Name, fi.ModTime(), e.mtime, err)
 					}
@@ -410,7 +404,6 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 					return nil
 				}
 
-				log.Infof("not exist %s %q cmdhash:%s", ftype, ent.Name, base64.StdEncoding.EncodeToString(e.cmdhash))
 				if logw != nil {
 					fmt.Fprintf(logw, "no local output: %s %q\n", ftype, ent.Name)
 				}
@@ -452,7 +445,6 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 					return nil
 				}
 				isOutputLocal := outputLocal(ctx, ent.Name)
-				log.Infof("old local %s %q: state:%s disk:%s cmdhash:%s outputLocal:%t", ftype, ent.Name, e.mtime, fi.ModTime(), base64.StdEncoding.EncodeToString(e.cmdhash), isOutputLocal)
 				if logw != nil {
 					fmt.Fprintf(logw, "old local %s %q: state:%s disk:%s cmdhash:%s outputLocal:%t\n", ftype, ent.Name, e.mtime, fi.ModTime(), base64.StdEncoding.EncodeToString(e.cmdhash), isOutputLocal)
 				}
@@ -665,7 +657,6 @@ func saveFile(data []byte, opts Option) (retErr error) {
 		return err
 	}
 	err = os.Rename(f.Name(), opts.StateFile)
-	log.Infof("replace %s: %v", opts.StateFile, err)
 	return err
 }
 
@@ -747,9 +738,6 @@ func (hfs *HashFS) State(ctx context.Context) *pb.State {
 			}
 			e := v.(*entry)
 			if e.err != nil {
-				if !errors.Is(e.err, fs.ErrNotExist) {
-					log.Infof("ignore %s: err:%v", name, e.err)
-				}
 				continue
 			}
 			if runtime.GOOS == "windows" {

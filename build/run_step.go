@@ -119,7 +119,6 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 	} else if exited {
 		// store handler generated outputs to local disk.
 		// better to upload to CAS, or store in fs_state?
-		log.Infof("outputs[handler] %d", len(step.cmd.Outputs))
 		err = b.hashFS.Flush(ctx, step.cmd.ExecRoot, step.cmd.Outputs)
 		if err == nil {
 			b.plan.done(ctx, step)
@@ -149,7 +148,6 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 
 	runCmd := b.runStrategy(step)
 	err = runCmd(ctx, step)
-	log.Infof("done err=%v", err)
 	if err != nil {
 		if ctx.Err() != nil {
 			err = fmt.Errorf("ctx err: %w: %w", ctx.Err(), err)

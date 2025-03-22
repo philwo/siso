@@ -126,6 +126,9 @@ Use "siso help -advanced" to display all commands.
 	flag.IntVar(&mutexprofFrac, "mutexprof_frac", 0, "mutex profile fraction")
 	flag.StringVar(&traceFile, "trace", "", `go trace output for "go tool trace"`)
 
+	log.SetTimeFormat("2006-01-02 15:04:05")
+	log.SetReportCaller(true)
+
 	credHelper := cred.DefaultCredentialHelper()
 	if h, ok := os.LookupEnv("SISO_CREDENTIAL_HELPER"); ok {
 		credHelper = h

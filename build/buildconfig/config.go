@@ -10,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"time"
 
 	"github.com/charmbracelet/log"
 	"go.starlark.net/resolve"
@@ -216,10 +215,6 @@ func (cfg *Config) Handle(ctx context.Context, handler string, bpath *build.Path
 	if !ok {
 		return fmt.Errorf("no handler:%q for %s", handler, cmd)
 	}
-	started := time.Now()
-	defer func() {
-		log.Infof("handle:%s %s", handler, time.Since(started))
-	}()
 	thread := &starlark.Thread{
 		Name: "handler:" + handler,
 		Print: func(thread *starlark.Thread, msg string) {

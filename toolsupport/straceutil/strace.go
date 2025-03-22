@@ -98,7 +98,6 @@ func (s *Strace) PostProcess() (inputs, outputs []string, err error) {
 	for i := 0; i < len(inputs); i++ {
 		target, err := os.Readlink(filepath.Join(s.dir, inputs[i]))
 		if err == nil {
-			log.Infof("add symlink from %s -> %s", inputs[i], target)
 			if !filepath.IsAbs(target) {
 				target = filepath.Join(filepath.Dir(inputs[i]), target)
 			}

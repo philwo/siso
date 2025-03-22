@@ -8,8 +8,6 @@ import (
 	"bytes"
 	"hash/maphash"
 	"sync/atomic"
-
-	"github.com/charmbracelet/log"
 )
 
 const nodeMapArraySize = 1 << 25
@@ -106,7 +104,6 @@ func (nm *nodeMap) freeze() []*Node {
 	nodes := make([]*Node, 0, nm.n.Load()+1)
 	nodes = append(nodes, nil) // 0: invalid target.
 	id := 1
-	log.Infof("freeze bigmap")
 	maxDepth := 0
 	for i := range nodeMapArraySize {
 		n := nm.nodes[i].Load()
@@ -120,6 +117,5 @@ func (nm *nodeMap) freeze() []*Node {
 		}
 		maxDepth = max(depth, maxDepth)
 	}
-	log.Infof("nodes=%d max deps=%d", len(nodes), maxDepth)
 	return nodes
 }
