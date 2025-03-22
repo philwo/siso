@@ -10,27 +10,17 @@ import (
 
 func (b *Builder) runStrategy(step *Step) func(context.Context, *Step) error {
 	// Criteria for remote executable:
-	// - Allow remote if available and command has platform container-image property.
-	// - Allow reproxy if available and command has reproxy config set.
-	// If the command doesn't meet either criteria, fallback to local.
+	// - Remote execution is available
+	// - Command has platform container-image property
+	// If the command doesn't meet all criteria, fallback to local.
 	// Any further validation should be done in the exec handler, not here.
 	allowRemote := b.remoteExec != nil && len(step.cmd.Platform) > 0 && step.cmd.Platform["container-image"] != ""
-	allowREProxy := b.reproxyExec.Enabled() && step.cmd.REProxyConfig != nil
 	switch {
-	case step.cmd.Pure && allowREProxy:
-		return b.runReproxy
 	case step.cmd.Pure && allowRemote:
 		return b.runRemote
 	default:
 		return b.runLocal
 	}
-}
-
-func (b *Builder) runReproxy(ctx context.Context, step *Step) error {
-	dedupInputs(step.cmd)
-	// TODO: b/297807325 - Siso relies on Reproxy's local fallback for
-	// monitoring at this moment. So, Siso shouldn't try local fallback.
-	return b.execReproxy(ctx, step)
 }
 
 func (b *Builder) runLocal(ctx context.Context, step *Step) error {

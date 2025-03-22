@@ -30,7 +30,6 @@ import (
 	"go.chromium.org/infra/build/siso/execute"
 	"go.chromium.org/infra/build/siso/execute/localexec"
 	"go.chromium.org/infra/build/siso/execute/remoteexec"
-	"go.chromium.org/infra/build/siso/execute/reproxyexec"
 	"go.chromium.org/infra/build/siso/hashfs"
 	"go.chromium.org/infra/build/siso/reapi"
 	"go.chromium.org/infra/build/siso/reapi/digest"
@@ -62,8 +61,7 @@ type Options struct {
 	RECacheEnableRead bool
 	// TODO(b/266518906): enable RECacheEnableWrite option for read-only client.
 	// RECacheEnableWrite bool
-	ReproxyAddr string
-	ActionSalt  []byte
+	ActionSalt []byte
 
 	OutputLocal          OutputLocalFunc
 	Cache                *Cache
@@ -159,9 +157,6 @@ type Builder struct {
 	// reCacheEnableWrite bool
 	reapiclient *reapi.Client
 
-	reproxySema *semaphore.Semaphore
-	reproxyExec *reproxyexec.REProxyExec
-
 	actionSalt []byte
 
 	outputLocal OutputLocalFunc
@@ -228,18 +223,11 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 	}
 	var le localexec.LocalExec
 	var re *remoteexec.RemoteExec
-	var pe *reproxyexec.REProxyExec
 	if opts.REAPIClient != nil {
 		log.Infof("enable built-in remote exec")
 		re = remoteexec.New(opts.REAPIClient)
 	} else {
 		log.Infof("disable built-in remote exec")
-	}
-	pe = reproxyexec.New(opts.ReproxyAddr)
-	if pe.Enabled() {
-		log.Infof("enable reclient integration: addr=%s", opts.ReproxyAddr)
-	} else {
-		log.Infof("disable reclient integration")
 	}
 	experiments.ShowOnce()
 	numCPU := runtimex.NumCPU()
@@ -289,8 +277,6 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 		remoteExec:        re,
 		reCacheEnableRead: opts.RECacheEnableRead,
 		// reCacheEnableWrite: opts.RECacheEnableWrite,
-		reproxyExec: pe,
-		reproxySema: semaphore.New("reproxyexec", opts.Limits.Remote),
 		actionSalt:  opts.ActionSalt,
 		reapiclient: opts.REAPIClient,
 
@@ -334,10 +320,7 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 
 // Close cleans up the builder.
 func (b *Builder) Close() error {
-	if b.reproxyExec == nil {
-		return nil
-	}
-	return b.reproxyExec.Close()
+	return nil
 }
 
 // Stats returns stats of the builder.
@@ -468,15 +451,10 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 					stat.FastDepsSuccess, stat.FastDepsFailed, stat.ScanDepsFailed)
 			}
 		}
-		if !b.reproxyExec.Used() {
-			// this stats will be shown by reproxy shutdown.
-			msg := fmt.Sprintf("\nlocal:%d remote:%d cache:%d fallback:%d retry:%d skip:%d\n",
-				stat.Local+stat.NoExec, stat.Remote, stat.CacheHit, stat.LocalFallback, stat.RemoteRetry, stat.Skipped) +
-				depsStatLine + "\n"
-			ui.Default.PrintLines("\n", msg)
-		} else {
-			ui.Default.PrintLines("\n", "\n")
-		}
+		msg := fmt.Sprintf("\nlocal:%d remote:%d cache:%d fallback:%d retry:%d skip:%d\n",
+			stat.Local+stat.NoExec, stat.Remote, stat.CacheHit, stat.LocalFallback, stat.RemoteRetry, stat.Skipped) +
+			depsStatLine + "\n"
+		ui.Default.PrintLines("\n", msg)
 	}()
 	pstat := b.plan.stats()
 	b.progress.report("\nbuild start: Ready %d Pending %d", pstat.nready, pstat.npendings)
@@ -488,7 +466,7 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 		fmt.Fprintf(b.explainWriter, "--clobber is specified\n")
 	}
 
-	// prepare all output directories for local process and reproxy,
+	// prepare all output directories for local process,
 	// to minimize mkdir operations.
 	// if we create out dirs before each action concurrently,
 	// need to check the dir many times and worry about race.
@@ -546,7 +524,6 @@ loop:
 			}
 			continue
 		case <-ctx.Done():
-			log.Infof("context done")
 			done(context.Cause(ctx))
 			cancel()
 			b.plan.dump(ctx, b.graph)
@@ -586,7 +563,6 @@ loop:
 			err = b.runStep(ctx, step)
 			select {
 			case <-ctx.Done():
-				log.Infof("context done")
 				return
 			default:
 			}
@@ -926,7 +902,7 @@ func (b *Builder) prepareAllOutDirs(ctx context.Context) error {
 	log.Infof("prepare out dirs: targets:%d -> %d -> %d ", len(b.plan.targets), ndirs, len(dirs))
 	for _, dir := range dirs {
 		// we don't use hashfs here for performance.
-		// just create dirs on local disk, so reproxy and local process
+		// just create dirs on local disk, so local process
 		// can detect the dirs.
 		err := os.MkdirAll(filepath.Join(b.path.ExecRoot, dir), 0755)
 		if err != nil {
