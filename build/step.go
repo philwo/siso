@@ -11,7 +11,6 @@ import (
 	"encoding/base64"
 	"fmt"
 	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 
@@ -320,47 +319,6 @@ func (s *Step) getWeightedDuration() time.Duration {
 	s.state.mu.Lock()
 	defer s.state.mu.Unlock()
 	return s.state.weightedDuration
-}
-
-func stepSpanName(stepDef StepDef) string {
-	if !strings.HasPrefix(stepDef.ActionName(), "__") {
-		return stepDef.ActionName()
-	}
-	cmd := stepDef.Binding("command")
-	i := strings.Index(cmd, " ")
-	if i > 0 {
-		// use python script as step name, not python binary itself.
-		arg0 := cmd[:i]
-		if strings.HasSuffix(strings.TrimSuffix(arg0, ".exe"), "python3") {
-			cmd = cmd[i+1:]
-		}
-	}
-	i = strings.Index(cmd, " ")
-	if i > 0 {
-		cmd = cmd[:i]
-	}
-	return cmd
-}
-
-func stepBacktraces(ctx context.Context, step *Step) []string {
-	var locs []string
-	var prev string
-	for s := step.def; s != nil; s = s.Next() {
-		outs := s.Outputs(ctx)
-		loc := stepSpanName(s)
-		if len(outs) > 0 {
-			out := outs[0]
-			if odir := filepath.Dir(out); odir != "." {
-				out = odir
-			}
-			loc = fmt.Sprintf("%s %s", loc, out)
-		}
-		if loc != prev {
-			locs = append(locs, loc)
-			prev = loc
-		}
-	}
-	return locs
 }
 
 // useReclient returns true if the step uses Reclient via rewrapper or reproxy.

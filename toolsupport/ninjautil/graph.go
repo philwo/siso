@@ -324,21 +324,6 @@ func (e *Edge) Print(w io.Writer) {
 	e.env.Print(w)
 }
 
-func escapeNinjaValue(s string) string {
-	if strings.ContainsAny(s, "$\n") {
-		var sb strings.Builder
-		for _, ch := range s {
-			switch ch {
-			case '$', '\n':
-				sb.WriteByte('$')
-			}
-			sb.WriteRune(ch)
-		}
-		return sb.String()
-	}
-	return s
-}
-
 func escapeNinjaToken(s string) string {
 	if strings.ContainsAny(s, " $:") {
 		var sb strings.Builder

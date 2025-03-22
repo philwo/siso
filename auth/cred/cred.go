@@ -7,13 +7,11 @@ package cred
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 
 	"github.com/charmbracelet/log"
 	"golang.org/x/oauth2"
 	"google.golang.org/api/option"
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/oauth"
 
@@ -126,17 +124,6 @@ func New(ctx context.Context, opts Options) (Cred, error) {
 		rpcCredentials: rpcCredentials,
 		tokenSource:    tokenSource,
 	}, nil
-}
-
-// GRPCDialOptions returns grpc's dial options to use the credential.
-func (c Cred) GRPCDialOptions() []grpc.DialOption {
-	if c.rpcCredentials == nil {
-		return nil
-	}
-	return []grpc.DialOption{
-		grpc.WithPerRPCCredentials(c.rpcCredentials),
-		grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{})),
-	}
 }
 
 // ClientOptions returns googleapi's client options to use the credential.
