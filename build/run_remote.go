@@ -143,7 +143,7 @@ func (b *Builder) runRemote(ctx context.Context, step *Step) error {
 		b.progressStepFallback(step)
 		step.metrics.IsRemote = false
 		step.metrics.Fallback = true
-		res := cmdOutput(ctx, cmdOutputResultFALLBACK, "", step.cmd, step.def.Binding("command"), step.def.RuleName(), err)
+		res := cmdOutput(ctx, cmdOutputResultFALLBACK, step.cmd, step.def.Binding("command"), step.def.RuleName(), err)
 		b.logOutput(res, false)
 		// Preserve remote action result and error.
 		ar, _ := step.cmd.ActionResult()
@@ -186,7 +186,7 @@ func (b *Builder) tryFastStep(ctx context.Context, step, fastStep *Step, cacheCh
 func (b *Builder) fastStepDone(ctx context.Context, step, fastStep *Step) error {
 	step.metrics = fastStep.metrics
 	step.metrics.DepsLog = true
-	res := cmdOutput(ctx, cmdOutputResultSUCCESS, "fast", fastStep.cmd, step.def.Binding("command"), step.def.RuleName(), nil)
+	res := cmdOutput(ctx, cmdOutputResultSUCCESS, fastStep.cmd, step.def.Binding("command"), step.def.RuleName(), nil)
 	if res != nil {
 		b.logOutput(res, step.cmd.Console)
 		if experiments.Enabled("fail-on-stdouterr", "step %s emit stdout/stderr", step) {

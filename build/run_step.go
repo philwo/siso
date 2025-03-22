@@ -111,7 +111,7 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 	exited, err := b.handleStep(ctx, step)
 	if err != nil {
 		if !experiments.Enabled("keep-going-handle-error", "handle %s failed: %v", step, err) {
-			res := cmdOutput(ctx, cmdOutputResultFAILED, "handle", step.cmd, step.def.Binding("command"), step.def.RuleName(), err)
+			res := cmdOutput(ctx, cmdOutputResultFAILED, step.cmd, step.def.Binding("command"), step.def.RuleName(), err)
 			step.cmd.SetOutputResult(b.logOutput(res, step.cmd.Console))
 			log.Warnf("Failed to exec(handle): %v", err)
 			return fmt.Errorf("failed to run handler for %s: %w", step, err)
@@ -129,7 +129,7 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 	}
 	err = b.setupRSP(ctx, step)
 	if err != nil {
-		res := cmdOutput(ctx, cmdOutputResultFAILED, "rsp", step.cmd, step.def.Binding("command"), step.def.RuleName(), err)
+		res := cmdOutput(ctx, cmdOutputResultFAILED, step.cmd, step.def.Binding("command"), step.def.RuleName(), err)
 		step.cmd.SetOutputResult(b.logOutput(res, step.cmd.Console))
 		return fmt.Errorf("failed to setup rsp: %s: %w", step, err)
 	}
@@ -162,10 +162,10 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 			// RBE returns permission denied when
 			// platform container image are not available
 			// on RBE worker.
-			res := cmdOutput(ctx, cmdOutputResultFAILED, "badContainer", step.cmd, step.def.Binding("command"), step.def.RuleName(), err)
+			res := cmdOutput(ctx, cmdOutputResultFAILED, step.cmd, step.def.Binding("command"), step.def.RuleName(), err)
 			step.cmd.SetOutputResult(b.logOutput(res, step.cmd.Console))
 		default:
-			msgs := cmdOutput(ctx, cmdOutputResultFAILED, "", step.cmd, step.def.Binding("command"), step.def.RuleName(), err)
+			msgs := cmdOutput(ctx, cmdOutputResultFAILED, step.cmd, step.def.Binding("command"), step.def.RuleName(), err)
 			step.cmd.SetOutputResult(b.logOutput(msgs, step.cmd.Console))
 		}
 		return StepError{
@@ -174,7 +174,7 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 		}
 	}
 
-	res := cmdOutput(ctx, cmdOutputResultSUCCESS, "", step.cmd, step.def.Binding("command"), step.def.RuleName(), nil)
+	res := cmdOutput(ctx, cmdOutputResultSUCCESS, step.cmd, step.def.Binding("command"), step.def.RuleName(), nil)
 	if res != nil {
 		step.cmd.SetOutputResult(b.logOutput(res, step.cmd.Console))
 		if experiments.Enabled("fail-on-stdouterr", "step %s emit stdout/stderr", step) {
