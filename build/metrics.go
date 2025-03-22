@@ -33,7 +33,7 @@ func (i *IntervalMetric) UnmarshalJSON(b []byte) error {
 	if err != nil {
 		return err
 	}
-	*i = IntervalMetric(time.Duration(int64(secs * 1e9)))
+	*i = IntervalMetric(int64(secs * 1e9))
 	return nil
 }
 

@@ -77,7 +77,7 @@ func starFSRead(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tup
 	if err != nil {
 		return starlark.None, err
 	}
-	return starlark.Bytes(string(buf)), nil
+	return starlark.Bytes(buf), nil
 }
 
 // Starlark function `fs.is_dir(fname)` to check fname is a dir.

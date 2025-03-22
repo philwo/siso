@@ -19,12 +19,12 @@ func rusage(cmd *exec.Cmd) *epb.Rusage {
 	if u, ok := cmd.ProcessState.SysUsage().(*syscall.Rusage); ok {
 		return &epb.Rusage{
 			// 32bit arch may use int32 for Maxrss etc.
-			MaxRss:  int64(u.Maxrss),
-			Majflt:  int64(u.Majflt),
-			Inblock: int64(u.Inblock),
-			Oublock: int64(u.Oublock),
-			Utime:   &durationpb.Duration{Seconds: int64(u.Utime.Sec), Nanos: int32(u.Utime.Usec)},
-			Stime:   &durationpb.Duration{Seconds: int64(u.Stime.Sec), Nanos: int32(u.Stime.Usec)},
+			MaxRss:  u.Maxrss,
+			Majflt:  u.Majflt,
+			Inblock: u.Inblock,
+			Oublock: u.Oublock,
+			Utime:   &durationpb.Duration{Seconds: u.Utime.Sec, Nanos: u.Utime.Usec},
+			Stime:   &durationpb.Duration{Seconds: u.Stime.Sec, Nanos: u.Stime.Usec},
 		}
 	}
 	return nil

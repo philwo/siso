@@ -153,7 +153,7 @@ func (cfg *Config) Init(ctx context.Context, hashFS *hashfs.HashFS, buildPath *b
 		"fs": starFS(ctx, hashFS.FileSystem(ctx, buildPath.ExecRoot), buildPath, cfg.fscache),
 	})
 	log.Infof("hctx: %v", hctx)
-	ret, err := starlark.Call(thread, fun, starlark.Tuple([]starlark.Value{hctx}), nil)
+	ret, err := starlark.Call(thread, fun, []starlark.Value{hctx}, nil)
 	if err != nil {
 		log.Warnf("thread:%s failed to run %s: %v", thread.Name, configEntryPoint, err)
 		var eerr *starlark.EvalError
@@ -244,7 +244,7 @@ func (cfg *Config) Handle(ctx context.Context, handler string, bpath *build.Path
 	}
 	log.Debugf("hcmd: %v", hcmd)
 	// hctx and hcmd will be frozen, so fun may not mutate hcmd.
-	_, err = starlark.Call(thread, fun, starlark.Tuple([]starlark.Value{hctx, hcmd}), nil)
+	_, err = starlark.Call(thread, fun, []starlark.Value{hctx, hcmd}, nil)
 	if err != nil {
 		log.Warnf("thread:%s failed to run %s: %v", thread.Name, handler, err)
 		var eerr *starlark.EvalError
