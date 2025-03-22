@@ -59,7 +59,7 @@ func (c *Cache) GetActionResult(ctx context.Context, cmd *execute.Cmd) error {
 	}
 
 	var d digest.Digest
-	err := c.sema.Do(ctx, func(ctx context.Context) error {
+	err := c.sema.Do(ctx, func() error {
 		var err error
 		d, err = cmd.Digest(ctx, nil)
 		return err

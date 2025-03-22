@@ -47,7 +47,7 @@ func New(client Client) *Exporter {
 // into dir.
 func (e *Exporter) Export(ctx context.Context, dir string, d digest.Digest, w io.Writer) error {
 	e.eg.Go(func() error {
-		return e.sema.Do(ctx, func(ctx context.Context) error {
+		return e.sema.Do(ctx, func() error {
 			return e.exportDir(ctx, dir, d, w)
 		})
 	})
@@ -75,14 +75,14 @@ func (e *Exporter) exportDir(ctx context.Context, dir string, d digest.Digest, w
 	}
 	for _, f := range curdir.Files {
 		e.eg.Go(func() error {
-			return e.sema.Do(ctx, func(ctx context.Context) error {
+			return e.sema.Do(ctx, func() error {
 				return e.exportFile(ctx, filepath.Join(dir, f.Name), digest.FromProto(f.Digest), f.IsExecutable, w)
 			})
 		})
 	}
 	for _, subdir := range curdir.Directories {
 		e.eg.Go(func() error {
-			return e.sema.Do(ctx, func(ctx context.Context) error {
+			return e.sema.Do(ctx, func() error {
 				return e.exportDir(ctx, filepath.Join(dir, subdir.Name), digest.FromProto(subdir.Digest), w)
 			})
 		})

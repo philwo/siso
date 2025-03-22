@@ -516,7 +516,7 @@ func lookupBlobsInStore(ctx context.Context, blobs []digest.Digest, ds *digest.S
 				return
 			}
 			var b []byte
-			err := FileSemaphore.Do(ctx, func(ctx context.Context) error {
+			err := FileSemaphore.Do(ctx, func() error {
 				var err error
 				b, err = readAll(ctx, data)
 				return err
