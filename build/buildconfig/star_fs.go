@@ -73,7 +73,7 @@ func starFSRead(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tup
 	if err != nil {
 		return starlark.None, err
 	}
-	buf, err := c.fscache.Get(c.ctx, c.fs, fname)
+	buf, err := c.fscache.Get(c.fs, fname)
 	if err != nil {
 		return starlark.None, err
 	}

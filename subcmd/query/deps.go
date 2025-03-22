@@ -116,7 +116,7 @@ func (c *depsRun) run(ctx context.Context, args []string) error {
 		return err
 	}
 
-	depsLog, err := ninjautil.NewDepsLog(ctx, c.depsLogFile)
+	depsLog, err := ninjautil.NewDepsLog(c.depsLogFile)
 	if err != nil {
 		return err
 	}
@@ -134,7 +134,7 @@ func (c *depsRun) run(ctx context.Context, args []string) error {
 		if err != nil {
 			return err
 		}
-		fsstate, err := hashfs.Load(ctx, hashfs.Option{StateFile: c.fsopt.StateFile})
+		fsstate, err := hashfs.Load(hashfs.Option{StateFile: c.fsopt.StateFile})
 		if err != nil {
 			return err
 		}
@@ -149,7 +149,7 @@ func (c *depsRun) run(ctx context.Context, args []string) error {
 		if err != nil {
 			return err
 		}
-		targets, err = depsTargets(ctx, state, depsLog, args)
+		targets, err = depsTargets(state, depsLog, args)
 		if err != nil {
 			return err
 		}
@@ -181,7 +181,7 @@ func (c *depsRun) run(ctx context.Context, args []string) error {
 
 func lookupDeps(ctx context.Context, state *ninjautil.State, hashFS *hashfs.HashFS, depsLog *ninjautil.DepsLog, bpath *build.Path, target string) (string, []string, time.Time, ninjabuild.DepsLogState, error) {
 	var depState ninjabuild.DepsLogState
-	deps, depsTime, err := depsLog.Get(ctx, target)
+	deps, depsTime, err := depsLog.Get(target)
 	if err == nil {
 		if hashFS != nil {
 			depState, _ = ninjabuild.CheckDepsLogState(ctx, hashFS, bpath, target, depsTime)
@@ -214,20 +214,20 @@ func lookupDeps(ctx context.Context, state *ninjautil.State, hashFS *hashfs.Hash
 		// the rule has no deps,depfile.
 		return "", nil, time.Time{}, depState, ninjautil.ErrNoDepsLog
 	}
-	df := bpath.MaybeFromWD(ctx, depfile)
+	df := bpath.MaybeFromWD(depfile)
 	fi, err := hashFS.Stat(ctx, bpath.ExecRoot, df)
 	if err != nil {
 		return "", nil, time.Time{}, depState, fmt.Errorf("no depfile=%q to build target %q: %w", depfile, target, err)
 	}
 	fsys := hashFS.FileSystem(ctx, bpath.ExecRoot)
-	deps, err = makeutil.ParseDepsFile(ctx, fsys, df)
+	deps, err = makeutil.ParseDepsFile(fsys, df)
 	if err != nil {
 		return "", nil, time.Time{}, depState, fmt.Errorf("failed to read depfile=%q to build target %q: %w", depfile, target, err)
 	}
 	return fmt.Sprintf("depfile=%q", depfile), deps, fi.ModTime(), ninjabuild.DepsLogValid, nil
 }
 
-func depsTargets(ctx context.Context, state *ninjautil.State, depsLog *ninjautil.DepsLog, args []string) ([]string, error) {
+func depsTargets(state *ninjautil.State, depsLog *ninjautil.DepsLog, args []string) ([]string, error) {
 	var nodes []*ninjautil.Node
 	if len(args) > 0 {
 		var err error

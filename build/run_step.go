@@ -62,11 +62,11 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 			step.metrics.Duration = IntervalMetric(duration)
 			step.metrics.ActionEndTime = IntervalMetric(step.endTime.Sub(b.start))
 			step.metrics.Err = err != nil
-			b.recordMetrics(ctx, step.metrics)
-			b.recordNinjaLogs(ctx, step)
-			b.stats.update(ctx, &step.metrics, step.cmd.Pure)
-			b.outputFailureSummary(ctx, step, err)
-			b.outputFailedCommands(ctx, step, err)
+			b.recordMetrics(step.metrics)
+			b.recordNinjaLogs(step)
+			b.stats.update(&step.metrics, step.cmd.Pure)
+			b.outputFailureSummary(step, err)
+			b.outputFailedCommands(step, err)
 		}
 		// unref for GC to reclaim memory.
 		step.cmd = nil
@@ -75,7 +75,7 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 	if !b.needToRun(ctx, step.def, step.outputs) {
 		step.metrics.skip = true
 		b.plan.done(ctx, step)
-		b.stats.update(ctx, &step.metrics, true)
+		b.stats.update(&step.metrics, true)
 		return nil
 	}
 	select {
@@ -100,15 +100,15 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 		return nil
 	}
 
-	b.progressStepStarted(ctx, step)
-	defer b.progressStepFinished(ctx, step)
+	b.progressStepStarted(step)
+	defer b.progressStepFinished(step)
 
 	step.setPhase(stepHandler)
 	exited, err := b.handleStep(ctx, step)
 	if err != nil {
 		if !experiments.Enabled("keep-going-handle-error", "handle %s failed: %v", step, err) {
 			res := cmdOutput(ctx, cmdOutputResultFAILED, "handle", step.cmd, step.def.Binding("command"), step.def.RuleName(), err)
-			step.cmd.SetOutputResult(b.logOutput(ctx, res, step.cmd.Console))
+			step.cmd.SetOutputResult(b.logOutput(res, step.cmd.Console))
 			log.Warnf("Failed to exec(handle): %v", err)
 			return fmt.Errorf("failed to run handler for %s: %w", step, err)
 		}
@@ -126,7 +126,7 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 	err = b.setupRSP(ctx, step)
 	if err != nil {
 		res := cmdOutput(ctx, cmdOutputResultFAILED, "rsp", step.cmd, step.def.Binding("command"), step.def.RuleName(), err)
-		step.cmd.SetOutputResult(b.logOutput(ctx, res, step.cmd.Console))
+		step.cmd.SetOutputResult(b.logOutput(res, step.cmd.Console))
 		return fmt.Errorf("failed to setup rsp: %s: %w", step, err)
 	}
 	defer func() {
@@ -142,7 +142,7 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 	// expand inputs to get full action inputs unless deps=gcc,msvc
 	depsExpandInputs(ctx, b, step)
 
-	runCmd := b.runStrategy(ctx, step)
+	runCmd := b.runStrategy(step)
 	err = runCmd(ctx, step)
 	log.Infof("done err=%v", err)
 	if err != nil {
@@ -158,20 +158,20 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 			// platform container image are not available
 			// on RBE worker.
 			res := cmdOutput(ctx, cmdOutputResultFAILED, "badContainer", step.cmd, step.def.Binding("command"), step.def.RuleName(), err)
-			step.cmd.SetOutputResult(b.logOutput(ctx, res, step.cmd.Console))
+			step.cmd.SetOutputResult(b.logOutput(res, step.cmd.Console))
 		default:
 			msgs := cmdOutput(ctx, cmdOutputResultFAILED, "", step.cmd, step.def.Binding("command"), step.def.RuleName(), err)
-			step.cmd.SetOutputResult(b.logOutput(ctx, msgs, step.cmd.Console))
+			step.cmd.SetOutputResult(b.logOutput(msgs, step.cmd.Console))
 		}
 		return StepError{
-			Target: b.path.MaybeToWD(ctx, step.cmd.Outputs[0]),
+			Target: b.path.MaybeToWD(step.cmd.Outputs[0]),
 			Cause:  err,
 		}
 	}
 
 	res := cmdOutput(ctx, cmdOutputResultSUCCESS, "", step.cmd, step.def.Binding("command"), step.def.RuleName(), nil)
 	if res != nil {
-		step.cmd.SetOutputResult(b.logOutput(ctx, res, step.cmd.Console))
+		step.cmd.SetOutputResult(b.logOutput(res, step.cmd.Console))
 		if experiments.Enabled("fail-on-stdouterr", "step %s emit stdout/stderr", step) {
 			return fmt.Errorf("%s emit stdout/stderr", step)
 		}
@@ -208,7 +208,7 @@ func (b *Builder) handleStep(ctx context.Context, step *Step) (bool, error) {
 	return exited, nil
 }
 
-func (b *Builder) outputFailureSummary(ctx context.Context, step *Step, err error) {
+func (b *Builder) outputFailureSummary(step *Step, err error) {
 	if err == nil || b.failureSummaryWriter == nil || step.cmd == nil {
 		return
 	}
@@ -237,7 +237,7 @@ func (b *Builder) outputFailureSummary(ctx context.Context, step *Step, err erro
 	}
 }
 
-func (b *Builder) outputFailedCommands(ctx context.Context, step *Step, err error) {
+func (b *Builder) outputFailedCommands(step *Step, err error) {
 	if err == nil || b.failedCommandsWriter == nil || step.cmd == nil {
 		return
 	}

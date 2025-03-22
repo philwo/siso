@@ -6,7 +6,6 @@ package ninjautil
 
 import (
 	"bytes"
-	"context"
 	"hash/maphash"
 	"sync/atomic"
 
@@ -103,7 +102,7 @@ func (nm *nodeMap) lookup(key string) (*Node, bool) {
 }
 
 // freeze freezes bigMap as []*Node, and assign sequence id in *Node.
-func (nm *nodeMap) freeze(ctx context.Context) []*Node {
+func (nm *nodeMap) freeze() []*Node {
 	nodes := make([]*Node, 0, nm.n.Load()+1)
 	nodes = append(nodes, nil) // 0: invalid target.
 	id := 1

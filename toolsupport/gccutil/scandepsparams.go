@@ -5,7 +5,6 @@
 package gccutil
 
 import (
-	"context"
 	"path/filepath"
 	"strings"
 )
@@ -38,7 +37,7 @@ type ScanDepsParams struct {
 // It only parses major command line flags used in chromium.
 // full set of command line flags for include dirs can be found in
 // https://clang.llvm.org/docs/ClangCommandLineReference.html#include-path-management
-func ExtractScanDepsParams(ctx context.Context, args, env []string) ScanDepsParams {
+func ExtractScanDepsParams(args, env []string) ScanDepsParams {
 	res := ScanDepsParams{
 		Defines: make(map[string]string),
 	}

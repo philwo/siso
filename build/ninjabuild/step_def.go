@@ -93,7 +93,7 @@ func (er *edgeRule) ensure(ctx context.Context, globals *globals) (gotRule bool,
 		return false, StepRule{}, false
 	}
 	er.ruleChecked = true
-	rule, pure = globals.stepConfig.Lookup(ctx, globals.path, er.edge)
+	rule, pure = globals.stepConfig.Lookup(globals.path, er.edge)
 	if !pure && er.edge.Binding("solibs") == "" {
 		// remove edgeRule for all outputs of the edge from edgeRules
 		// for non-pure and no solibs step.
@@ -109,7 +109,7 @@ func (er *edgeRule) ensure(ctx context.Context, globals *globals) (gotRule bool,
 
 var randReader = bufio.NewReader(rand.Reader)
 
-func (g *Graph) newStepDef(ctx context.Context, edge *ninjautil.Edge, next build.StepDef) *StepDef {
+func (g *Graph) newStepDef(edge *ninjautil.Edge, next build.StepDef) *StepDef {
 	id := uuid.Must(uuid.NewRandomFromReader(randReader)).String()
 	stepDef := &StepDef{
 		id:      id,
@@ -149,14 +149,14 @@ func (s *StepDef) EnsureRule(ctx context.Context) {
 	er := s.globals.edgeRules[outputs[0].ID()].get()
 	if er == nil {
 		// *edgeRule was removed by er.ensure by other output of the edge?
-		outPath := s.globals.targetPath(ctx, outputs[0])
+		outPath := s.globals.targetPath(outputs[0])
 		log.Warnf("edgeRule not found for %s: pure=%t", outPath, s.pure)
 		return
 	}
 	var gotRule bool
 	gotRule, s.rule, s.pure = er.ensure(ctx, s.globals)
 	if !gotRule {
-		s.rule, s.pure = s.globals.stepConfig.Lookup(ctx, s.globals.path, s.edge)
+		s.rule, s.pure = s.globals.stepConfig.Lookup(s.globals.path, s.edge)
 		log.Debugf("rule:%t", s.pure)
 	}
 }
@@ -315,7 +315,7 @@ func (s *StepDef) Depfile(ctx context.Context) string {
 	if depfile == "" {
 		return ""
 	}
-	return s.globals.path.MaybeFromWD(ctx, depfile)
+	return s.globals.path.MaybeFromWD(depfile)
 }
 
 // Rspfile returns exec-root relative rspfile path or empty if not set.
@@ -324,7 +324,7 @@ func (s *StepDef) Rspfile(ctx context.Context) string {
 	if rspfile == "" {
 		return ""
 	}
-	return s.globals.path.MaybeFromWD(ctx, rspfile)
+	return s.globals.path.MaybeFromWD(rspfile)
 }
 
 func edgeSolibs(edge *ninjautil.Edge) []string {
@@ -349,7 +349,7 @@ func (s *StepDef) Inputs(ctx context.Context) []string {
 	var targets []string
 	globals := s.globals
 	for _, in := range s.edge.Inputs() {
-		p := globals.targetPath(ctx, in)
+		p := globals.targetPath(in)
 		if seen[p] {
 			continue
 		}
@@ -360,7 +360,7 @@ func (s *StepDef) Inputs(ctx context.Context) []string {
 		if s.rule.Debug {
 			log.Infof("solib %s", p)
 		}
-		p := globals.path.MaybeFromWD(ctx, p)
+		p := globals.path.MaybeFromWD(p)
 		if seen[p] {
 			continue
 		}
@@ -381,7 +381,7 @@ func (s *StepDef) TriggerInputs(ctx context.Context) []string {
 	var targets []string
 	globals := s.globals
 	for _, in := range s.edge.TriggerInputs() {
-		p := globals.targetPath(ctx, in)
+		p := globals.targetPath(in)
 		if seen[p] {
 			continue
 		}
@@ -422,7 +422,7 @@ func (s DepsLogState) String() string {
 
 // CheckDepsLogState checks deps log state by its output file.
 func CheckDepsLogState(ctx context.Context, hashFS *hashfs.HashFS, bpath *build.Path, target string, depsTime time.Time) (DepsLogState, string) {
-	fi, err := hashFS.Stat(ctx, bpath.ExecRoot, bpath.MaybeFromWD(ctx, target))
+	fi, err := hashFS.Stat(ctx, bpath.ExecRoot, bpath.MaybeFromWD(target))
 	if err != nil {
 		return DepsLogStale, fmt.Sprintf("not found deps output %q: %v", target, err)
 	}
@@ -445,7 +445,7 @@ func depInputs(ctx context.Context, s *StepDef) (func(yield func(string) bool), 
 		}
 		out := outputs[0].Path()
 		var depsTime time.Time
-		deps, depsTime, err = s.globals.depsLog.Get(ctx, out)
+		deps, depsTime, err = s.globals.depsLog.Get(out)
 		if err != nil {
 			return nil, fmt.Errorf("%w: failed to lookup deps log %s: %w", build.ErrMissingDeps, out, err)
 		}
@@ -466,19 +466,19 @@ func depInputs(ctx context.Context, s *StepDef) (func(yield func(string) bool), 
 		if depfile == "" {
 			return func(yield func(string) bool) {}, nil
 		}
-		df := s.globals.path.MaybeFromWD(ctx, depfile)
+		df := s.globals.path.MaybeFromWD(depfile)
 		if s.edge.Binding("generator") != "" {
 			// e.g. rule gn.
 			// generator runs locally, so believe a local file
 			// rather than a file in hashfs.
-			s.globals.hashFS.Forget(ctx, s.globals.path.ExecRoot, []string{df})
+			s.globals.hashFS.Forget(s.globals.path.ExecRoot, []string{df})
 		}
 		_, err := s.globals.hashFS.Stat(ctx, s.globals.path.ExecRoot, df)
 		if err != nil {
 			return nil, fmt.Errorf("%w: no depfile %s: %w", build.ErrMissingDeps, depfile, err)
 		}
 		fsys := s.globals.hashFS.FileSystem(ctx, s.globals.path.ExecRoot)
-		deps, err = makeutil.ParseDepsFile(ctx, fsys, df)
+		deps, err = makeutil.ParseDepsFile(fsys, df)
 		if err != nil {
 			return nil, fmt.Errorf("%w: failed to load depfile %s: %w", build.ErrMissingDeps, df, err)
 		}
@@ -486,7 +486,7 @@ func depInputs(ctx context.Context, s *StepDef) (func(yield func(string) bool), 
 	}
 	return func(yield func(string) bool) {
 		for _, in := range deps {
-			rin := s.globals.path.MaybeFromWD(ctx, in)
+			rin := s.globals.path.MaybeFromWD(in)
 			if !yield(rin) {
 				return
 			}
@@ -498,7 +498,7 @@ func depInputs(ctx context.Context, s *StepDef) (func(yield func(string) bool), 
 func (s *StepDef) ToolInputs(ctx context.Context) []string {
 	var inputs []string
 	for _, in := range s.rule.Inputs {
-		inputs = append(inputs, fromConfigPath(ctx, s.globals.path, in))
+		inputs = append(inputs, fromConfigPath(s.globals.path, in))
 	}
 	return s.globals.stepConfig.ExpandInputs(ctx, s.globals.path, s.globals.hashFS, inputs)
 }
@@ -621,7 +621,7 @@ func (s StepDef) ExpandedCaseSensitives(ctx context.Context, inputs []string) []
 }
 
 // expandLabels expands labels in given inputs.
-func (s *StepDef) expandLabels(ctx context.Context, inputs []string) []string {
+func (s *StepDef) expandLabels(inputs []string) []string {
 	if s.rule.Debug {
 		log.Infof("expands labels")
 	}
@@ -659,7 +659,7 @@ func (s *StepDef) expandLabels(ctx context.Context, inputs []string) []string {
 			log.Infof("expand %s", cpath)
 		}
 		for _, dep := range deps {
-			dep := fromConfigPath(ctx, p, dep)
+			dep := fromConfigPath(p, dep)
 			inputs = append(inputs, dep)
 		}
 	}
@@ -684,7 +684,7 @@ func (s *StepDef) ExpandedInputs(ctx context.Context) []string {
 	var inputs []string
 	globals := s.globals
 	for _, in := range s.edge.Inputs() {
-		p := globals.targetPath(ctx, in)
+		p := globals.targetPath(in)
 		if seen[p] {
 			continue
 		}
@@ -703,7 +703,7 @@ func (s *StepDef) ExpandedInputs(ctx context.Context) []string {
 		inputs = append(inputs, p)
 	}
 	for _, p := range edgeSolibs(s.edge) {
-		p = globals.path.MaybeFromWD(ctx, p)
+		p = globals.path.MaybeFromWD(p)
 		if seen[p] {
 			continue
 		}
@@ -732,7 +732,7 @@ func (s *StepDef) ExpandedInputs(ctx context.Context) []string {
 		for k, v := range seen {
 			iseen[k] = v
 		}
-		filter := s.rule.IndirectInputs.filter(ctx)
+		filter := s.rule.IndirectInputs.filter()
 		for _, in := range s.edge.Inputs() {
 			edge, ok := in.InEdge()
 			if !ok {
@@ -745,7 +745,7 @@ func (s *StepDef) ExpandedInputs(ctx context.Context) []string {
 	for _, inEdge := range phonyEdges {
 		// replace phony inputs here before ExpandInput,
 		// since ExpandInputs removes non-exist inputs.
-		p := globals.targetPath(ctx, inEdge.Outputs()[0])
+		p := globals.targetPath(inEdge.Outputs()[0])
 		inputs = append(inputs, replacePhony(ctx, globals, seen, p, inEdge, s.rule.Debug)...)
 	}
 
@@ -753,7 +753,7 @@ func (s *StepDef) ExpandedInputs(ctx context.Context) []string {
 	var newInputs []string
 	changed := false
 	for i := 0; i < len(inputs); i++ {
-		inpath := globals.path.MaybeToWD(ctx, inputs[i])
+		inpath := globals.path.MaybeToWD(inputs[i])
 		innode, ok := globals.nstate.LookupNodeByPath(inpath)
 		if !ok {
 			newInputs = append(newInputs, inputs[i])
@@ -771,7 +771,7 @@ func (s *StepDef) ExpandedInputs(ctx context.Context) []string {
 		}
 		var ins []string
 		for _, in := range er.edge.Inputs() {
-			p := globals.targetPath(ctx, in)
+			p := globals.targetPath(in)
 			if seen[p] {
 				continue
 			}
@@ -793,7 +793,7 @@ func (s *StepDef) ExpandedInputs(ctx context.Context) []string {
 		newInputs = append(newInputs, inputs[i])
 		var solibsIns []string
 		for _, in := range edgeSolibs(er.edge) {
-			in = globals.path.MaybeFromWD(ctx, in)
+			in = globals.path.MaybeFromWD(in)
 			if seen[in] {
 				continue
 			}
@@ -813,12 +813,12 @@ func (s *StepDef) ExpandedInputs(ctx context.Context) []string {
 		}
 		// when accumulate expands inputs/outputs.
 		edgeOuts := er.edge.Outputs()
-		if inputs[i] == globals.targetPath(ctx, edgeOuts[0]) {
+		if inputs[i] == globals.targetPath(edgeOuts[0]) {
 			// associates additional outputs to main output.
 			// so step depends on the main output of this step can access
 			// additional outputs of this step (in local run).
 			for _, out := range edgeOuts[1:] {
-				o := globals.targetPath(ctx, out)
+				o := globals.targetPath(out)
 				if seen[o] {
 					continue
 				}
@@ -848,7 +848,7 @@ func (s *StepDef) ExpandedInputs(ctx context.Context) []string {
 func replacePhony(ctx context.Context, globals *globals, seen map[string]bool, target string, edge *ninjautil.Edge, debug bool) []string {
 	var inputs []string
 	for _, in := range edge.Inputs() {
-		p := globals.targetPath(ctx, in)
+		p := globals.targetPath(in)
 		if seen[p] {
 			continue
 		}
@@ -873,7 +873,7 @@ func (s *StepDef) appendIndirectInputs(ctx context.Context, filter func(context.
 	if !edge.IsPhony() {
 		// allow to use outputs of the edge.
 		for _, out := range edge.Outputs() {
-			p := globals.targetPath(ctx, out)
+			p := globals.targetPath(out)
 			if seen[p] {
 				continue
 			}
@@ -892,7 +892,7 @@ func (s *StepDef) appendIndirectInputs(ctx context.Context, filter func(context.
 	}
 	var nextEdges []*ninjautil.Edge
 	for _, in := range edge.Inputs() {
-		p := globals.targetPath(ctx, in)
+		p := globals.targetPath(in)
 		if seen[p] {
 			continue
 		}
@@ -938,12 +938,12 @@ func (s *StepDef) CheckInputDeps(ctx context.Context, depInputs []string) (bool,
 	depInputs = depInputs[:0]
 	bpath := s.globals.path
 	for in := range deps {
-		depInputs = append(depInputs, bpath.MaybeToWD(ctx, in))
+		depInputs = append(depInputs, bpath.MaybeToWD(in))
 	}
 	sort.Strings(depInputs)
 	var outputPath string
 	if len(s.edge.Outputs()) > 0 {
-		out := bpath.MaybeFromWD(ctx, s.edge.Outputs()[0].Path())
+		out := bpath.MaybeFromWD(s.edge.Outputs()[0].Path())
 		outputPath = toConfigPath(bpath, out)
 	}
 	v, ok := s.globals.stepConfig.BadDeps[outputPath]
@@ -960,7 +960,7 @@ func checkInputDep(ctx context.Context, globals *globals, edge *ninjautil.Edge, 
 	inputs := edge.Inputs()
 	var edges []*ninjautil.Edge
 	for _, in := range inputs {
-		p := globals.targetPath(ctx, in)
+		p := globals.targetPath(in)
 		if deps[p] {
 			delete(deps, p)
 			if len(deps) == 0 {
@@ -979,7 +979,7 @@ func checkInputDep(ctx context.Context, globals *globals, edge *ninjautil.Edge, 
 	}
 	if checkOutputs {
 		for _, out := range edge.Outputs() {
-			p := globals.targetPath(ctx, out)
+			p := globals.targetPath(out)
 			if deps[p] {
 				delete(deps, p)
 				if len(deps) == 0 {
@@ -1016,7 +1016,7 @@ func (s *StepDef) Handle(ctx context.Context, cmd *execute.Cmd) error {
 	}
 	// handler may use labels in inputs, so expand here.
 	// TODO(ukai): always need to expand labels here?
-	cmd.Inputs = s.expandLabels(ctx, cmd.Inputs)
+	cmd.Inputs = s.expandLabels(cmd.Inputs)
 
 	// Add executables to REProxyConfig.ToolchainInputs to send Linux executables from Windows.
 	if runtime.GOOS == "windows" && cmd.REProxyConfig != nil {
@@ -1037,7 +1037,7 @@ func (s *StepDef) Outputs(ctx context.Context) []string {
 	var targets []string
 	globals := s.globals
 	for _, out := range s.edge.Outputs() {
-		p := globals.targetPath(ctx, out)
+		p := globals.targetPath(out)
 		if seen[p] {
 			continue
 		}
@@ -1072,7 +1072,7 @@ func (s *StepDef) RecordDeps(ctx context.Context, output string, t time.Time, de
 		// no need to record deps
 		return false, nil
 	}
-	return s.globals.depsLog.Record(ctx, output, t, deps)
+	return s.globals.depsLog.Record(output, t, deps)
 }
 
 // RuleFix shows suggested fix for the rule.

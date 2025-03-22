@@ -63,7 +63,7 @@ func New(ctx context.Context, fname string, flags map[string]string, repos map[s
 	loader := &repoLoader{
 		ctx:         ctx,
 		repos:       repos,
-		predeclared: builtinModule(ctx),
+		predeclared: builtinModule(),
 	}
 	log.Infof("enable starlark recursion")
 	resolve.AllowRecursion = true
@@ -181,7 +181,7 @@ func (cfg *Config) Init(ctx context.Context, hashFS *hashfs.HashFS, buildPath *b
 	if err != nil {
 		return "", fmt.Errorf("no filegroups in %v: %w", ret, err)
 	}
-	cfg.filegroups, err = parseFilegroups(ctx, fg)
+	cfg.filegroups, err = parseFilegroups(fg)
 	if err != nil {
 		return "", fmt.Errorf("bad filegroups: %w", err)
 	}
@@ -198,7 +198,7 @@ func (cfg *Config) Init(ctx context.Context, hashFS *hashfs.HashFS, buildPath *b
 }
 
 // Func returns a function for the handler name.
-func (cfg *Config) Func(ctx context.Context, handler string) (starlark.Value, bool) {
+func (cfg *Config) Func(handler string) (starlark.Value, bool) {
 	if cfg.handlers == nil {
 		log.Warnf("no handlers")
 		return starlark.None, false
@@ -212,7 +212,7 @@ func (cfg *Config) Func(ctx context.Context, handler string) (starlark.Value, bo
 
 // Handle runs handler for the cmd.
 func (cfg *Config) Handle(ctx context.Context, handler string, bpath *build.Path, cmd *execute.Cmd, expandedInputs func() []string) (err error) {
-	fun, ok := cfg.Func(ctx, handler)
+	fun, ok := cfg.Func(handler)
 	if !ok {
 		return fmt.Errorf("no handler:%q for %s", handler, cmd)
 	}
@@ -238,7 +238,7 @@ func (cfg *Config) Handle(ctx context.Context, handler string, bpath *build.Path
 	})
 	log.Debugf("hctx: %v", hctx)
 
-	hcmd, err := packCmd(ctx, cmd, expandedInputs)
+	hcmd, err := packCmd(cmd, expandedInputs)
 	if err != nil {
 		return fmt.Errorf("failed to pack cmd: %w", err)
 	}

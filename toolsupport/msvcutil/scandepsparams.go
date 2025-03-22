@@ -5,7 +5,6 @@
 package msvcutil
 
 import (
-	"context"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -41,7 +40,7 @@ type ScanDepsParams struct {
 // full set of command line flags for include dirs can be found in
 // https://learn.microsoft.com/en-us/cpp/build/reference/compiler-options-listed-by-category?view=msvc-170
 // https://clang.llvm.org/docs/ClangCommandLineReference.html#include-path-management
-func ExtractScanDepsParams(ctx context.Context, args, env []string) ScanDepsParams {
+func ExtractScanDepsParams(args, env []string) ScanDepsParams {
 	res := ScanDepsParams{
 		Defines: make(map[string]string),
 	}

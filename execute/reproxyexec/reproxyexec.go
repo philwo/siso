@@ -85,7 +85,7 @@ type REProxyExec struct {
 }
 
 // New creates new remote executor.
-func New(ctx context.Context, addr string) *REProxyExec {
+func New(addr string) *REProxyExec {
 	return &REProxyExec{
 		connAddress: addr,
 	}
@@ -157,9 +157,7 @@ func (re *REProxyExec) Run(ctx context.Context, cmd *execute.Cmd) error {
 	// Dial reproxy if no connection, ensure same address is used for subsequent calls.
 	// Only one dial is allowed, if it fails all subsequent calls will fail fast.
 	re.connOnce.Do(func() {
-		ctx, cancel := context.WithTimeout(ctx, dialTimeout)
-		defer cancel()
-		re.conn, re.connErr = dialContext(ctx, re.connAddress)
+		re.conn, re.connErr = dialContext(re.connAddress)
 	})
 	if re.connErr != nil {
 		return fmt.Errorf("fail to dial %s: %w", re.connAddress, re.connErr)

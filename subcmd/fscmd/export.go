@@ -12,8 +12,6 @@ import (
 	"github.com/maruel/subcommands"
 	"google.golang.org/protobuf/encoding/prototext"
 
-	"go.chromium.org/luci/common/cli"
-
 	"go.chromium.org/infra/build/siso/hashfs"
 )
 
@@ -44,15 +42,13 @@ func (c *exportRun) init() {
 }
 
 func (c *exportRun) Run(a subcommands.Application, args []string, env subcommands.Env) int {
-	ctx := cli.GetContext(a, c, env)
-
 	err := os.Chdir(c.dir)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to chdir %s: %v\n", c.dir, err)
 		return 1
 	}
 
-	st, err := hashfs.Load(ctx, hashfs.Option{StateFile: c.stateFile})
+	st, err := hashfs.Load(hashfs.Option{StateFile: c.stateFile})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to load %s: %v\n", c.stateFile, err)
 		return 1

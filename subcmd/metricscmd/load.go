@@ -5,7 +5,6 @@
 package metricscmd
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -14,7 +13,7 @@ import (
 	"go.chromium.org/infra/build/siso/build"
 )
 
-func loadMetrics(ctx context.Context, fname string) ([]build.StepMetric, error) {
+func loadMetrics(fname string) ([]build.StepMetric, error) {
 	f, err := os.Open(fname)
 	if err != nil {
 		return nil, err

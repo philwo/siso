@@ -5,7 +5,6 @@
 package metricscmd
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -15,8 +14,6 @@ import (
 	"sort"
 
 	"github.com/maruel/subcommands"
-
-	"go.chromium.org/luci/common/cli"
 
 	"go.chromium.org/infra/build/siso/build"
 )
@@ -88,8 +85,7 @@ func (c *cmpRun) init() {
 }
 
 func (c *cmpRun) Run(a subcommands.Application, args []string, env subcommands.Env) int {
-	ctx := cli.GetContext(a, c, env)
-	err := c.run(ctx)
+	err := c.run()
 	if err != nil {
 		switch {
 		case errors.Is(err, flag.ErrHelp):
@@ -102,17 +98,17 @@ func (c *cmpRun) Run(a subcommands.Application, args []string, env subcommands.E
 	return 0
 }
 
-func (c *cmpRun) run(ctx context.Context) error {
+func (c *cmpRun) run() error {
 	output, ok := formats[c.format]
 	if !ok {
 		return fmt.Errorf("unknown format %q: known formats %q: %w", c.format, formatKeys, flag.ErrHelp)
 	}
 
-	x, err := loadMetrics(ctx, filepath.Join(c.dir, c.inputA))
+	x, err := loadMetrics(filepath.Join(c.dir, c.inputA))
 	if err != nil {
 		return err
 	}
-	y, err := loadMetrics(ctx, filepath.Join(c.dir, c.inputB))
+	y, err := loadMetrics(filepath.Join(c.dir, c.inputB))
 	if err != nil {
 		return err
 	}

@@ -96,7 +96,7 @@ func (c *run) collect(ctx context.Context) (map[string]digest.Data, error) {
 	if err != nil {
 		return nil, err
 	}
-	osfs := osfs.New(ctx, "fs", c.osfsopt)
+	osfs := osfs.New("fs", c.osfsopt)
 
 	for _, pat := range []string{"siso*", ".siso*", "args.gn", "gn_logs.txt"} {
 		matches, err := fs.Glob(fsys, pat)

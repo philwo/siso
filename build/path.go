@@ -5,7 +5,6 @@
 package build
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -51,7 +50,7 @@ func (p *Path) Intern(path string) string {
 
 // MaybeFromWD attempts to convert cwd relative to exec root relative.
 // It logs an error and returns the path as-is if this fails.
-func (p *Path) MaybeFromWD(ctx context.Context, path string) string {
+func (p *Path) MaybeFromWD(path string) string {
 	s, err := p.FromWD(path)
 	if err != nil {
 		log.Warnf("Failed to get rel %s, %s: %v", p.ExecRoot, path, err)
@@ -95,7 +94,7 @@ func (p *Path) FromWD(path string) (string, error) {
 // slash-separated.
 // It keeps absolute path as is.
 // It logs an error and returns the path as-is if this fails.
-func (p *Path) MaybeToWD(ctx context.Context, path string) string {
+func (p *Path) MaybeToWD(path string) string {
 	if path == "" {
 		return ""
 	}

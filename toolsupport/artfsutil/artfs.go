@@ -26,7 +26,7 @@ type Client struct {
 }
 
 // New creates new artfs client mounted at dir.
-func New(ctx context.Context, dir, endpoint string) (*Client, error) {
+func New(dir, endpoint string) (*Client, error) {
 	dir, err := filepath.Abs(dir)
 	if err != nil {
 		return nil, err

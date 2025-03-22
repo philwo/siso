@@ -7,7 +7,6 @@ package makeutil
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"io/fs"
 	"strings"
@@ -16,7 +15,7 @@ import (
 )
 
 // ParseDepsFile parses *.d file in fname on fsys.
-func ParseDepsFile(ctx context.Context, fsys fs.FS, fname string) ([]string, error) {
+func ParseDepsFile(fsys fs.FS, fname string) ([]string, error) {
 	if fname == "" {
 		return nil, nil
 	}

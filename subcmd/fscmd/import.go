@@ -13,8 +13,6 @@ import (
 	"github.com/maruel/subcommands"
 	"google.golang.org/protobuf/encoding/prototext"
 
-	"go.chromium.org/luci/common/cli"
-
 	"go.chromium.org/infra/build/siso/hashfs"
 	pb "go.chromium.org/infra/build/siso/hashfs/proto"
 )
@@ -45,8 +43,6 @@ func (c *importRun) init() {
 }
 
 func (c *importRun) Run(a subcommands.Application, args []string, env subcommands.Env) int {
-	ctx := cli.GetContext(a, c, env)
-
 	err := os.Chdir(c.dir)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to chdir %s: %v\n", c.dir, err)
@@ -74,7 +70,7 @@ func (c *importRun) Run(a subcommands.Application, args []string, env subcommand
 		return 1
 	}
 	os.Remove(".siso_last_targets")
-	err = hashfs.Save(ctx, st, hashfs.Option{StateFile: stateFile})
+	err = hashfs.Save(st, hashfs.Option{StateFile: stateFile})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to save %s: %v\n", stateFile, err)
 		return 1

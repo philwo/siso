@@ -7,18 +7,17 @@
 package osfs
 
 import (
-	"context"
 	"time"
 
 	"golang.org/x/sys/unix"
 )
 
 // Clonefile copies src to dst by using cloneline.
-func (fs *OSFS) Clonefile(ctx context.Context, src, dst string) error {
+func (fs *OSFS) Clonefile(src, dst string) error {
 	started := time.Now()
 	err := unix.Clonefile(src, dst, unix.CLONE_NOFOLLOW)
 	if dur := time.Since(started); dur > 1*time.Minute {
-		logSlow(ctx, dst, dur, err)
+		logSlow(dst, dur, err)
 	}
 	return err
 }

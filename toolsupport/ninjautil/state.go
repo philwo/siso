@@ -5,7 +5,6 @@
 package ninjautil
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -218,7 +217,6 @@ func (s *State) Targets(args []string) ([]*Node, error) {
 // a direct #include for the header.
 // i.e. "foo.h^" will be equivalent with "foo.cc^"
 func (s *State) hatTarget(t string) (*Node, bool) {
-	ctx := context.Background() // TODO: take from caller.
 	t = strings.TrimSuffix(t, "^")
 	n, ok := s.LookupNodeByPath(t)
 	if ok {
@@ -254,7 +252,7 @@ func (s *State) hatTarget(t string) (*Node, bool) {
 		if err != nil {
 			return nil, false
 		}
-		includes, _, err := scandeps.CPPScan(ctx, fname, buf)
+		includes, _, err := scandeps.CPPScan(fname, buf)
 		if err != nil {
 			return nil, false
 		}

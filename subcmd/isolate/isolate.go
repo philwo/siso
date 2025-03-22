@@ -130,7 +130,7 @@ func (c *run) run(ctx context.Context) error {
 		cancel(errInterrupted{})
 	})()
 	started := time.Now()
-	execRoot, err := c.initWorkdirs(ctx)
+	execRoot, err := c.initWorkdirs()
 	if err != nil {
 		return err
 	}
@@ -177,7 +177,7 @@ func (c *run) run(ctx context.Context) error {
 		}
 	}()
 
-	st, err := hashfs.Load(ctx, *c.fsopt)
+	st, err := hashfs.Load(*c.fsopt)
 	if err != nil {
 		return fmt.Errorf("failed to load %s: %w", c.fsopt.StateFile, err)
 	}
@@ -235,7 +235,7 @@ func (c *run) run(ctx context.Context) error {
 	return nil
 }
 
-func (c *run) initWorkdirs(ctx context.Context) (string, error) {
+func (c *run) initWorkdirs() (string, error) {
 	// don't use $PWD for current directory
 	// to avoid symlink issue. b/286779149
 	pwd := os.Getenv("PWD")

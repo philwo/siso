@@ -7,14 +7,12 @@
 package reproxyexec
 
 import (
-	"context"
-
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
 // dialContext connects to the serverAddress for grpc.
-func dialContext(ctx context.Context, serverAddr string) (*grpc.ClientConn, error) {
+func dialContext(serverAddr string) (*grpc.ClientConn, error) {
 	return grpc.NewClient(
 		serverAddr,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),

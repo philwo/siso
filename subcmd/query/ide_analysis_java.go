@@ -192,7 +192,7 @@ func (a *ideAnalyzer) appendIndirectJavaBuildableUnits(ctx context.Context, edge
 			path := out.Path()
 			switch filepath.Ext(path) {
 			case ".jar":
-				buf, err := a.hashFS.ReadFile(ctx, a.path.ExecRoot, a.path.MaybeFromWD(ctx, path))
+				buf, err := a.hashFS.ReadFile(ctx, a.path.ExecRoot, a.path.MaybeFromWD(path))
 				if err != nil {
 					log.Warnf("not exist generated file %q: %v", path, err)
 					continue
@@ -211,7 +211,7 @@ func (a *ideAnalyzer) appendIndirectJavaBuildableUnits(ctx context.Context, edge
 			path := out.Path()
 			switch filepath.Ext(path) {
 			case ".java", ".jar", ".class":
-				buf, err := a.hashFS.ReadFile(ctx, a.path.ExecRoot, a.path.MaybeFromWD(ctx, path))
+				buf, err := a.hashFS.ReadFile(ctx, a.path.ExecRoot, a.path.MaybeFromWD(path))
 				if err != nil {
 					log.Warnf("not exist generated file %q: %v", path, err)
 					continue
@@ -223,7 +223,7 @@ func (a *ideAnalyzer) appendIndirectJavaBuildableUnits(ctx context.Context, edge
 			}
 		}
 	}
-	buildableUnit := a.buildableUnit(ctx, edge, pb.Language_LANGUAGE_JAVA, args, generatedFiles, depIDs)
+	buildableUnit := a.buildableUnit(edge, pb.Language_LANGUAGE_JAVA, args, generatedFiles, depIDs)
 	buildableUnits[buildableUnit.Id] = buildableUnit
 
 	return []string{buildableUnit.Id}, nil

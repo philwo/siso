@@ -5,15 +5,12 @@
 package osfs
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"io/fs"
 	"os"
 
 	"github.com/maruel/subcommands"
-
-	"go.chromium.org/luci/common/cli"
 )
 
 func HelperCmd() *subcommands.Command {
@@ -49,8 +46,7 @@ func (c *run) init() {
 }
 
 func (c *run) Run(a subcommands.Application, args []string, env subcommands.Env) int {
-	ctx := cli.GetContext(a, c, env)
-	err := c.run(ctx)
+	err := c.run()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		return 1
@@ -58,7 +54,7 @@ func (c *run) Run(a subcommands.Application, args []string, env subcommands.Env)
 	return 0
 }
 
-func (c *run) run(ctx context.Context) error {
+func (c *run) run() error {
 	if c.mode&0700 == 0 {
 		return fmt.Errorf("invalid mode 0%o: %s", c.mode, fs.FileMode(c.mode))
 	}

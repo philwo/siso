@@ -7,7 +7,6 @@
 package ninja
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/charmbracelet/log"
@@ -17,14 +16,14 @@ import (
 	"go.chromium.org/infra/build/siso/ui"
 )
 
-func (c *ninjaCmdRun) checkResourceLimits(ctx context.Context) {
+func (c *ninjaCmdRun) checkResourceLimits() {
 	var lim unix.Rlimit
 	err := unix.Getrlimit(unix.RLIMIT_NOFILE, &lim)
 	if err != nil {
 		log.Warnf("failed to get rlimit: %v", err)
 		return
 	}
-	limits := build.DefaultLimits(ctx)
+	limits := build.DefaultLimits()
 	nfile := uint64(limits.Local) * 8 // 8 fds per proc?
 	switch {
 	case c.offline:

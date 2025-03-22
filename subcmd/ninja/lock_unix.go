@@ -7,7 +7,6 @@
 package ninja
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -20,7 +19,7 @@ type lockFile struct {
 	f *os.File
 }
 
-func newLockFile(ctx context.Context, fname string) (*lockFile, error) {
+func newLockFile(fname string) (*lockFile, error) {
 	f, err := os.OpenFile(fname, os.O_RDWR|os.O_CREATE, 0644)
 	if err != nil {
 		return nil, err

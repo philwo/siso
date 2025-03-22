@@ -25,7 +25,7 @@ type Importer struct{}
 func (Importer) Import(ctx context.Context, dir string, ds *digest.Store) (digest.Digest, error) {
 	var entries []merkletree.Entry
 	// TODO: pass osfs from subcommand?
-	osfs := osfs.New(ctx, "fs", osfs.Option{})
+	osfs := osfs.New("fs", osfs.Option{})
 	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err

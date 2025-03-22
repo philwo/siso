@@ -31,7 +31,7 @@ type stdoutURLSource struct {
 	done    chan bool
 }
 
-func newStdoutURLSource(ctx context.Context, stdoutURL string) (*stdoutURLSource, error) {
+func newStdoutURLSource(stdoutURL string) (*stdoutURLSource, error) {
 	var authorization string
 	if strings.HasPrefix(stdoutURL, "https://logs.chromium.org/logs/") {
 		if !strings.HasSuffix(stdoutURL, "?format=raw") {
@@ -62,7 +62,7 @@ func newStdoutURLSource(ctx context.Context, stdoutURL string) (*stdoutURLSource
 		started:   time.Now(),
 		done:      make(chan bool),
 	}
-	go src.run(ctx, resp.Body)
+	go src.run(resp.Body)
 	return src, nil
 }
 
@@ -76,7 +76,7 @@ func (s *stdoutURLSource) text() string {
 	return strings.Join(s.lines, "\n")
 }
 
-func (s *stdoutURLSource) run(ctx context.Context, body io.ReadCloser) {
+func (s *stdoutURLSource) run(body io.ReadCloser) {
 	defer func() {
 		err := body.Close()
 		if err != nil {
