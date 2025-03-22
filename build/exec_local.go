@@ -135,7 +135,7 @@ func (b *Builder) prepareLocalInputs(ctx context.Context, step *Step) error {
 	err := b.hashFS.Flush(ctx, step.cmd.ExecRoot, inputs)
 	log.Infof("prepare-local-inputs %d %s: %v", len(inputs), time.Since(start), err)
 	// now, all inputs are expected to be on disk.
-	// for reproxy and local, no need to scan deps.
+	// for local, no need to scan deps.
 	// but need to remove missing inputs from cmd.Inputs
 	// because we'll record header inputs for deps=msvc in deps log.
 	// TODO: b/322712783 - minimize local disk check.

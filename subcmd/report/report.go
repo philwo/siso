@@ -135,32 +135,7 @@ func (c *run) collect(ctx context.Context) (map[string]digest.Data, error) {
 		}
 	}
 
-	// no need to collect .reproxy_tmp/racing
-	// .reproxy_tmp/cache may exist, but must not collect reproxy.creds.
-	_, err = os.Stat(".reproxy_tmp/logs")
-	if err != nil {
-		log.Infof("no .reproxy_tmp/logs: %v", err)
-		return report, nil
-	}
-	err = fs.WalkDir(fsys, ".reproxy_tmp/logs", func(fname string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			return nil
-		}
-		ui.Default.PrintLines(fmt.Sprintf("reading %s", fname))
-		src := osfs.FileSource(fname, -1)
-		data, err := digest.FromLocalFile(ctx, src)
-		if err != nil {
-			log.Errorf("Error to calculate digest %s: %v", fname, err)
-			return nil
-		}
-		log.Infof("add %s %s", fname, data.Digest())
-		report[fname] = data
-		return nil
-	})
-	return report, err
+	return report, nil
 }
 
 func (c *run) archive(ctx context.Context) (err error) {

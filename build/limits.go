@@ -29,10 +29,6 @@ const (
 	// limit # of concurrent steps at most 80 times of num cpus
 	// to protect from out of memory, or DDoS to RE API.
 	remoteLimitFactor = 80
-
-	// max limit # of concurrent steps for reproxy
-	// to protect from thread exaustion b/333669451
-	reproxyLimitCap = 5000
 )
 
 // Limits specifies the resource limits used in siso build process.
@@ -128,14 +124,7 @@ func DefaultLimits() Limits {
 }
 
 func limitForStep(numCPU int) int {
-	limit := stepLimitFactor * numCPU
-	// limit step for reproxy to protect from thread exceeeds.
-	// reclient_helper.py sets the RBE_server_address
-	// https://chromium.googlesource.com/chromium/tools/depot_tools.git/+/e13840bd9a04f464e3bef22afac1976fc15a96a0/reclient_helper.py#138
-	if v := os.Getenv("RBE_server_address"); v != "" {
-		return min(reproxyLimitCap*2, limit)
-	}
-	return limit
+	return stepLimitFactor * numCPU
 }
 
 func limitForRemote(numCPU int) int {
@@ -143,11 +132,6 @@ func limitForRemote(numCPU int) int {
 	// Intel Mac has bad performance with a large number of remote actions.
 	if runtime.GOOS == "darwin" && runtime.GOARCH == "amd64" {
 		return min(1000, limit)
-	}
-	// reclient_helper.py sets the RBE_server_address
-	// https://chromium.googlesource.com/chromium/tools/depot_tools.git/+/e13840bd9a04f464e3bef22afac1976fc15a96a0/reclient_helper.py#138
-	if v := os.Getenv("RBE_server_address"); v != "" {
-		return min(reproxyLimitCap, limit)
 	}
 	return limit
 }
