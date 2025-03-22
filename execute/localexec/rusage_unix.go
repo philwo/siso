@@ -10,7 +10,7 @@ import (
 	"os/exec"
 	"syscall"
 
-	durationpb "google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	epb "go.chromium.org/infra/build/siso/execute/proto"
 )
