@@ -9,17 +9,10 @@ import (
 	"fmt"
 
 	"github.com/charmbracelet/log"
-	"go.chromium.org/infra/build/siso/execute"
 	"go.chromium.org/infra/build/siso/toolsupport/makeutil"
 )
 
 type depsDepfile struct{}
-
-func (depsDepfile) DepsFastCmd(ctx context.Context, b *Builder, cmd *execute.Cmd) (*execute.Cmd, error) {
-	newCmd := &execute.Cmd{}
-	*newCmd = *cmd
-	return newCmd, nil
-}
 
 func (depsDepfile) DepsAfterRun(ctx context.Context, b *Builder, step *Step) ([]string, error) {
 	_, err := b.hashFS.Stat(ctx, b.path.ExecRoot, step.cmd.Depfile)
@@ -40,8 +33,6 @@ func (depsDepfile) DepsAfterRun(ctx context.Context, b *Builder, step *Step) ([]
 }
 
 func (depsDepfile) DepsCmd(ctx context.Context, b *Builder, step *Step) ([]string, error) {
-	// depfile can use "remote" only for fastDeps case.
-	// Otherwise, should disable "remote"
 	log.Infof("deps= depfile=%s. no pure, no remote", step.cmd.Depfile)
 	step.cmd.Pure = false
 	return step.cmd.Inputs, nil
