@@ -83,7 +83,7 @@ func (b *Builder) execLocal(ctx context.Context, step *Step) error {
 	queueTime := time.Now()
 	var dur time.Duration
 	step.setPhase(phase.wait())
-	err = sema.Do(ctx, func(ctx context.Context) error {
+	err = sema.Do(ctx, func() error {
 		step.setPhase(phase)
 		if step.cmd.Console {
 			b.progress.startConsoleCmd(step.cmd)

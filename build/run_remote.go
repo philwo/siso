@@ -57,9 +57,9 @@ func (b *Builder) runRemote(ctx context.Context, step *Step) error {
 				log.Infof("cmd cache miss: %v", err)
 			}
 		}
-		if ctx, done, err := b.fastLocalSema.TryAcquire(ctx); err == nil {
+		if done, err := b.fastLocalSema.TryAcquire(ctx); err == nil {
 			var err error
-			defer func() { done(err) }()
+			defer done()
 			log.Infof("fast local %s", step.cmd.Desc)
 			// TODO: detach remote for future cache hit.
 			err = b.execLocal(ctx, step)

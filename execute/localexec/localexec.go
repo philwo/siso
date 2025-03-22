@@ -129,7 +129,7 @@ func run(ctx context.Context, cmd *execute.Cmd) (*rpb.ActionResult, error) {
 
 	var ru *epb.Rusage
 	var err error
-	err = forkSema.Do(ctx, func(ctx context.Context) error {
+	err = forkSema.Do(ctx, func() error {
 		return c.Start()
 	})
 	if err == nil {

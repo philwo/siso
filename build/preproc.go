@@ -13,7 +13,7 @@ import (
 
 func preprocCmd(ctx context.Context, b *Builder, step *Step) error {
 	step.setPhase(stepPreproc)
-	err := b.preprocSema.Do(ctx, func(ctx context.Context) error {
+	err := b.preprocSema.Do(ctx, func() error {
 		err := depsCmd(ctx, b, step)
 		if err != nil {
 			// disable remote execution. b/289143861
