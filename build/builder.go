@@ -445,7 +445,7 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 
 loop:
 	for {
-		ctx, done, err := b.stepSema.WaitAcquire(ctx)
+		done, err := b.stepSema.WaitAcquire(ctx)
 		if err != nil {
 			cancel()
 			return err
@@ -456,11 +456,11 @@ loop:
 		select {
 		case step, ok = <-b.plan.q:
 			if !ok {
-				done(nil)
+				done()
 				break loop
 			}
 		case err := <-errch:
-			done(err)
+			done()
 			var shouldFail bool
 			if err != nil {
 				shouldFail = b.failures.shouldFail(err)
@@ -477,7 +477,7 @@ loop:
 			}
 			continue
 		case <-ctx.Done():
-			done(context.Cause(ctx))
+			done()
 			cancel()
 			b.plan.dump(ctx, b.graph)
 			return context.Cause(ctx)
@@ -511,7 +511,7 @@ loop:
 					err = fmt.Errorf("panic: %v: %s", r, loc)
 				}
 			}()
-			defer done(nil)
+			defer done()
 
 			err = b.runStep(ctx, step)
 			select {

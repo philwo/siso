@@ -141,7 +141,7 @@ func run(ctx context.Context, cmd *execute.Cmd) (*rpb.ActionResult, error) {
 		}
 		st := straceutil.New(cmd.ID, c)
 		c = st.Cmd(ctx)
-		err = forkSema.Do(ctx, func(ctx context.Context) error {
+		err = forkSema.Do(ctx, func() error {
 			return c.Start()
 		})
 		if err == nil {
@@ -157,7 +157,7 @@ func run(ctx context.Context, cmd *execute.Cmd) (*rpb.ActionResult, error) {
 		}
 		st.Close()
 	} else {
-		err = forkSema.Do(ctx, func(ctx context.Context) error {
+		err = forkSema.Do(ctx, func() error {
 			return c.Start()
 		})
 		if err == nil {

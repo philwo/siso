@@ -32,9 +32,9 @@ var errDepsLog = errors.New("failed to exec with deps log")
 func (b *Builder) runRemote(ctx context.Context, step *Step) error {
 	cacheCheck := b.cache != nil && b.reCacheEnableRead
 	if b.fastLocalSema != nil && int(b.progress.numLocal.Load()) < b.fastLocalSema.Capacity() {
-		if ctx, done, err := b.fastLocalSema.TryAcquire(ctx); err == nil {
+		if done, err := b.fastLocalSema.TryAcquire(ctx); err == nil {
 			var err error
-			defer func() { done(err) }()
+			defer done()
 			log.Infof("fast local %s", step.cmd.Desc)
 			// TODO: check cache if input age is old enough.
 			// TODO: detach remote for future cache hit.
@@ -44,7 +44,7 @@ func (b *Builder) runRemote(ctx context.Context, step *Step) error {
 		}
 	}
 	step.setPhase(stepPreproc)
-	err := b.preprocSema.Do(ctx, func(ctx context.Context) error {
+	err := b.preprocSema.Do(ctx, func() error {
 		err := depsCmd(ctx, b, step)
 		if err != nil {
 			// disable remote execution. b/289143861
