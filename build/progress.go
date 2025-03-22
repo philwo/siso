@@ -248,8 +248,6 @@ func (p *progress) step(b *Builder, step *Step, s string) {
 
 		remoteWaits := b.remoteSema.NumWaits()
 		remoteServs := b.remoteSema.NumServs()
-		remoteWaits += b.reproxySema.NumWaits()
-		remoteServs += b.reproxySema.NumServs()
 		remoteWaits += b.rewrapSema.NumWaits()
 		remoteServs += b.rewrapSema.NumServs()
 		remoteProgress := runProgress(remoteWaits, remoteServs)
@@ -322,7 +320,7 @@ type ActiveStepInfo struct {
 
 	// step accumulated service duration (local exec, or remote call).
 	// not including local execution queue, remote execution queue,
-	// but including all of remote call (reapi or reproxy), uploading
+	// but including all of remote call (reapi), uploading
 	// inputs, downloading outputs etc.
 	ServDur string
 }

@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/charmbracelet/log"
-	"github.com/golang/glog"
 	"go.chromium.org/infra/build/siso/execute"
 	"go.chromium.org/infra/build/siso/toolsupport/straceutil"
 )
@@ -54,7 +53,7 @@ func (f *fileTraceExecutor) Run(ctx context.Context, cmd *execute.Cmd) error {
 func (f *fileTraceExecutor) logLocalExec(ctx context.Context, step *Step, dur time.Duration) error {
 	err := f.checkTrace(ctx, step, dur)
 	if err != nil {
-		glog.Warningf("failed to check trace %v", err)
+		log.Warnf("failed to check trace %v", err)
 	}
 	return err
 }
@@ -99,7 +98,7 @@ func (f *fileTraceExecutor) checkTrace(ctx context.Context, step *Step, dur time
 	}
 	inadds, indels, inplatforms, inerrs := filesDiff(ctx, b, allInputs, inouts, f.inputs, step.def.Binding("ignore_extra_input_pattern"))
 	outadds, outdels, outplatforms, outerrs := filesDiff(ctx, b, allOutputs, inouts, f.outputs, step.def.Binding("ignore_extra_output_pattern"))
-	glog.Infof("check-trace inputs=%d+%d+%d=>%d+%d+%d outputs=%d+%d+%d=>%d+%d+%d",
+	log.Infof("check-trace inputs=%d+%d+%d=>%d+%d+%d outputs=%d+%d+%d=>%d+%d+%d",
 		len(allInputs), len(inouts), len(f.inputs),
 		len(inadds), len(indels), len(inplatforms),
 		len(allOutputs), len(inouts), len(f.outputs),

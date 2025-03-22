@@ -18,7 +18,6 @@ import (
 	"sync"
 
 	"github.com/charmbracelet/log"
-	"github.com/golang/glog"
 	"go.chromium.org/infra/build/siso/build"
 	"go.chromium.org/infra/build/siso/execute"
 	"go.chromium.org/infra/build/siso/hashfs"
@@ -489,7 +488,7 @@ func (sc StepConfig) ExpandInputs(ctx context.Context, p *build.Path, hashFS *ha
 			if err != nil {
 				if _, loaded := knownMissingInputs.LoadOrStore(path, true); !loaded {
 					// TODO(b/271783311): hard error for bad config
-					glog.Warningf("missing inputs %s", path)
+					log.Warnf("missing inputs %s", path)
 				}
 			} else {
 				expanded = append(expanded, filepath.ToSlash(path))
@@ -508,7 +507,7 @@ func (sc StepConfig) ExpandInputs(ctx context.Context, p *build.Path, hashFS *ha
 				_, err := hashFS.Stat(ctx, p.ExecRoot, dep)
 				if err != nil {
 					if _, loaded := knownMissingInputs.LoadOrStore(depPathPair{dep, path}, true); !loaded {
-						glog.Warningf("missing file in input-dep %s (from %s): %v", dep, path, err)
+						log.Warnf("missing file in input-dep %s (from %s): %v", dep, path, err)
 					}
 					continue
 				}

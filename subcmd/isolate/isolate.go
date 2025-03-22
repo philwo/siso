@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/charmbracelet/log"
-	"github.com/golang/glog"
 	"github.com/google/uuid"
 	"github.com/maruel/subcommands"
 	"golang.org/x/sync/errgroup"
@@ -217,7 +216,7 @@ func (c *run) run(ctx context.Context) error {
 			mu.Lock()
 			result[target] = d.String()
 			mu.Unlock()
-			glog.Infof("uploaded digest for %s: %s in %s", target, d, duration)
+			log.Infof("uploaded digest for %s: %s in %s", target, d, duration)
 			ui.Default.PrintLines(fmt.Sprintf("uploaded digest for %s: %s in %s\n", target, d, duration))
 			return nil
 		})
@@ -384,12 +383,12 @@ func upload(ctx context.Context, execRoot, buildDir string, hashFS *hashfs.HashF
 	if err != nil {
 		return digest.Digest{}, err
 	}
-	glog.Infof("upload %s for %s", d, target)
+	log.Infof("upload %s for %s", d, target)
 	started := time.Now()
 	n, err := casClient.UploadAll(ctx, ds)
 	if err != nil {
 		return digest.Digest{}, err
 	}
-	glog.Infof("uploaded %d for %s in %s", n, target, time.Since(started))
+	log.Infof("uploaded %d for %s in %s", n, target, time.Since(started))
 	return d, nil
 }

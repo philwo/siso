@@ -26,7 +26,6 @@ import (
 
 	"github.com/biogo/hts/bgzf"
 	"github.com/charmbracelet/log"
-	"github.com/golang/glog"
 	"github.com/klauspost/compress/zstd"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/protobuf/proto"
@@ -455,7 +454,7 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 					return nil
 				}
 				isOutputLocal := outputLocal(ctx, ent.Name)
-				glog.Infof("old local %s %q: state:%s disk:%s cmdhash:%s outputLocal:%t", ftype, ent.Name, e.mtime, fi.ModTime(), base64.StdEncoding.EncodeToString(e.cmdhash), isOutputLocal)
+				log.Infof("old local %s %q: state:%s disk:%s cmdhash:%s outputLocal:%t", ftype, ent.Name, e.mtime, fi.ModTime(), base64.StdEncoding.EncodeToString(e.cmdhash), isOutputLocal)
 				if logw != nil {
 					fmt.Fprintf(logw, "old local %s %q: state:%s disk:%s cmdhash:%s outputLocal:%t\n", ftype, ent.Name, e.mtime, fi.ModTime(), base64.StdEncoding.EncodeToString(e.cmdhash), isOutputLocal)
 				}
@@ -469,7 +468,7 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 				// TODO: flush instead of removing local?
 				err = os.Remove(ent.Name)
 				if err != nil {
-					glog.Warningf("failed to remove stale old local file %q: %v", ent.Name, err)
+					log.Warnf("failed to remove stale old local file %q: %v", ent.Name, err)
 					if logw != nil {
 						fmt.Fprintf(logw, "failed to remove stale old local file %q: %v\n", ent.Name, err)
 					}

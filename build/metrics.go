@@ -97,7 +97,6 @@ type StepMetric struct {
 	RemoteRetry int  `json:"remote_retry,omitempty"` // count of remote retry
 
 	// DepsScanTime is the time it took in calculating deps for cmd inputs.
-	// TODO: set in reproxy mode too
 	DepsScanTime IntervalMetric `json:"depsscan,omitempty"`
 
 	// RunTime, QueueTime and ExecTime are measured by the execution
@@ -113,7 +112,6 @@ type StepMetric struct {
 	RunTime IntervalMetric `json:"run,omitempty"`
 	// QueueTime is the time it took until the worker could begin executing
 	// the action.
-	// TODO: set in reproxy mode too
 	QueueTime IntervalMetric `json:"queue,omitempty"`
 	// ExecStartTime is set if the action was not cached, containing the time
 	// measured when the execution strategy started the process.

@@ -14,10 +14,8 @@ import (
 
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
 	"github.com/charmbracelet/log"
-	"github.com/golang/glog"
 
 	"go.chromium.org/infra/build/siso/execute"
-	"go.chromium.org/infra/build/siso/execute/reproxyexec"
 )
 
 // StepDef is a build step definition.
@@ -367,7 +365,7 @@ func (s *Step) useReclient() bool {
 func (s *Step) init(ctx context.Context, b *Builder, stepManifest *stepManifest) {
 	s.def.EnsureRule(ctx)
 	s.cmd = newCmd(ctx, b, s.def, stepManifest)
-	glog.Infof("cmdhash:%s", base64.StdEncoding.EncodeToString(s.cmd.CmdHash))
+	log.Infof("cmdhash:%s", base64.StdEncoding.EncodeToString(s.cmd.CmdHash))
 }
 
 func newCmd(ctx context.Context, b *Builder, stepDef StepDef, stepManifest *stepManifest) *execute.Cmd {
@@ -506,16 +504,11 @@ func validateRemoteActionResult(result *rpb.ActionResult) bool {
 		return false
 	}
 
-	// When the action runs locally, Reproxy doesn't add outputs to the result.
-	// Then, the next condition will pass which ends up with retring the same action.
-	switch result.GetExecutionMetadata().GetWorker() {
-	case reproxyexec.WorkerNameFallback, reproxyexec.WorkerNameRacingLocal, reproxyexec.WorkerNameLocal:
-		return true
-	}
+	// Succeeded result should have at least one output. b/350360391
 	if result.ExitCode == 0 && len(result.GetOutputFiles()) == 0 {
-		// succeeded result should have at least one output. b/350360391
 		return false
 	}
+
 	return true
 }
 

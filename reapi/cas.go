@@ -20,7 +20,6 @@ import (
 
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
 	"github.com/charmbracelet/log"
-	"github.com/golang/glog"
 	"github.com/google/uuid"
 	"github.com/klauspost/compress/zstd"
 	bpb "google.golang.org/genproto/googleapis/bytestream"
@@ -314,7 +313,7 @@ func (c *Client) UploadAll(ctx context.Context, ds *digest.Store) (numUploaded i
 				} else {
 					s = d.String()
 				}
-				glog.Infof("upload %s failed: %v", s, uop.err)
+				log.Infof("upload %s failed: %v", s, uop.err)
 				c.knownDigests.CompareAndDelete(d, uop)
 			}
 		}
@@ -680,14 +679,14 @@ func (c *Client) uploadWithByteStream(ctx context.Context, digests []digest.Dige
 		})
 		uploads[d].done(err)
 		if err != nil {
-			glog.Warningf("Failed to stream %s in %s: %v", data, time.Since(started), err)
+			log.Warnf("Failed to stream %s in %s: %v", data, time.Since(started), err)
 			missingBlobs = append(missingBlobs, missingBlob{
 				Digest: d,
 				Err:    err,
 			})
 			continue
 		}
-		glog.Infof("uploaded streaming %s in %s err=%v", data, time.Since(started), err)
+		log.Infof("uploaded streaming %s in %s err=%v", data, time.Since(started), err)
 	}
 	log.Infof("uploaded by streaming %d blobs (missing:%d)", len(digests), len(missingBlobs))
 

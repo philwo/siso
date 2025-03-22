@@ -28,7 +28,7 @@ func (c *ninjaCmdRun) checkResourceLimits(ctx context.Context, limits build.Limi
 	switch {
 	case c.offline:
 	case c.remoteJobs > 0:
-		// reproxy grpc client+server, scandeps server client+server
+		// scandeps server client+server
 		nfile += uint64(c.remoteJobs) * 4
 	default:
 		nfile += uint64(limits.Remote) * 4

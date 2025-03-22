@@ -21,7 +21,6 @@ import (
 
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
 	"github.com/charmbracelet/log"
-	"github.com/golang/glog"
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	"go.chromium.org/infra/build/siso/hashfs"
@@ -360,7 +359,6 @@ func (c *Cmd) ActionDigest() digest.Digest {
 }
 
 // SetActionDigest sets action digest.
-// This is used to set the digest provided by Reproxy.
 func (c *Cmd) SetActionDigest(d digest.Digest) {
 	c.actionDigest = d
 }
@@ -392,7 +390,7 @@ func (c *Cmd) Digest(ctx context.Context, ds *digest.Store) (actionDigest digest
 	var treeDuration time.Duration
 	defer func() {
 		// -2 for command and action message.
-		glog.Infof("action: %s {command; %s inputRoot: %s %d %s}: %v", actionDigest, commandDigest, inputRootDigest, ds.Size()-2, treeDuration, err)
+		log.Infof("action: %s {command; %s inputRoot: %s %d %s}: %v", actionDigest, commandDigest, inputRootDigest, ds.Size()-2, treeDuration, err)
 	}()
 	started := time.Now()
 	ents, err := c.inputTree(ctx)
@@ -470,7 +468,7 @@ func (c *Cmd) inputTree(ctx context.Context) ([]merkletree.Entry, error) {
 			if err != nil {
 				return nil, err
 			}
-			glog.Infof("external inputs %d -> %d", len(rootInputs), len(rootEnts))
+			log.Infof("external inputs %d -> %d", len(rootInputs), len(rootEnts))
 		}
 		inputs = newInputs
 
@@ -850,7 +848,7 @@ func (c *Cmd) RecordPreOutputs(ctx context.Context) {
 // RecordOutputs records cmd's outputs from action result in hashfs.
 func (c *Cmd) RecordOutputs(ctx context.Context, ds hashfs.DataSource, now time.Time) error {
 	entries, additionalEntries := c.entriesFromResult(ctx, ds, now)
-	glog.Infof("output entries %d+%d", len(entries), len(additionalEntries))
+	log.Infof("output entries %d+%d", len(entries), len(additionalEntries))
 	entries = c.computeOutputEntries(entries, now, c.CmdHash)
 	err := c.HashFS.Update(ctx, c.ExecRoot, entries)
 	if err != nil {
@@ -1043,10 +1041,10 @@ func (c *Cmd) RecordOutputsFromLocal(ctx context.Context, now time.Time) error {
 				continue
 			}
 			if d.SizeBytes == 0 {
-				glog.Warningf("restat: empty file %q %s->%s", ent.Name, pent.ModTime, ent.ModTime)
+				log.Warnf("restat: empty file %q %s->%s", ent.Name, pent.ModTime, ent.ModTime)
 				continue
 			}
-			glog.Warningf("restat: changed but not modified %q %s %s->%s", ent.Name, ent.Entry.Data.Digest(), pent.ModTime, ent.ModTime)
+			log.Warnf("restat: changed but not modified %q %s %s->%s", ent.Name, ent.Entry.Data.Digest(), pent.ModTime, ent.ModTime)
 		}
 	}
 	return nil
@@ -1057,7 +1055,7 @@ func ResultFromEntries(ctx context.Context, result *rpb.ActionResult, dir string
 	for _, ent := range entries {
 		name, err := filepath.Rel(dir, ent.Name)
 		if err != nil {
-			glog.Warningf("failed to get rel path %q: %v", ent.Name, err)
+			log.Warnf("failed to get rel path %q: %v", ent.Name, err)
 			continue
 		}
 		name = filepath.ToSlash(name)

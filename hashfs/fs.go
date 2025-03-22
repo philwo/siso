@@ -25,7 +25,6 @@ import (
 	"time"
 
 	"github.com/charmbracelet/log"
-	"github.com/golang/glog"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -233,9 +232,9 @@ func (hfs *HashFS) Close(ctx context.Context) error {
 	}
 	err := hfs.journal.Close()
 	if err != nil {
-		glog.Warningf("Failed to close journal %v", err)
+		log.Warnf("Failed to close journal %v", err)
 	}
-	glog.Infof("close journal")
+	log.Infof("close journal")
 	if hfs.clean.Load() || !hfs.loaded.Load() || len(hfs.taintedFiles) > 0 {
 		// don't update fs state when there are tainted files.
 		log.Warnf("not save state clean=%t loaded=%t tainted:%d", hfs.clean.Load(), hfs.loaded.Load(), len(hfs.taintedFiles))
@@ -428,7 +427,7 @@ func (hfs *HashFS) stat(ctx context.Context, root, fname string, needCompute boo
 		e, err = hfs.directory.store(ctx, fullname, e)
 	}
 	if err != nil {
-		glog.Warningf("failed to store %s %s in %s: %v", fullname, e, dir, err)
+		log.Warnf("failed to store %s %s in %s: %v", fullname, e, dir, err)
 		return FileInfo{}, err
 	}
 	if e.err != nil {
@@ -1533,7 +1532,7 @@ func (e *entry) init(ctx context.Context, fname string, executables map[string]b
 		// e.g. fifo in chromiumos build tree?
 		// /build/amd64-generic/tmp/portage/chromeos-base/chromeos-chrome-139.0.7206.0_rc-r1/.ipc/in: unknown filetype prwxrwx---
 		e.err = fmt.Errorf("unexpected filetype not regular %s: %s", fi.Mode(), fname)
-		glog.Warningf("tree entry %s: unknown filetype %s", fname, fi.Mode())
+		log.Warnf("tree entry %s: unknown filetype %s", fname, fi.Mode())
 		return
 	}
 	if e.mtime.Before(fi.ModTime()) {
@@ -1678,7 +1677,7 @@ func (e *entry) updateDir(ctx context.Context, hfs *HashFS, dname string) []stri
 			}
 		}
 	}
-	glog.Infof("updateDir mtime %s %d %s -> %s: %s", dname, len(names), e.directory.mtime, fi.ModTime(), time.Since(started))
+	log.Infof("updateDir mtime %s %d %s -> %s: %s", dname, len(names), e.directory.mtime, fi.ModTime(), time.Since(started))
 	e.directory.mtime = fi.ModTime()
 	// if local dir is updated after hashfs update, update hashfs mtime.
 	if e.mtime.Before(e.directory.mtime) {
@@ -2439,7 +2438,7 @@ func waitUntilModTime(ctx context.Context, fullname string, mtime time.Time) err
 	}
 	// report error as it implies that broken time synchronization
 	// so unreliable build.
-	glog.Errorf("waiting for future mtime on %s: mtime=%s now=%s", fullname, mtime, now)
+	log.Errorf("waiting for future mtime on %s: mtime=%s now=%s", fullname, mtime, now)
 	started := now
 	for time.Since(started) < 5*time.Second {
 		select {
@@ -2449,7 +2448,7 @@ func waitUntilModTime(ctx context.Context, fullname string, mtime time.Time) err
 		}
 		now = time.Now()
 		if !mtime.After(now) {
-			glog.Warningf("future mtime corrected for %s in %s", fullname, time.Since(started))
+			log.Warnf("future mtime corrected for %s in %s", fullname, time.Since(started))
 			return nil
 		}
 	}

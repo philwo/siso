@@ -20,7 +20,6 @@ import (
 
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
 	"github.com/charmbracelet/log"
-	"github.com/golang/glog"
 	"google.golang.org/api/option"
 	gtransport "google.golang.org/api/transport/grpc"
 	"google.golang.org/grpc"
@@ -350,7 +349,7 @@ func NewFromConn(ctx context.Context, opt Option, conn, casConn grpcClientConn) 
 	log.Infof("capabilities of %s: %s", opt.Instance, capa)
 	if opt.CompressedBlob > 0 {
 		if c := selectCompressor(capa.GetCacheCapabilities().GetSupportedCompressors()); c != rpb.Compressor_IDENTITY {
-			glog.Infof("compressed-blobs/%s for > %d", strings.ToLower(c.String()), opt.CompressedBlob)
+			log.Infof("compressed-blobs/%s for > %d", strings.ToLower(c.String()), opt.CompressedBlob)
 		} else {
 			log.Infof("compressed-blobs is not supported")
 			opt.CompressedBlob = 0
@@ -421,25 +420,4 @@ func NewContext(ctx context.Context, rmd *rpb.RequestMetadata) context.Context {
 	return metadata.AppendToOutgoingContext(ctx,
 		"build.bazel.remote.execution.v2.requestmetadata-bin",
 		string(b))
-}
-
-// MetadataFromOutgoingContext returns request metadata in outgoing context.
-func MetadataFromOutgoingContext(ctx context.Context) (*rpb.RequestMetadata, bool) {
-	md, ok := metadata.FromOutgoingContext(ctx)
-	if !ok {
-		return nil, false
-	}
-	v, ok := md["build.bazel.remote.execution.v2.requestmetadata-bin"]
-	if !ok {
-		return nil, false
-	}
-	if len(v) == 0 {
-		return nil, false
-	}
-	rmd := &rpb.RequestMetadata{}
-	err := proto.Unmarshal([]byte(v[0]), rmd)
-	if err != nil {
-		return nil, false
-	}
-	return rmd, true
 }

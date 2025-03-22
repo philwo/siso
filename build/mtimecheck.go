@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/charmbracelet/log"
-	"github.com/golang/glog"
 )
 
 type phonyState struct {
@@ -37,7 +36,7 @@ func (b *Builder) needToRun(ctx context.Context, stepDef StepDef, stepManifest *
 				mtime:    mtime,
 			})
 			if dirtyErr != nil {
-				glog.Infof("phony output %s dirty=%v mtime=%v", outpath, dirtyErr, mtime)
+				log.Infof("phony output %s dirty=%v mtime=%v", outpath, dirtyErr, mtime)
 			}
 		}
 		// nothing to run for phony target.
@@ -86,7 +85,7 @@ func (b *Builder) checkUpToDate(ctx context.Context, stepDef StepDef, stepManife
 		// TODO: remove old cmdhash support
 		oldCmdHash := calculateOldCmdHash(stepManifest.cmdline, stepManifest.rspfileContent)
 		if !bytes.Equal(cmdhash, oldCmdHash) {
-			glog.Infof("need: cmdhash differ %q -> %q", base64.StdEncoding.EncodeToString(cmdhash), base64.StdEncoding.EncodeToString(stepManifest.cmdHash))
+			log.Infof("need: cmdhash differ %q -> %q", base64.StdEncoding.EncodeToString(cmdhash), base64.StdEncoding.EncodeToString(stepManifest.cmdHash))
 			if len(cmdhash) == 0 {
 				fmt.Fprintf(b.explainWriter, "command line not found in log for %s\n", outname)
 			} else {
@@ -99,9 +98,9 @@ func (b *Builder) checkUpToDate(ctx context.Context, stepDef StepDef, stepManife
 	if len(edgehash) == 0 {
 		// old version of siso didn't record edgehash...
 		// TODO: remove this condition?
-		glog.Warningf("missing edgehash in output")
+		log.Warnf("missing edgehash in output")
 	} else if !bytes.Equal(edgehash, stepManifest.edgeHash) {
-		glog.Infof("need: edgehash differ %q -> %q", base64.StdEncoding.EncodeToString(edgehash), base64.StdEncoding.EncodeToString(stepManifest.edgeHash))
+		log.Infof("need: edgehash differ %q -> %q", base64.StdEncoding.EncodeToString(edgehash), base64.StdEncoding.EncodeToString(stepManifest.edgeHash))
 		fmt.Fprintf(b.explainWriter, "edge changed for %s\n", outname)
 		return false
 	}

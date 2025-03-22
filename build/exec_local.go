@@ -14,7 +14,6 @@ import (
 
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
 	"github.com/charmbracelet/log"
-	"github.com/golang/glog"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.chromium.org/infra/build/siso/execute"
@@ -56,7 +55,7 @@ func (b *Builder) execLocal(ctx context.Context, step *Step) error {
 			// http://b/261655377 errorprone_plugin_tests: too slow under strace?
 			impure := step.def.Binding("impure") == "true"
 			if impure {
-				glog.Warningf("disable file-access-trace by impure")
+				log.Warnf("disable file-access-trace by impure")
 			} else {
 				traceExecutor, err := newFileTraceExecutor(b, executor)
 				if err != nil {
@@ -67,7 +66,7 @@ func (b *Builder) execLocal(ctx context.Context, step *Step) error {
 			}
 		}
 	default:
-		glog.Warningf("unsupported sandbox %q", sandbox)
+		log.Warnf("unsupported sandbox %q", sandbox)
 	}
 
 	// native integration is handled by exec_reproxy.go
@@ -155,7 +154,7 @@ func (b *Builder) trustedLocalUpload(ctx context.Context, step *Step) error {
 	actionDigest, err := cmd.Digest(ctx, ds)
 
 	if err != nil {
-		glog.Warningf("failed to compute digest for trusted local upload: %v", err)
+		log.Warnf("failed to compute digest for trusted local upload: %v", err)
 		return err
 	}
 
@@ -218,7 +217,7 @@ func (b *Builder) prepareLocalInputs(ctx context.Context, step *Step) error {
 	err := b.hashFS.Flush(ctx, step.cmd.ExecRoot, inputs)
 	log.Infof("prepare-local-inputs %d %s: %v", len(inputs), time.Since(start), err)
 	// now, all inputs are expected to be on disk.
-	// for reproxy and local, no need to scan deps.
+	// for local, no need to scan deps.
 	// but need to remove missing inputs from cmd.Inputs
 	// because we'll record header inputs for deps=msvc in deps log.
 	// TODO: b/322712783 - minimize local disk check.

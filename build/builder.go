@@ -25,13 +25,11 @@ import (
 	"time"
 
 	"github.com/charmbracelet/log"
-	"github.com/golang/glog"
 
 	"go.chromium.org/infra/build/siso/build/metadata"
 	"go.chromium.org/infra/build/siso/execute"
 	"go.chromium.org/infra/build/siso/execute/localexec"
 	"go.chromium.org/infra/build/siso/execute/remoteexec"
-	"go.chromium.org/infra/build/siso/execute/reproxyexec"
 	"go.chromium.org/infra/build/siso/hashfs"
 	"go.chromium.org/infra/build/siso/reapi"
 	"go.chromium.org/infra/build/siso/reapi/digest"
@@ -64,7 +62,6 @@ type Options struct {
 	REExecEnable       bool
 	RECacheEnableRead  bool
 	RECacheEnableWrite bool
-	ReproxyAddr        string
 	ActionSalt         []byte
 
 	OutputLocal          OutputLocalFunc
@@ -169,9 +166,6 @@ type Builder struct {
 	reCacheEnableWrite bool
 	reapiclient        *reapi.Client
 
-	reproxySema *semaphore.Semaphore
-	reproxyExec *reproxyexec.REProxyExec
-
 	actionSalt []byte
 
 	outputLocal OutputLocalFunc
@@ -233,7 +227,7 @@ func New(ctx context.Context, graph Graph, opts Options) (_ *Builder, err error)
 	}
 
 	builddir := graph.Binding("builddir")
-	glog.Infof("builddir=%q", builddir)
+	log.Infof("builddir=%q", builddir)
 	if builddir != "" {
 		err := os.MkdirAll(builddir, 0755)
 		if err != nil {
@@ -245,7 +239,7 @@ func New(ctx context.Context, graph Graph, opts Options) (_ *Builder, err error)
 		return nil, err
 	}
 	defer func() {
-		glog.Infof("close .ninja_log")
+		log.Infof("close .ninja_log")
 		cerr := ninjaLogWriter.Close()
 		if err == nil {
 			err = cerr
@@ -260,18 +254,11 @@ func New(ctx context.Context, graph Graph, opts Options) (_ *Builder, err error)
 	}
 	var le localexec.LocalExec
 	var re *remoteexec.RemoteExec
-	var pe *reproxyexec.REProxyExec
 	if opts.REAPIClient != nil {
 		log.Infof("enable built-in remote exec")
 		re = remoteexec.New(opts.REAPIClient)
 	} else {
 		log.Infof("disable built-in remote exec")
-	}
-	pe = reproxyexec.New(opts.ReproxyAddr)
-	if pe.Enabled() {
-		log.Infof("enable reclient integration: addr=%s", opts.ReproxyAddr)
-	} else {
-		log.Infof("disable reclient integration")
 	}
 	experiments.ShowOnce()
 	numCPU := runtimex.NumCPU()
@@ -280,10 +267,10 @@ func New(ctx context.Context, graph Graph, opts Options) (_ *Builder, err error)
 	}
 	switch {
 	case opts.StrictRemote:
-		glog.Infof("strict remote.  no fastlocal, no local fallback")
+		log.Infof("strict remote.  no fastlocal, no local fallback")
 		opts.Limits.FastLocal = 0
 	case opts.Batch:
-		glog.Infof("batch mode. no fastlocal")
+		log.Infof("batch mode. no fastlocal")
 		opts.Limits.FastLocal = 0
 	}
 	// On many cores machine, it would hit default max thread limit = 10000.
@@ -328,8 +315,6 @@ func New(ctx context.Context, graph Graph, opts Options) (_ *Builder, err error)
 		reExecEnable:       opts.REExecEnable,
 		reCacheEnableRead:  opts.RECacheEnableRead,
 		reCacheEnableWrite: opts.RECacheEnableWrite,
-		reproxyExec:        pe,
-		reproxySema:        semaphore.New("reproxyexec", opts.Limits.Remote),
 		actionSalt:         opts.ActionSalt,
 		reapiclient:        opts.REAPIClient,
 
@@ -380,10 +365,7 @@ func New(ctx context.Context, graph Graph, opts Options) (_ *Builder, err error)
 
 // Close cleans up the builder.
 func (b *Builder) Close() error {
-	if b.reproxyExec == nil {
-		return nil
-	}
-	return b.reproxyExec.Close()
+	return nil
 }
 
 // Stats returns stats of the builder.
@@ -500,7 +482,7 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 		if b.rebuildManifest != "" {
 			fi, mferr := b.hashFS.Stat(ctx, b.path.ExecRoot, filepath.Join(b.path.Dir, b.rebuildManifest))
 			if mferr != nil {
-				glog.Warningf("failed to stat %s: %v", b.rebuildManifest, mferr)
+				log.Warnf("failed to stat %s: %v", b.rebuildManifest, mferr)
 				err = fmt.Errorf("%w: missing manifest %s: %v", ErrManifest, b.rebuildManifest, mferr)
 				return
 			}
@@ -529,15 +511,10 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 					stat.FastDepsSuccess, stat.FastDepsFailed, stat.ScanDepsFailed)
 			}
 		}
-		if !b.reproxyExec.Used() {
-			// this stats will be shown by reproxy shutdown.
-			msg := fmt.Sprintf("\nlocal:%d remote:%d cache:%d fallback:%d retry:%d skip:%d\n",
-				stat.Local+stat.NoExec, stat.Remote, stat.CacheHit, stat.LocalFallback, stat.RemoteRetry, stat.Skipped) +
-				depsStatLine + "\n"
-			ui.Default.PrintLines("\n", msg)
-		} else {
-			ui.Default.PrintLines("\n", "\n")
-		}
+		msg := fmt.Sprintf("\nlocal:%d remote:%d cache:%d fallback:%d retry:%d skip:%d\n",
+			stat.Local+stat.NoExec, stat.Remote, stat.CacheHit, stat.LocalFallback, stat.RemoteRetry, stat.Skipped) +
+			depsStatLine + "\n"
+		ui.Default.PrintLines("\n", msg)
 	}()
 	pstat := b.plan.stats()
 	b.progress.report("\nbuild start: Ready %d Pending %d", pstat.nready, pstat.npendings)
@@ -549,7 +526,7 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 		fmt.Fprintf(b.explainWriter, "--clobber is specified\n")
 	}
 
-	// prepare all output directories for local process and reproxy,
+	// prepare all output directories for local process,
 	// to minimize mkdir operations.
 	// if we create out dirs before each action concurrently,
 	// need to check the dir many times and worry about race.
@@ -607,7 +584,6 @@ loop:
 			}
 			continue
 		case <-ctx.Done():
-			log.Infof("context done")
 			done(context.Cause(ctx))
 			cancel()
 			b.plan.dump(ctx, b.graph)
@@ -647,7 +623,6 @@ loop:
 			err = b.runStep(ctx, step)
 			select {
 			case <-ctx.Done():
-				log.Infof("context done")
 				return
 			default:
 			}
@@ -696,7 +671,7 @@ loop:
 	metrics.Duration = IntervalMetric(time.Since(b.start))
 	metrics.Err = err != nil
 	b.recordMetrics(metrics)
-	glog.Infof("%s finished: %v", name, err)
+	log.Infof("%s finished: %v", name, err)
 	if b.rebuildManifest == "" && b.batch && b.failureSummaryWriter != nil {
 		// non batch mode (ui.IsTerminal) may build last failed command
 		// so should not trigger this check at the end of build.
@@ -987,7 +962,7 @@ func (b *Builder) prepareAllOutDirs(ctx context.Context) error {
 	log.Infof("prepare out dirs: targets:%d -> %d -> %d ", len(b.plan.targets), ndirs, len(dirs))
 	for _, dir := range dirs {
 		// we don't use hashfs here for performance.
-		// just create dirs on local disk, so reproxy and local process
+		// just create dirs on local disk, so local process
 		// can detect the dirs.
 		err := os.MkdirAll(filepath.Join(b.path.ExecRoot, dir), 0755)
 		if err != nil {

@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/charmbracelet/log"
-	"github.com/golang/glog"
 	"go.chromium.org/infra/build/siso/hashfs"
 	"go.chromium.org/infra/build/siso/ui"
 )
@@ -353,7 +352,7 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 	}
 
 	if ignore && sched.prepareHeaderOnly {
-		glog.Infof("check outputs=%d for %s", len(newEdge.Outputs), targetPath(ctx, graph, target))
+		log.Infof("check outputs=%d for %s", len(newEdge.Outputs), targetPath(ctx, graph, target))
 		// If this step generates header (even if build dependency
 		// doesn't explicitly depend on the header), don't ignore this.
 		// b/358693473
@@ -447,7 +446,7 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 		}
 	}
 	if ignore {
-		glog.Infof("sched: ignore target %s", targetPath(ctx, graph, target))
+		log.Infof("sched: ignore target %s", targetPath(ctx, graph, target))
 		return validationQueue, nil
 	}
 	step.outputs = newEdge.Outputs

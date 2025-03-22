@@ -27,7 +27,6 @@ import (
 	"time"
 
 	"github.com/charmbracelet/log"
-	"github.com/golang/glog"
 	"github.com/klauspost/cpuid/v2"
 	"github.com/maruel/subcommands"
 	"golang.org/x/sync/errgroup"
@@ -139,7 +138,6 @@ type ninjaCmdRun struct {
 	reExecEnable       bool
 	reCacheEnableRead  bool
 	reCacheEnableWrite bool
-	reproxyAddr        string
 
 	artfsDir      string
 	artfsEndpoint string
@@ -420,11 +418,10 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 
 	if c.offline {
 		ui.Default.Warningf(ui.SGR(ui.Red, "offline mode\n"))
-		glog.Warningf("offline mode")
+		log.Warnf("offline mode")
 		c.reopt = new(reapi.Option)
 		c.reopt.Insecure = true
 		c.projectID = ""
-		c.reproxyAddr = ""
 	}
 
 	execRoot, err := c.initWorkdirs()
@@ -526,7 +523,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	log.Infof("%s", cpuinfo())
 	log.Infof("%s", gcinfo())
 
-	glog.Infof("siso version %s", c.version)
+	log.Infof("siso version %s", c.version)
 	sisoMetadata.SisoVersion = c.version
 	if cmdver, err := version.GetStartupVersion(); err != nil {
 		log.Warnf("cannot determine CIPD package version: %s", err)
@@ -539,7 +536,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 			if buildInfo.GoVersion != "" {
 				log.Infof("Go version: %s", buildInfo.GoVersion)
 			}
-			glog.Infof("module %s %s %s", buildInfo.Main.Path, buildInfo.Main.Version, buildInfo.Main.Sum)
+			log.Infof("module %s %s %s", buildInfo.Main.Path, buildInfo.Main.Version, buildInfo.Main.Sum)
 			for _, s := range buildInfo.Settings {
 				if strings.HasPrefix(s.Key, "vcs.") || strings.HasPrefix(s.Key, "-") {
 					log.Infof("build_%s=%s", s.Key, s.Value)
@@ -656,7 +653,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		if !filepath.IsAbs(fsmonitor) {
 			fsmonitorPath, err = exec.LookPath(fsmonitor)
 			if err != nil {
-				glog.Warningf("failed to find fsmonitor %q: %v", fsmonitor, err)
+				log.Warnf("failed to find fsmonitor %q: %v", fsmonitor, err)
 				ui.Default.Warningf(ui.SGR(ui.BackgroundRed, fmt.Sprintf("SISO_FSMONITOR=%q: failed %v\n", fsmonitor, err)))
 			}
 		} else {
@@ -668,7 +665,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 			case "watchman":
 				fsm, err := watchmanutil.New(ctx, fsmonitorPath, execRoot)
 				if err != nil {
-					glog.Warningf("failed to initialize watchman: %v", err)
+					log.Warnf("failed to initialize watchman: %v", err)
 					ui.Default.Errorf(ui.SGR(ui.BackgroundRed, fmt.Sprintf("SISO_FSMONITOR=watchman: failed %v\n", err)))
 				} else {
 					ui.Default.Infof(ui.SGR(ui.Yellow, fmt.Sprintf("use watchman as fsmonitor: %s\n", fsmonitorPath)))
@@ -973,9 +970,6 @@ func (c *ninjaCmdRun) init() {
 	c.Flags.BoolVar(&c.reExecEnable, "re_exec_enable", true, "remote exec enable")
 	c.Flags.BoolVar(&c.reCacheEnableRead, "re_cache_enable_read", true, "remote exec cache enable read")
 	c.Flags.BoolVar(&c.reCacheEnableWrite, "re_cache_enable_write", false, "remote exec cache allow local trusted uploads")
-	// reclient_helper.py sets the RBE_server_address
-	// https://chromium.googlesource.com/chromium/tools/depot_tools.git/+/e13840bd9a04f464e3bef22afac1976fc15a96a0/reclient_helper.py#138
-	c.reproxyAddr = os.Getenv("RBE_server_address")
 
 	c.Flags.StringVar(&c.artfsDir, "artfs_dir", "", "artfs mount point")
 	c.Flags.StringVar(&c.artfsEndpoint, "artfs_endpoint", "localhost:65001", "artfs server endpoint")
@@ -1177,7 +1171,6 @@ func (c *ninjaCmdRun) initBuildOpts(projectID string, buildPath *build.Path, con
 		newline = "\r\n"
 	}
 	fmt.Fprintf(failedCommandsWriter, "cd %s%s", filepath.Join(buildPath.ExecRoot, buildPath.Dir), newline)
-	// TODO: for reproxy mode, may need to run reproxy for rewrapper commands.
 
 	outputLogWriter, done, err := c.logWriter(c.outputLogFile)
 	if err != nil {
@@ -1231,7 +1224,6 @@ func (c *ninjaCmdRun) initBuildOpts(projectID string, buildPath *build.Path, con
 		REExecEnable:         c.reExecEnable,
 		RECacheEnableRead:    c.reCacheEnableRead,
 		RECacheEnableWrite:   c.reCacheEnableWrite,
-		ReproxyAddr:          c.reproxyAddr,
 		ActionSalt:           actionSaltBytes,
 		OutputLocal:          build.OutputLocalFunc(c.fsopt.OutputLocal),
 		Cache:                cache,

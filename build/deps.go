@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/charmbracelet/log"
-	"github.com/golang/glog"
 	"go.chromium.org/infra/build/siso/execute"
 	"go.chromium.org/infra/build/siso/toolsupport/gccutil"
 	"go.chromium.org/infra/build/siso/toolsupport/makeutil"
@@ -134,7 +133,7 @@ func depsExpandInputs(ctx context.Context, b *Builder, step *Step) {
 			}
 		}
 		if _, err := b.hashFS.Stat(ctx, b.path.ExecRoot, in); err != nil {
-			glog.Warningf("deps stat error %s: %v", in, err)
+			log.Warnf("deps stat error %s: %v", in, err)
 			continue
 		}
 		inputs = append(inputs, in)
@@ -145,12 +144,12 @@ func depsExpandInputs(ctx context.Context, b *Builder, step *Step) {
 		}
 		seen[in] = true
 		if _, err := b.hashFS.Stat(ctx, b.path.ExecRoot, in); err != nil {
-			glog.Warningf("deps stat error %s: %v", in, err)
+			log.Warnf("deps stat error %s: %v", in, err)
 			continue
 		}
 		inputs = append(inputs, in)
 	}
-	glog.Infof("deps expands %d -> %d", len(step.cmd.Inputs), len(inputs))
+	log.Infof("deps expands %d -> %d", len(step.cmd.Inputs), len(inputs))
 	step.cmd.Inputs = make([]string, len(inputs))
 	copy(step.cmd.Inputs, inputs)
 }

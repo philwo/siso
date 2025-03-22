@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/charmbracelet/log"
-	"github.com/golang/glog"
 	"go.chromium.org/infra/build/siso/execute"
 	"go.chromium.org/infra/build/siso/reapi/merkletree"
 	"go.chromium.org/infra/build/siso/scandeps"
@@ -117,7 +116,7 @@ func (depsGCC) DepsAfterRun(ctx context.Context, b *Builder, step *Step) (_ []st
 			return
 		}
 		if err != nil {
-			glog.Warningf("preserve depfile=%q: %v", step.cmd.Depfile, err)
+			log.Warnf("preserve depfile=%q: %v", step.cmd.Depfile, err)
 			return
 		}
 		if b.keepDepfile {

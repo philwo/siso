@@ -12,7 +12,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/golang/glog"
+	"github.com/charmbracelet/log"
 	"golang.org/x/oauth2"
 	"google.golang.org/api/option"
 	"google.golang.org/grpc"
@@ -94,7 +94,7 @@ func New(ctx context.Context, opts Options) (Cred, error) {
 	var authenticator *auth.Authenticator
 	_, err := os.UserHomeDir()
 	if err != nil {
-		glog.Warningf("disable luci-auth: %v", err)
+		log.Warnf("disable luci-auth: %v", err)
 		err = fmt.Errorf("disable luci-auth: %w", err)
 	} else {
 		t = "luci-auth-cloud-platform"
@@ -120,10 +120,10 @@ func New(ctx context.Context, opts Options) (Cred, error) {
 			if errors.Is(err, errNoAuthorization) {
 				if ch, ok := ts.(*credHelperGoogle); ok {
 					t = ch.h.path
-					glog.Warningf("use auth %s, no token source %v", ch.h.path, err)
+					log.Warnf("use auth %s, no token source %v", ch.h.path, err)
 				} else {
 					t = fmt.Sprintf("%T", ts)
-					glog.Warningf("use auth %T, no token source: %v", ts, err)
+					log.Warnf("use auth %T, no token source: %v", ts, err)
 				}
 				ts = nil
 			} else {
@@ -132,7 +132,7 @@ func New(ctx context.Context, opts Options) (Cred, error) {
 		} else {
 			t, _ = tok.Extra("x-token-source").(string)
 			email, _ = tok.Extra("x-token-email").(string)
-			glog.Infof("use auth %v email: %s", t, email)
+			log.Infof("use auth %v email: %s", t, email)
 			ts = oauth2.ReuseTokenSource(tok, ts)
 		}
 		perRPCCredentials := opts.PerRPCCredentials
@@ -164,7 +164,7 @@ func New(ctx context.Context, opts Options) (Cred, error) {
 		return Cred{}, err
 	}
 
-	glog.Infof("use %s email: %s", t, email)
+	log.Infof("use %s email: %s", t, email)
 	return Cred{
 		Type:              t,
 		Email:             email,

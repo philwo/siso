@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/charmbracelet/log"
-	"github.com/golang/glog"
 	"go.chromium.org/infra/build/siso/reapi/digest"
 	"go.chromium.org/infra/build/siso/reapi/merkletree"
 )
@@ -142,7 +141,7 @@ func (st *subtree) init(ctx context.Context, b *Builder, dir string, files []str
 		if !filepath.IsAbs(rootDir) {
 			rootDir = filepath.Join(b.path.ExecRoot, dir)
 		}
-		glog.Infof("tree init root dir: %q (%q %q)", rootDir, b.path.ExecRoot, dir)
+		log.Infof("tree init root dir: %q (%q %q)", rootDir, b.path.ExecRoot, dir)
 		ents, err := b.hashFS.Entries(ctx, rootDir, inputs)
 		if err != nil {
 			log.Warnf("failed to get subtree entries %s: %v", dir, err)

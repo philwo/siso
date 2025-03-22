@@ -10,7 +10,6 @@ import (
 	"fmt"
 
 	"github.com/charmbracelet/log"
-	"github.com/golang/glog"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -44,14 +43,14 @@ func (b *Builder) runRemote(ctx context.Context, step *Step) error {
 	if startLocal {
 		// no cacheCheck as startlocal for incremental build
 		// will build modified code, and not expect cache hit (?)
-		glog.Infof("start local %s", step.cmd.Desc)
+		log.Infof("start local %s", step.cmd.Desc)
 		err := b.execLocal(ctx, step)
 		step.metrics.StartLocal = true
 		return err
 	} else if b.fastLocalSema != nil && int(b.progress.numLocal.Load()) < b.fastLocalSema.Capacity() {
 		// TODO: skip check cache when step is too new and can't expect cache hit?
 		if cacheCheck {
-			glog.Infof("check cache before fast local")
+			log.Infof("check cache before fast local")
 			fastStep, fastOK = fastDepsCmd(ctx, b, step)
 			if fastOK {
 				err := b.execRemoteCache(ctx, fastStep)
@@ -70,13 +69,13 @@ func (b *Builder) runRemote(ctx context.Context, step *Step) error {
 					return nil
 				}
 				needCheckCache = false
-				glog.Infof("cmd cache miss: %v", err)
+				log.Infof("cmd cache miss: %v", err)
 			}
 		}
 		if ctx, done, err := b.fastLocalSema.TryAcquire(ctx); err == nil {
 			var err error
 			defer func() { done(err) }()
-			glog.Infof("fast local %s", step.cmd.Desc)
+			log.Infof("fast local %s", step.cmd.Desc)
 			// TODO: detach remote for future cache hit.
 			err = b.execLocal(ctx, step)
 			step.metrics.FastLocal = true

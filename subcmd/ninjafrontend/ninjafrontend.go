@@ -16,7 +16,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/golang/glog"
+	"github.com/charmbracelet/log"
 	"github.com/maruel/subcommands"
 	"google.golang.org/protobuf/proto"
 
@@ -103,7 +103,7 @@ func (c *run) run(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("reading size of %d: %w", n, err)
 		}
-		glog.Infof("entry %d size=%d", n, size)
+		log.Infof("entry %d size=%d", n, size)
 		buf := make([]byte, size)
 		_, err = io.ReadFull(r, buf)
 		if err != nil {

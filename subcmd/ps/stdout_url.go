@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/charmbracelet/log"
-	"github.com/golang/glog"
 	"go.chromium.org/infra/build/siso/build"
 	"go.chromium.org/infra/build/siso/ui"
 )
@@ -46,7 +45,7 @@ func newStdoutURLSource(ctx context.Context, stdoutURL string) (*stdoutURLSource
 			authorization = "Bearer " + strings.TrimSpace(string(out))
 		}
 	}
-	glog.Infof("check %s", stdoutURL)
+	log.Infof("check %s", stdoutURL)
 	req, err := http.NewRequestWithContext(ctx, "GET", stdoutURL, nil)
 	if err != nil {
 		return nil, err

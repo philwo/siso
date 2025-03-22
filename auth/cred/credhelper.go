@@ -15,7 +15,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/golang/glog"
+	"github.com/charmbracelet/log"
 	"golang.org/x/oauth2"
 )
 
@@ -122,7 +122,7 @@ func (h *credHelper) get(ctx context.Context, endpoint string) (credHelperPerRPC
 		}
 		cce.cred.expires = expires
 		cce.cred.stdout = resp.stdout
-		glog.Infof("cred %s %s valid %s", endpoint, time.Since(started), time.Until(expires))
+		log.Infof("cred %s %s valid %s", endpoint, time.Since(started), time.Until(expires))
 	}
 	return cce.cred, nil
 }

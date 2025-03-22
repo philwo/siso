@@ -11,7 +11,7 @@ import (
 	"io/fs"
 	"strings"
 
-	"github.com/golang/glog"
+	"github.com/charmbracelet/log"
 )
 
 // IgnoreMissingOut controls whether to report missing out in depfile as
@@ -52,7 +52,7 @@ depLines:
 		out := bytes.TrimSpace(s[:i])
 		if len(out) == 0 {
 			if IgnoreMissingOut {
-				glog.Warningf("missing output in deps. depfile should be `<target>: <dependencyList>`")
+				log.Warnf("missing output in deps. depfile should be `<target>: <dependencyList>`")
 			} else {
 				return nil, fmt.Errorf("missing output in deps. depfile should be `<target>: <dependencyList>`")
 			}

@@ -14,7 +14,6 @@ import (
 	"cloud.google.com/go/longrunning/autogen/longrunningpb"
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
 	"github.com/charmbracelet/log"
-	"github.com/golang/glog"
 	spb "google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -83,7 +82,7 @@ retryLoop:
 					if err != nil {
 						log.Warnf("failed to unmarshal metadata: %v", err)
 					} else {
-						glog.Infof("operation stage: %v %s", metadata.GetStage(), ongoingDetails(metadata.GetPartialExecutionMetadata()))
+						log.Infof("operation stage: %v %s", metadata.GetStage(), ongoingDetails(metadata.GetPartialExecutionMetadata()))
 					}
 					continue
 				}
