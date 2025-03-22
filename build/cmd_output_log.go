@@ -166,7 +166,7 @@ func (c *cmdOutputLog) Msg(width int, console, verboseFailure bool) string {
 
 // cmdOutput returns cmd output log (result, id, desc, err, action, output, args, stdout, stderr).
 // it will return nil if ctx is canceled or success with no stdout/stderr.
-func cmdOutput(ctx context.Context, result cmdOutputResult, phase string, cmd *execute.Cmd, cmdline, rule string, err error) *cmdOutputLog {
+func cmdOutput(ctx context.Context, result cmdOutputResult, cmd *execute.Cmd, cmdline, rule string, err error) *cmdOutputLog {
 	if ctx.Err() != nil {
 		return nil
 	}
