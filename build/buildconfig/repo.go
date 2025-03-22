@@ -85,9 +85,9 @@ func (r *repoLoader) Load(thread *starlark.Thread, module string) (starlark.Stri
 		if errors.Is(err, fs.ErrNotExist) && moduleName == configOverridesRepo {
 			log.Warnf("no @%s//%s: %v", configOverridesRepo, fname, err)
 			name := strings.TrimSuffix(fname, filepath.Ext(fname))
-			return starlark.StringDict(map[string]starlark.Value{
+			return map[string]starlark.Value{
 				name: starlark.None,
-			}), nil
+			}, nil
 		}
 		return nil, fmt.Errorf("failed to load %s: %w", fullname, err)
 	}
