@@ -31,9 +31,7 @@ func writeFile(name string, data []byte, perm os.FileMode) error {
 	//
 	// Goma used subprocess server, and gomax used localexec-server,
 	// so that fork&exec from the process that didn't create executables.
-	// but it spawns new sub process and it involves some complexity
-	// (i.e. we'll use unix domain socket to communicate, but we can't
-	// create unix domain socket in Cog workspace)
+	// but it spawns new sub process and it involves some complexity.
 	//
 	// It will run a new process to create executable file, so that
 	// any build steps won't inherit file descriptor to write executable

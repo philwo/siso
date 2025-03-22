@@ -13,7 +13,6 @@ import (
 	"io"
 	"io/fs"
 	"os"
-	"runtime"
 	"time"
 
 	"github.com/charmbracelet/log"
@@ -50,7 +49,7 @@ func (o *Option) RegisterFlags(flagSet *flag.FlagSet) {
 	if xattr.XATTR_SUPPORTED {
 		xattrname = defaultDigestXattr
 	}
-	flagSet.StringVar(&o.DigestXattrName, "fs_digest_xattr", xattrname, "xatr for sha256 digest")
+	flagSet.StringVar(&o.DigestXattrName, "fs_digest_xattr", xattrname, "xattr for sha256 digest")
 }
 
 // New creates new OSFS.
@@ -66,33 +65,14 @@ func New(name string, opt Option) *OSFS {
 	}
 }
 
-func logSlow(name string, dur time.Duration, err error) {
-	buf := make([]byte, 4*1024)
-	n := runtime.Stack(buf, false)
-	log.Warnf("slow op %s: %s %v\n%s", name, dur, err, buf[:n])
-}
-
 // Chmod changes the mode of the named file to mode.
 func (ofs *OSFS) Chmod(name string, mode fs.FileMode) error {
-	started := time.Now()
-	err := os.Chmod(name, mode)
-	if dur := time.Since(started); dur > 1*time.Minute {
-		logSlow(name, dur, err)
-	}
-	return err
+	return os.Chmod(name, mode)
 }
 
 // Chtimes changes the access and modification times of the named file.
 func (ofs *OSFS) Chtimes(name string, atime, mtime time.Time) error {
-	started := time.Now()
-	// workaround for cog utimes bug. b/356987531
-	_, _ = os.Stat(name)
-
-	err := os.Chtimes(name, atime, mtime)
-	if dur := time.Since(started); dur > 1*time.Minute {
-		logSlow(name, dur, err)
-	}
-	return err
+	return os.Chtimes(name, atime, mtime)
 }
 
 // AsFileSource asserts digest.Source value holds FileSource type,
@@ -111,82 +91,47 @@ func (ofs *OSFS) FileSource(name string, size int64) FileSource {
 
 // Lstat returns a FileInfo describing the named file.
 func (ofs *OSFS) Lstat(ctx context.Context, fname string) (fs.FileInfo, error) {
-	started := time.Now()
 	var fi fs.FileInfo
 	err := LstatSemaphore.Do(ctx, func(ctx context.Context) error {
 		var err error
 		fi, err = os.Lstat(fname)
 		return err
 	})
-	if dur := time.Since(started); dur > 1*time.Minute {
-		logSlow(fname, dur, err)
-	}
 	return fi, err
 }
 
 // MkdirAll creates a directory named path, along with any necessary parents.
 func (ofs *OSFS) MkdirAll(dirname string, perm fs.FileMode) error {
-	started := time.Now()
-	err := os.MkdirAll(dirname, perm)
-	if dur := time.Since(started); dur > 1*time.Minute {
-		logSlow(dirname, dur, err)
-	}
-	return err
+	return os.MkdirAll(dirname, perm)
 }
 
 // Readlink returns the destination of the named symbolic link.
 func (ofs *OSFS) Readlink(name string) (string, error) {
-	started := time.Now()
-	target, err := os.Readlink(name)
-	if dur := time.Since(started); dur > 1*time.Minute {
-		logSlow(name, dur, err)
-	}
-	return target, err
+	return os.Readlink(name)
 }
 
 // Remove removes the named file or directory.
 func (ofs *OSFS) Remove(name string) error {
-	started := time.Now()
-	err := os.Remove(name)
-	if dur := time.Since(started); dur > 1*time.Minute {
-		logSlow(name, dur, err)
-	}
-	return err
+	return os.Remove(name)
 }
 
 // Rename renames oldpath to newpath.
 func (ofs *OSFS) Rename(oldpath, newpath string) error {
-	started := time.Now()
-	err := os.Rename(oldpath, newpath)
-	if dur := time.Since(started); dur > 1*time.Minute {
-		logSlow(newpath, dur, err)
-	}
-	return err
+	return os.Rename(oldpath, newpath)
 }
 
 // Symlink creates newname as a symbolic link to oldname.
 func (ofs *OSFS) Symlink(oldname, newname string) error {
-	started := time.Now()
-	err := os.Symlink(oldname, newname)
-	if dur := time.Since(started); dur > 1*time.Minute {
-		logSlow(newname, dur, err)
-	}
-	return err
+	return os.Symlink(oldname, newname)
 }
 
 // WriteFile writes data to the named file, creating it if necessary.
 func (ofs *OSFS) WriteFile(name string, data []byte, perm fs.FileMode) error {
-	started := time.Now()
-	err := writeFile(name, data, perm)
-	if dur := time.Since(started); dur > 1*time.Minute {
-		logSlow(name, dur, err)
-	}
-	return err
+	return writeFile(name, data, perm)
 }
 
 // WriteDigestData writes digest source into the named file.
 func (ofs *OSFS) WriteDigestData(ctx context.Context, name string, src digest.Source, perm fs.FileMode) error {
-	started := time.Now()
 	err := retry.Do(ctx, func() error {
 		r, err := src.Open(ctx)
 		if err != nil {
@@ -204,9 +149,6 @@ func (ofs *OSFS) WriteDigestData(ctx context.Context, name string, src digest.So
 		}
 		return err
 	})
-	if dur := time.Since(started); dur > 1*time.Minute {
-		logSlow(name, dur, err)
-	}
 	return err
 }
 
@@ -272,10 +214,5 @@ func (f *file) Read(buf []byte) (int, error) {
 }
 
 func (f *file) Close() error {
-	name := f.file.Name()
-	err := f.file.Close()
-	if dur := time.Since(f.started); dur > 1*time.Minute {
-		logSlow(name, dur, err)
-	}
-	return err
+	return f.file.Close()
 }
