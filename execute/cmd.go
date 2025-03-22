@@ -497,7 +497,6 @@ func (c *Cmd) inputTree(ctx context.Context) ([]merkletree.Entry, error) {
 		})
 		return ents, nil
 	}
-	log.Debugf("remote tree @%s %s", c.ExecRoot, c.RemoteInputs)
 
 	// Construct a reverse map from local path to remote paths.
 	// Note that multiple remote inputs may use the same local input.
@@ -549,7 +548,6 @@ func (c *Cmd) inputTree(ctx context.Context) ([]merkletree.Entry, error) {
 func treeDigest(ctx context.Context, subtrees []merkletree.TreeEntry, entries []merkletree.Entry, ds *digest.Store) (digest.Digest, error) {
 	t := merkletree.New(ds)
 	for _, subtree := range subtrees {
-		log.Debugf("input subtree: %#v", subtree)
 		err := t.SetTree(subtree)
 		if errors.Is(err, merkletree.ErrPrecomputedSubTree) {
 			// probably wrong TreeInputs are set.
@@ -563,13 +561,11 @@ func treeDigest(ctx context.Context, subtrees []merkletree.TreeEntry, entries []
 		}
 	}
 	for _, ent := range entries {
-		log.Debugf("input entry: %#v", ent)
 		err := t.Set(ent)
 		if errors.Is(err, merkletree.ErrPrecomputedSubTree) {
 			// wrong config or deps uses files in subtree.
 			// assume subtree contains the file,
 			// so ignore ErrPrecomputedSubTree here.
-			log.Debugf("ignore entry in subtree %v: %v", ent, err)
 			continue
 		}
 		if err != nil {
@@ -590,7 +586,6 @@ func (c *Cmd) canonicalizeDir(ents []merkletree.Entry, treeInputs []merkletree.T
 	if cdir == "" {
 		return ents, treeInputs
 	}
-	log.Debugf("canonicalize dir: %s -> %s", c.Dir, cdir)
 	ents = c.canonicalizeEntries(cdir, ents)
 	treeInputs = slices.Clone(treeInputs)
 	treeInputs = c.canonicalizeTrees(cdir, treeInputs)

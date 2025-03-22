@@ -9,14 +9,11 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-
-	"github.com/charmbracelet/log"
 )
 
 func fastDepsCmd(ctx context.Context, b *Builder, step *Step) (*Step, bool) {
 	fastStep, err := depsFastStep(ctx, b, step)
 	if err != nil {
-		log.Debugf("no fast-deps %s: %v", step.cmd.Deps, err)
 		return nil, false
 	}
 	return fastStep, true

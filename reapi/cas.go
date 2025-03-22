@@ -199,7 +199,6 @@ func (c *Client) getWithBatchReadBlobs(ctx context.Context, d digest.Digest, nam
 func (c *Client) getWithByteStream(ctx context.Context, d digest.Digest, name string) ([]byte, error) {
 	started := time.Now()
 	resourceName := c.resourceName(d)
-	log.Debugf("get %s", resourceName)
 	var buf []byte
 	err := retry.Do(ctx, func() error {
 		ctx, cancel := contextWithTimeoutForBytestream(ctx, d)

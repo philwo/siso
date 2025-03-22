@@ -84,16 +84,13 @@ func (fv *fsview) addDir(ctx context.Context, dir string, searchPath searchPathT
 		seen := slices.Contains(fv.searchPaths, dir)
 		if !seen {
 			fv.searchPaths = append(fv.searchPaths, dir)
-			log.Debugf("add dir:%d %s", len(fv.searchPaths), dir)
 		}
 	case frameworkSearchPath:
 		seen := slices.Contains(fv.frameworkPaths, dir)
 		if !seen {
 			fv.frameworkPaths = append(fv.frameworkPaths, dir)
-			log.Debugf("add dir[framework]:%d %s", len(fv.frameworkPaths), dir)
 		}
 	}
-	log.Debugf("add dir readdir %s", dir)
 	dents, err := fv.fs.ReadDir(ctx, fv.execRoot, dir)
 	if err != nil {
 		if !errors.Is(err, fs.ErrNotExist) {
@@ -112,30 +109,24 @@ func (fv *fsview) get(ctx context.Context, dir, name string) (string, *scanResul
 	// uses symlinks.
 	if top != ".." && !strings.HasSuffix(dir, ".framework/Headers") {
 		if fv.topEnts[dir] == nil {
-			log.Debugf("no dir %s for top:%s", dir, top)
 			return "", nil, fs.ErrNotExist
 		}
 		if _, ok := fv.topEnts[dir].Load(top); !ok {
-			log.Debugf("not found in %s for top:%s", dir, top)
 			return "", nil, fs.ErrNotExist
 		}
 	}
 	incpath := fv.pathJoin(dir, name)
-	log.Debugf("find path %s/%s -> %s", dir, name, incpath)
 	if !filepath.IsLocal(incpath) {
 		// out of exxecroot?
-		log.Debugf("find not local")
 		return "", nil, fs.ErrNotExist
 	}
 	if v, ok := fv.visited[incpath]; ok {
 		if !v {
-			log.Debugf("find visited not found")
 			return "", nil, fs.ErrNotExist
 		}
 	}
 	incpath = fv.fs.pathIntern(incpath)
 	sr, err := fv.scanFile(ctx, incpath)
-	log.Debugf("scanFile %q %v: %v", incpath, sr, err)
 	if err != nil {
 		fv.visited[incpath] = false
 		return "", nil, err
@@ -156,7 +147,6 @@ func (fv *fsview) scanFile(ctx context.Context, fname string) (*scanResult, erro
 	}
 
 	buf, err := fv.fs.hashfs.ReadFile(ctx, fv.execRoot, fname)
-	log.Debugf("scanFile readfile: %s %v", fname, err)
 	if err != nil {
 		return sr, sr.err
 	}
@@ -188,7 +178,6 @@ func (fv *fsview) scanFile(ctx context.Context, fname string) (*scanResult, erro
 func (fv *fsview) scanResult(ctx context.Context, incpath string) (*scanResult, error) {
 	sr, ok := fv.getFile(incpath)
 	if ok {
-		log.Debugf("scanResult getFile %q %v", incpath, sr)
 		if sr == nil {
 			return nil, fs.ErrNotExist
 		}
@@ -197,7 +186,6 @@ func (fv *fsview) scanResult(ctx context.Context, incpath string) (*scanResult, 
 	if strings.Contains(incpath, ".framework/Headers/") {
 		// framework headers are symlinks to the framework bundle.
 		// so we don't need to check the directory existence.
-		log.Debugf("scanResult for framework %q", incpath)
 	} else {
 		i := -1
 		for {
@@ -212,25 +200,21 @@ func (fv *fsview) scanResult(ctx context.Context, incpath string) (*scanResult, 
 				if exist {
 					continue
 				}
-				log.Debugf("scanResult %q checkDir=%q not exist", incpath, dirname)
 				return nil, fs.ErrNotExist
 			}
 			fi, err := fv.fs.hashfs.Stat(ctx, fv.execRoot, dirname)
 			if err != nil {
 				fv.setDir(dirname, false)
-				log.Debugf("scanResult %q stat dir=%q not exist", incpath, dirname)
 				return nil, fs.ErrNotExist
 			}
 			if !fi.IsDir() {
 				fv.setDir(dirname, false)
-				log.Debugf("scanResult %q dir=%q mode=%s", incpath, dirname, fi.Mode())
 				return nil, fs.ErrNotExist
 			}
 			fv.setDir(dirname, true)
 		}
 	}
 	fi, err := fv.fs.hashfs.Stat(ctx, fv.execRoot, incpath)
-	log.Debugf("scanResult stat %q: %v", incpath, err)
 	if err != nil {
 		fv.setFile(incpath, nil)
 		return nil, fs.ErrNotExist

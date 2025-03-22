@@ -281,7 +281,6 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 				log.Infof("scan state ignore target %s", targetPath(ctx, graph, target))
 				return
 			}
-			log.Debugf("scan state done target %s", targetPath(ctx, graph, target))
 			targets[target].scan = scanStateDone
 		}()
 	case scanStateVisiting:
@@ -334,7 +333,6 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 			switch targets[out].scan {
 			case scanStateNotVisited:
 				targets[out].scan = nextState
-				log.Debugf("scan state %v other target %s", nextState, targetPath(ctx, graph, out))
 			}
 		}
 	}()
@@ -368,11 +366,9 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 				ignore = false
 				break outCheck
 			}
-			log.Debugf("schedule %s ignore output=%s", targetPath(ctx, graph, target), fname)
 
 		}
 	}
-	log.Debugf("target=%s ignore=%t prepareHeaderOnly=%t", targetPath(ctx, graph, target), ignore, sched.prepareHeaderOnly)
 
 	// we might not need to use depfile's dependencies to construct
 	// build graph.
@@ -543,7 +539,6 @@ func (s *scheduler) add(graph Graph, step *Step) {
 		}
 	}
 	if step.ReadyToRun("", Target(0)) {
-		log.Debugf("step state: %s ready to run", step.String())
 		select {
 		case s.plan.q <- step:
 		default:
@@ -553,7 +548,6 @@ func (s *scheduler) add(graph Graph, step *Step) {
 		}
 		return
 	}
-	log.Debugf("pending to run: %s (waits: %d)", step, step.NumWaits())
 	s.plan.npendings++
 }
 
@@ -622,11 +616,9 @@ func (p *plan) done(ctx context.Context, step *Step) {
 	p.ready = p.ready[:i]
 
 	// Unblock waiting steps and send them to the queue if they are ready.
-	npendings := p.npendings
 	nready := 0
 	ready := make([]*Step, 0, len(outs))
 	for _, out := range outs {
-		log.Debugf("done %v", out)
 		i = 0
 		for _, s := range p.targets[out].waits {
 			prevNonPhony := step.String()
@@ -636,7 +628,6 @@ func (p *plan) done(ctx context.Context, step *Step) {
 			if s.ReadyToRun(prevNonPhony, out) {
 				p.npendings--
 				nready++
-				log.Debugf("step state: %s ready to run %q", s.String(), s.def.Outputs(ctx)[0])
 				select {
 				case p.q <- s:
 				default:
@@ -657,11 +648,6 @@ func (p *plan) done(ctx context.Context, step *Step) {
 			continue
 		}
 		p.targets[out].waits = p.targets[out].waits[:i]
-	}
-	if nready > 0 {
-		log.Debugf("trigger %d. pendings %d -> %d", nready, npendings, p.npendings)
-	} else {
-		log.Debugf("zero-trigger outs=%v", outs)
 	}
 
 	p.ready = append(p.ready, ready...)

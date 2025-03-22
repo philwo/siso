@@ -37,7 +37,6 @@ func (b *Builder) teardownRSP(ctx context.Context, step *Step) {
 	if rsp == "" {
 		return
 	}
-	log.Debugf("remove rsp %q", rsp)
 	err := b.hashFS.Remove(ctx, step.cmd.ExecRoot, rsp)
 	if err != nil {
 		log.Warnf("failed to remove %s: %v", rsp, err)

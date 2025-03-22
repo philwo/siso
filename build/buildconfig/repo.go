@@ -40,7 +40,6 @@ type repoLoader struct {
 // A module may be `@<repo>//` prefix to select repository.
 func (r *repoLoader) Load(thread *starlark.Thread, module string) (starlark.StringDict, error) {
 	curname := thread.Local("modulename").(string)
-	log.Debugf("load %s from %s", module, curname)
 	var curModule string
 	if m, n, ok := strings.Cut(curname, "//"); ok {
 		curModule = m[1:]
@@ -69,7 +68,6 @@ func (r *repoLoader) Load(thread *starlark.Thread, module string) (starlark.Stri
 	} else {
 		fullname = fname
 	}
-	log.Debugf("module=%q fname=%q fullname=%q", moduleName, fname, fullname)
 	var buf []byte
 	var err error
 	if moduleName != "" {

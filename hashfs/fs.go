@@ -608,7 +608,6 @@ func (hfs *HashFS) Copy(ctx context.Context, root, src, dst string, mtime time.T
 	e, _, ok := hfs.directory.lookup(ctx, srcfname)
 	if !ok {
 		e = newLocalEntry()
-		log.Debugf("new entry for copy src %s", srcfname)
 		e.init(ctx, srcfname, hfs.executables, hfs.OS)
 		if errors.Is(e.err, context.Canceled) {
 			return e.err
@@ -717,7 +716,6 @@ func (hfs *HashFS) Mkdir(ctx context.Context, root, dirname string, cmdhash, edg
 
 // Remove removes a file at root/fname.
 func (hfs *HashFS) Remove(ctx context.Context, root, fname string) error {
-	log.Debugf("remove @%s %s", root, fname)
 	hfs.clean.Store(false)
 	fname = makeFullpath(root, fname)
 	lready := make(chan bool, 1)
@@ -734,7 +732,6 @@ func (hfs *HashFS) Remove(ctx context.Context, root, fname string) error {
 // RemoveAll removes all files under root/name.
 // Also removes from the disk at the same time.
 func (hfs *HashFS) RemoveAll(ctx context.Context, root, name string) error {
-	log.Debugf("removeAll @%s %s", root, name)
 	hfs.clean.Store(false)
 	name = makeFullpath(root, name)
 	err := os.RemoveAll(name)
@@ -888,7 +885,6 @@ func (hfs *HashFS) Entries(ctx context.Context, root string, inputs []string) ([
 		fname := makeFullpath(root, fname)
 		e, _, ok := hfs.directory.lookup(ctx, fname)
 		if ok {
-			log.Debugf("tree cache hit %s", fname)
 			ents = append(ents, e)
 			if e.mode.IsRegular() {
 				e.mu.Lock()
@@ -910,7 +906,6 @@ func (hfs *HashFS) Entries(ctx context.Context, root string, inputs []string) ([
 		if errors.Is(e.err, context.Canceled) {
 			return nil, e.err
 		}
-		log.Debugf("tree new entry %s", fname)
 		e, err := hfs.directory.store(ctx, fname, e)
 		if err != nil {
 			return nil, err
@@ -951,12 +946,9 @@ func (hfs *HashFS) Entries(ctx context.Context, root string, inputs []string) ([
 				tname = ""
 				var ok bool
 				elink, _, ok = hfs.directory.lookup(ctx, name)
-				if ok {
-					log.Debugf("tree cache hit %s", name)
-				} else {
+				if !ok {
 					elink = newLocalEntry()
 					elink.init(ctx, name, hfs.executables, hfs.OS)
-					log.Debugf("tree new entry %s", name)
 					var err error
 					elink, err = hfs.directory.store(ctx, name, elink)
 					if err != nil {
@@ -1368,7 +1360,6 @@ func (hfs *HashFS) Flush(ctx context.Context, execRoot string, files []string) e
 			if !need {
 				// need=false means file is already downloaded,
 				// or entry was constructed from local disk.
-				log.Debugf("flush %s local ready", fname)
 				e.mu.Lock()
 				if e.mtimeUpdated && e.target == "" {
 					// mtime was updated after entry sets mtime from the local disk.
@@ -1495,7 +1486,6 @@ func (e *entry) String() string {
 func (e *entry) init(ctx context.Context, fname string, executables map[string]bool, osfs *osfs.OSFS) {
 	fi, err := osfs.Lstat(ctx, fname)
 	if errors.Is(err, fs.ErrNotExist) {
-		log.Debugf("not exist %s", fname)
 		e.err = err
 		return
 	}
@@ -1511,7 +1501,6 @@ func (e *entry) init(ctx context.Context, fname string, executables map[string]b
 	}
 	switch {
 	case fi.IsDir():
-		log.Debugf("tree entry %s: is dir", fname)
 		e.directory = &directory{}
 		e.mode = 0644 | fs.ModeDir
 	case fi.Mode().Type() == fs.ModeSymlink:
@@ -1520,7 +1509,6 @@ func (e *entry) init(ctx context.Context, fname string, executables map[string]b
 		if err != nil {
 			e.err = err
 		}
-		log.Debugf("tree entry %s: symlink to %s: %v", fname, e.target, e.err)
 	case fi.Mode().IsRegular():
 		e.mode = 0644
 		if isExecutable(fi, fname, executables) {
@@ -1627,7 +1615,6 @@ func (e *entry) updateDir(ctx context.Context, hfs *HashFS, dname string) []stri
 		return nil
 	}
 	if fi.ModTime().Equal(e.directory.mtime) {
-		log.Debugf("updateDir %s: up-to-date %s", dname, e.mtime)
 		return nil
 	}
 	started := time.Now()
@@ -1720,7 +1707,6 @@ func (e *entry) flush(ctx context.Context, fname string, osfs *osfs.OSFS) error 
 		// directory
 		fi, err := osfs.Lstat(ctx, fname)
 		if err == nil && fi.IsDir() && fi.ModTime().Equal(mtime) {
-			log.Debugf("flush dir %s: already exist", fname)
 			return nil
 		}
 		err = osfs.MkdirAll(fname, 0755)
@@ -1968,8 +1954,6 @@ func (d *directory) lookupEntry(ctx context.Context, fname string) (*entry, *dir
 		}
 		d = subdir
 	}
-	logOrigFname := pe.origFname
-	log.Debugf("lookup %s fname empty", logOrigFname)
 	return nil, nil, "", false
 }
 
@@ -2012,8 +1996,6 @@ func (d *directory) storeEntry(ctx context.Context, fname string, e *entry) (*en
 		origFname: fname,
 		elems:     make([]string, 0, strings.Count(fname, "/")+1),
 	}
-	logOrigFname := pe.origFname
-	log.Debugf("store %s %v", logOrigFname, e)
 	if strings.HasPrefix(fname, "/") {
 		pe.elems = append(pe.elems, "/")
 	}
@@ -2023,12 +2005,6 @@ func (d *directory) storeEntry(ctx context.Context, fname string, e *entry) (*en
 		if !ok {
 			v, loaded := d.m.LoadOrStore(fname, e)
 			if !loaded {
-				lv := struct {
-					origFname string
-					d         *directory
-					fname     string
-				}{pe.origFname, d, fname}
-				log.Debugf("store %s -> %p %s", lv.origFname, lv.d, lv.fname)
 				return e, "", nil
 			}
 			// check whether there is an update from previous entry.
@@ -2067,12 +2043,6 @@ func (d *directory) storeEntry(ctx context.Context, fname string, e *entry) (*en
 				}
 				ee.isChanged = e.isChanged
 				ee.mu.Unlock()
-				lv := struct {
-					origFname   string
-					mtime       time.Time
-					updatedTime time.Time
-				}{pe.origFname, ee.getMtime(), ee.getUpdatedTime()}
-				log.Debugf("store %s: mtime updated %v %v", lv.origFname, lv.mtime, lv.updatedTime)
 				return ee, "", nil
 			} else if ee.getDir() != nil && e.getDir() != nil {
 				// ok if mkdir with the no cmdhash or same cmdhash.
@@ -2120,7 +2090,7 @@ func (d *directory) storeEntry(ctx context.Context, fname string, e *entry) (*en
 // resolveNextDir returns directory if resolved `elem` is directory.
 // resolveNextDir returns resolved path name as string if resolved `elem` is symlink.
 func resolveNextDir(ctx context.Context, d *directory, next func(context.Context, *directory, pathElements, string) (*directory, string, bool), pe pathElements, elem, rest string) (*directory, string, bool) {
-	for i := range maxSymlinks {
+	for range maxSymlinks {
 		nextDir, target, ok := next(ctx, d, pe, elem)
 		if target != "" {
 			if len(pe.elems) != pe.n {
@@ -2144,13 +2114,11 @@ func resolveNextDir(ctx context.Context, d *directory, next func(context.Context
 			}
 			if filepath.IsAbs(target) {
 				resolved := filepath.ToSlash(filepath.Join(target, rest))
-				log.Debugf("resolve symlink -> %s", resolved)
 				return nil, resolved, false
 			}
 			pe.elems[len(pe.elems)-1] = target
 			pe.elems = append(pe.elems, rest)
 			resolved := filepath.ToSlash(filepath.Join(pe.elems...))
-			log.Debugf("resolve symlink -> %s", resolved)
 			return nil, resolved, false
 		}
 
@@ -2160,9 +2128,7 @@ func resolveNextDir(ctx context.Context, d *directory, next func(context.Context
 		if nextDir != nil {
 			return nextDir, "", true
 		}
-		log.Debugf("next %s %d", elem, i)
 	}
-	log.Debugf("resolve loop?")
 	return nil, "", false
 }
 
@@ -2196,24 +2162,12 @@ func nextDir(ctx context.Context, d *directory, pe pathElements, elem string) (*
 		if dent != nil && dent.err == nil {
 			target := dent.target
 			subdir := dent.getDir()
-			lv := struct {
-				origFname, elem string
-				d               *directory
-				dent            *entry
-			}{pe.origFname, elem, d, dent}
-			log.Debugf("store %s subdir0 %s -> %s (%v)", lv.origFname, lv.elem, lv.d, lv.dent)
 			if subdir == nil && target == "" {
-				log.Debugf("store %s no dir, no symlink", pe.origFname)
 				return nil, "", false
 			}
 			return subdir, target, true
 		}
-		deleted := d.m.CompareAndDelete(elem, dent)
-		lv := struct {
-			origFname, elem string
-			deleted         bool
-		}{pe.origFname, elem, deleted}
-		log.Debugf("store %s delete missing %s to create dir deleted: %t", lv.origFname, lv.elem, lv.deleted)
+		_ = d.m.CompareAndDelete(elem, dent)
 	}
 	// create intermediate dir of elem.
 	mtime := time.Now()
@@ -2276,12 +2230,6 @@ func nextDir(ctx context.Context, d *directory, pe pathElements, elem string) (*
 		target = dent.target
 	}
 	subdir := dent.getDir()
-	lv := struct {
-		origFname, elem string
-		subdir          *directory
-		dent            *entry
-	}{pe.origFname, elem, subdir, dent}
-	log.Debugf("store %s subdir1 %s -> %s (%v)", lv.origFname, lv.elem, lv.subdir, lv.dent)
 	d = subdir
 	if d == nil && target == "" {
 		log.Warnf("store %s no dir, no symlink", pe.origFname)

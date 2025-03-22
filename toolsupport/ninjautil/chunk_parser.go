@@ -9,9 +9,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
-	"time"
 
-	"github.com/charmbracelet/log"
 	"go.chromium.org/infra/build/siso/runtimex"
 )
 
@@ -59,7 +57,6 @@ func splitIntoChunks(buf []byte) []chunk {
 		if next < len(buf) {
 			next = nextChunk(buf, next)
 		}
-		log.Debugf("chunk %d..%d", start, next)
 		chunks = append(chunks, chunk{
 			buf:   buf,
 			start: start,
@@ -100,7 +97,6 @@ func nextChunk(buf []byte, i int) int {
 
 // parseChunk parses chunk into statements and counts for allocations.
 func (ch *chunk) parseChunk() error {
-	t := time.Now()
 	buf := ch.buf
 	var lastStatement statementType
 	nlines := bytes.Count(buf[ch.start:ch.end], []byte{'\n'})
@@ -266,12 +262,6 @@ loop:
 		ch.nvar++
 	}
 
-	log.Debugf("scan var:%d rule:%d+%d build:%d+%d pool:%d+%d default:%d include:%d subninja:%d comment:%d: %s",
-		ch.nvar, ch.nrule, ch.nrulevar,
-		ch.nbuild, ch.nbuildvar,
-		ch.npool, ch.npoolvar,
-		ch.ndefault, ch.ninclude, ch.nsubninja, ch.ncomment,
-		time.Since(t))
 	return nil
 }
 
@@ -395,7 +385,6 @@ func (ch *chunk) includeChunks(i int, chunks []chunk) {
 // buildGraphInChunk parses build / default / subninja,
 // which requires path (evalString) evaluation.
 func (ch *chunk) buildGraphInChunk(state *State, fileState *fileState, scope *fileScope) error {
-	log.Debugf("buildGraphInChunk statements=%d", len(ch.statements))
 	var buf bytes.Buffer
 	buf.Grow(4096)
 	var err error
@@ -632,7 +621,6 @@ func (ch *chunk) parseRule(i int, scope *fileScope, rule *rule) (int, error) {
 		return 0, fmt.Errorf("line:%d invalid rule name %q: %w", lineno(ch.buf, st.s), ch.buf[st.v:st.e], err)
 	}
 	name := string(s)
-	log.Debugf("rule %q", name)
 	rule.name = name
 	err = scope.setRule(rule)
 	if err != nil {

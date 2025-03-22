@@ -119,7 +119,6 @@ func scanStraceData(buf []byte) ([]string, []string) {
 		var line []byte
 		line, buf = nextLine(buf)
 		syscall, fnames, wr := parseTraceLine(line)
-		log.Debugf("trace %q %q wr:%t", syscall, fnames, wr)
 		if len(fnames) == 0 {
 			continue
 		}
@@ -257,7 +256,6 @@ func parseTraceLine(line []byte) (sycall string, fnames []string, wr bool) {
 	//   openat(...) = 3
 	//  fail
 	//   syscall(...) = -1 ENOENT (No such file or directory)
-	log.Debugf("trace line: %q", line)
 
 	// workaround for missing --successful-only
 	i := bytes.LastIndexByte(line, '=')
@@ -268,7 +266,6 @@ func parseTraceLine(line []byte) (sycall string, fnames []string, wr bool) {
 	ret := bytes.TrimSpace(line[i+1:])
 	if bytes.HasPrefix(ret, []byte{'-'}) {
 		// ignore error calls. i.e. negative return value
-		log.Debugf("trace line[error]: %q", line)
 		return "", nil, false
 	}
 

@@ -71,7 +71,6 @@ type depsRecord struct {
 func verifySignature(f io.Reader) error {
 	buf := make([]byte, len(fileSignature))
 	n, err := f.Read(buf)
-	log.Debugf("signature=%q: %d %v", buf, n, err)
 	if err != nil || n != len(buf) {
 		return fmt.Errorf("failed to read file signature=%d: %w", n, err)
 	}
@@ -84,7 +83,6 @@ func verifySignature(f io.Reader) error {
 func verifyVersion(f io.Reader) error {
 	var ver int32
 	err := binary.Read(f, binary.LittleEndian, &ver)
-	log.Debugf("version=%d: %v", ver, err)
 	if err != nil {
 		return fmt.Errorf("failed to read version: %w", err)
 	}
@@ -97,7 +95,6 @@ func verifyVersion(f io.Reader) error {
 func readRecordHeader(f io.Reader) (recordHeader, error) {
 	var header recordHeader
 	err := binary.Read(f, binary.LittleEndian, &header)
-	log.Debugf("header=0x%0x: %v", header, err)
 	if err != nil {
 		return -1, err
 	}
@@ -113,7 +110,6 @@ func readDepsRecord(buf []byte, size int, depsLogPaths []string) (int32, *depsRe
 	//   input path id, ...
 	rec := make([]int32, size/4)
 	err := binary.Read(bytes.NewReader(buf[:size]), binary.LittleEndian, rec)
-	log.Debugf("deps record=%v: %v", rec, err)
 	if err != nil {
 		return -1, nil, err
 	}
@@ -150,11 +146,9 @@ func readPathRecord(buf []byte, size int, numDepsLogPaths int) (string, error) {
 		}
 	}
 	pathname := string(buf[:pathSize])
-	log.Debugf("path record %q %d", pathname, numDepsLogPaths)
 
 	var checksum int32
 	err := binary.Read(bytes.NewReader(buf[size-4:size]), binary.LittleEndian, &checksum)
-	log.Debugf("checksum %x: %v", checksum, err)
 	if err != nil {
 		return "", err
 	}
@@ -207,7 +201,6 @@ func NewDepsLog(fname string) (*DepsLog, error) {
 readLoop:
 	for {
 		offset, err = f.Seek(0, os.SEEK_CUR)
-		log.Debugf("offset=%d: %v", offset, err)
 		if err != nil {
 			log.Errorf("failed to get offset: %v", err)
 			broken = true
@@ -379,7 +372,6 @@ func (d *DepsLog) update(outID int32, deps *depsRecord) bool {
 			d.deps = newDeps
 		}
 	}
-	log.Debugf("update deps out=%d deps=%v", outID, deps)
 	d.deps[outID] = deps
 	return existed
 }

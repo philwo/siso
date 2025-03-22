@@ -213,7 +213,6 @@ func (b *Builder) trustedLocalUpload(ctx context.Context, step *Step) error {
 func (b *Builder) prepareLocalInputs(ctx context.Context, step *Step) error {
 	inputs := step.cmd.AllInputs()
 	start := time.Now()
-	log.Debugf("prepare-local-inputs %d", len(inputs))
 	err := b.hashFS.Flush(ctx, step.cmd.ExecRoot, inputs)
 	log.Infof("prepare-local-inputs %d %s: %v", len(inputs), time.Since(start), err)
 	// now, all inputs are expected to be on disk.

@@ -9,9 +9,7 @@ import (
 	"fmt"
 	"os"
 	"sync"
-	"time"
 
-	"github.com/charmbracelet/log"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -63,19 +61,15 @@ type fileParser struct {
 func (p *fileParser) parseFile(ctx context.Context, fname string) error {
 	p.fname = fname
 	p.fileState.filenames = append(p.fileState.filenames, fname)
-	t := time.Now()
 	var err error
 	p.buf, err = p.readFile(fname)
-	log.Debugf("read %s %v: %s", fname, err, time.Since(t))
 	if err != nil {
 		return err
 	}
-	t = time.Now()
 	err = p.parseContent(ctx)
 	if err != nil {
 		return fmt.Errorf("%s: %w", fname, err)
 	}
-	log.Debugf("parseContent %s %v: %s", p.fname, err, time.Since(t))
 	return nil
 }
 
@@ -128,38 +122,26 @@ func (p *fileParser) readFile(fname string) ([]byte, error) {
 
 // parseContent parses ninja file.
 func (p *fileParser) parseContent(ctx context.Context) error {
-	t := time.Now()
 	p.chunks = splitIntoChunks(p.buf)
-	log.Debugf("split %s %d: %s", p.fname, len(p.chunks), time.Since(t))
 
-	t = time.Now()
 	err := p.parseChunks()
-	log.Debugf("parse chunks %s %v: %s", p.fname, err, time.Since(t))
 	if err != nil {
 		return err
 	}
 
-	t = time.Now()
 	p.alloc()
-	log.Debugf("alloc %s: %s", p.fname, time.Since(t))
 
-	t = time.Now()
 	err = p.setup(ctx)
-	log.Debugf("setup %s %v: %s", p.fname, err, time.Since(t))
 	if err != nil {
 		return err
 	}
 
-	t = time.Now()
 	err = p.buildGraph()
-	log.Debugf("build graph %s %v: %s", p.fname, err, time.Since(t))
 	if err != nil {
 		return err
 	}
 
-	t = time.Now()
 	err = p.finalize()
-	log.Debugf("finalize %s %v: %s", p.fname, err, time.Since(t))
 	if err != nil {
 		return err
 	}
@@ -212,8 +194,6 @@ func (p *fileParser) alloc() {
 	p.scope.rules = newRuleMap(p.full.nrule)
 	p.scope.bindings = newShardBindings(p.full.nvar)
 
-	log.Debugf("alloc rule=%d edge=%d pool=%d var=%d binding=%d+%d", p.full.nrule, p.full.nbuild, p.full.npool, p.full.nvar, p.full.nrulevar, p.full.nbuildvar)
-
 	for i := range p.chunks {
 		ch := &p.chunks[i]
 		ch.nodemap = p.state.nodeMap.localNodeMap(ch.nbuild) // estimates # of nodes
@@ -228,8 +208,6 @@ func (p *fileParser) alloc() {
 		ch.inPaths = make([]evalString, 0, (ch.end-ch.start)/256)
 		ch.validationPaths = make([]evalString, 0, 4)
 		ch.edgePathSlab = newSlab[*Node](ch.nbuild)
-
-		log.Debugf("chunk#%d edge:%d", i, ch.edgeArena.len())
 	}
 }
 

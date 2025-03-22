@@ -379,7 +379,6 @@ func (sc StepConfig) Lookup(bpath *build.Path, edge *ninjautil.Edge) (StepRule, 
 			// TODO(b/277532415): preserve quote of args0?
 		}
 	}
-	log.Debugf("lookup action:%s out:%s args0:%s", actionName, out, args0)
 
 loop:
 	for _, c := range sc.Rules {
@@ -429,8 +428,6 @@ loop:
 				rule.Platform["InputRootAbsolutePath"] = bpath.ExecRoot
 			}
 		}
-
-		log.Debugf("hit %s actionName:%q out:%q args0:%q -> action_name:%q action_outs:%q command:%q inputs:%d+%d outputs:%d+%d output-local:%t platform:%v + %v replace:%t accumulate:%t", rule.Name, actionName, outConfig, args0, rule.ActionName, rule.ActionOuts, rule.CommandPrefix, len(rule.Inputs), len(opt.Inputs), len(rule.Outputs), len(opt.Outputs), rule.OutputLocal, rule.Platform, opt.Platform, rule.Replace, rule.Accumulate)
 
 		inputs := make([]string, 0, len(rule.Inputs)+len(opt.Inputs))
 		inputs = append(inputs, rule.Inputs...)
@@ -497,7 +494,6 @@ func (sc StepConfig) ExpandInputs(ctx context.Context, p *build.Path, hashFS *ha
 		path = toConfigPath(p, path)
 		deps, ok := sc.InputDeps[path]
 		if ok {
-			log.Debugf("input-deps expand %s", path)
 			for _, dep := range deps {
 				dep := fromConfigPath(p, dep)
 				if strings.Contains(dep, ":") {

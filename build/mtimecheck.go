@@ -143,11 +143,9 @@ func (b *Builder) checkUpToDate(ctx context.Context, stepDef StepDef, stepManife
 				fmt.Fprintf(b.explainWriter, "output %s flush error %s: %v", outname, localOutputs, err)
 				return false
 			}
-			log.Debugf("flush all outputs %s", localOutputs)
 		}
 	}
 
-	log.Debugf("skip: in:%s < out:%s %s", lastIn, out0, outmtime.Sub(inmtime))
 	return true
 }
 
@@ -168,13 +166,11 @@ func outputMtime(ctx context.Context, b *Builder, outputs []string, restat bool)
 			}
 			continue
 		}
-		log.Debugf("out-cmdhash %d:%s %s", i, outPath, base64.StdEncoding.EncodeToString(fi.CmdHash()))
 		if i == 0 {
 			outcmdhash = fi.CmdHash()
 			edgehash = fi.EdgeHash()
 		}
 		if !bytes.Equal(outcmdhash, fi.CmdHash()) {
-			log.Debugf("out-cmdhash differ %s %s->%s", outPath, base64.StdEncoding.EncodeToString(outcmdhash), base64.StdEncoding.EncodeToString(fi.CmdHash()))
 			outcmdhash = nil
 		}
 		var t time.Time
