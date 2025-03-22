@@ -22,7 +22,6 @@ func (b *Builder) setupRSP(ctx context.Context, step *Step) error {
 		return nil
 	}
 	content := step.cmd.RSPFileContent
-	log.Debugf("create rsp %q=%q", rsp, content)
 	err := b.hashFS.WriteFile(ctx, step.cmd.ExecRoot, rsp, content, false, time.Now(), nil)
 	if err != nil {
 		return fmt.Errorf("failed to create rsp %s: %w", rsp, err)
@@ -38,7 +37,6 @@ func (b *Builder) teardownRSP(ctx context.Context, step *Step) {
 	if rsp == "" {
 		return
 	}
-	log.Debugf("remove rsp %q", rsp)
 	err := b.hashFS.Remove(ctx, step.cmd.ExecRoot, rsp)
 	if err != nil {
 		log.Warnf("failed to remove %s: %v", rsp, err)

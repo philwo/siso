@@ -34,11 +34,8 @@ func CPPScan(fname string, buf []byte) ([]string, map[string][]string, error) {
 			line = buf[:i]
 			buf = buf[i+1:]
 		}
-		lineStart := line
 		if line[0] != '#' {
 			// not directive line
-			logLine := line
-			log.Debugf("skip %q", logLine)
 			continue
 		}
 		// skip #
@@ -56,8 +53,6 @@ func CPPScan(fname string, buf []byte) ([]string, map[string][]string, error) {
 			case line[0] == '\t':
 			default:
 				// not '#include ' nor '#include_next ' ?
-				logLineStart := lineStart
-				log.Debugf("skip %q", logLineStart)
 				continue
 			}
 		case bytes.HasPrefix(line, []byte("import")):
@@ -65,8 +60,6 @@ func CPPScan(fname string, buf []byte) ([]string, map[string][]string, error) {
 			switch line[0] {
 			case ' ', '\t':
 			default:
-				logLineStart := lineStart
-				log.Debugf("skip %q", logLineStart)
 				continue
 			}
 
@@ -76,24 +69,18 @@ func CPPScan(fname string, buf []byte) ([]string, map[string][]string, error) {
 			case ' ', '\t':
 			default:
 				// not '#define '
-				logLineStart := lineStart
-				log.Debugf("skip %q", logLineStart)
 				continue
 			}
 			line = bytes.TrimSpace(line)
-			addDefine(defines, fname, line)
+			addDefine(defines, line)
 			continue
 		default:
 			// ignore other directives
-			logLineStart := lineStart
-			log.Debugf("skip %q", logLineStart)
 			continue
 		}
 		line = bytes.TrimSpace(line)
 		if len(line) == 0 {
 			// no path for #include?
-			logLineStart := lineStart
-			log.Debugf("skip %q", logLineStart)
 			continue
 		}
 		includes = addInclude(includes, line)
@@ -119,13 +106,10 @@ func cppExpandMacros(ctx context.Context, paths []string, incname string, macros
 	for _, v := range values {
 		paths = cppExpandMacros(ctx, paths, v, macros)
 	}
-	log.Debugf("expand %q -> %q", incname, paths)
 	return paths
 }
 
 func addInclude(paths []string, incpath []byte) []string {
-	logIncpath := incpath
-	log.Debugf("addInclude %q", logIncpath)
 	delim := string(incpath[0])
 	switch delim {
 	case `"`:
@@ -138,8 +122,6 @@ func addInclude(paths []string, incpath []byte) []string {
 	if i < 0 {
 		if delim == ">" || delim == `"` {
 			// unclosed path?
-			logIncpath := incpath
-			log.Debugf("unclosed path? %q", logIncpath)
 			return paths
 		}
 		// otherwise, use rest of line as token.
@@ -152,32 +134,24 @@ func addInclude(paths []string, incpath []byte) []string {
 		// not <>, "", nor upper macros?
 		return paths
 	}
-	logIncpath = incpath
-	log.Debugf("include %q", logIncpath)
 	return append(paths, strings.Clone(string(incpath)))
 }
 
-func addDefine(defines map[string][]string, fname string, line []byte) {
+func addDefine(defines map[string][]string, line []byte) {
 	// line
 	//  MACRO "path.h"
 	//  MACRO <path.h>
 	i := bytes.IndexAny(line, " \t")
 	if i < 0 {
 		// no macro name
-		logLine := line
-		log.Debugf("no macro name: %q", logLine)
 		return
 	}
 	macro := strings.Clone(string(line[:i]))
 	if strings.Contains(macro, "(") {
-		logMacro := macro
-		log.Debugf("ignore func maro: %q", logMacro)
 		return
 	}
 	line = bytes.TrimSpace(line[i+1:])
 	if len(line) == 0 {
-		logMacro := macro
-		log.Debugf("no macro value for %q?", logMacro)
 		return
 	}
 	switch line[0] {
@@ -189,11 +163,6 @@ func addDefine(defines map[string][]string, fname string, line []byte) {
 		i = bytes.IndexByte(line[1:], delim)
 		if i < 0 {
 			// unclosed path?
-			lv := struct {
-				macro string
-				line  []byte
-			}{macro: macro, line: line}
-			log.Debugf("unclosed path for macro %q: %q", lv.macro, lv.line)
 			return
 		}
 		value := strings.Clone(string(line[:i+2])) // include delim at both side
@@ -212,26 +181,13 @@ func addDefine(defines map[string][]string, fname string, line []byte) {
 			value = value[:i]
 		}
 		if len(value) == 0 {
-			logMacro := macro
-			log.Debugf("just define macro %s?", logMacro)
 			return
 		}
 		if bytes.IndexByte(value, '(') >= 0 {
-			lv := struct {
-				macro string
-				value []byte
-			}{macro: macro, value: value}
-			log.Debugf("ignore func maro: %q=%q", lv.macro, lv.value)
 			return
 		}
 		if value[0] >= 'A' && value[0] <= 'Z' {
 			defines[macro] = append(defines[macro], strings.Clone(string(value)))
-		} else {
-			lv := struct {
-				macro string
-				line  []byte
-			}{macro: macro, line: line}
-			log.Debugf("ignore macro %s=%s", lv.macro, lv.line)
 		}
 	}
 }

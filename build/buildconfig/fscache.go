@@ -26,7 +26,6 @@ func (c *fscache) Get(fsys fs.FS, fname string) ([]byte, error) {
 	buf, ok := c.m[fname]
 	c.mu.Unlock()
 	if ok {
-		log.Debugf("fscache hit %s: %d", fname, len(buf))
 		return buf, nil
 	}
 	v, err, _ := c.s.Do(fname, func() (any, error) {

@@ -83,7 +83,6 @@ retryLoop:
 						log.Warnf("failed to unmarshal metadata: %v", err)
 					} else {
 						log.Infof("operation stage: %v", metadata.GetStage())
-						log.Debugf("operation metadata: %v", metadata)
 					}
 					continue
 				}

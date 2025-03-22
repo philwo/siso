@@ -116,8 +116,6 @@ func (s *ScanDeps) Scan(ctx context.Context, execRoot string, req Request) ([]st
 			return nil, fmt.Errorf("too slow scandeps: dirs:%d ds:%d i:%d n:%d %s %s", len(req.Dirs), scanner.maxDirstack, icnt, ncnt, setupDur, dur)
 		}
 		names := scanner.nextInputs(ctx)
-		logNames := names
-		log.Debugf("try include %q", logNames)
 		for _, name := range names {
 			ncnt++
 			incpath, err := scanner.find(ctx, name)
@@ -125,27 +123,18 @@ func (s *ScanDeps) Scan(ctx context.Context, execRoot string, req Request) ([]st
 				if errors.Is(err, ctx.Err()) {
 					return nil, fmt.Errorf("timeout dirs:%d ds:%d i:%d n:%d %s %s: %w", len(req.Dirs), scanner.maxDirstack, icnt, ncnt, setupDur, time.Since(started), err)
 				}
-				lv := struct {
-					name string
-					err  error
-				}{name, err}
-				log.Debugf("name %s not found: %v", lv.name, lv.err)
 				continue
 			}
 			if incpath == "" {
 				// already read?
 				continue
 			}
-			log.Debugf("include %s -> %s", name, incpath)
 			if deps, ok := s.inputDeps[incpath]; ok {
-				logDeps := deps
-				log.Debugf("add inputDeps %q", logDeps)
 				scanner.addInputs(deps...)
 			}
 			// if not found, fallback to `clang -M`?
 		}
 	}
 	results := scanner.results()
-	log.Debugf("results=%q", results)
 	return results, nil
 }

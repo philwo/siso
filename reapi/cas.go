@@ -186,7 +186,6 @@ func (c *Client) getWithBatchReadBlobs(ctx context.Context, d digest.Digest, nam
 func (c *Client) getWithByteStream(ctx context.Context, d digest.Digest, name string) ([]byte, error) {
 	started := time.Now()
 	resourceName := c.resourceName(d)
-	log.Debugf("get %s", resourceName)
 	var buf []byte
 	err := retry.Do(ctx, func() error {
 		ctx, cancel := contextWithTimeoutForBytestream(ctx, d)
@@ -624,8 +623,6 @@ func (c *Client) uploadWithByteStream(ctx context.Context, digests []digest.Dige
 				return err
 			}
 			defer rd.Close()
-			resourceName := c.uploadResourceName(d)
-			log.Infof("put %s", resourceName)
 			wr, err := bytestreamio.Create(ctx, bsClient, c.uploadResourceName(d))
 			if err != nil {
 				return err

@@ -221,11 +221,8 @@ func (depsMSVC) scandeps(ctx context.Context, b *Builder, step *Step) ([]string,
 			// no-fallback has longer timeout for scandeps
 			req.Timeout = 2 * req.Timeout
 		}
-		log.Debugf("scandeps req=%#v", req)
-		started := time.Now()
 		var err error
 		ins, err = b.scanDeps.Scan(ctx, b.path.ExecRoot, req)
-		log.Debugf("scandeps %d %s: %v", len(ins), time.Since(started), err)
 		if err != nil {
 			buf, berr := json.Marshal(req)
 			log.Warnf("scandeps failed Request %s %v: %v", buf, berr, err)

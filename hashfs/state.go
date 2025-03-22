@@ -291,7 +291,6 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 			}
 			fi, err := fsm.FileInfo(ctx, ent)
 			if errors.Is(err, fs.ErrNotExist) {
-				log.Debugf("not exist %q", ent.Name)
 				nnotexist.Add(1)
 				if len(h) == 0 {
 					log.Infof("not exist with no cmdhash: %q", ent.Name)
@@ -433,7 +432,6 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 				e = le
 			case entryEqLocal:
 				neq.Add(1)
-				log.Debugf("equal local %s %q: %s", ftype, ent.Name, e.mtime)
 				if logw != nil {
 					fmt.Fprintf(logw, "equal local %s %q: %s\n", ftype, ent.Name, e.mtime)
 				}
@@ -451,7 +449,6 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 					fmt.Fprintf(logw, "old local %s %q: state:%s disk:%s cmdhash:%s\n", ftype, ent.Name, e.mtime, fi.ModTime(), base64.StdEncoding.EncodeToString(e.cmdhash))
 				}
 			}
-			log.Debugf("set state %q: d:%s %s s:%s m:%s cmdhash:%s action:%s", ent.Name, e.d, e.mode, e.target, e.mtime, base64.StdEncoding.EncodeToString(e.cmdhash), e.action)
 			if ftype == "dir" {
 				dirs[i] = e
 			} else {
@@ -708,7 +705,6 @@ func (hfs *HashFS) State(ctx context.Context) *pb.State {
 		dir := dirs[0]
 		dirs = dirs[1:]
 		var names []string
-		log.Debugf("state dir=%s dirs=%d", dir.name, len(dirs))
 		// TODO(b/254182269): need mutex here?
 		dir.dir.m.Range(func(k, _ any) bool {
 			name := filepath.ToSlash(filepath.Join(dir.name, k.(string)))
@@ -716,7 +712,6 @@ func (hfs *HashFS) State(ctx context.Context) *pb.State {
 			return true
 		})
 		sort.Strings(names)
-		log.Debugf("state dir=%s -> %q", dir.name, names)
 		for _, name := range names {
 			v, ok := dir.dir.m.Load(filepath.Base(name))
 			if !ok {
@@ -743,8 +738,6 @@ func (hfs *HashFS) State(ctx context.Context) *pb.State {
 			if e.mtime.IsZero() {
 				if len(e.cmdhash) > 0 {
 					log.Warnf("wrong entry for %s: mtime is zero, but cmdhash set %s", name, e.cmdhash)
-				} else {
-					log.Debugf("ignore %s: no mtime", name)
 				}
 				continue
 			}
@@ -845,7 +838,6 @@ func loadJournal(fname string, state *pb.State) bool {
 			break
 		}
 		m[ent.Name] = ent
-		log.Debugf("from journal %s", ent.Name)
 		cnt++
 	}
 	if cnt == 0 {

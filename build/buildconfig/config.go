@@ -236,13 +236,11 @@ func (cfg *Config) Handle(ctx context.Context, handler string, bpath *build.Path
 		"flags":    starFlags(cfg.flags),
 		"fs":       starFS(ctx, cmd.HashFS.FileSystem(ctx, cmd.ExecRoot), bpath, cfg.fscache),
 	})
-	log.Debugf("hctx: %v", hctx)
 
 	hcmd, err := packCmd(cmd, expandedInputs)
 	if err != nil {
 		return fmt.Errorf("failed to pack cmd: %w", err)
 	}
-	log.Debugf("hcmd: %v", hcmd)
 	// hctx and hcmd will be frozen, so fun may not mutate hcmd.
 	_, err = starlark.Call(thread, fun, []starlark.Value{hctx, hcmd}, nil)
 	if err != nil {

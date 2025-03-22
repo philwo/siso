@@ -157,7 +157,6 @@ func (s *StepDef) EnsureRule(ctx context.Context) {
 	gotRule, s.rule, s.pure = er.ensure(ctx, s.globals)
 	if !gotRule {
 		s.rule, s.pure = s.globals.stepConfig.Lookup(s.globals.path, s.edge)
-		log.Debugf("rule:%t", s.pure)
 	}
 }
 
@@ -207,7 +206,6 @@ func (s *StepDef) Args(ctx context.Context) []string {
 		if tool != "msvc" {
 			return args
 		}
-		log.Debugf("%s envfile=%q", s, s.envfile)
 		return flagSet.Args()
 	}
 	return args
@@ -458,7 +456,6 @@ func depInputs(ctx context.Context, s *StepDef) (func(yield func(string) bool), 
 		default:
 			return nil, fmt.Errorf("wrong deps log state for %q: state=%s %s", out, state, msg)
 		}
-		log.Debugf("depslog %s: %d", out, len(deps))
 
 	case "":
 		// deps info is in depfile
@@ -482,7 +479,6 @@ func depInputs(ctx context.Context, s *StepDef) (func(yield func(string) bool), 
 		if err != nil {
 			return nil, fmt.Errorf("%w: failed to load depfile %s: %w", build.ErrMissingDeps, df, err)
 		}
-		log.Debugf("depfile %s: %d", depfile, len(deps))
 	}
 	return func(yield func(string) bool) {
 		for _, in := range deps {
@@ -513,7 +509,6 @@ func fixInputs(ctx context.Context, stepDef *StepDef, inputs, excludes []string)
 			_, err := stepDef.globals.hashFS.Stat(ctx, stepDef.globals.path.ExecRoot, in)
 			if err != nil {
 				if errors.Is(err, fs.ErrNotExist) {
-					log.Debugf("input %s is phony", in)
 					continue
 				}
 				log.Warnf("input %s is phony: %v", in, err)

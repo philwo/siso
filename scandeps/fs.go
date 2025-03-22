@@ -46,7 +46,6 @@ type dircache struct {
 
 // update updates filesystem modification by fi.
 func (fsys *filesystem) update(ctx context.Context, fi *hashfs.FileInfo) {
-	log.Debugf("update %s dir:%t", fi.Path(), fi.IsDir())
 	var dname string
 	var base string
 	if !fi.IsDir() {
@@ -130,7 +129,6 @@ func (fsys *filesystem) ReadDir(ctx context.Context, execRoot, dname string) (*s
 	dc := dv.(*dircache)
 	if !loaded {
 		go func() {
-			log.Debugf("fsys readdir %s", dname)
 			symlinkErr := fmt.Errorf("readdir %s: %w", dname, syscall.ELOOP)
 			const maxSymlinks = 40
 			var dents []hashfs.DirEntry
@@ -161,7 +159,6 @@ func (fsys *filesystem) ReadDir(ctx context.Context, execRoot, dname string) (*s
 			}
 			dc.err = err
 			for _, de := range dents {
-				log.Debugf("dirent %q %q", fullpath, de.Name())
 				dc.m.Store(fsys.pathIntern(de.Name()), true)
 			}
 			dname = fullpath
