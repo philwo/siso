@@ -36,7 +36,7 @@ func preprocCmd(ctx context.Context, b *Builder, step *Step) error {
 	if err != nil {
 		return err
 	}
-	dedupInputs(ctx, step.cmd)
+	dedupInputs(step.cmd)
 	return nil
 }
 

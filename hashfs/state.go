@@ -101,7 +101,7 @@ func isZstd(b []byte) bool {
 	return len(b) >= 4 && b[0] == 0x28 && b[1] == 0xb5 && b[2] == 0x2f && b[3] == 0xfd
 }
 
-func loadFile(ctx context.Context, opts Option) ([]byte, error) {
+func loadFile(opts Option) ([]byte, error) {
 	f, err := os.Open(opts.StateFile)
 	if err != nil {
 		return nil, err
@@ -179,9 +179,9 @@ func loadFile(ctx context.Context, opts Option) ([]byte, error) {
 }
 
 // Load loads a HashFS's state.
-func Load(ctx context.Context, opts Option) (*pb.State, error) {
+func Load(opts Option) (*pb.State, error) {
 	start := time.Now()
-	b, err := loadFile(ctx, opts)
+	b, err := loadFile(opts)
 	if err != nil {
 		return nil, err
 	}
@@ -380,7 +380,7 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 				data, err := localDigest(ctx, src, ent.Name)
 				if err == nil && data.Digest() == e.d {
 					et = entryEqLocal
-					err = hfs.OS.Chtimes(ctx, ent.Name, time.Now(), e.mtime)
+					err = hfs.OS.Chtimes(ent.Name, time.Now(), e.mtime)
 					log.Infof("reconcile mtime %q %v -> %v: %v", ent.Name, fi.ModTime(), e.mtime, err)
 					if logw != nil {
 						fmt.Fprintf(logw, "reconcile mtime %q %v -> %v: %v\n", ent.Name, fi.ModTime(), e.mtime, err)
@@ -608,7 +608,7 @@ func newStateEntry(ctx context.Context, ent *pb.Entry, ftime time.Time, dataSour
 	return e, entType
 }
 
-func saveFile(ctx context.Context, data []byte, opts Option) (retErr error) {
+func saveFile(data []byte, opts Option) (retErr error) {
 	compressThreads := opts.CompressThreads
 	if compressThreads == 0 {
 		compressThreads = defaultCompressThreads
@@ -674,7 +674,7 @@ func saveFile(ctx context.Context, data []byte, opts Option) (retErr error) {
 }
 
 // Save persists state in fname.
-func Save(ctx context.Context, state *pb.State, opts Option) error {
+func Save(state *pb.State, opts Option) error {
 	defer func() {
 		r := recover()
 		if r == nil {
@@ -705,7 +705,7 @@ func Save(ctx context.Context, state *pb.State, opts Option) error {
 	durMarshal := time.Since(start)
 
 	start = time.Now()
-	err = saveFile(ctx, b, opts)
+	err = saveFile(b, opts)
 	if err != nil {
 		return err
 	}
@@ -853,7 +853,7 @@ func StateMap(s *pb.State) map[string]*pb.Entry {
 	return m
 }
 
-func loadJournal(ctx context.Context, fname string, state *pb.State) bool {
+func loadJournal(fname string, state *pb.State) bool {
 	started := time.Now()
 	b, err := os.ReadFile(fname)
 	if err != nil {

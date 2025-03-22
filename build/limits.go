@@ -5,7 +5,6 @@
 package build
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"runtime"
@@ -62,10 +61,10 @@ var (
 // e.g.
 //
 //	SISO_LIMITS=step=1024,local=8,remote=80
-func DefaultLimits(ctx context.Context) Limits {
+func DefaultLimits() Limits {
 	limitOnce.Do(func() {
 		numCPU := runtimex.NumCPU()
-		stepLimit := limitForStep(ctx, numCPU)
+		stepLimit := limitForStep(numCPU)
 		defaultLimits = Limits{
 			Step:      stepLimit,
 			Preproc:   stepLimit,
@@ -73,8 +72,8 @@ func DefaultLimits(ctx context.Context) Limits {
 			Local:     numCPU,
 			FastLocal: limitForFastLocal(numCPU),
 			// TODO(crbug.com/429473708): set reasonable default for StartLocal
-			Remote: limitForRemote(ctx, numCPU),
-			REWrap: limitForREWrapper(ctx, numCPU),
+			Remote: limitForRemote(numCPU),
+			REWrap: limitForREWrapper(numCPU),
 			Cache:  stepLimitFactor * numCPU,
 		}
 		// On many cores machine, it would hit default max thread limit = 10000.
@@ -132,7 +131,7 @@ func DefaultLimits(ctx context.Context) Limits {
 	return defaultLimits
 }
 
-func limitForStep(ctx context.Context, numCPU int) int {
+func limitForStep(numCPU int) int {
 	limit := stepLimitFactor * numCPU
 	// limit step for reproxy to protect from thread exceeeds.
 	// reclient_helper.py sets the RBE_server_address
@@ -143,7 +142,7 @@ func limitForStep(ctx context.Context, numCPU int) int {
 	return limit
 }
 
-func limitForRemote(ctx context.Context, numCPU int) int {
+func limitForRemote(numCPU int) int {
 	limit := remoteLimitFactor * numCPU
 	// Intel Mac has bad performance with a large number of remote actions.
 	if runtime.GOOS == "darwin" && runtime.GOARCH == "amd64" {
@@ -172,7 +171,7 @@ func limitForFastLocal(numCPU int) int {
 	return n
 }
 
-func limitForREWrapper(ctx context.Context, numCPU int) int {
+func limitForREWrapper(numCPU int) int {
 	// same logic in depot_tools/autoninja.py
 	// https://chromium.googlesource.com/chromium/tools/depot_tools.git/+/54762c22175e17dce4f4eab18c5942c06e82478f/autoninja.py#166
 	const defaultCoreMultiplier = remoteLimitFactor

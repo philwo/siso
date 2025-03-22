@@ -41,7 +41,7 @@ func (b *Builder) execRemote(ctx context.Context, step *Step) error {
 			step.setPhase(phase)
 			if phase == stepRetryRun {
 				step.metrics.RemoteRetry++
-				b.progressStepRetry(ctx, step)
+				b.progressStepRetry(step)
 			}
 			reExecStarted := time.Now()
 			// Record ActionStartTime only when it's not set, yet.
@@ -65,7 +65,7 @@ func (b *Builder) execRemote(ctx context.Context, step *Step) error {
 			if err == nil && !validateRemoteActionResult(result) {
 				log.Errorf("no outputs in action result. retry without cache lookup. b/350360391")
 				res := cmdOutput(ctx, cmdOutputResultRETRY, "", step.cmd, step.def.Binding("command"), step.def.RuleName(), err)
-				b.logOutput(ctx, res, false)
+				b.logOutput(res, false)
 				step.metrics.RemoteRetry++
 				step.cmd.SkipCacheLookup = true
 				step.setPhase(phase)
@@ -81,7 +81,7 @@ func (b *Builder) execRemote(ctx context.Context, step *Step) error {
 				step.metrics.Cached = true
 			}
 			step.metrics.RunTime = IntervalMetric(time.Since(reExecStarted))
-			step.metrics.done(ctx, step, b.start)
+			step.metrics.done(step, b.start)
 			return err
 		})
 		reExecDur += time.Duration(step.metrics.RunTime)
@@ -119,9 +119,9 @@ func (b *Builder) execRemoteCache(ctx context.Context, step *Step) error {
 			step.cmd.SkipCacheLookup = true
 			return errors.New("no output in action result")
 		}
-		b.progressStepCacheHit(ctx, step)
+		b.progressStepCacheHit(step)
 		step.metrics.RunTime = IntervalMetric(time.Since(start))
-		step.metrics.done(ctx, step, b.start)
+		step.metrics.done(step, b.start)
 		step.metrics.Cached = true
 		return nil
 	})

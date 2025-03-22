@@ -8,7 +8,7 @@ import (
 	"context"
 )
 
-func (b *Builder) runStrategy(ctx context.Context, step *Step) func(context.Context, *Step) error {
+func (b *Builder) runStrategy(step *Step) func(context.Context, *Step) error {
 	// Criteria for remote executable:
 	// - Allow remote if available and command has platform property.
 	// - Allow reproxy if available and command has reproxy config set.
@@ -27,7 +27,7 @@ func (b *Builder) runStrategy(ctx context.Context, step *Step) func(context.Cont
 }
 
 func (b *Builder) runReproxy(ctx context.Context, step *Step) error {
-	dedupInputs(ctx, step.cmd)
+	dedupInputs(step.cmd)
 	// TODO: b/297807325 - Siso relies on Reproxy's local fallback for
 	// monitoring at this moment. So, Siso shouldn't try local fallback.
 	return b.execReproxy(ctx, step)
@@ -38,7 +38,7 @@ func (b *Builder) runLocal(ctx context.Context, step *Step) error {
 	// we can flush these inputs before local execution.
 	// but we already flushed generated *.h etc, no need to
 	// preproc for local run.
-	dedupInputs(ctx, step.cmd)
+	dedupInputs(step.cmd)
 	// TODO: use local cache?
 	return b.execLocal(ctx, step)
 }

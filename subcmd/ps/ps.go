@@ -89,7 +89,7 @@ func (c *run) Run(a subcommands.Application, args []string, env subcommands.Env)
 	if c.stdoutURL != "" {
 		src, err = newStdoutURLSource(ctx, c.stdoutURL)
 	} else {
-		src, err = newLocalSource(ctx, c.dir)
+		src, err = newLocalSource(c.dir)
 	}
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -116,7 +116,7 @@ func (c *run) Run(a subcommands.Application, args []string, env subcommands.Env)
 				lines = append(lines, "\f\n")
 				lines = append(lines, fmt.Sprintf("%10s %9s %s\n", "DURATION", "PHASE", "DESC"))
 			}
-			c.render(ctx, lines, activeSteps)
+			c.render(lines, activeSteps)
 		}
 		if c.interval <= 0 {
 			break
@@ -125,7 +125,7 @@ func (c *run) Run(a subcommands.Application, args []string, env subcommands.Env)
 			fmt.Println(src.text())
 			c.termui = false
 			ui.Default = ui.LogUI{}
-			c.render(ctx, nil, activeSteps)
+			c.render(nil, activeSteps)
 			return ret
 		}
 		select {
@@ -137,7 +137,7 @@ func (c *run) Run(a subcommands.Application, args []string, env subcommands.Env)
 	return ret
 }
 
-func (c *run) render(ctx context.Context, lines []string, activeSteps []build.ActiveStepInfo) {
+func (c *run) render(lines []string, activeSteps []build.ActiveStepInfo) {
 	headings := len(lines)
 	for _, as := range activeSteps {
 		dur := as.ServDur

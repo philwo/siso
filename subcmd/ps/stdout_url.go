@@ -63,7 +63,7 @@ func newStdoutURLSource(ctx context.Context, stdoutURL string) (*stdoutURLSource
 		started:   time.Now(),
 		done:      make(chan bool),
 	}
-	go src.run(ctx, resp.Body)
+	go src.run(resp.Body)
 	return src, nil
 }
 
@@ -77,7 +77,7 @@ func (s *stdoutURLSource) text() string {
 	return strings.Join(s.lines, "\n")
 }
 
-func (s *stdoutURLSource) run(ctx context.Context, body io.ReadCloser) {
+func (s *stdoutURLSource) run(body io.ReadCloser) {
 	defer func() {
 		err := body.Close()
 		if err != nil {

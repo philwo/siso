@@ -6,7 +6,6 @@ package scandeps
 
 import (
 	"bytes"
-	"context"
 	"encoding/binary"
 	"fmt"
 )
@@ -97,7 +96,7 @@ func (p *hmapParser) Str(fieldName string) string {
 }
 
 // ParseHeaderMap parses *.hmap file.
-func ParseHeaderMap(ctx context.Context, buf []byte) (map[string]string, error) {
+func ParseHeaderMap(buf []byte) (map[string]string, error) {
 	p := &hmapParser{
 		hmap: buf,
 		buf:  buf,

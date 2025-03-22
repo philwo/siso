@@ -5,7 +5,6 @@
 package metricscmd
 
 import (
-	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -16,8 +15,6 @@ import (
 	"time"
 
 	"github.com/maruel/subcommands"
-
-	"go.chromium.org/luci/common/cli"
 
 	"go.chromium.org/infra/build/siso/build"
 )
@@ -67,8 +64,7 @@ func (c *summaryRun) init() {
 }
 
 func (c *summaryRun) Run(a subcommands.Application, args []string, env subcommands.Env) int {
-	ctx := cli.GetContext(a, c, env)
-	err := c.run(ctx)
+	err := c.run()
 	if err != nil {
 		switch {
 		case errors.Is(err, flag.ErrHelp):
@@ -81,7 +77,7 @@ func (c *summaryRun) Run(a subcommands.Application, args []string, env subcomman
 	return 0
 }
 
-func (c *summaryRun) run(ctx context.Context) error {
+func (c *summaryRun) run() error {
 	switch c.elapsedTime {
 	case "run", "step":
 	default:
@@ -92,7 +88,7 @@ func (c *summaryRun) run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	metrics, err := loadMetrics(ctx, c.input)
+	metrics, err := loadMetrics(c.input)
 	if err != nil {
 		return err
 	}

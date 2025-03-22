@@ -56,8 +56,8 @@ func (b *Builder) checkUpToDate(ctx context.Context, stepDef StepDef, stepManife
 
 	// TODO(b/288419130): make sure it covers all cases as ninja does.
 
-	outname := b.path.MaybeToWD(ctx, out0)
-	lastInName := b.path.MaybeToWD(ctx, lastIn)
+	outname := b.path.MaybeToWD(out0)
+	lastInName := b.path.MaybeToWD(lastIn)
 	if err != nil {
 		log.Infof("need %v", err)
 		reason := "missing-inputs"

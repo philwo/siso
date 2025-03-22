@@ -152,7 +152,7 @@ func (m *StepMetric) init(ctx context.Context, b *Builder, step *Step, stepStart
 	m.StepID = step.def.String()
 	m.Rule = step.def.RuleName()
 	m.Action = step.def.ActionName()
-	m.Output = b.path.MaybeToWD(ctx, step.def.Outputs(ctx)[0])
+	m.Output = b.path.MaybeToWD(step.def.Outputs(ctx)[0])
 	m.GNTarget = step.def.Binding("gn_target")
 	m.PrevStepID = step.prevStepID
 	m.PrevStepOut = prevStepOut
@@ -160,7 +160,7 @@ func (m *StepMetric) init(ctx context.Context, b *Builder, step *Step, stepStart
 	m.Start = IntervalMetric(stepStart.Sub(step.readyTime))
 }
 
-func (m *StepMetric) done(ctx context.Context, step *Step, buildStart time.Time) {
+func (m *StepMetric) done(step *Step, buildStart time.Time) {
 	m.WeightedDuration = IntervalMetric(step.getWeightedDuration())
 	m.Inputs = len(step.cmd.Inputs)
 	m.Outputs = len(step.cmd.Outputs)

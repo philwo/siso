@@ -41,15 +41,15 @@ func (msvc depsMSVC) DepsFastCmd(ctx context.Context, b *Builder, cmd *execute.C
 }
 
 func (msvc depsMSVC) fixCmdInputs(ctx context.Context, b *Builder, cmd *execute.Cmd) ([]string, error) {
-	params := msvcutil.ExtractScanDepsParams(ctx, cmd.Args, cmd.Env)
+	params := msvcutil.ExtractScanDepsParams(cmd.Args, cmd.Env)
 	for i := range params.Files {
-		params.Files[i] = b.path.MaybeFromWD(ctx, params.Files[i])
+		params.Files[i] = b.path.MaybeFromWD(params.Files[i])
 	}
 	for i := range params.Dirs {
-		params.Dirs[i] = b.path.MaybeFromWD(ctx, params.Dirs[i])
+		params.Dirs[i] = b.path.MaybeFromWD(params.Dirs[i])
 	}
 	for i := range params.Sysroots {
-		params.Sysroots[i] = b.path.MaybeFromWD(ctx, params.Sysroots[i])
+		params.Sysroots[i] = b.path.MaybeFromWD(params.Sysroots[i])
 	}
 	var inputs []string
 	if len(params.Sources) == 0 {
@@ -82,7 +82,7 @@ func (msvc depsMSVC) fixCmdInputs(ctx context.Context, b *Builder, cmd *execute.
 		// but if we use it with OSFamily=Windows, need to
 		// deduplicate such case sensitive filenames.
 		fixFn = func(ctx context.Context, files []string) []string {
-			return fixCaseSensitiveIncludes(ctx, b, files)
+			return fixCaseSensitiveIncludes(b, files)
 		}
 	}
 
@@ -132,7 +132,7 @@ func (depsMSVC) DepsAfterRun(ctx context.Context, b *Builder, step *Step) ([]str
 			// (for libc++ headers, like `utility`).
 			continue
 		}
-		in = b.path.MaybeToWD(ctx, in)
+		in = b.path.MaybeToWD(in)
 		if m[in] {
 			continue
 		}
@@ -199,7 +199,7 @@ func (depsMSVC) scandeps(ctx context.Context, b *Builder, step *Step) ([]string,
 		if step.metrics.ActionStartTime == 0 {
 			step.metrics.ActionStartTime = IntervalMetric(time.Since(b.start))
 		}
-		params := msvcutil.ExtractScanDepsParams(ctx, step.cmd.Args, step.cmd.Env)
+		params := msvcutil.ExtractScanDepsParams(step.cmd.Args, step.cmd.Env)
 		if len(params.Sources) == 0 {
 			// If ExtractScanDepsParams doesn't return Sources, such action uses inputs from ninja build file directly, as the action doesn't need include scanning.
 			// e.g. clang modules, rust and etc.
@@ -207,18 +207,18 @@ func (depsMSVC) scandeps(ctx context.Context, b *Builder, step *Step) ([]string,
 		}
 
 		for i := range params.Sources {
-			params.Sources[i] = b.path.MaybeFromWD(ctx, params.Sources[i])
+			params.Sources[i] = b.path.MaybeFromWD(params.Sources[i])
 		}
 		// no need to canonicalize path for Includes.
 		// it should be used as is for `#include "pathname.h"`
 		for i := range params.Files {
-			params.Files[i] = b.path.MaybeFromWD(ctx, params.Files[i])
+			params.Files[i] = b.path.MaybeFromWD(params.Files[i])
 		}
 		for i := range params.Dirs {
-			params.Dirs[i] = b.path.MaybeFromWD(ctx, params.Dirs[i])
+			params.Dirs[i] = b.path.MaybeFromWD(params.Dirs[i])
 		}
 		for i := range params.Sysroots {
-			params.Sysroots[i] = b.path.MaybeFromWD(ctx, params.Sysroots[i])
+			params.Sysroots[i] = b.path.MaybeFromWD(params.Sysroots[i])
 		}
 		req := scandeps.Request{
 			Defines:  params.Defines,
@@ -254,7 +254,7 @@ func (depsMSVC) scandeps(ctx context.Context, b *Builder, step *Step) ([]string,
 	return ins, nil
 }
 
-func fixCaseSensitiveIncludes(ctx context.Context, b *Builder, files []string) []string {
+func fixCaseSensitiveIncludes(b *Builder, files []string) []string {
 	m := make(map[string]bool)
 	newFiles := make([]string, 0, len(files))
 	for _, f := range files {
@@ -300,7 +300,7 @@ func expandCPPCaseSensitiveIncludes(ctx context.Context, b *Builder, files []str
 			log.Warnf("expand cs: failed to read %s: %v", f, err)
 			continue
 		}
-		includes, _, err := scandeps.CPPScan(ctx, f, buf)
+		includes, _, err := scandeps.CPPScan(f, buf)
 		if err != nil {
 			log.Warnf("expand cs: failed to scan %s: %v", f, err)
 			continue

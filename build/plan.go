@@ -216,7 +216,7 @@ func schedule(ctx context.Context, sched *scheduler, graph Graph, args ...string
 	if len(args) > 0 {
 		var targetNames []string
 		for _, t := range targets {
-			targetNames = append(targetNames, sched.path.MaybeToWD(ctx, targetPath(ctx, graph, t)))
+			targetNames = append(targetNames, sched.path.MaybeToWD(targetPath(ctx, graph, t)))
 		}
 		if !slices.Equal(args, targetNames) {
 			ui.Default.PrintLines(fmt.Sprintf("target: %q\n    ->  %q\n\n", args, targetNames))
@@ -255,7 +255,7 @@ func schedule(ctx context.Context, sched *scheduler, graph Graph, args ...string
 			}
 		}
 	}
-	sched.finish(ctx, time.Since(started))
+	sched.finish(time.Since(started))
 	return nil
 }
 
@@ -451,12 +451,12 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 		return validationQueue, nil
 	}
 	step.outputs = newEdge.Outputs
-	sched.add(ctx, graph, step)
+	sched.add(graph, step)
 	return validationQueue, nil
 }
 
 // newScheduler creates new scheduler.
-func newScheduler(ctx context.Context, opt schedulerOption) *scheduler {
+func newScheduler(opt schedulerOption) *scheduler {
 	var prepareHeaderOnly bool
 	if opt.Prepare {
 		log.Infof("schedule: prepare mode")
@@ -493,10 +493,10 @@ func (s *scheduler) mark(ctx context.Context, graph Graph, target Target, next S
 	if err != nil {
 		var neededBy string
 		if next != nil && len(next.Outputs(ctx)) > 0 {
-			neededBy = s.path.MaybeToWD(ctx, next.Outputs(ctx)[0])
+			neededBy = s.path.MaybeToWD(next.Outputs(ctx)[0])
 		}
 		return MissingSourceError{
-			Target:   s.path.MaybeToWD(ctx, fname),
+			Target:   s.path.MaybeToWD(fname),
 			NeededBy: neededBy,
 		}
 	}
@@ -510,7 +510,7 @@ func (s *scheduler) progressReport(format string, args ...any) {
 }
 
 // finish finishes the scheduling.
-func (s *scheduler) finish(ctx context.Context, d time.Duration) {
+func (s *scheduler) finish(d time.Duration) {
 	s.plan.mu.Lock()
 	defer s.plan.mu.Unlock()
 	nready := len(s.plan.q) + len(s.plan.ready)
@@ -523,7 +523,7 @@ func (s *scheduler) finish(ctx context.Context, d time.Duration) {
 }
 
 // add adds new stepDef to run.
-func (s *scheduler) add(ctx context.Context, graph Graph, step *Step) {
+func (s *scheduler) add(graph Graph, step *Step) {
 	s.plan.mu.Lock()
 	defer s.plan.mu.Unlock()
 	defer func() {

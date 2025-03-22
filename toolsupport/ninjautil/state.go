@@ -6,7 +6,6 @@ package ninjautil
 
 import (
 	"bytes"
-	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -225,7 +224,6 @@ func (s *State) Targets(args []string) ([]*Node, error) {
 // a direct #include for the header.
 // i.e. "foo.h^" will be equivalent with "foo.cc^"
 func (s *State) hatTarget(t string, seen map[string]bool) (*Node, bool) {
-	ctx := context.Background() // TODO: take from caller.
 	if seen[t] {
 		return nil, false
 	}
@@ -265,7 +263,7 @@ func (s *State) hatTarget(t string, seen map[string]bool) (*Node, bool) {
 		if err != nil {
 			return nil, false
 		}
-		includes, _, err := scandeps.CPPScan(ctx, fname, buf)
+		includes, _, err := scandeps.CPPScan(fname, buf)
 		if err != nil {
 			return nil, false
 		}

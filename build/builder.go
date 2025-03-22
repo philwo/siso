@@ -263,11 +263,11 @@ func New(ctx context.Context, graph Graph, opts Options) (_ *Builder, err error)
 	var pe *reproxyexec.REProxyExec
 	if opts.REAPIClient != nil {
 		log.Infof("enable built-in remote exec")
-		re = remoteexec.New(ctx, opts.REAPIClient)
+		re = remoteexec.New(opts.REAPIClient)
 	} else {
 		log.Infof("disable built-in remote exec")
 	}
-	pe = reproxyexec.New(ctx, opts.ReproxyAddr)
+	pe = reproxyexec.New(opts.ReproxyAddr)
 	if pe.Enabled() {
 		log.Infof("enable reclient integration: addr=%s", opts.ReproxyAddr)
 	} else {
@@ -276,7 +276,7 @@ func New(ctx context.Context, graph Graph, opts Options) (_ *Builder, err error)
 	experiments.ShowOnce()
 	numCPU := runtimex.NumCPU()
 	if (opts.Limits == Limits{}) {
-		opts.Limits = DefaultLimits(ctx)
+		opts.Limits = DefaultLimits()
 	}
 	switch {
 	case opts.StrictRemote:
@@ -443,7 +443,7 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 		HashFS:     b.hashFS,
 		Prepare:    b.prepare,
 	}
-	sched := newScheduler(ctx, schedOpts)
+	sched := newScheduler(schedOpts)
 	err = schedule(ctx, sched, b.graph, args...)
 	if err != nil {
 		if b.failureSummaryWriter != nil {
@@ -543,7 +543,7 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 	b.progress.report("\nbuild start: Ready %d Pending %d", pstat.nready, pstat.npendings)
 	log.Infof("build pendings=%d ready=%d", pstat.npendings, pstat.nready)
 	b.progress.start(ctx, b)
-	defer b.progress.stop(ctx)
+	defer b.progress.stop()
 
 	if b.clobber {
 		fmt.Fprintf(b.explainWriter, "--clobber is specified\n")
@@ -695,7 +695,7 @@ loop:
 	var metrics StepMetric
 	metrics.Duration = IntervalMetric(time.Since(b.start))
 	metrics.Err = err != nil
-	b.recordMetrics(ctx, metrics)
+	b.recordMetrics(metrics)
 	glog.Infof("%s finished: %v", name, err)
 	if b.rebuildManifest == "" && b.batch && b.failureSummaryWriter != nil {
 		// non batch mode (ui.IsTerminal) may build last failed command
@@ -755,7 +755,7 @@ func (b *Builder) uploadBuildNinja(ctx context.Context) {
 	log.Infof("uploaded build files tree %s (%d entries) in %s", d, len(ents), time.Since(started))
 }
 
-func (b *Builder) recordMetrics(ctx context.Context, m StepMetric) {
+func (b *Builder) recordMetrics(m StepMetric) {
 	mb, err := json.Marshal(m)
 	if err != nil {
 		log.Warnf("metrics marshal err: %v", err)
@@ -764,7 +764,7 @@ func (b *Builder) recordMetrics(ctx context.Context, m StepMetric) {
 	fmt.Fprintf(b.metricsJSONWriter, "%s\n", mb)
 }
 
-func (b *Builder) recordNinjaLogs(ctx context.Context, s *Step) {
+func (b *Builder) recordNinjaLogs(s *Step) {
 	// TODO: b/298594790 - Use the same mtime with hashFS.
 	start := time.Duration(s.metrics.ActionStartTime).Milliseconds()
 	end := time.Duration(s.metrics.ActionEndTime).Milliseconds()
@@ -775,14 +775,14 @@ func (b *Builder) recordNinjaLogs(ctx context.Context, s *Step) {
 	for _, output := range s.cmd.Outputs {
 		outputs = append(outputs, strings.TrimPrefix(output, buildDir))
 	}
-	ninjautil.WriteNinjaLogEntries(ctx, b.ninjaLogWriter, start, end, s.endTime, outputs, s.cmd.Args)
+	ninjautil.WriteNinjaLogEntries(b.ninjaLogWriter, start, end, s.endTime, outputs, s.cmd.Args)
 }
 
 // dedupInputs deduplicates inputs.
 // For windows worker, which uses case insensitive file system, it also
 // deduplicates filenames with different cases, e.g. "Windows.h" vs "windows.h".
 // TODO(b/275452106): support Mac worker
-func dedupInputs(ctx context.Context, cmd *execute.Cmd) {
+func dedupInputs(cmd *execute.Cmd) {
 	// need to dedup input with different case in intermediate dir on win and mac?
 	caseInsensitive := cmd.Platform["OSFamily"] == "Windows"
 	m := make(map[string]string)
@@ -868,7 +868,7 @@ func (b *Builder) outputs(ctx context.Context, step *Step) error {
 			if !local {
 				// need to make sure it doesn't exist on disk too
 				// for local=true, Flush will remove.
-				err = b.hashFS.OS.Remove(ctx, filepath.Join(step.cmd.ExecRoot, out))
+				err = b.hashFS.OS.Remove(filepath.Join(step.cmd.ExecRoot, out))
 				if err != nil && !errors.Is(err, fs.ErrNotExist) {
 					log.Warnf("remove missing outputs %q: %v", out, err)
 				}
@@ -886,30 +886,30 @@ func (b *Builder) outputs(ctx context.Context, step *Step) error {
 }
 
 // progressStepCacheHit shows progress of the cache hit step.
-func (b *Builder) progressStepCacheHit(ctx context.Context, step *Step) {
-	b.progress.step(ctx, b, step, progressPrefixCacheHit+step.cmd.Desc)
+func (b *Builder) progressStepCacheHit(step *Step) {
+	b.progress.step(b, step, progressPrefixCacheHit+step.cmd.Desc)
 }
 
 // progressStepStarted shows progress of the started step.
-func (b *Builder) progressStepStarted(ctx context.Context, step *Step) {
+func (b *Builder) progressStepStarted(step *Step) {
 	step.setPhase(stepStart)
-	b.progress.step(ctx, b, step, progressPrefixStart+step.cmd.Desc)
+	b.progress.step(b, step, progressPrefixStart+step.cmd.Desc)
 }
 
 // progressStepFinished shows progress of the finished step.
-func (b *Builder) progressStepFinished(ctx context.Context, step *Step) {
+func (b *Builder) progressStepFinished(step *Step) {
 	step.setPhase(stepDone)
-	b.progress.step(ctx, b, step, progressPrefixFinish+step.cmd.Desc)
+	b.progress.step(b, step, progressPrefixFinish+step.cmd.Desc)
 }
 
 // progressStepRetry shows progress of the retried step.
-func (b *Builder) progressStepRetry(ctx context.Context, step *Step) {
-	b.progress.step(ctx, b, step, progressPrefixRetry+step.cmd.Desc)
+func (b *Builder) progressStepRetry(step *Step) {
+	b.progress.step(b, step, progressPrefixRetry+step.cmd.Desc)
 }
 
 // progressStepFallback shows progress of the fallback step.
-func (b *Builder) progressStepFallback(ctx context.Context, step *Step) {
-	b.progress.step(ctx, b, step, progressPrefixFallback+step.cmd.Desc)
+func (b *Builder) progressStepFallback(step *Step) {
+	b.progress.step(b, step, progressPrefixFallback+step.cmd.Desc)
 }
 
 var errNotRelocatable = errors.New("request is not relocatable")
@@ -940,7 +940,7 @@ func (b *Builder) updateDeps(ctx context.Context, step *Step) error {
 	log.Infof("update deps=%s: %s %s %d updated:%t pure:%t/%t->true", step.cmd.Deps, output, base64.StdEncoding.EncodeToString(step.cmd.CmdHash), len(deps), updated, step.cmd.Pure, step.cmd.Pure)
 	canonicalizedDeps := make([]string, 0, len(deps))
 	for _, dep := range deps {
-		canonicalizedDeps = append(canonicalizedDeps, b.path.MaybeFromWD(ctx, dep))
+		canonicalizedDeps = append(canonicalizedDeps, b.path.MaybeFromWD(dep))
 	}
 	depsFixCmd(ctx, b, step, canonicalizedDeps)
 	return nil

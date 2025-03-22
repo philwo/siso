@@ -65,7 +65,7 @@ func (p *fileParser) parseFile(ctx context.Context, fname string) error {
 	p.fileState.filenames = append(p.fileState.filenames, fname)
 	t := time.Now()
 	var err error
-	p.buf, err = p.readFile(ctx, fname)
+	p.buf, err = p.readFile(fname)
 	log.Debugf("read %s %v: %s", fname, err, time.Since(t))
 	if err != nil {
 		return err
@@ -80,7 +80,7 @@ func (p *fileParser) parseFile(ctx context.Context, fname string) error {
 }
 
 // readFile reads a file of fname in parallel.
-func (p *fileParser) readFile(ctx context.Context, fname string) ([]byte, error) {
+func (p *fileParser) readFile(fname string) ([]byte, error) {
 	f, err := os.Open(fname)
 	if err != nil {
 		return nil, err
@@ -129,18 +129,18 @@ func (p *fileParser) readFile(ctx context.Context, fname string) ([]byte, error)
 // parseContent parses ninja file.
 func (p *fileParser) parseContent(ctx context.Context) error {
 	t := time.Now()
-	p.chunks = splitIntoChunks(ctx, p.buf)
+	p.chunks = splitIntoChunks(p.buf)
 	log.Debugf("split %s %d: %s", p.fname, len(p.chunks), time.Since(t))
 
 	t = time.Now()
-	err := p.parseChunks(ctx)
+	err := p.parseChunks()
 	log.Debugf("parse chunks %s %v: %s", p.fname, err, time.Since(t))
 	if err != nil {
 		return err
 	}
 
 	t = time.Now()
-	p.alloc(ctx)
+	p.alloc()
 	log.Debugf("alloc %s: %s", p.fname, time.Since(t))
 
 	t = time.Now()
@@ -151,14 +151,14 @@ func (p *fileParser) parseContent(ctx context.Context) error {
 	}
 
 	t = time.Now()
-	err = p.buildGraph(ctx)
+	err = p.buildGraph()
 	log.Debugf("build graph %s %v: %s", p.fname, err, time.Since(t))
 	if err != nil {
 		return err
 	}
 
 	t = time.Now()
-	err = p.finalize(ctx)
+	err = p.finalize()
 	log.Debugf("finalize %s %v: %s", p.fname, err, time.Since(t))
 	if err != nil {
 		return err
@@ -167,21 +167,21 @@ func (p *fileParser) parseContent(ctx context.Context) error {
 }
 
 // parseChunks parses chunks into statements and counts for allocs concurrently.
-func (p *fileParser) parseChunks(ctx context.Context) error {
+func (p *fileParser) parseChunks() error {
 	var eg errgroup.Group
 	for i := range p.chunks {
 		eg.Go(func() error {
 			p.sema <- struct{}{}
 			defer func() { <-p.sema }()
 
-			return p.chunks[i].parseChunk(ctx)
+			return p.chunks[i].parseChunk()
 		})
 	}
 	return eg.Wait()
 }
 
 // alloc allocates arenas.
-func (p *fileParser) alloc(ctx context.Context) {
+func (p *fileParser) alloc() {
 	p.full.start = 0
 	p.full.end = len(p.buf)
 	pos := 0
@@ -263,7 +263,7 @@ func (p *fileParser) setup(ctx context.Context) error {
 }
 
 // buildGraph parses build statements and rule bindings concurrently.
-func (p *fileParser) buildGraph(ctx context.Context) error {
+func (p *fileParser) buildGraph() error {
 	var eg errgroup.Group
 	for i := range p.chunks {
 		ch := &p.chunks[i]
@@ -271,7 +271,7 @@ func (p *fileParser) buildGraph(ctx context.Context) error {
 			p.sema <- struct{}{}
 			defer func() { <-p.sema }()
 
-			return ch.buildGraphInChunk(ctx, p.state, &p.fileState, p.scope)
+			return ch.buildGraphInChunk(p.state, &p.fileState, p.scope)
 		})
 		for j := range ch.includes {
 			inc := ch.includes[j]
@@ -281,7 +281,7 @@ func (p *fileParser) buildGraph(ctx context.Context) error {
 					p.sema <- struct{}{}
 					defer func() { <-p.sema }()
 
-					return ich.buildGraphInChunk(ctx, p.state, &p.fileState, p.scope)
+					return ich.buildGraphInChunk(p.state, &p.fileState, p.scope)
 				})
 			}
 		}
@@ -290,7 +290,7 @@ func (p *fileParser) buildGraph(ctx context.Context) error {
 }
 
 // finalize finalizes a file parsing.
-func (p *fileParser) finalize(ctx context.Context) error {
+func (p *fileParser) finalize() error {
 	p.fileState.edges = make([]*Edge, 0, p.edgeArena.len())
 	for i := range p.edgeArena.used() {
 		edge := p.edgeArena.at(i)

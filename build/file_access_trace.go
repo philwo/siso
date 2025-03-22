@@ -28,8 +28,8 @@ type fileTraceExecutor struct {
 	inputs, outputs []string
 }
 
-func newFileTraceExecutor(ctx context.Context, b *Builder, executor execute.Executor) (*fileTraceExecutor, error) {
-	if !straceutil.Available(ctx) {
+func newFileTraceExecutor(b *Builder, executor execute.Executor) (*fileTraceExecutor, error) {
+	if !straceutil.Available() {
 		return nil, errors.New("strace is not available")
 	}
 	return &fileTraceExecutor{
@@ -47,7 +47,7 @@ func (f *fileTraceExecutor) Run(ctx context.Context, cmd *execute.Cmd) error {
 	if err != nil {
 		return err
 	}
-	f.inputs, f.outputs, err = st.PostProcess(ctx)
+	f.inputs, f.outputs, err = st.PostProcess()
 	return err
 }
 
@@ -202,7 +202,7 @@ allInputs:
 	b.localexecLogWriter.Write(buf.Bytes())
 	if step.cmd.Pure {
 		log.Warnf("impure cmd deps=%q marked as pure", step.cmd.Deps)
-		return depsImpureCheck(ctx, step, command)
+		return depsImpureCheck(step, command)
 	}
 	return nil
 }
@@ -298,7 +298,7 @@ func filesDiff(ctx context.Context, b *Builder, x, opts, y []string, ignorePatte
 	return uniqueFiles(adds), uniqueFiles(dels), uniqueFiles(platforms), errs
 }
 
-func depsImpureCheck(ctx context.Context, step *Step, command string) error {
+func depsImpureCheck(step *Step, command string) error {
 	// deps="gcc","msvc" doesn't use file access. new *.d will have correct deps.
 	switch step.cmd.Deps {
 	case "gcc", "msvc":

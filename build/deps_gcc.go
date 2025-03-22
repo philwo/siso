@@ -38,23 +38,23 @@ func (gcc depsGCC) DepsFastCmd(ctx context.Context, b *Builder, cmd *execute.Cmd
 	// sets include dirs + sysroots to ToolInputs.
 	// Inputs will be overridden by deps log data.
 	newCmd.ToolInputs = append(newCmd.ToolInputs, inputs...)
-	gcc.fixForSplitDwarf(ctx, newCmd)
+	gcc.fixForSplitDwarf(newCmd)
 	return newCmd, nil
 }
 
 func (gcc depsGCC) fixCmdInputs(ctx context.Context, b *Builder, cmd *execute.Cmd) ([]string, error) {
-	params := gccutil.ExtractScanDepsParams(ctx, cmd.Args, cmd.Env)
+	params := gccutil.ExtractScanDepsParams(cmd.Args, cmd.Env)
 	for i := range params.Files {
-		params.Files[i] = b.path.MaybeFromWD(ctx, params.Files[i])
+		params.Files[i] = b.path.MaybeFromWD(params.Files[i])
 	}
 	for i := range params.Dirs {
-		params.Dirs[i] = b.path.MaybeFromWD(ctx, params.Dirs[i])
+		params.Dirs[i] = b.path.MaybeFromWD(params.Dirs[i])
 	}
 	for i := range params.Frameworks {
-		params.Frameworks[i] = b.path.MaybeFromWD(ctx, params.Frameworks[i])
+		params.Frameworks[i] = b.path.MaybeFromWD(params.Frameworks[i])
 	}
 	for i := range params.Sysroots {
-		params.Sysroots[i] = b.path.MaybeFromWD(ctx, params.Sysroots[i])
+		params.Sysroots[i] = b.path.MaybeFromWD(params.Sysroots[i])
 	}
 	var inputs []string
 	if len(params.Sources) == 0 {
@@ -91,7 +91,7 @@ func (gcc depsGCC) fixCmdInputs(ctx context.Context, b *Builder, cmd *execute.Cm
 }
 
 // TODO: use handler?
-func (depsGCC) fixForSplitDwarf(ctx context.Context, cmd *execute.Cmd) {
+func (depsGCC) fixForSplitDwarf(cmd *execute.Cmd) {
 	hasSplitDwarf := slices.Contains(cmd.Args, "-gsplit-dwarf")
 	if !hasSplitDwarf {
 		return
@@ -131,7 +131,7 @@ func (depsGCC) DepsAfterRun(ctx context.Context, b *Builder, step *Step) (_ []st
 		return nil, fmt.Errorf("gcc-deps: failed to get depfile %q of %s: %w", step.cmd.Depfile, step, err)
 	}
 
-	deps, err := makeutil.ParseDeps(ctx, buf)
+	deps, err := makeutil.ParseDeps(buf)
 	if err != nil {
 		return nil, fmt.Errorf("gcc-deps: failed to parse depfile %q: %w", step.cmd.Depfile, err)
 	}
@@ -157,7 +157,7 @@ func (gcc depsGCC) DepsCmd(ctx context.Context, b *Builder, step *Step) ([]strin
 		}
 		depsIns = append(depsIns, inputs...)
 	}
-	gcc.fixForSplitDwarf(ctx, step.cmd)
+	gcc.fixForSplitDwarf(step.cmd)
 	return depsIns, err
 }
 
@@ -180,7 +180,7 @@ func (depsGCC) scandeps(ctx context.Context, b *Builder, step *Step) ([]string, 
 		if step.metrics.ActionStartTime == 0 {
 			step.metrics.ActionStartTime = IntervalMetric(time.Since(b.start))
 		}
-		params := gccutil.ExtractScanDepsParams(ctx, step.cmd.Args, step.cmd.Env)
+		params := gccutil.ExtractScanDepsParams(step.cmd.Args, step.cmd.Env)
 		if len(params.Sources) == 0 {
 			// If ExtractScanDepsParams doesn't return Sources, such action uses inputs from ninja build file directly, as the action doesn't need include scanning.
 			// e.g. clang modules, rust and etc.
@@ -191,37 +191,37 @@ func (depsGCC) scandeps(ctx context.Context, b *Builder, step *Step) ([]string, 
 		// usually error, but can be used for scandeps for cros chroot case.
 		var externals []string
 		for i := range params.Sources {
-			params.Sources[i] = b.path.MaybeFromWD(ctx, params.Sources[i])
+			params.Sources[i] = b.path.MaybeFromWD(params.Sources[i])
 			if !filepath.IsLocal(params.Sources[i]) {
 				externals = append(externals, params.Sources[i])
 			}
 		}
 		for i := range params.Includes {
-			params.Includes[i] = b.path.MaybeFromWD(ctx, params.Includes[i])
+			params.Includes[i] = b.path.MaybeFromWD(params.Includes[i])
 			if !filepath.IsLocal(params.Includes[i]) {
 				externals = append(externals, params.Includes[i])
 			}
 		}
 		for i := range params.Files {
-			params.Files[i] = b.path.MaybeFromWD(ctx, params.Files[i])
+			params.Files[i] = b.path.MaybeFromWD(params.Files[i])
 			if !filepath.IsLocal(params.Files[i]) {
 				externals = append(externals, params.Files[i])
 			}
 		}
 		for i := range params.Dirs {
-			params.Dirs[i] = b.path.MaybeFromWD(ctx, params.Dirs[i])
+			params.Dirs[i] = b.path.MaybeFromWD(params.Dirs[i])
 			if !filepath.IsLocal(params.Dirs[i]) {
 				externals = append(externals, params.Dirs[i])
 			}
 		}
 		for i := range params.Frameworks {
-			params.Frameworks[i] = b.path.MaybeFromWD(ctx, params.Frameworks[i])
+			params.Frameworks[i] = b.path.MaybeFromWD(params.Frameworks[i])
 			if !filepath.IsLocal(params.Frameworks[i]) {
 				externals = append(externals, params.Frameworks[i])
 			}
 		}
 		for i := range params.Sysroots {
-			params.Sysroots[i] = b.path.MaybeFromWD(ctx, params.Sysroots[i])
+			params.Sysroots[i] = b.path.MaybeFromWD(params.Sysroots[i])
 			if !filepath.IsLocal(params.Sysroots[i]) {
 				externals = append(externals, params.Sysroots[i])
 			}

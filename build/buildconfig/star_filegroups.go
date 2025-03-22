@@ -19,7 +19,7 @@ import (
 	"go.chromium.org/infra/build/siso/hashfs"
 )
 
-func parseFilegroups(ctx context.Context, v starlark.Value) (map[string]filegroupUpdater, error) {
+func parseFilegroups(v starlark.Value) (map[string]filegroupUpdater, error) {
 	d, ok := v.(*starlark.Dict)
 	if !ok {
 		return nil, fmt.Errorf("filegroups %T, want dict", v)
@@ -34,7 +34,7 @@ func parseFilegroups(ctx context.Context, v starlark.Value) (map[string]filegrou
 		if err != nil {
 			return nil, fmt.Errorf("filegroups value for %s: %w", key, err)
 		}
-		g, err := parseFilegroupUpdater(ctx, key, val)
+		g, err := parseFilegroupUpdater(key, val)
 		if err != nil {
 			return nil, fmt.Errorf("filegroups for %s: %w", key, err)
 		}
@@ -43,7 +43,7 @@ func parseFilegroups(ctx context.Context, v starlark.Value) (map[string]filegrou
 	return fg, nil
 }
 
-func parseFilegroupUpdater(ctx context.Context, key string, v starlark.Value) (filegroupUpdater, error) {
+func parseFilegroupUpdater(key string, v starlark.Value) (filegroupUpdater, error) {
 	d, ok := v.(*starlark.Dict)
 	if !ok {
 		return nil, fmt.Errorf("filegroup %T, want dict", v)

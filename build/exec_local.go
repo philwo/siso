@@ -58,7 +58,7 @@ func (b *Builder) execLocal(ctx context.Context, step *Step) error {
 			if impure {
 				glog.Warningf("disable file-access-trace by impure")
 			} else {
-				traceExecutor, err := newFileTraceExecutor(ctx, b, executor)
+				traceExecutor, err := newFileTraceExecutor(b, executor)
 				if err != nil {
 					return fmt.Errorf("unable to perform file-access-trace: %w", err)
 				}
@@ -116,7 +116,7 @@ func (b *Builder) execLocal(ctx context.Context, step *Step) error {
 			result.ExecutionMetadata.WorkerStartTimestamp = timestamppb.New(started)
 		}
 		step.metrics.RunTime = IntervalMetric(time.Since(started))
-		step.metrics.done(ctx, step, b.start)
+		step.metrics.done(step, b.start)
 		return err
 	})
 	if !errors.Is(err, context.Canceled) {

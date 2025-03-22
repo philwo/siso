@@ -5,7 +5,6 @@
 package ninjautil
 
 import (
-	"context"
 	"encoding/hex"
 	"fmt"
 	"hash/fnv"
@@ -38,7 +37,7 @@ func InitializeNinjaLog(builddir string) (*os.File, error) {
 // TODO: b/298594790
 //   - Implement MurmurHash64A as Ninja.
 //   - Make mtime compatible on Windows.
-func WriteNinjaLogEntries(ctx context.Context, w io.Writer, start, end int64, mtime time.Time, outputs, command []string) {
+func WriteNinjaLogEntries(w io.Writer, start, end int64, mtime time.Time, outputs, command []string) {
 	h := fnv.New64()
 	h.Write([]byte(strings.Join(command, " ")))
 	hash := hex.EncodeToString(h.Sum(nil))

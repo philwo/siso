@@ -386,7 +386,7 @@ func newCmd(ctx context.Context, b *Builder, stepDef StepDef, stepManifest *step
 	// correctly managed by Siso.
 	// This workaround is needed to make second build as null build.
 	if stepDef.ActionName() == "gn" && len(stepManifest.outputs) == 1 && filepath.Base(stepManifest.outputs[0]) == "build.ninja.stamp" {
-		stepManifest.outputs = append(stepManifest.outputs, b.path.MaybeFromWD(ctx, "build.ninja"))
+		stepManifest.outputs = append(stepManifest.outputs, b.path.MaybeFromWD("build.ninja"))
 	}
 
 	cmd := &execute.Cmd{
@@ -426,7 +426,7 @@ func newCmd(ctx context.Context, b *Builder, stepDef StepDef, stepManifest *step
 		// TODO(b/266518906): enable DoNotCache for read-only client
 		// DoNotCache: !b.reCacheEnableWrite,
 		SkipCacheLookup: !b.reCacheEnableRead,
-		Timeout:         stepTimeout(ctx, stepDef.Binding("timeout")),
+		Timeout:         stepTimeout(stepDef.Binding("timeout")),
 		ActionSalt:      b.actionSalt,
 	}
 	if envfile := stepDef.Binding("envfile"); envfile != "" {
@@ -455,7 +455,7 @@ func newCmd(ctx context.Context, b *Builder, stepDef StepDef, stepManifest *step
 	return cmd
 }
 
-func stepTimeout(ctx context.Context, d string) time.Duration {
+func stepTimeout(d string) time.Duration {
 	const defaultTimeout = 1 * time.Hour
 	if d == "" {
 		return defaultTimeout
@@ -534,7 +534,7 @@ func (b *Builder) loadEnvfile(ctx context.Context, fname string) []string {
 		// https://ninja-build.org/manual.html#_extra_tools
 		// ninja -t msvc -e ENVFILE -- cl.exe <arguments>
 		//  Where ENVFILE is a binary file that contains an environment block suitable for CreateProcessA() on Windows (i.e. a series of zero-terminated strings that look like NAME=VALUE, followed by an extra zero terminator).
-		buf, err := b.hashFS.ReadFile(ctx, b.path.ExecRoot, b.path.MaybeFromWD(ctx, fname))
+		buf, err := b.hashFS.ReadFile(ctx, b.path.ExecRoot, b.path.MaybeFromWD(fname))
 		if err != nil {
 			log.Warnf("failed to load envfile %q: %v", fname, err)
 			return

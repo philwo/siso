@@ -74,10 +74,10 @@ func (s *ScanDeps) Scan(ctx context.Context, execRoot string, req Request) ([]st
 	// if precomputed tree is defined for the dir (in addDir later).
 
 	scanner := s.fs.scanner(ctx, execRoot, s.inputDeps, precomputedTrees)
-	scanner.setMacros(ctx, req.Defines)
+	scanner.setMacros(req.Defines)
 
 	for _, s := range req.Includes {
-		scanner.addInclude(ctx, s)
+		scanner.addInclude(s)
 	}
 	for _, s := range req.Sources {
 		scanner.addSource(ctx, s)
@@ -140,7 +140,7 @@ func (s *ScanDeps) Scan(ctx context.Context, execRoot string, req Request) ([]st
 			if deps, ok := s.inputDeps[incpath]; ok {
 				logDeps := deps
 				log.Debugf("add inputDeps %q", logDeps)
-				scanner.addInputs(ctx, deps...)
+				scanner.addInputs(deps...)
 			}
 			// if not found, fallback to `clang -M`?
 		}

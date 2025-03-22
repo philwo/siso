@@ -115,7 +115,7 @@ func NewStepConfig(ctx context.Context, config *buildconfig.Config, p *build.Pat
 		return nil, err
 	}
 	log.Infof("save to .siso_config")
-	err = stepConfig.Init(ctx)
+	err = stepConfig.Init()
 	if err != nil {
 		return nil, err
 	}
@@ -171,7 +171,7 @@ func updateFilegroups(ctx context.Context, config *buildconfig.Config, buildPath
 		return err
 	}
 	log.Infof("save to .siso_filegroups")
-	return sc.UpdateFilegroups(ctx, fg.Filegroups)
+	return sc.UpdateFilegroups(fg.Filegroups)
 }
 
 // Load loads build.ninja file specified by fname and returns parsed states.
@@ -190,7 +190,7 @@ func Load(ctx context.Context, fname string, buildPath *build.Path) (*ninjautil.
 }
 
 // NewGraph creates new Graph from fname (usually "build.ninja") with stepConfig.
-func NewGraph(ctx context.Context, fname string, nstate *ninjautil.State, config *buildconfig.Config, p *build.Path, hashFS *hashfs.HashFS, stepConfig *StepConfig, depsLog *ninjautil.DepsLog) *Graph {
+func NewGraph(fname string, nstate *ninjautil.State, config *buildconfig.Config, p *build.Path, hashFS *hashfs.HashFS, stepConfig *StepConfig, depsLog *ninjautil.DepsLog) *Graph {
 	graph := &Graph{
 		fname: fname,
 
@@ -211,7 +211,7 @@ func NewGraph(ctx context.Context, fname string, nstate *ninjautil.State, config
 			executables:    make(map[string]bool),
 		},
 	}
-	graph.initGlobals(ctx)
+	graph.initGlobals()
 	return graph
 }
 
@@ -237,7 +237,7 @@ func (g *Graph) Reload(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	g.reset(ctx)
+	g.reset()
 	return nil
 }
 
@@ -248,11 +248,11 @@ func (g *Graph) Reset(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	g.reset(ctx)
+	g.reset()
 	return nil
 }
 
-func (g *Graph) reset(ctx context.Context) {
+func (g *Graph) reset() {
 	g.visited = make(map[*ninjautil.Edge]*build.Edge)
 	g.globals.depsLog.Reset()
 	g.globals.targetPaths = make([]string, g.globals.nstate.NumNodes())
@@ -261,10 +261,10 @@ func (g *Graph) reset(ctx context.Context) {
 	g.globals.caseSensitives = make(map[string][]string)
 	g.globals.gnTargets = make(map[*ninjautil.Edge]gnTarget)
 	g.globals.executables = make(map[string]bool)
-	g.initGlobals(ctx)
+	g.initGlobals()
 }
 
-func (g *Graph) initGlobals(ctx context.Context) {
+func (g *Graph) initGlobals() {
 	// initialize caseSensitives.
 	for _, f := range g.globals.stepConfig.CaseSensitiveInputs {
 		cif := strings.ToLower(f)
@@ -410,10 +410,10 @@ func (g *Graph) TargetPath(ctx context.Context, target build.Target) (string, er
 	if !ok {
 		return "", fmt.Errorf("invalid target %v", target)
 	}
-	return g.globals.targetPath(ctx, node), nil
+	return g.globals.targetPath(node), nil
 }
 
-func (g *globals) targetPath(ctx context.Context, node *ninjautil.Node) string {
+func (g *globals) targetPath(node *ninjautil.Node) string {
 	p := g.targetPaths[node.ID()]
 	if p != "" {
 		return p
@@ -442,9 +442,9 @@ func (g *Graph) Edge(ctx context.Context, target build.Target, next build.StepDe
 		return v, build.ErrDuplicateStep
 	}
 	if edge.IsPhony() {
-		g.globals.phony[g.globals.targetPath(ctx, n)] = true
+		g.globals.phony[g.globals.targetPath(n)] = true
 	}
-	stepDef := g.newStepDef(ctx, edge, next)
+	stepDef := g.newStepDef(edge, next)
 	edgeInputs := edge.TriggerInputs()
 	inputs := make([]build.Target, 0, len(edgeInputs))
 	for _, in := range edgeInputs {

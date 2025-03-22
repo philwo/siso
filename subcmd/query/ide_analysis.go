@@ -182,7 +182,7 @@ func (c *ideAnalysisRun) analyze(ctx context.Context, args []string) (*pb.IdeAna
 		defer func() {
 			log.Infof("hashfs in %s: %v", time.Since(started), finalErr)
 		}()
-		fsstate, err := hashfs.Load(gctx, hashfs.Option{StateFile: c.fsopt.StateFile})
+		fsstate, err := hashfs.Load(hashfs.Option{StateFile: c.fsopt.StateFile})
 		if err != nil {
 			return err
 		}
@@ -244,7 +244,7 @@ func (a *ideAnalyzer) analyzeTarget(ctx context.Context, target string) (*pb.Ana
 	if strings.HasSuffix(target, "^") {
 		result.SourceFilePath = strings.TrimSuffix(target, "^")
 	}
-	nodes, err := a.targetForCPP(ctx, target)
+	nodes, err := a.targetForCPP(target)
 	if err != nil {
 		result.Status = &pb.AnalysisResult_Status{
 			Code:          pb.AnalysisResult_Status_CODE_NOT_FOUND,
@@ -336,7 +336,7 @@ func (a *ideAnalyzer) analyzeTarget(ctx context.Context, target string) (*pb.Ana
 	return result, nil
 }
 
-func (a *ideAnalyzer) targetForCPP(ctx context.Context, target string) ([]*ninjautil.Node, error) {
+func (a *ideAnalyzer) targetForCPP(target string) ([]*ninjautil.Node, error) {
 	nodes, err := a.state.Targets([]string{target})
 	if err == nil {
 		return nodes, nil
@@ -414,23 +414,23 @@ func (a *ideAnalyzer) analyzeCPP(ctx context.Context, edge *ninjautil.Edge, resu
 		return result, nil
 	}
 	// scandeps
-	params := gccutil.ExtractScanDepsParams(ctx, cmdArgs, nil)
+	params := gccutil.ExtractScanDepsParams(cmdArgs, nil)
 	for i := range params.Sources {
-		params.Sources[i] = a.path.MaybeFromWD(ctx, params.Sources[i])
+		params.Sources[i] = a.path.MaybeFromWD(params.Sources[i])
 	}
 	// no need to canonicalize path for Includes.
 	// it should be used as is for `#include "pathname.h"`
 	for i := range params.Files {
-		params.Files[i] = a.path.MaybeFromWD(ctx, params.Files[i])
+		params.Files[i] = a.path.MaybeFromWD(params.Files[i])
 	}
 	for i := range params.Dirs {
-		params.Dirs[i] = a.path.MaybeFromWD(ctx, params.Dirs[i])
+		params.Dirs[i] = a.path.MaybeFromWD(params.Dirs[i])
 	}
 	for i := range params.Frameworks {
-		params.Frameworks[i] = a.path.MaybeFromWD(ctx, params.Frameworks[i])
+		params.Frameworks[i] = a.path.MaybeFromWD(params.Frameworks[i])
 	}
 	for i := range params.Sysroots {
-		params.Sysroots[i] = a.path.MaybeFromWD(ctx, params.Sysroots[i])
+		params.Sysroots[i] = a.path.MaybeFromWD(params.Sysroots[i])
 	}
 	req := scandeps.Request{
 		Defines:    params.Defines,
@@ -455,7 +455,7 @@ func (a *ideAnalyzer) analyzeCPP(ctx context.Context, edge *ninjautil.Edge, resu
 	started = time.Now()
 
 	for _, inc := range incs {
-		incTarget := a.path.MaybeToWD(ctx, inc)
+		incTarget := a.path.MaybeToWD(inc)
 		node, ok := a.state.LookupNodeByPath(incTarget)
 		if !ok {
 			log.Infof("not in build graph: %s", incTarget)
@@ -470,7 +470,7 @@ func (a *ideAnalyzer) analyzeCPP(ctx context.Context, edge *ninjautil.Edge, resu
 		var generatedFiles []*pb.GeneratedFile
 		for _, out := range inEdge.Outputs() {
 			path := out.Path()
-			buf, err := a.hashFS.ReadFile(ctx, a.path.ExecRoot, a.path.MaybeFromWD(ctx, path))
+			buf, err := a.hashFS.ReadFile(ctx, a.path.ExecRoot, a.path.MaybeFromWD(path))
 			if err != nil {
 				log.Infof("not exist generated file %q: %v", path, err)
 				continue
@@ -481,7 +481,7 @@ func (a *ideAnalyzer) analyzeCPP(ctx context.Context, edge *ninjautil.Edge, resu
 			})
 		}
 		// add buildable unit for the inEdge
-		bu := a.buildableUnit(ctx, inEdge, pb.Language_LANGUAGE_UNSPECIFIED, edgeCmdArgs(inEdge), generatedFiles, nil)
+		bu := a.buildableUnit(inEdge, pb.Language_LANGUAGE_UNSPECIFIED, edgeCmdArgs(inEdge), generatedFiles, nil)
 		deps[bu.Id] = bu
 	}
 	depIDs := make([]string, 0, len(deps))
@@ -489,7 +489,7 @@ func (a *ideAnalyzer) analyzeCPP(ctx context.Context, edge *ninjautil.Edge, resu
 		depIDs = append(depIDs, k)
 	}
 	sort.Strings(depIDs)
-	buildableUnit := a.buildableUnit(ctx, edge, pb.Language_LANGUAGE_CPP, cmdArgs, nil, depIDs)
+	buildableUnit := a.buildableUnit(edge, pb.Language_LANGUAGE_CPP, cmdArgs, nil, depIDs)
 	result.UnitId = buildableUnit.Id
 	result.Invalidation = a.invalidation(ctx)
 
@@ -510,7 +510,7 @@ func edgeCmdArgs(edge *ninjautil.Edge) []string {
 	return cmdArgs
 }
 
-func (a *ideAnalyzer) buildableUnit(ctx context.Context, edge *ninjautil.Edge, language pb.Language, cmdArgs []string, outputs []*pb.GeneratedFile, depIDs []string) *pb.BuildableUnit {
+func (a *ideAnalyzer) buildableUnit(edge *ninjautil.Edge, language pb.Language, cmdArgs []string, outputs []*pb.GeneratedFile, depIDs []string) *pb.BuildableUnit {
 	outPath := edge.Outputs()[0].Path()
 	log.Infof("buildableUnit for %s: lang=%s", outPath, language)
 
@@ -571,7 +571,7 @@ func (a *ideAnalyzer) invalidation(ctx context.Context) *pb.Invalidation {
 		log.Warnf("failed to read build.ninja.d: %v", err)
 		return inv
 	}
-	bdeps, err := makeutil.ParseDeps(ctx, buf)
+	bdeps, err := makeutil.ParseDeps(buf)
 	if err != nil {
 		log.Warnf("failed to parse build.ninja.d: %v", err)
 		return inv
