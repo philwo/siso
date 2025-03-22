@@ -177,7 +177,7 @@ func starActionsWrite(thread *starlark.Thread, fn *starlark.Builtin, args starla
 	if err != nil {
 		return starlark.None, err
 	}
-	err = c.cmd.HashFS.WriteFile(c.ctx, c.cmd.ExecRoot, fname, []byte(string(content)), isExecutable, time.Now(), c.cmd.CmdHash, c.cmd.EdgeHash)
+	err = c.cmd.HashFS.WriteFile(c.ctx, c.cmd.ExecRoot, fname, []byte(content), isExecutable, time.Now(), c.cmd.CmdHash, c.cmd.EdgeHash)
 	return starlark.None, err
 }
 
@@ -294,10 +294,10 @@ func starActionsExit(thread *starlark.Thread, fn *starlark.Builtin, args starlar
 		ExitCode: exitStatus,
 	}
 	if stdout != "" {
-		result.StdoutRaw = []byte(string(stdout))
+		result.StdoutRaw = []byte(stdout)
 	}
 	if stderr != "" {
-		result.StderrRaw = []byte(string(stderr))
+		result.StderrRaw = []byte(stderr)
 	}
 	entries, err := c.cmd.HashFS.Entries(c.ctx, c.cmd.ExecRoot, c.cmd.Outputs)
 	if err != nil {
