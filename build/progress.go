@@ -183,7 +183,7 @@ func (p *progress) step(b *Builder, step *Step, s string) {
 		if p.verbose {
 			msg += step.def.Binding("command")
 		} else {
-			msg += msg[len(progressPrefixFinish):]
+			msg += s[len(progressPrefixFinish):]
 		}
 
 		ui.Default.PrintLines(msg)
