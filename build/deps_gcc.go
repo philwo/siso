@@ -101,7 +101,6 @@ func (depsGCC) fixForSplitDwarf(cmd *execute.Cmd) {
 			continue
 		}
 	}
-	log.Infof("add %s", dwo)
 	cmd.Outputs = uniqueFiles(cmd.Outputs, []string{dwo})
 }
 

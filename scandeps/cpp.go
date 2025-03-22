@@ -8,15 +8,10 @@ import (
 	"bytes"
 	"context"
 	"strings"
-	"time"
-
-	"github.com/charmbracelet/log"
 )
 
 // CPPScan scans C preprocessor directives for #include/#define in buf.
 func CPPScan(fname string, buf []byte) ([]string, map[string][]string, error) {
-	started := time.Now()
-
 	var includes []string
 	defines := make(map[string][]string)
 	for len(buf) > 0 {
@@ -84,10 +79,6 @@ func CPPScan(fname string, buf []byte) ([]string, map[string][]string, error) {
 			continue
 		}
 		includes = addInclude(includes, line)
-	}
-	dur := time.Since(started)
-	if dur > time.Second {
-		log.Infof("slow cppScan %s %s", fname, dur)
 	}
 	return includes, defines, nil
 }

@@ -14,7 +14,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/charmbracelet/log"
 	"github.com/maruel/subcommands"
 
 	"go.chromium.org/luci/common/cli"
@@ -92,7 +91,6 @@ func (c *run) run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	log.Infof("input_deps=%q\n", inputDeps)
 
 	execRoot, err := os.Getwd()
 	if err != nil {

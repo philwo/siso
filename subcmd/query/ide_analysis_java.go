@@ -25,7 +25,6 @@ import (
 )
 
 func (a *ideAnalyzer) analyzeJava(ctx context.Context, edge *ninjautil.Edge, result *pb.AnalysisResult) (*pb.AnalysisResult, map[string]*pb.BuildableUnit) {
-	log.Infof("analyze java %s", result.SourceFilePath)
 	started := time.Now()
 	deps := map[string]*pb.BuildableUnit{}
 	seen := make(map[string]bool)
@@ -59,7 +58,6 @@ func (a *ideAnalyzer) appendIndirectJavaBuildableUnits(ctx context.Context, edge
 		return nil, nil
 	}
 	seen[edge.Outputs()[0].Path()] = true
-	log.Infof("check edge for %q", edge.Outputs()[0].Path())
 	isFinalCommand := len(buildableUnits) == 0
 	var nextEdges []*ninjautil.Edge
 	depIDseen := map[string]bool{}

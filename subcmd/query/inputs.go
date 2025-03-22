@@ -12,7 +12,6 @@ import (
 	"os"
 	"sort"
 
-	"github.com/charmbracelet/log"
 	"github.com/maruel/subcommands"
 
 	"go.chromium.org/luci/common/cli"
@@ -181,7 +180,6 @@ func (g *inputsGraph) Traverse(ctx context.Context, target string) error {
 		err := g.Traverse(ctx, dep)
 		var terr targetNotFoundError
 		if errors.As(err, &terr) {
-			log.Infof("target for deps %q: implicit header?", dep)
 			continue
 		}
 		if err != nil {

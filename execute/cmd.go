@@ -391,12 +391,10 @@ func (c *Cmd) Digest(ctx context.Context, ds *digest.Store) (digest.Digest, erro
 	if err != nil {
 		return digest.Digest{}, fmt.Errorf("failed to get input root for %s: %w", c, err)
 	}
-	log.Infof("inputRoot: %s digests=%d", inputRootDigest, ds.Size())
 	commandDigest, err := c.commandDigest(ds)
 	if err != nil {
 		return digest.Digest{}, fmt.Errorf("failed to build command for %s: %w", c, err)
 	}
-	log.Infof("command: %s", commandDigest)
 
 	var timeout *durationpb.Duration
 	if c.Timeout > 0 {
@@ -420,7 +418,6 @@ func (c *Cmd) Digest(ctx context.Context, ds *digest.Store) (digest.Digest, erro
 		ds.Set(action)
 	}
 	c.actionDigest = action.Digest()
-	log.Infof("action: %s", c.actionDigest)
 	return c.actionDigest, nil
 }
 
@@ -767,7 +764,6 @@ func (c *Cmd) RecordPreOutputs(ctx context.Context) {
 // RecordOutputs records cmd's outputs from action result in hashfs.
 func (c *Cmd) RecordOutputs(ctx context.Context, ds hashfs.DataSource, now time.Time) error {
 	entries, additionalEntries := c.entriesFromResult(ctx, ds, c.actionResult, c.CmdHash, c.actionDigest, now)
-	log.Infof("output entries %d+%d", len(entries), len(additionalEntries))
 	entries = c.computeOutputEntries(entries, now, c.CmdHash)
 	err := c.HashFS.Update(ctx, c.ExecRoot, entries)
 	if err != nil {
@@ -789,15 +785,6 @@ func retrieveLocalOutputEntries(ctx context.Context, hfs *hashfs.HashFS, root st
 }
 
 func updateLocalOutputDir(ctx context.Context, hfs *hashfs.HashFS, root, dir string, outputs map[string]hashfs.UpdateEntry) (err error) {
-	started := time.Now()
-	defer func() {
-		if err != nil {
-			log.Warnf("failed to update local output dir %q: %v", dir, err)
-		} else {
-			log.Infof("update local output dir %q: %s", dir, time.Since(started))
-		}
-	}()
-
 	entriesFromLocalDir := func(dir string) ([]hashfs.UpdateEntry, error) {
 		dents, err := hfs.ReadDir(ctx, root, dir)
 		if err != nil {

@@ -28,8 +28,6 @@ var ErrBadPlatformContainerImage = errors.New("reapi: bad platform container ima
 
 // ExecuteAndWait executes a cmd and waits for the result.
 func (c *Client) ExecuteAndWait(ctx context.Context, req *rpb.ExecuteRequest, opts ...grpc.CallOption) (string, *rpb.ExecuteResponse, error) {
-	log.Infof("execute action")
-
 	if req.InstanceName == "" {
 		req.InstanceName = c.opt.Instance
 	}
@@ -70,7 +68,6 @@ retryLoop:
 				}
 				if opName == "" {
 					opName = op.GetName()
-					log.Infof("operation starts: %s", opName)
 				}
 				if !op.GetDone() {
 					waitReq = &rpb.WaitExecutionRequest{
@@ -81,12 +78,9 @@ retryLoop:
 					err = op.GetMetadata().UnmarshalTo(metadata)
 					if err != nil {
 						log.Warnf("failed to unmarshal metadata: %v", err)
-					} else {
-						log.Infof("operation stage: %v", metadata.GetStage())
 					}
 					continue
 				}
-				log.Infof("operation done: %s", opName)
 				waitReq = nil
 				err = op.GetResponse().UnmarshalTo(resp)
 				if err != nil {
@@ -127,7 +121,7 @@ retryLoop:
 			break retryLoop
 		default:
 			if unknownErr {
-				log.Infof("pctx is not done: ctx=%v: %v", context.Cause(ctx), err)
+				log.Warnf("pctx is not done: ctx=%v: %v", context.Cause(ctx), err)
 			}
 		}
 		if status.Code(err) == codes.DeadlineExceeded {

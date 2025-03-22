@@ -48,7 +48,7 @@ func newStatuszServer(ctx context.Context, b *build.Builder) error {
 	}()
 
 	s.Addr = listener.Addr().String()
-	log.Infof(".siso_port=%s", s.Addr)
+	log.Infof("statusz listening on port %s", s.Addr)
 	err = os.WriteFile(".siso_port", []byte(s.Addr), 0644)
 	if err != nil {
 		log.Warnf("failed to write .siso_port: %v", err)

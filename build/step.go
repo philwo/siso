@@ -8,7 +8,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
-	"encoding/base64"
 	"fmt"
 	"path/filepath"
 	"sync"
@@ -329,7 +328,6 @@ func (s *Step) useReclient() bool {
 func (s *Step) init(ctx context.Context, b *Builder) {
 	s.def.EnsureRule(ctx)
 	s.cmd = newCmd(ctx, b, s.def)
-	log.Infof("cmdhash:%s", base64.StdEncoding.EncodeToString(s.cmd.CmdHash))
 }
 
 func newCmd(ctx context.Context, b *Builder, stepDef StepDef) *execute.Cmd {

@@ -10,9 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"sync/atomic"
-	"time"
-
-	"github.com/charmbracelet/log"
 )
 
 // Semaphore is a semaphore.
@@ -47,13 +44,9 @@ func New(name string, n int) *Semaphore {
 func (s *Semaphore) WaitAcquire(ctx context.Context) (context.Context, func(error), error) {
 	s.waits.Add(1)
 	defer s.waits.Add(-1)
-	now := time.Now()
 	select {
 	case tid := <-s.ch:
 		s.reqs.Add(1)
-		if dur := time.Since(now); dur > 1*time.Second {
-			log.Infof("wait %s for %s", s.name, dur)
-		}
 		return ctx, func(err error) {
 			s.ch <- tid
 		}, nil

@@ -647,7 +647,6 @@ func (s *StepDef) expandLabels(inputs []string) []string {
 		deps, ok := s.globals.stepConfig.InputDeps[cpath]
 		if !ok {
 			// TODO(b/266759797): make it hard error?
-			log.Warnf("unknown label %q", cpath)
 			continue
 		}
 		if s.rule.Debug {

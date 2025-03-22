@@ -29,7 +29,6 @@ func (b *Builder) execRemote(ctx context.Context, step *Step) error {
 		timeout = step.cmd.Timeout * 4
 	}
 	step.cmd.RecordPreOutputs(ctx)
-	log.Infof("exec remote %s", step.cmd.Desc)
 	phase := stepRemoteRun
 	if step.metrics.DepsLogErr {
 		phase = stepRetryRun
@@ -56,7 +55,6 @@ func (b *Builder) execRemote(ctx context.Context, step *Step) error {
 				ActionMnemonic:          step.def.ActionName(),
 				TargetId:                step.cmd.Outputs[0],
 			})
-			log.Infof("step state: remote exec [%s]", phase)
 			phase = stepRetryRun
 			err := b.remoteExec.Run(ctx, step.cmd)
 			step.setPhase(stepOutput)
@@ -86,7 +84,7 @@ func (b *Builder) execRemote(ctx context.Context, step *Step) error {
 		})
 		reExecDur += time.Duration(step.metrics.RunTime)
 		if code := status.Code(err); noFallback && (code == codes.DeadlineExceeded || errors.Is(err, context.DeadlineExceeded)) && reExecDur < timeout {
-			log.Warnf("exec remote timedout duration=%s timeout=%s: %v", reExecDur, timeout, err)
+			log.Warnf("remote execution timed out: duration=%s timeout=%s err=%v", reExecDur, timeout, err)
 			err = status.Errorf(codes.Unavailable, "reapi timedout %v", err)
 		}
 		return err
