@@ -490,7 +490,7 @@ func (s *scheduler) finish(d time.Duration) {
 	if d < ui.DurationThreshold {
 		return
 	}
-	s.progressReport("%6s schedule pending:%d+ready:%d (node:%d edge:%d)\n", ui.FormatDuration(d), npendings, nready, len(s.plan.targets), s.visited)
+	s.progressReport("%6s schedule pending:%d+ready:%d (node:%d edge:%d)", ui.FormatDuration(d), npendings, nready, len(s.plan.targets), s.visited)
 }
 
 // add adds new stepDef to run.

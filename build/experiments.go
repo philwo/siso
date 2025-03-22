@@ -104,7 +104,7 @@ func (e *Experiments) Enabled(k, format string, args ...any) bool {
 		return false
 	}
 	ex.once.Do(func() {
-		ui.Default.PrintLines(fmt.Sprintf(format+" %s\n", append(args, e.Hint(k))...))
+		ui.Default.PrintLines(fmt.Sprintf(format+" %s", append(args, e.Hint(k))...))
 	})
 	return true
 }

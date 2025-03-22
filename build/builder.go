@@ -40,7 +40,7 @@ import (
 )
 
 // chromium recipe module expects this string.
-const ninjaNoWorkToDo = "ninja: no work to do.\n\n"
+const ninjaNoWorkToDo = "ninja: no work to do."
 
 // OutputLocalFunc is a function to determine the file should be downloaded or not.
 type OutputLocalFunc func(context.Context, string) bool
@@ -397,7 +397,7 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 			}
 			log.Infof("rebuild manifest %#v %s: %s->%s: %s", stat, b.rebuildManifest, mftime, fi.ModTime(), time.Since(started))
 			if fi.ModTime().After(mftime) || stat.Done != stat.Skipped {
-				ui.Default.PrintLines(fmt.Sprintf("%6s Regenerating ninja files\n\n", ui.FormatDuration(time.Since(started))))
+				ui.Default.PrintLines(fmt.Sprintf("%6s Regenerating ninja files", ui.FormatDuration(time.Since(started))))
 				err = ErrManifestModified
 				return
 			}
@@ -412,18 +412,16 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 		if b.reapiclient != nil {
 			// scandeps is only used in siso native mode.
 			if stat.ScanDepsFailed != 0 {
-				depsStatLine = fmt.Sprintf("deps log:%d logErr:%d scanErr:%d\n",
-					stat.ScanDepsFailed)
+				depsStatLine = fmt.Sprintf("deps scanErr:%d\n", stat.ScanDepsFailed)
 			}
 		}
-		msg := fmt.Sprintf("\nlocal:%d remote:%d cache:%d fallback:%d retry:%d skip:%d\n",
+		msg := fmt.Sprintf("local:%d remote:%d cache:%d fallback:%d retry:%d skip:%d",
 			stat.Local+stat.NoExec, stat.Remote, stat.CacheHit, stat.LocalFallback, stat.RemoteRetry, stat.Skipped) +
-			depsStatLine + "\n"
-		ui.Default.PrintLines("\n", msg)
+			depsStatLine
+		ui.Default.PrintLines(msg)
 	}()
 	pstat := b.plan.stats()
-	b.progress.report("\nbuild start: Ready %d Pending %d", pstat.nready, pstat.npendings)
-	log.Infof("build pendings=%d ready=%d", pstat.npendings, pstat.nready)
+	b.progress.report("build start: Ready %d Pending %d", pstat.nready, pstat.npendings)
 	b.progress.start(ctx, b)
 	defer b.progress.stop()
 
@@ -553,11 +551,10 @@ loop:
 	close(errch)
 	err = <-errdone
 	if !b.verbose {
-		// replace 2 progress lines.
 		if err == nil {
-			ui.Default.PrintLines(fmt.Sprintf("%s finished", name), "")
+			ui.Default.PrintLines(fmt.Sprintf("%s finished", name))
 		} else {
-			ui.Default.PrintLines(fmt.Sprintf("%s failed", name), "")
+			ui.Default.PrintLines(fmt.Sprintf("%s failed", name))
 		}
 	}
 	// metrics for full build session, without step_id etc.

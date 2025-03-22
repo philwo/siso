@@ -95,7 +95,7 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 			return context.Cause(ctx)
 		default:
 		}
-		fmt.Printf("%s\n", step.def.Binding("command"))
+		log.Info(step.def.Binding("command"))
 		b.plan.done(step)
 		return nil
 	}
