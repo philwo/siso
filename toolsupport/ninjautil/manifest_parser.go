@@ -62,7 +62,7 @@ func (p *ManifestParser) Load(ctx context.Context, fname string) error {
 	if err != nil {
 		return err
 	}
-	p.state.nodes = p.state.nodeMap.freeze(ctx)
+	p.state.nodes = p.state.nodeMap.freeze()
 	for _, edge := range p.state.edges {
 		for _, in := range edge.inputs {
 			if in.outs == nil {

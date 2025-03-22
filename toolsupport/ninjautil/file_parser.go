@@ -181,7 +181,7 @@ func (p *fileParser) parseChunks(ctx context.Context) error {
 			p.sema <- struct{}{}
 			defer func() { <-p.sema }()
 
-			return p.chunks[i].parseChunk(ctx)
+			return p.chunks[i].parseChunk()
 		})
 	}
 	return eg.Wait()
@@ -282,7 +282,7 @@ func (p *fileParser) buildGraph(ctx context.Context) error {
 			p.sema <- struct{}{}
 			defer func() { <-p.sema }()
 
-			return ch.buildGraphInChunk(ctx, p.state, &p.fileState, &p.scope)
+			return ch.buildGraphInChunk(p.state, &p.fileState, &p.scope)
 		})
 		for j := range ch.includes {
 			inc := ch.includes[j]
@@ -292,7 +292,7 @@ func (p *fileParser) buildGraph(ctx context.Context) error {
 					p.sema <- struct{}{}
 					defer func() { <-p.sema }()
 
-					return ich.buildGraphInChunk(ctx, p.state, &p.fileState, &p.scope)
+					return ich.buildGraphInChunk(p.state, &p.fileState, &p.scope)
 				})
 			}
 		}

@@ -30,7 +30,7 @@ func (b *Builder) execReproxy(ctx context.Context, step *Step) error {
 	if err != nil && !experiments.Enabled("ignore-missing-local-inputs", "step %s missing inputs: %v", step, err) {
 		return err
 	}
-	err = allowWriteOutputs(ctx, step.cmd)
+	err = allowWriteOutputs(step.cmd)
 	if err != nil {
 		return err
 	}
@@ -49,7 +49,7 @@ func (b *Builder) execReproxy(ctx context.Context, step *Step) error {
 			TargetId:                step.cmd.Outputs[0],
 		})
 		log.Infof("step state: remote exec (via reproxy)")
-		maybeDisableLocalFallback(ctx, b, step)
+		maybeDisableLocalFallback(b, step)
 
 		err := b.reproxyExec.Run(ctx, step.cmd)
 		step.setPhase(stepOutput)
@@ -81,7 +81,7 @@ func (b *Builder) execReproxy(ctx context.Context, step *Step) error {
 			if stderr := fallbackResult.GetStderrRaw(); len(stderr) > 0 {
 				res.stderr = stderr
 			}
-			b.logOutput(ctx, res, false)
+			b.logOutput(res, false)
 		case reproxyexec.WorkerNameLocal, reproxyexec.WorkerNameRacingLocal:
 			// TODO: Siso may want to have `racing`flag in the step metrics.
 			step.metrics.IsLocal = true
@@ -92,7 +92,7 @@ func (b *Builder) execReproxy(ctx context.Context, step *Step) error {
 			step.metrics.Cached = true
 		}
 		step.metrics.RunTime = IntervalMetric(time.Since(started))
-		step.metrics.done(ctx, step, b.start)
+		step.metrics.done(step, b.start)
 		return err
 	})
 	if err != nil {
@@ -108,7 +108,7 @@ func (b *Builder) execReproxy(ctx context.Context, step *Step) error {
 
 // allowWriteOutputs fixes the permissions of the output files if they are not writable.
 // TODO: b/299227633 - Remove this workaround after Reproxy fixes the write operation.
-func allowWriteOutputs(ctx context.Context, cmd *execute.Cmd) error {
+func allowWriteOutputs(cmd *execute.Cmd) error {
 	for _, out := range cmd.Outputs {
 		fname := filepath.Join(cmd.ExecRoot, out)
 		fi, err := os.Lstat(fname)
@@ -131,7 +131,7 @@ func allowWriteOutputs(ctx context.Context, cmd *execute.Cmd) error {
 	return nil
 }
 
-func maybeDisableLocalFallback(ctx context.Context, b *Builder, step *Step) {
+func maybeDisableLocalFallback(b *Builder, step *Step) {
 	// Manually override remote_local_fallback to remote when falback is disabled.
 	// TODO: b/297807325 - Siso relies on Reclient metrics and monitoring at this moment.
 	// CompileErrorRatioAlert checks remote failure/local success case. So it

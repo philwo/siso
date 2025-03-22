@@ -6,7 +6,5 @@
 
 package ninja
 
-import "context"
-
-func (c *ninjaCmdRun) checkResourceLimits(ctx context.Context) {
+func (c *ninjaCmdRun) checkResourceLimits() {
 }

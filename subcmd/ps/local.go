@@ -23,7 +23,7 @@ type localSource struct {
 	wd string
 }
 
-func newLocalSource(ctx context.Context, dir string) (*localSource, error) {
+func newLocalSource(dir string) (*localSource, error) {
 	err := os.Chdir(dir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to chdir %s: %w", dir, err)

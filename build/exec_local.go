@@ -48,7 +48,7 @@ func (b *Builder) execLocal(ctx context.Context, step *Step) error {
 		stateMessage = "remote exec wrapper"
 		phase = stepREWrapperRun
 		sema = b.rewrapSema
-	case localexec.TraceEnabled(ctx):
+	case localexec.TraceEnabled():
 		// check impure explicitly set in config,
 		// rather than step.cmd.Pure.
 		// step.cmd.Pure may be false when config is not set
@@ -101,7 +101,7 @@ func (b *Builder) execLocal(ctx context.Context, step *Step) error {
 			result.ExecutionMetadata.WorkerStartTimestamp = timestamppb.New(started)
 		}
 		step.metrics.RunTime = IntervalMetric(time.Since(started))
-		step.metrics.done(ctx, step, b.start)
+		step.metrics.done(step, b.start)
 		return err
 	})
 	if !errors.Is(err, context.Canceled) {
@@ -114,7 +114,7 @@ func (b *Builder) execLocal(ctx context.Context, step *Step) error {
 				}
 			}
 		} else {
-			b.logLocalExec(ctx, step, dur)
+			b.logLocalExec(step, dur)
 		}
 	}
 	if err != nil {
@@ -187,7 +187,7 @@ func (b *Builder) checkLocalOutputs(ctx context.Context, step *Step) error {
 	return nil
 }
 
-func (b *Builder) logLocalExec(ctx context.Context, step *Step, dur time.Duration) {
+func (b *Builder) logLocalExec(step *Step, dur time.Duration) {
 	command := step.def.Binding("command")
 	if len(command) > 256 {
 		command = command[:256] + " ..."

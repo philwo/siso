@@ -32,7 +32,7 @@ type RemoteExec struct {
 }
 
 // New creates new remote executor.
-func New(ctx context.Context, client *reapi.Client) *RemoteExec {
+func New(client *reapi.Client) *RemoteExec {
 	return &RemoteExec{
 		client: client,
 	}

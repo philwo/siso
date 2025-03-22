@@ -264,7 +264,7 @@ func (fsys *filesystem) getHmap(ctx context.Context, execRoot, fname string) (ma
 		log.Warnf("missing hmap %s: %v", fname, err)
 		return nil, false
 	}
-	m, err := ParseHeaderMap(ctx, buf)
+	m, err := ParseHeaderMap(buf)
 	if err != nil {
 		log.Warnf("failed to parse hmap %s: %v", fname, err)
 		return nil, false

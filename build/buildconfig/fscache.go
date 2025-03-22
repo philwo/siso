@@ -5,7 +5,6 @@
 package buildconfig
 
 import (
-	"context"
 	"io/fs"
 	"sync"
 
@@ -22,7 +21,7 @@ type fscache struct {
 }
 
 // Get reads the file fname from fsys into memory and returns its content.
-func (c *fscache) Get(ctx context.Context, fsys fs.FS, fname string) ([]byte, error) {
+func (c *fscache) Get(fsys fs.FS, fname string) ([]byte, error) {
 	c.mu.Lock()
 	buf, ok := c.m[fname]
 	c.mu.Unlock()

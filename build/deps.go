@@ -247,7 +247,7 @@ func checkDepfile(ctx context.Context, b *Builder, step *Step) error {
 		return fmt.Errorf("failed to fetch depfile %q: %w", step.cmd.Depfile, err)
 	}
 	fsys := b.hashFS.FileSystem(ctx, b.path.ExecRoot)
-	deps, err := makeutil.ParseDepsFile(ctx, fsys, step.cmd.Depfile)
+	deps, err := makeutil.ParseDepsFile(fsys, step.cmd.Depfile)
 	if err != nil {
 		return fmt.Errorf("failed to parse depfile %q: %w", step.cmd.Depfile, err)
 	}
@@ -280,13 +280,13 @@ func checkDeps(ctx context.Context, b *Builder, step *Step, deps []string) error
 			continue
 		}
 		// all dep (== inputs) should exist just after step ran.
-		input := b.path.MaybeFromWD(ctx, dep)
+		input := b.path.MaybeFromWD(dep)
 		fi, err := b.hashFS.Stat(ctx, b.path.ExecRoot, input)
 		if errors.Is(err, fs.ErrNotExist) {
 			// file may be read by handler and not found
 			// and generated after that (e.g. gn_logs.txt)
 			// forget and check again.
-			b.hashFS.Forget(ctx, b.path.ExecRoot, []string{input})
+			b.hashFS.Forget(b.path.ExecRoot, []string{input})
 			fi, err = b.hashFS.Stat(ctx, b.path.ExecRoot, input)
 		}
 		if err != nil {

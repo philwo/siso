@@ -5,7 +5,6 @@
 package build
 
 import (
-	"context"
 	"sync"
 
 	"github.com/charmbracelet/log"
@@ -24,7 +23,7 @@ func newStats(total int) *stats {
 	}
 }
 
-func (s *stats) update(ctx context.Context, m *StepMetric, pure bool) {
+func (s *stats) update(m *StepMetric, pure bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.s.Done++

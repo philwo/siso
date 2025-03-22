@@ -101,7 +101,7 @@ func nextChunk(buf []byte, i int) int {
 }
 
 // parseChunk parses chunk into statements and counts for allocations.
-func (ch *chunk) parseChunk(ctx context.Context) error {
+func (ch *chunk) parseChunk() error {
 	t := time.Now()
 	buf := ch.buf
 	var lastStatement statementType
@@ -309,7 +309,7 @@ func (ch *chunk) setupInChunk(ctx context.Context, state *State, scope *fileScop
 		st := ch.statements[i]
 		switch st.t {
 		case statementVarDecl:
-			err = ch.parseVarBinding(ctx, i, scope)
+			err = ch.parseVarBinding(i, scope)
 			if err != nil {
 				return err
 			}
@@ -317,7 +317,7 @@ func (ch *chunk) setupInChunk(ctx context.Context, state *State, scope *fileScop
 			continue
 
 		case statementPool:
-			i, err = ch.parsePool(ctx, i, &buf, state, scope, ch.poolArena.new())
+			i, err = ch.parsePool(i, &buf, state, scope, ch.poolArena.new())
 			if err != nil {
 				return err
 			}
@@ -339,7 +339,7 @@ func (ch *chunk) setupInChunk(ctx context.Context, state *State, scope *fileScop
 			i++
 			continue
 		case statementInclude:
-			include, err := ch.parseInclude(ctx, i, &buf, scope)
+			include, err := ch.parseInclude(i, &buf, scope)
 			if err != nil {
 				return err
 			}
@@ -364,7 +364,7 @@ func (ch *chunk) setupInChunk(ctx context.Context, state *State, scope *fileScop
 			if err != nil {
 				return err
 			}
-			ch.includeChunks(ctx, i, fp.chunks)
+			ch.includeChunks(i, fp.chunks)
 			i++
 			continue
 		case statementSubninja:
@@ -378,7 +378,7 @@ func (ch *chunk) setupInChunk(ctx context.Context, state *State, scope *fileScop
 }
 
 // includeChunks includes chunks's statements in ch.statements[i].
-func (ch *chunk) includeChunks(ctx context.Context, i int, chunks []chunk) {
+func (ch *chunk) includeChunks(i int, chunks []chunk) {
 	st := ch.statements[i]
 	pos := st.pos + 1
 	for i := range chunks {
@@ -397,7 +397,7 @@ func (ch *chunk) includeChunks(ctx context.Context, i int, chunks []chunk) {
 
 // buildGraphInChunk parses build / default / subninja,
 // which requires path (evalString) evaluation.
-func (ch *chunk) buildGraphInChunk(ctx context.Context, state *State, fileState *fileState, scope *fileScope) error {
+func (ch *chunk) buildGraphInChunk(state *State, fileState *fileState, scope *fileScope) error {
 	log.Debugf("buildGraphInChunk statements=%d", len(ch.statements))
 	var buf bytes.Buffer
 	buf.Grow(4096)
@@ -417,7 +417,7 @@ func (ch *chunk) buildGraphInChunk(ctx context.Context, state *State, fileState 
 			continue
 
 		case statementBuild:
-			i, err = ch.parseBuild(ctx, i, &buf, state, scope)
+			i, err = ch.parseBuild(i, &buf, state, scope)
 			if err != nil {
 				return fmt.Errorf("line:%d failed to parse edge: %q: %w", lineno(ch.buf, st.s), ch.buf[st.s:st.e], err)
 			}
@@ -425,7 +425,7 @@ func (ch *chunk) buildGraphInChunk(ctx context.Context, state *State, fileState 
 
 		case statementDefault:
 			// TODO: after build graph and fail if target not found?
-			nodes, err := ch.parseDefault(ctx, i, &buf, scope)
+			nodes, err := ch.parseDefault(i, &buf, scope)
 			if err != nil {
 				return err
 			}
@@ -436,7 +436,7 @@ func (ch *chunk) buildGraphInChunk(ctx context.Context, state *State, fileState 
 			i++
 			continue
 		case statementSubninja:
-			subninja, err := ch.parseSubninja(ctx, i, &buf, scope)
+			subninja, err := ch.parseSubninja(i, &buf, scope)
 			if err != nil {
 				return err
 			}
@@ -462,7 +462,7 @@ func (ch *chunk) parseName(s, e int) ([]byte, error) {
 }
 
 // parseBuild parses build statement at statements[i].
-func (ch *chunk) parseBuild(ctx context.Context, i int, buf *bytes.Buffer, state *State, scope *fileScope) (int, error) {
+func (ch *chunk) parseBuild(i int, buf *bytes.Buffer, state *State, scope *fileScope) (int, error) {
 	st := ch.statements[i]
 	edge := ch.edgeArena.new()
 	edge.scope = scope
@@ -582,13 +582,13 @@ func (ch *chunk) targetNode(env evalEnv, buf *bytes.Buffer, target evalString) (
 }
 
 // parseVarBinding parses a binding statements[i] and sets it in env.
-func (ch *chunk) parseVarBinding(ctx context.Context, i int, env evalSetEnv) error {
+func (ch *chunk) parseVarBinding(i int, env evalSetEnv) error {
 	st := ch.statements[i]
 	name, err := ch.parseName(st.s, st.v)
 	if err != nil {
 		return fmt.Errorf("line:%d invalid var name: %q: %w", lineno(ch.buf, st.s), ch.buf[st.s:st.e], err)
 	}
-	val, err := parseEvalString(ctx, ch.buf[st.v+1:st.e])
+	val, err := parseEvalString(ch.buf[st.v+1 : st.e])
 	if err != nil {
 		return fmt.Errorf("line:%d invalid var value: %q: %w", lineno(ch.buf, st.s), val.v, err)
 	}
@@ -598,7 +598,7 @@ func (ch *chunk) parseVarBinding(ctx context.Context, i int, env evalSetEnv) err
 }
 
 // parsePool parses pool statement at statements[i].
-func (ch *chunk) parsePool(ctx context.Context, i int, buf *bytes.Buffer, state *State, scope *fileScope, pool *Pool) (int, error) {
+func (ch *chunk) parsePool(i int, buf *bytes.Buffer, state *State, scope *fileScope, pool *Pool) (int, error) {
 	st := ch.statements[i]
 	name, err := ch.parseName(st.v, st.e)
 	if err != nil {
@@ -642,7 +642,7 @@ func (ch *chunk) parseRule(ctx context.Context, i int, scope *fileScope, rule *r
 		return 0, fmt.Errorf("line:%d failed to set rule %q: %w", lineno(ch.buf, st.s), name, err)
 	}
 	rule.bindings = ch.bindingArena.slice(ch.countStatement(i+1, statementRuleVar))[:0]
-	i, err = ch.parseRuleBindings(ctx, i+1, rule)
+	i, err = ch.parseRuleBindings(i+1, rule)
 	if err != nil {
 		return 0, err
 	}
@@ -650,13 +650,13 @@ func (ch *chunk) parseRule(ctx context.Context, i int, scope *fileScope, rule *r
 }
 
 // parseRuleBindings parses binding vars from statements[i:] and sets them in env.
-func (ch *chunk) parseRuleBindings(ctx context.Context, i int, rule *rule) (int, error) {
+func (ch *chunk) parseRuleBindings(i int, rule *rule) (int, error) {
 	for ; i < len(ch.statements); i++ {
 		st := ch.statements[i]
 		if st.t != statementRuleVar {
 			break
 		}
-		err := ch.parseVarBinding(ctx, i, rule)
+		err := ch.parseVarBinding(i, rule)
 		if err != nil {
 			return i, err
 		}
@@ -665,7 +665,7 @@ func (ch *chunk) parseRuleBindings(ctx context.Context, i int, rule *rule) (int,
 }
 
 // parseDefault parses default statement at statements[i].
-func (ch *chunk) parseDefault(ctx context.Context, i int, buf *bytes.Buffer, scope *fileScope) ([]*Node, error) {
+func (ch *chunk) parseDefault(i int, buf *bytes.Buffer, scope *fileScope) ([]*Node, error) {
 	st := ch.statements[i]
 	pp := newPathParser(ch.buf[st.v:st.e])
 	paths, _ := pp.pathList(nil)
@@ -681,7 +681,7 @@ func (ch *chunk) parseDefault(ctx context.Context, i int, buf *bytes.Buffer, sco
 }
 
 // parseInclude parses include statement at statements[i].
-func (ch *chunk) parseInclude(ctx context.Context, i int, buf *bytes.Buffer, scope *fileScope) (string, error) {
+func (ch *chunk) parseInclude(i int, buf *bytes.Buffer, scope *fileScope) (string, error) {
 	st := ch.statements[i]
 	pp := newPathParser(ch.buf[st.v:st.e])
 	paths, _ := pp.pathList(nil)
@@ -696,7 +696,7 @@ func (ch *chunk) parseInclude(ctx context.Context, i int, buf *bytes.Buffer, sco
 }
 
 // parseSubninja parses subninja statement at statements[i].
-func (ch *chunk) parseSubninja(ctx context.Context, i int, buf *bytes.Buffer, scope *fileScope) (string, error) {
+func (ch *chunk) parseSubninja(i int, buf *bytes.Buffer, scope *fileScope) (string, error) {
 	st := ch.statements[i]
 	pp := newPathParser(ch.buf[st.v:st.e])
 	paths, _ := pp.pathList(nil)

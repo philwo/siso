@@ -392,12 +392,12 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		c.reproxyAddr = ""
 	}
 
-	execRoot, err := c.initWorkdirs(ctx)
+	execRoot, err := c.initWorkdirs()
 	if err != nil {
 		return stats, err
 	}
 	if !c.dryRun {
-		lock, err := newLockFile(ctx, ".siso_lock")
+		lock, err := newLockFile(".siso_lock")
 		switch {
 		case errors.Is(err, errors.ErrUnsupported):
 			log.Warnf("lockfile is not supported")
@@ -446,13 +446,13 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	}
 
 	isLogDirDefault := c.logDir == "."
-	err = c.initLogDir(ctx)
+	err = c.initLogDir()
 	if err != nil {
 		return stats, err
 	}
 	log.Infof("siso log dir=%s default=%t", c.logDir, isLogDirDefault)
 
-	resetCrashOutput, err := c.setupCrashOutput(ctx)
+	resetCrashOutput, err := c.setupCrashOutput()
 	if err != nil {
 		return stats, err
 	}
@@ -462,7 +462,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 
 	// compute default limits based on fstype of work dir (e.g. artfs),
 	// not of exec root.
-	limits := build.DefaultLimits(ctx)
+	limits := build.DefaultLimits()
 	if c.remoteJobs > 0 {
 		limits.Remote = c.remoteJobs
 		limits.REWrap = c.remoteJobs
@@ -510,7 +510,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 			}
 		}
 	}
-	c.checkResourceLimits(ctx)
+	c.checkResourceLimits()
 
 	log.Infof("project id: %q", projectID)
 	log.Infof("commandline %q", os.Args)
@@ -529,7 +529,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	var eg errgroup.Group
 	var localDepsLog *ninjautil.DepsLog
 	eg.Go(func() error {
-		depsLog, err := c.initDepsLog(ctx)
+		depsLog, err := c.initDepsLog()
 		if err != nil {
 			return err
 		}
@@ -545,7 +545,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		return stats, err
 	}
 	defer func() {
-		err := ds.Close(ctx)
+		err := ds.Close()
 		if err != nil {
 			log.Errorf("close datasource: %v", err)
 		}
@@ -599,7 +599,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		c.fsopt.CogFS = cogfs
 	}
 	if c.artfsDir != "" && c.artfsEndpoint != "" {
-		artfs, err := artfsutil.New(ctx, c.artfsDir, c.artfsEndpoint)
+		artfs, err := artfsutil.New(c.artfsDir, c.artfsEndpoint)
 		if err != nil {
 			return stats, err
 		}
@@ -676,7 +676,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 			// store failed targets only when build steps failed.
 			// i.e., don't store with error like context canceled, etc.
 			log.Infof("record failed targets: %q", stepError.Target)
-			serr := saveTargets(ctx, failedTargetsFilename, targets, []string{stepError.Target})
+			serr := saveTargets(failedTargetsFilename, targets, []string{stepError.Target})
 			if serr != nil {
 				log.Warnf("failed to save failed targets: %v", serr)
 				return
@@ -689,7 +689,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		}
 	}()
 	defer func() {
-		hashFS.SetBuildTargets(ctx, targets, !c.dryRun && c.subtool == "" && !c.prepare && err == nil)
+		hashFS.SetBuildTargets(targets, !c.dryRun && c.subtool == "" && !c.prepare && err == nil)
 		err := hashFS.Close(ctx)
 		if err != nil {
 			log.Errorf("close hashfs: %v", err)
@@ -713,7 +713,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		return stats, errNothingToDo
 	}
 
-	bopts, done, err := c.initBuildOpts(ctx, projectID, buildPath, config, ds, hashFS, limits)
+	bopts, done, err := c.initBuildOpts(projectID, buildPath, config, ds, hashFS, limits)
 	if err != nil {
 		return stats, err
 	}
@@ -751,11 +751,11 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	}
 	spin.Stop(nil)
 
-	graph := ninjabuild.NewGraph(ctx, c.fname, nstate, config, buildPath, hashFS, stepConfig, localDepsLog)
+	graph := ninjabuild.NewGraph(c.fname, nstate, config, buildPath, hashFS, stepConfig, localDepsLog)
 
 	var lastFailedTargets []string
 	if !c.batch && !c.clobber {
-		lastFailedTargets, _ = checkTargets(ctx, failedTargetsFilename, targets)
+		lastFailedTargets, _ = checkTargets(failedTargetsFilename, targets)
 	}
 	err = os.Remove(failedTargetsFilename)
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
@@ -927,7 +927,7 @@ func (c *ninjaCmdRun) init() {
 	c.Flags.StringVar(&c.adjustWarn, "w", "", "adjust warnings. not supported b/288807840")
 }
 
-func (c *ninjaCmdRun) initWorkdirs(ctx context.Context) (string, error) {
+func (c *ninjaCmdRun) initWorkdirs() (string, error) {
 	// don't use $PWD for current directory
 	// to avoid symlink issue. b/286779149
 	pwd := os.Getenv("PWD")
@@ -996,7 +996,7 @@ func (c *ninjaCmdRun) initWorkdirs(ctx context.Context) (string, error) {
 	return execRoot, err
 }
 
-func (c *ninjaCmdRun) initLogDir(ctx context.Context) error {
+func (c *ninjaCmdRun) initLogDir() error {
 	if !filepath.IsAbs(c.logDir) {
 		logDir, err := filepath.Abs(c.logDir)
 		if err != nil {
@@ -1054,13 +1054,13 @@ func (c *ninjaCmdRun) initConfig(ctx context.Context, execRoot string, targets [
 	return config, nil
 }
 
-func (c *ninjaCmdRun) initDepsLog(ctx context.Context) (*ninjautil.DepsLog, error) {
+func (c *ninjaCmdRun) initDepsLog() (*ninjautil.DepsLog, error) {
 	err := os.MkdirAll(filepath.Dir(c.depsLogFile), 0755)
 	if err != nil {
 		log.Warnf("failed to mkdir for deps log: %v", err)
 		return nil, err
 	}
-	depsLog, err := ninjautil.NewDepsLog(ctx, c.depsLogFile)
+	depsLog, err := ninjautil.NewDepsLog(c.depsLogFile)
 	if err != nil {
 		log.Warnf("failed to load deps log: %v", err)
 		return nil, err
@@ -1068,7 +1068,7 @@ func (c *ninjaCmdRun) initDepsLog(ctx context.Context) (*ninjautil.DepsLog, erro
 	if !depsLog.NeedsRecompact() {
 		return depsLog, nil
 	}
-	err = depsLog.Recompact(ctx)
+	err = depsLog.Recompact()
 	if err != nil {
 		log.Warnf("failed to recompact deps log: %v", err)
 		return nil, err
@@ -1076,7 +1076,7 @@ func (c *ninjaCmdRun) initDepsLog(ctx context.Context) (*ninjautil.DepsLog, erro
 	return depsLog, nil
 }
 
-func (c *ninjaCmdRun) initBuildOpts(ctx context.Context, projectID string, buildPath *build.Path, config *buildconfig.Config, ds dataSource, hashFS *hashfs.HashFS, limits build.Limits) (bopts build.Options, done func(*error), err error) {
+func (c *ninjaCmdRun) initBuildOpts(projectID string, buildPath *build.Path, config *buildconfig.Config, ds dataSource, hashFS *hashfs.HashFS, limits build.Limits) (bopts build.Options, done func(*error), err error) {
 	var dones []func(*error)
 	defer func() {
 		if err != nil {
@@ -1087,7 +1087,7 @@ func (c *ninjaCmdRun) initBuildOpts(ctx context.Context, projectID string, build
 		}
 	}()
 
-	failureSummaryWriter, done, err := c.logWriter(ctx, c.failureSummaryFile)
+	failureSummaryWriter, done, err := c.logWriter(c.failureSummaryFile)
 	if err != nil {
 		return bopts, nil, err
 	}
@@ -1097,7 +1097,7 @@ func (c *ninjaCmdRun) initBuildOpts(ctx context.Context, projectID string, build
 			fmt.Fprintf(failureSummaryWriter, "error: %v\n", *errp)
 		}
 	})
-	failedCommandsWriter, done, err := c.logWriter(ctx, c.failedCommandsFile)
+	failedCommandsWriter, done, err := c.logWriter(c.failedCommandsFile)
 	if err != nil {
 		return bopts, nil, err
 	}
@@ -1118,12 +1118,12 @@ func (c *ninjaCmdRun) initBuildOpts(ctx context.Context, projectID string, build
 	fmt.Fprintf(failedCommandsWriter, "cd %s%s", filepath.Join(buildPath.ExecRoot, buildPath.Dir), newline)
 	// TODO: for reproxy mode, may need to run reproxy for rewrapper commands.
 
-	outputLogWriter, done, err := c.logWriter(ctx, c.outputLogFile)
+	outputLogWriter, done, err := c.logWriter(c.outputLogFile)
 	if err != nil {
 		return bopts, nil, err
 	}
 	dones = append(dones, done)
-	explainWriter, done, err := c.logWriter(ctx, c.explainFile)
+	explainWriter, done, err := c.logWriter(c.explainFile)
 	if err != nil {
 		return bopts, nil, err
 	}
@@ -1136,19 +1136,19 @@ func (c *ninjaCmdRun) initBuildOpts(ctx context.Context, projectID string, build
 		}
 	}
 
-	localexecLogWriter, done, err := c.logWriter(ctx, c.localexecLogFile)
+	localexecLogWriter, done, err := c.logWriter(c.localexecLogFile)
 	if err != nil {
 		return bopts, nil, err
 	}
 	dones = append(dones, done)
 
-	metricsJSONWriter, done, err := c.logWriter(ctx, c.metricsJSON)
+	metricsJSONWriter, done, err := c.logWriter(c.metricsJSON)
 	if err != nil {
 		return bopts, nil, err
 	}
 	dones = append(dones, done)
 
-	ninjaLogWriter, err := ninjautil.OpenNinjaLog(ctx)
+	ninjaLogWriter, err := ninjautil.OpenNinjaLog()
 	if err != nil {
 		return bopts, nil, err
 	}
@@ -1164,7 +1164,7 @@ func (c *ninjaCmdRun) initBuildOpts(ctx context.Context, projectID string, build
 		actionSaltBytes = []byte(c.actionSalt)
 	}
 
-	cache, err := build.NewCache(ctx, build.CacheOptions{
+	cache, err := build.NewCache(build.CacheOptions{
 		Store:      ds.cache,
 		EnableRead: c.cacheEnableRead,
 	})
@@ -1225,12 +1225,12 @@ func (c *ninjaCmdRun) logFilename(fname, startDir string) string {
 	return "." + string(os.PathSeparator) + rel
 }
 
-func (c *ninjaCmdRun) logWriter(ctx context.Context, fname string) (io.Writer, func(errp *error), error) {
+func (c *ninjaCmdRun) logWriter(fname string) (io.Writer, func(errp *error), error) {
 	fname = c.logFilename(fname, "")
 	if fname == "" {
 		return nil, func(*error) {}, nil
 	}
-	rotateFiles(ctx, fname)
+	rotateFiles(fname)
 	f, err := os.Create(fname)
 	if err != nil {
 		return nil, func(*error) {}, err
@@ -1402,7 +1402,7 @@ func (c *ninjaCmdRun) initDataSource(ctx context.Context, credential cred.Cred) 
 	return ds, nil
 }
 
-func (ds dataSource) Close(ctx context.Context) error {
+func (ds dataSource) Close() error {
 	if ds.client == nil {
 		return nil
 	}
@@ -1454,7 +1454,7 @@ func (s source) String() string {
 	return fmt.Sprintf("dataSource:%s", s.fname)
 }
 
-func rotateFiles(ctx context.Context, fname string) {
+func rotateFiles(fname string) {
 	ext := filepath.Ext(fname)
 	fnameBase := strings.TrimSuffix(fname, ext)
 	for i := 8; i >= 0; i-- {
@@ -1507,7 +1507,7 @@ type lastTargets struct {
 	Failed  []string `json:"failed,omitempty"`
 }
 
-func loadTargets(ctx context.Context, targetsFile string) ([]string, []string, error) {
+func loadTargets(targetsFile string) ([]string, []string, error) {
 	buf, err := os.ReadFile(targetsFile)
 	if err != nil {
 		return nil, nil, err
@@ -1520,7 +1520,7 @@ func loadTargets(ctx context.Context, targetsFile string) ([]string, []string, e
 	return last.Targets, last.Failed, nil
 }
 
-func saveTargets(ctx context.Context, targetsFile string, targets, failed []string) error {
+func saveTargets(targetsFile string, targets, failed []string) error {
 	v := lastTargets{
 		Targets: targets,
 		Failed:  failed,
@@ -1536,8 +1536,8 @@ func saveTargets(ctx context.Context, targetsFile string, targets, failed []stri
 	return nil
 }
 
-func checkTargets(ctx context.Context, lastTargetsFilename string, targets []string) ([]string, bool) {
-	lastTargets, failed, err := loadTargets(ctx, lastTargetsFilename)
+func checkTargets(lastTargetsFilename string, targets []string) ([]string, bool) {
+	lastTargets, failed, err := loadTargets(lastTargetsFilename)
 	if err != nil {
 		log.Warnf("checkTargets: %v", err)
 		return nil, false
@@ -1588,9 +1588,9 @@ func gcinfo() string {
 	return sb.String()
 }
 
-func (c *ninjaCmdRun) setupCrashOutput(ctx context.Context) (func(), error) {
+func (c *ninjaCmdRun) setupCrashOutput() (func(), error) {
 	fname := c.logFilename("siso_crash", "")
-	rotateFiles(ctx, fname)
+	rotateFiles(fname)
 	crashFile, err := os.Create(fname)
 	if err != nil {
 		return nil, err

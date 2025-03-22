@@ -200,7 +200,7 @@ func cmdOutput(ctx context.Context, result cmdOutputResult, phase string, cmd *e
 	return res
 }
 
-func (b *Builder) logOutput(ctx context.Context, cmdOutput *cmdOutputLog, console bool) string {
+func (b *Builder) logOutput(cmdOutput *cmdOutputLog, console bool) string {
 	if cmdOutput == nil {
 		return ""
 	}

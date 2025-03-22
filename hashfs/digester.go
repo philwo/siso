@@ -104,7 +104,7 @@ func (d *digester) worker() {
 	}
 }
 
-func (d *digester) stop(ctx context.Context) {
+func (d *digester) stop() {
 	close(d.quit)
 	log.Infof("wait for workers")
 	<-d.done

@@ -36,7 +36,7 @@ type Cache struct {
 }
 
 // NewCache creates new cache.
-func NewCache(ctx context.Context, opts CacheOptions) (*Cache, error) {
+func NewCache(opts CacheOptions) (*Cache, error) {
 	log.Infof("cache store=%v read=%t",
 		opts.Store,
 		opts.EnableRead)
