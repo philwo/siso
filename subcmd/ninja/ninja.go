@@ -24,7 +24,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/golang/glog"
+	"github.com/charmbracelet/log"
 	"github.com/klauspost/cpuid/v2"
 	"github.com/maruel/subcommands"
 	"golang.org/x/sync/errgroup"
@@ -386,7 +386,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 
 	if c.offline {
 		fmt.Fprintln(os.Stderr, ui.SGR(ui.Red, "offline mode"))
-		glog.Warningf("offline mode")
+		log.Warnf("offline mode")
 		c.reopt = new(reapi.Option)
 		c.projectID = ""
 		c.reproxyAddr = ""
@@ -400,7 +400,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		lock, err := newLockFile(ctx, ".siso_lock")
 		switch {
 		case errors.Is(err, errors.ErrUnsupported):
-			glog.Warningf("lockfile is not supported")
+			log.Warnf("lockfile is not supported")
 		case err != nil:
 			return stats, err
 		case err == nil:
@@ -450,7 +450,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	if err != nil {
 		return stats, err
 	}
-	glog.Infof("siso log dir=%s default=%t", c.logDir, isLogDirDefault)
+	log.Infof("siso log dir=%s default=%t", c.logDir, isLogDirDefault)
 
 	resetCrashOutput, err := c.setupCrashOutput(ctx)
 	if err != nil {
@@ -478,8 +478,8 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		credential, err = cred.New(ctx, c.authOpts)
 		if err != nil {
 			if !c.reopt.NeedCred() {
-				glog.Warningf("failed to init credential: %v", err)
-				glog.Warningf("but no remote apis require credential")
+				log.Warnf("failed to init credential: %v", err)
+				log.Warnf("but no remote apis require credential")
 			} else {
 				spin.Stop(errors.New(""))
 				return stats, err
@@ -488,33 +488,33 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		spin.Stop(nil)
 	}
 	// logging is ready.
-	glog.Infof("%s", cpuinfo())
-	glog.Infof("%s", gcinfo())
+	log.Infof("%s", cpuinfo())
+	log.Infof("%s", gcinfo())
 
-	glog.Infof("siso version %s", c.version)
+	log.Infof("siso version %s", c.version)
 	if cmdver, err := version.GetStartupVersion(); err != nil {
-		glog.Warningf("cannot determine CIPD package version: %s", err)
+		log.Warnf("cannot determine CIPD package version: %s", err)
 	} else if cmdver.PackageName != "" {
-		glog.Infof("CIPD package name: %s", cmdver.PackageName)
-		glog.Infof("CIPD instance ID: %s", cmdver.InstanceID)
+		log.Infof("CIPD package name: %s", cmdver.PackageName)
+		log.Infof("CIPD instance ID: %s", cmdver.InstanceID)
 	} else {
 		buildInfo, ok := debug.ReadBuildInfo()
 		if ok {
 			if buildInfo.GoVersion != "" {
-				glog.Infof("Go version: %s", buildInfo.GoVersion)
+				log.Infof("Go version: %s", buildInfo.GoVersion)
 			}
 			for _, s := range buildInfo.Settings {
 				if strings.HasPrefix(s.Key, "vcs.") || strings.HasPrefix(s.Key, "-") {
-					glog.Infof("build_%s=%s", s.Key, s.Value)
+					log.Infof("build_%s=%s", s.Key, s.Value)
 				}
 			}
 		}
 	}
 	c.checkResourceLimits(ctx)
 
-	glog.Infof("project id: %q", projectID)
-	glog.Infof("commandline %q", os.Args)
-	glog.Infof("is_terminal=%t batch=%t", ui.IsTerminal(), c.batch)
+	log.Infof("project id: %q", projectID)
+	log.Infof("commandline %q", os.Args)
+	log.Infof("is_terminal=%t batch=%t", ui.IsTerminal(), c.batch)
 
 	spin := ui.Default.NewSpinner()
 
@@ -547,7 +547,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	defer func() {
 		err := ds.Close(ctx)
 		if err != nil {
-			glog.Errorf("close datasource: %v", err)
+			log.Errorf("close datasource: %v", err)
 		}
 	}()
 	c.fsopt.DataSource = ds
@@ -559,7 +559,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		cwd := filepath.Join(execRoot, c.dir)
 		// ignore siso files not to be captured by ReadDir
 		// (i.g. scandeps for -I.)
-		glog.Infof("ignore siso files in %s", cwd)
+		log.Infof("ignore siso files in %s", cwd)
 		c.fsopt.Ignore = func(ctx context.Context, fname string) bool {
 			dir, base := filepath.Split(fname)
 			// allow siso prefix in other dir.
@@ -583,7 +583,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		}
 	} else {
 		// expect logDir is out of exec root.
-		glog.Infof("ignore .ninja_log")
+		log.Infof("ignore .ninja_log")
 		ninjaLogFname := filepath.Join(execRoot, c.dir, ".ninja_log")
 		c.fsopt.Ignore = func(ctx context.Context, fname string) bool {
 			return fname == ninjaLogFname
@@ -592,7 +592,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	// TODO: pass reopt for reclient mode?
 	cogfs, err := cogutil.New(ctx, execRoot, c.reopt)
 	if err != nil && !errors.Is(err, errors.ErrUnsupported) {
-		glog.Warningf("unable to use cog? %v", err)
+		log.Warnf("unable to use cog? %v", err)
 	}
 	if cogfs != nil {
 		ui.Default.PrintLines(ui.SGR(ui.Yellow, fmt.Sprintf("build in cog: %s\n", cogfs.Info())))
@@ -612,7 +612,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		if !filepath.IsAbs(fsmonitor) {
 			fsmonitorPath, err = exec.LookPath(fsmonitor)
 			if err != nil {
-				glog.Warningf("failed to find fsmonitor %q: %v", fsmonitor, err)
+				log.Warnf("failed to find fsmonitor %q: %v", fsmonitor, err)
 				fmt.Fprintln(os.Stderr, ui.SGR(ui.BackgroundRed, fmt.Sprintf("SISO_FSMONITOR=%q: failed %v", fsmonitor, err)))
 			}
 		} else {
@@ -624,7 +624,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 			case "watchman":
 				fsm, err := watchmanutil.New(ctx, fsmonitorPath, execRoot)
 				if err != nil {
-					glog.Warningf("failed to initialize watchman: %v", err)
+					log.Warnf("failed to initialize watchman: %v", err)
 					fmt.Fprintln(os.Stderr, ui.SGR(ui.BackgroundRed, fmt.Sprintf("SISO_FSMONITOR=watchman: failed %v", err)))
 				} else {
 					fmt.Fprintln(os.Stdout, ui.SGR(ui.Yellow, fmt.Sprintf("use watchman as fsmonitor: %s", fsmonitorPath)))
@@ -669,22 +669,22 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 			if !errors.As(errBuild.err, &stepError) {
 				rerr := os.Remove(c.logFilename(c.failedCommandsFile, ""))
 				if rerr != nil {
-					glog.Warningf("failed to remove failed command file: %v", rerr)
+					log.Warnf("failed to remove failed command file: %v", rerr)
 				}
 				return
 			}
 			// store failed targets only when build steps failed.
 			// i.e., don't store with error like context canceled, etc.
-			glog.Infof("record failed targets: %q", stepError.Target)
+			log.Infof("record failed targets: %q", stepError.Target)
 			serr := saveTargets(ctx, failedTargetsFilename, targets, []string{stepError.Target})
 			if serr != nil {
-				glog.Warningf("failed to save failed targets: %v", serr)
+				log.Warnf("failed to save failed targets: %v", serr)
 				return
 			}
 		} else {
 			rerr := os.Remove(c.logFilename(c.failedCommandsFile, ""))
 			if rerr != nil {
-				glog.Warningf("failed to remove failed command file: %v", rerr)
+				log.Warnf("failed to remove failed command file: %v", rerr)
 			}
 		}
 	}()
@@ -692,7 +692,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		hashFS.SetBuildTargets(ctx, targets, !c.dryRun && c.subtool == "" && !c.prepare && err == nil)
 		err := hashFS.Close(ctx)
 		if err != nil {
-			glog.Errorf("close hashfs: %v", err)
+			log.Errorf("close hashfs: %v", err)
 		}
 	}()
 	hashFSErr := hashFS.LoadErr()
@@ -703,7 +703,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	_, err = os.Stat(failedTargetsFilename)
 	lastFailed := err == nil
 	isClean := hashFS.IsClean(targets)
-	glog.Infof("hashfs loaderr: %v clean: %t (%q) last failed: %t", hashFSErr, isClean, targets, lastFailed)
+	log.Infof("hashfs loaderr: %v clean: %t (%q) last failed: %t", hashFSErr, isClean, targets, lastFailed)
 	// if not using non-default log_dir, it would see different
 	// .siso_last_targets, which won't match with .siso_fs_state.
 	// in this case, don't shortcut noop build, but better to check
@@ -759,7 +759,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	}
 	err = os.Remove(failedTargetsFilename)
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
-		glog.Warningf("failed to remove %s: %v", failedTargetsFilename, err)
+		log.Warnf("failed to remove %s: %v", failedTargetsFilename, err)
 	}
 	return runNinja(ctx, c.fname, graph, bopts, targets, runNinjaOpts{
 		checkFailedTargets: lastFailedTargets,
@@ -789,7 +789,7 @@ func runNinja(ctx context.Context, fname string, graph *ninjabuild.Graph, bopts 
 	spin := ui.Default.NewSpinner()
 
 	for {
-		glog.Infof("build starts")
+		log.Infof("build starts")
 		if len(nopts.checkFailedTargets) > 0 {
 			failedTargets := nopts.checkFailedTargets
 			ui.Default.PrintLines(fmt.Sprintf("Building last failed targets: %s...\n", failedTargets))
@@ -799,7 +799,7 @@ func runNinja(ctx context.Context, fname string, graph *ninjabuild.Graph, bopts 
 				if bopts.DryRun {
 					return stats, nil
 				}
-				glog.Infof("%s modified.", fname)
+				log.Infof("%s modified.", fname)
 				spin.Start("reloading")
 				err := graph.Reload(ctx)
 				if err != nil {
@@ -808,7 +808,7 @@ func runNinja(ctx context.Context, fname string, graph *ninjabuild.Graph, bopts 
 				}
 				spin.Stop(nil)
 				ui.Default.PrintLines("\n", "\n")
-				glog.Infof("reload done. build retry")
+				log.Infof("reload done. build retry")
 				continue
 			}
 			var errBuild buildError
@@ -835,7 +835,7 @@ func runNinja(ctx context.Context, fname string, graph *ninjabuild.Graph, bopts 
 			if bopts.DryRun {
 				return stats, nil
 			}
-			glog.Infof("%s modified", fname)
+			log.Infof("%s modified", fname)
 			spin.Start("reloading")
 			err := graph.Reload(ctx)
 			if err != nil {
@@ -843,10 +843,10 @@ func runNinja(ctx context.Context, fname string, graph *ninjabuild.Graph, bopts 
 				return stats, err
 			}
 			spin.Stop(nil)
-			glog.Infof("reload done. build retry")
+			log.Infof("reload done. build retry")
 			continue
 		}
-		glog.Infof("build finished: %v", err)
+		log.Infof("build finished: %v", err)
 		return stats, err
 	}
 }
@@ -862,7 +862,7 @@ func (c *ninjaCmdRun) init() {
 		if s := os.Getenv("RBE_remote_disabled"); s != "" {
 			err := f.Value.Set(s)
 			if err != nil {
-				glog.Errorf("invalid RBE_remote_disabled=%q: %v", s, err)
+				log.Errorf("invalid RBE_remote_disabled=%q: %v", s, err)
 			}
 		}
 	}
@@ -941,7 +941,7 @@ func (c *ninjaCmdRun) initWorkdirs(ctx context.Context) (string, error) {
 		return "", err
 	}
 	c.startDir = execRoot
-	glog.Infof("wd: %s", execRoot)
+	log.Infof("wd: %s", execRoot)
 	// The formatting of this string, complete with funny quotes, is
 	// so Emacs can properly identify that the cwd has changed for
 	// subsequent commands.
@@ -954,16 +954,16 @@ func (c *ninjaCmdRun) initWorkdirs(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	glog.Infof("change dir to %s", c.dir)
+	log.Infof("change dir to %s", c.dir)
 	cwd, err := os.Getwd()
 	if err != nil {
 		return "", err
 	}
 	realCWD, err := filepath.EvalSymlinks(cwd)
 	if err != nil {
-		glog.Warningf("failed to eval symlinks %q: %v", cwd, err)
+		log.Warnf("failed to eval symlinks %q: %v", cwd, err)
 	} else if cwd != realCWD {
-		glog.Infof("cwd %s -> %s", cwd, realCWD)
+		log.Infof("cwd %s -> %s", cwd, realCWD)
 		cwd = realCWD
 	}
 	if !filepath.IsAbs(c.configRepoDir) {
@@ -973,7 +973,7 @@ func (c *ninjaCmdRun) initWorkdirs(ctx context.Context) (string, error) {
 		}
 		c.configRepoDir = filepath.Join(execRoot, c.configRepoDir)
 	}
-	glog.Infof("exec_root: %s", execRoot)
+	log.Infof("exec_root: %s", execRoot)
 
 	// recalculate dir as relative to exec_root.
 	// recipe may use absolute path for -C.
@@ -985,7 +985,7 @@ func (c *ninjaCmdRun) initWorkdirs(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("dir %q is out of exec root %q", cwd, execRoot)
 	}
 	c.dir = rdir
-	glog.Infof("working_directory in exec_root: %s", c.dir)
+	log.Infof("working_directory in exec_root: %s", c.dir)
 	if c.startDir != execRoot {
 		ui.Default.PrintLines(fmt.Sprintf("exec_root=%s dir=%s\n", execRoot, c.dir))
 	}
@@ -1008,10 +1008,10 @@ func (c *ninjaCmdRun) initLogDir(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	err = c.logSymlink(ctx)
-	if err != nil {
-		glog.Warningf("failed to create symlink for log: %v", err)
-	}
+	// err = c.logSymlink(ctx)
+	// if err != nil {
+	// 	log.Warnf("failed to create symlink for log: %v", err)
+	// }
 	return nil
 }
 
@@ -1047,7 +1047,7 @@ func (c *ninjaCmdRun) initConfig(ctx context.Context, execRoot string, targets [
 			return nil, err
 		}
 	} else if errors.Is(err, fs.ErrNotExist) {
-		glog.Warningf("no args.gn: %v", err)
+		log.Warnf("no args.gn: %v", err)
 	} else {
 		return nil, err
 	}
@@ -1057,12 +1057,12 @@ func (c *ninjaCmdRun) initConfig(ctx context.Context, execRoot string, targets [
 func (c *ninjaCmdRun) initDepsLog(ctx context.Context) (*ninjautil.DepsLog, error) {
 	err := os.MkdirAll(filepath.Dir(c.depsLogFile), 0755)
 	if err != nil {
-		glog.Warningf("failed to mkdir for deps log: %v", err)
+		log.Warnf("failed to mkdir for deps log: %v", err)
 		return nil, err
 	}
 	depsLog, err := ninjautil.NewDepsLog(ctx, c.depsLogFile)
 	if err != nil {
-		glog.Warningf("failed to load deps log: %v", err)
+		log.Warnf("failed to load deps log: %v", err)
 		return nil, err
 	}
 	if !depsLog.NeedsRecompact() {
@@ -1070,7 +1070,7 @@ func (c *ninjaCmdRun) initDepsLog(ctx context.Context) (*ninjautil.DepsLog, erro
 	}
 	err = depsLog.Recompact(ctx)
 	if err != nil {
-		glog.Warningf("failed to recompact deps log: %v", err)
+		log.Warnf("failed to recompact deps log: %v", err)
 		return nil, err
 	}
 	return depsLog, nil
@@ -1153,7 +1153,7 @@ func (c *ninjaCmdRun) initBuildOpts(ctx context.Context, projectID string, build
 		return bopts, nil, err
 	}
 	dones = append(dones, func(errp *error) {
-		glog.Infof("close .ninja_log")
+		log.Infof("close .ninja_log")
 		cerr := ninjaLogWriter.Close()
 		if *errp == nil {
 			*errp = cerr
@@ -1169,7 +1169,7 @@ func (c *ninjaCmdRun) initBuildOpts(ctx context.Context, projectID string, build
 		EnableRead: c.cacheEnableRead,
 	})
 	if err != nil {
-		glog.Warningf("no cache enabled: %v", err)
+		log.Warnf("no cache enabled: %v", err)
 	}
 	bopts = build.Options{
 		StartTime:            c.started,
@@ -1225,15 +1225,6 @@ func (c *ninjaCmdRun) logFilename(fname, startDir string) string {
 	return "." + string(os.PathSeparator) + rel
 }
 
-// glogFilename returns filename of glog logfile. i.e. siso.INFO.
-func (c *ninjaCmdRun) glogFilename() string {
-	logFilename := "siso.INFO"
-	if runtime.GOOS == "windows" {
-		logFilename = "siso.exe.INFO"
-	}
-	return filepath.Join(c.logDir, logFilename)
-}
-
 func (c *ninjaCmdRun) logWriter(ctx context.Context, fname string) (io.Writer, func(errp *error), error) {
 	fname = c.logFilename(fname, "")
 	if fname == "" {
@@ -1245,7 +1236,7 @@ func (c *ninjaCmdRun) logWriter(ctx context.Context, fname string) (io.Writer, f
 		return nil, func(*error) {}, err
 	}
 	return f, func(errp *error) {
-		glog.Infof("close %s", fname)
+		log.Infof("close %s", fname)
 		cerr := f.Close()
 		if *errp == nil {
 			*errp = cerr
@@ -1256,7 +1247,7 @@ func (c *ninjaCmdRun) logWriter(ctx context.Context, fname string) (io.Writer, f
 func defaultCacheDir() string {
 	d, err := os.UserCacheDir()
 	if err != nil {
-		glog.Warningf("Failed to get user cache dir: %v", err)
+		log.Warnf("Failed to get user cache dir: %v", err)
 		return ""
 	}
 	return filepath.Join(d, "siso")
@@ -1265,10 +1256,10 @@ func defaultCacheDir() string {
 func rebuildManifest(ctx context.Context, graph *ninjabuild.Graph, bopts build.Options) error {
 	_, err := graph.Targets(ctx, graph.Filename())
 	if err != nil {
-		glog.Warningf("don't rebuild manifest: no target for %s: %v", graph.Filename(), err)
+		log.Warnf("don't rebuild manifest: no target for %s: %v", graph.Filename(), err)
 		return nil
 	}
-	glog.Infof("rebuild manifest")
+	log.Infof("rebuild manifest")
 	mfbopts := bopts
 	mfbopts.Clobber = false
 	mfbopts.Prepare = false
@@ -1317,7 +1308,7 @@ func doBuild(ctx context.Context, graph *ninjabuild.Graph, bopts build.Options, 
 		go func() {
 			err := newStatuszServer(hctx, b)
 			if err != nil {
-				glog.Warningf("statusz: %v", err)
+				log.Warnf("statusz: %v", err)
 			}
 		}()
 	}
@@ -1325,7 +1316,7 @@ func doBuild(ctx context.Context, graph *ninjabuild.Graph, bopts build.Options, 
 	defer func(ctx context.Context) {
 		cerr := b.Close()
 		if cerr != nil {
-			glog.Warningf("failed to close builder: %v", cerr)
+			log.Warnf("failed to close builder: %v", cerr)
 		}
 	}(ctx)
 	// prof := newCPUProfiler(ctx, "build")
@@ -1342,7 +1333,7 @@ func doBuild(ctx context.Context, graph *ninjabuild.Graph, bopts build.Options, 
 	}
 
 	stats = b.Stats()
-	glog.Infof("stats=%#v", stats)
+	log.Infof("stats=%#v", stats)
 	if err != nil {
 		return stats, buildError{err: err}
 	}
@@ -1353,32 +1344,32 @@ func doBuild(ctx context.Context, graph *ninjabuild.Graph, bopts build.Options, 
 	return stats, err
 }
 
-func (c *ninjaCmdRun) logSymlink(ctx context.Context) error {
-	logFilename := c.glogFilename()
-	rotateFiles(ctx, logFilename)
-	logfiles, err := glog.Names("INFO")
-	if err != nil {
-		return fmt.Errorf("failed to get glog INFO level log files: %w", err)
-	}
-	if len(logfiles) == 0 {
-		return fmt.Errorf("no glog INFO level log files")
-	}
-	err = os.Symlink(logfiles[0], logFilename)
-	if err != nil {
-		glog.Warningf("failed to create %s: %v", logFilename, err)
-		// On Windows, it failed to create symlink.
-		// just same filename in *.redirected file.
-		err = os.WriteFile(logFilename+".redirected", []byte(logfiles[0]), 0644)
-		if err != nil {
-			glog.Warningf("failed to write %s.redirected: %v", logFilename, err)
-		}
-		c.sisoInfoLog = logfiles[0]
-		return nil
-	}
-	glog.Infof("logfile: %q", logfiles)
-	c.sisoInfoLog = filepath.Base(logFilename)
-	return nil
-}
+// func (c *ninjaCmdRun) logSymlink(ctx context.Context) error {
+// 	logFilename := c.glogFilename()
+// 	rotateFiles(ctx, logFilename)
+// 	logfiles, err := log.Names("INFO")
+// 	if err != nil {
+// 		return fmt.Errorf("failed to get glog INFO level log files: %w", err)
+// 	}
+// 	if len(logfiles) == 0 {
+// 		return fmt.Errorf("no glog INFO level log files")
+// 	}
+// 	err = os.Symlink(logfiles[0], logFilename)
+// 	if err != nil {
+// 		log.Warnf("failed to create %s: %v", logFilename, err)
+// 		// On Windows, it failed to create symlink.
+// 		// just same filename in *.redirected file.
+// 		err = os.WriteFile(logFilename+".redirected", []byte(logfiles[0]), 0644)
+// 		if err != nil {
+// 			log.Warnf("failed to write %s.redirected: %v", logFilename, err)
+// 		}
+// 		c.sisoInfoLog = logfiles[0]
+// 		return nil
+// 	}
+// 	log.Infof("logfile: %q", logfiles)
+// 	c.sisoInfoLog = filepath.Base(logFilename)
+// 	return nil
+// }
 
 type dataSource struct {
 	cache  cachestore.CacheStore
@@ -1390,7 +1381,7 @@ func (c *ninjaCmdRun) initDataSource(ctx context.Context, credential cred.Cred) 
 	if c.localCacheEnable {
 		cache, err := build.NewLocalCache(c.cacheDir)
 		if err != nil {
-			glog.Warningf("failed to create local cache - no local cache enabled: %v", err)
+			log.Warnf("failed to create local cache - no local cache enabled: %v", err)
 		} else {
 			layeredCache.AddLayer(cache)
 			cache.GarbageCollectIfRequired(ctx)
@@ -1471,12 +1462,12 @@ func rotateFiles(ctx context.Context, fname string) {
 			fmt.Sprintf("%s.%d%s", fnameBase, i, ext),
 			fmt.Sprintf("%s.%d%s", fnameBase, i+1, ext))
 		if err != nil && !errors.Is(err, fs.ErrNotExist) {
-			glog.Warningf("rotate %s %d->%d failed: %v", fname, i, i+1, err)
+			log.Warnf("rotate %s %d->%d failed: %v", fname, i, i+1, err)
 		}
 	}
 	err := os.Rename(fname, fmt.Sprintf("%s.0%s", fnameBase, ext))
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
-		glog.Warningf("rotate %s ->0 failed: %v", fname, err)
+		log.Warnf("rotate %s ->0 failed: %v", fname, err)
 	}
 }
 
@@ -1548,7 +1539,7 @@ func saveTargets(ctx context.Context, targetsFile string, targets, failed []stri
 func checkTargets(ctx context.Context, lastTargetsFilename string, targets []string) ([]string, bool) {
 	lastTargets, failed, err := loadTargets(ctx, lastTargetsFilename)
 	if err != nil {
-		glog.Warningf("checkTargets: %v", err)
+		log.Warnf("checkTargets: %v", err)
 		return nil, false
 	}
 	if len(targets) != len(lastTargets) {

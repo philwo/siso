@@ -11,7 +11,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/golang/glog"
+	"github.com/charmbracelet/log"
 	"go.chromium.org/infra/build/siso/ui"
 )
 
@@ -67,7 +67,7 @@ func (e *Experiments) set(env string) {
 	e.m = make(map[string]*experimentFeature)
 	for _, v := range strings.Split(env, ",") {
 		if _, ok := knownExperiments[v]; !ok {
-			glog.Warningf("unknown experiment %q. ignored", v)
+			log.Warnf("unknown experiment %q. ignored", v)
 			continue
 		}
 		e.m[v] = &experimentFeature{}

@@ -12,7 +12,7 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/golang/glog"
+	"github.com/charmbracelet/log"
 	"go.chromium.org/infra/build/siso/build"
 )
 
@@ -29,7 +29,7 @@ func newStatuszServer(ctx context.Context, b *build.Builder) error {
 		w.Header().Add("Context-Type", "text/json")
 		_, err = w.Write(buf)
 		if err != nil {
-			glog.Warningf("failed to write response: %v", err)
+			log.Warnf("failed to write response: %v", err)
 		}
 	}))
 	s := &http.Server{
@@ -37,26 +37,26 @@ func newStatuszServer(ctx context.Context, b *build.Builder) error {
 	}
 	listener, err := net.Listen("tcp", "localhost:0")
 	if err != nil {
-		glog.Warningf("listener error: %v", err)
+		log.Warnf("listener error: %v", err)
 		return err
 	}
 	defer func() {
 		err := listener.Close()
 		if err != nil {
-			glog.Warningf("listener close error: %v", err)
+			log.Warnf("listener close error: %v", err)
 		}
 	}()
 
 	s.Addr = listener.Addr().String()
-	glog.Infof(".siso_port=%s", s.Addr)
+	log.Infof(".siso_port=%s", s.Addr)
 	err = os.WriteFile(".siso_port", []byte(s.Addr), 0644)
 	if err != nil {
-		glog.Warningf("failed to write .siso_port: %v", err)
+		log.Warnf("failed to write .siso_port: %v", err)
 	}
 	defer func() {
 		err := os.Remove(".siso_port")
 		if err != nil {
-			glog.Warningf("failed to remove .siso_port: %v", err)
+			log.Warnf("failed to remove .siso_port: %v", err)
 		}
 	}()
 
@@ -64,13 +64,13 @@ func newStatuszServer(ctx context.Context, b *build.Builder) error {
 		<-ctx.Done()
 		err := s.Close()
 		if err != nil {
-			glog.Warningf("http close error: %v", err)
+			log.Warnf("http close error: %v", err)
 		}
 	}()
 
 	err = s.Serve(listener)
 	if err != nil {
-		glog.Warningf("http serve error: %v", err)
+		log.Warnf("http serve error: %v", err)
 	}
 	return nil
 }

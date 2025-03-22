@@ -12,7 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/golang/glog"
+	"github.com/charmbracelet/log"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/proto"
@@ -40,18 +40,18 @@ func New(ctx context.Context, dir string, reopt *reapi.Option) (*Client, error) 
 	if err != nil {
 		return nil, err
 	}
-	glog.Infof("cog version:\n%s", string(buf))
+	log.Infof("cog version:\n%s", string(buf))
 	if !reopt.IsValid() {
-		glog.Warningf("cog: reapi is not enabled")
+		log.Warnf("cog: reapi is not enabled")
 		return &Client{}, nil
 	}
 	addr := fmt.Sprintf("unix:///google/cog/status/uds/%d", os.Getuid())
 	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		glog.Warningf("cog: failed to dial to cog server %s: %v", addr, err)
+		log.Warnf("cog: failed to dial to cog server %s: %v", addr, err)
 		return &Client{}, nil
 	}
-	glog.Infof("cog connected to %s", addr)
+	log.Infof("cog connected to %s", addr)
 	c := &Client{
 		reopt:  reopt,
 		conn:   conn,
@@ -64,15 +64,15 @@ func New(ctx context.Context, dir string, reopt *reapi.Option) (*Client, error) 
 		},
 	})
 	if err != nil {
-		glog.Warningf("cog: failed to insert .siso_cog_buildfs: %v", err)
+		log.Warnf("cog: failed to insert .siso_cog_buildfs: %v", err)
 		err = c.Close()
 		if err != nil {
-			glog.Warningf("cog: close conn: %v", err)
+			log.Warnf("cog: close conn: %v", err)
 		}
 		// disable buildfs
 		return &Client{}, nil
 	}
-	glog.Infof("cog: buildfs available")
+	log.Infof("cog: buildfs available")
 	return c, nil
 }
 
@@ -123,6 +123,6 @@ func (c *Client) BuildfsInsert(ctx context.Context, dir string, entries []merkle
 		req.Insertions = append(req.Insertions, ins)
 	}
 	_, err := c.client.BuildfsInsert(ctx, req)
-	glog.Infof("buildfs insert %s: %v", req, err)
+	log.Infof("buildfs insert %s: %v", req, err)
 	return err
 }

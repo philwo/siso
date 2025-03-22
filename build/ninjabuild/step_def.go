@@ -21,7 +21,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/golang/glog"
+	"github.com/charmbracelet/log"
 	"github.com/google/uuid"
 
 	"go.chromium.org/infra/build/siso/build"
@@ -127,11 +127,6 @@ func (g *Graph) newStepDef(ctx context.Context, edge *ninjautil.Edge, next build
 		globals := g.globals
 		for _, out := range edge.Outputs() {
 			globals.edgeRules[out.ID()].set(er)
-			if glog.V(1) {
-				outPath := globals.targetPath(ctx, out)
-				glog.Infof("add edgeRule for %s [newStepDef]", outPath)
-
-			}
 		}
 	}
 	return stepDef
@@ -156,16 +151,14 @@ func (s *StepDef) EnsureRule(ctx context.Context) {
 	if er == nil {
 		// *edgeRule was removed by er.ensure by other output of the edge?
 		outPath := s.globals.targetPath(ctx, outputs[0])
-		glog.Warningf("edgeRule not found for %s: pure=%t", outPath, s.pure)
+		log.Warnf("edgeRule not found for %s: pure=%t", outPath, s.pure)
 		return
 	}
 	var gotRule bool
 	gotRule, s.rule, s.pure = er.ensure(ctx, s.globals)
 	if !gotRule {
 		s.rule, s.pure = s.globals.stepConfig.Lookup(ctx, s.globals.path, s.edge)
-		if glog.V(1) {
-			glog.Infof("rule:%t", s.pure)
-		}
+		log.Debugf("rule:%t", s.pure)
 	}
 }
 
@@ -209,13 +202,13 @@ func (s *StepDef) Args(ctx context.Context) []string {
 		// -o FILE and -p PREFIX is not used?
 		err := flagSet.Parse(args[1:])
 		if err != nil {
-			glog.Warningf("%s failed to parse ninja flags %q: %v", s, args, err)
+			log.Warnf("%s failed to parse ninja flags %q: %v", s, args, err)
 			return args
 		}
 		if tool != "msvc" {
 			return args
 		}
-		glog.V(1).Infof("%s envfile=%q", s, s.envfile)
+		log.Debugf("%s envfile=%q", s, s.envfile)
 		return flagSet.Args()
 	}
 	return args
@@ -366,7 +359,7 @@ func (s *StepDef) Inputs(ctx context.Context) []string {
 	}
 	for _, p := range edgeSolibs(s.edge) {
 		if s.rule.Debug {
-			glog.Infof("solib %s", p)
+			log.Infof("solib %s", p)
 		}
 		p := globals.path.MaybeFromWD(ctx, p)
 		if seen[p] {
@@ -378,7 +371,7 @@ func (s *StepDef) Inputs(ctx context.Context) []string {
 	targets = fixInputs(ctx, s, targets, s.rule.ExcludeInputPatterns)
 	targets = append(targets, s.ToolInputs(ctx)...)
 	if s.rule.Debug {
-		glog.Infof("targets=%q", targets)
+		log.Infof("targets=%q", targets)
 	}
 	return uniqueFiles(targets)
 }
@@ -466,9 +459,7 @@ func depInputs(ctx context.Context, s *StepDef) (func(yield func(string) bool), 
 		default:
 			return nil, fmt.Errorf("wrong deps log state for %q: state=%s %s", out, state, msg)
 		}
-		if glog.V(1) {
-			glog.Infof("depslog %s: %d", out, len(deps))
-		}
+		log.Debugf("depslog %s: %d", out, len(deps))
 
 	case "":
 		// deps info is in depfile
@@ -492,9 +483,7 @@ func depInputs(ctx context.Context, s *StepDef) (func(yield func(string) bool), 
 		if err != nil {
 			return nil, fmt.Errorf("%w: failed to load depfile %s: %w", build.ErrMissingDeps, df, err)
 		}
-		if glog.V(1) {
-			glog.Infof("depfile %s: %d", depfile, len(deps))
-		}
+		log.Debugf("depfile %s: %d", depfile, len(deps))
 	}
 	return func(yield func(string) bool) {
 		for _, in := range deps {
@@ -517,7 +506,7 @@ func (s *StepDef) ToolInputs(ctx context.Context) []string {
 
 func fixInputs(ctx context.Context, stepDef *StepDef, inputs, excludes []string) []string {
 	if stepDef.rule.Debug {
-		glog.Infof("fix inputs=%d excludes=%d", len(inputs), len(excludes))
+		log.Infof("fix inputs=%d excludes=%d", len(inputs), len(excludes))
 	}
 	newInputs := make([]string, 0, len(inputs))
 	for _, in := range inputs {
@@ -525,16 +514,14 @@ func fixInputs(ctx context.Context, stepDef *StepDef, inputs, excludes []string)
 			_, err := stepDef.globals.hashFS.Stat(ctx, stepDef.globals.path.ExecRoot, in)
 			if err != nil {
 				if errors.Is(err, fs.ErrNotExist) {
-					if glog.V(1) {
-						glog.Infof("input %s is phony", in)
-					}
+					log.Debugf("input %s is phony", in)
 					continue
 				}
-				glog.Warningf("input %s is phony: %v", in, err)
+				log.Warnf("input %s is phony: %v", in, err)
 				continue
 
 			}
-			glog.Infof("input %s is phony, but exists", in)
+			log.Infof("input %s is phony, but exists", in)
 		}
 		newInputs = append(newInputs, in)
 	}
@@ -574,7 +561,7 @@ func fixInputs(ctx context.Context, stepDef *StepDef, inputs, excludes []string)
 			if m(in) {
 				rm[in] = true
 				if stepDef.rule.Debug {
-					glog.Infof("fix exclude %s by %s", in, e)
+					log.Infof("fix exclude %s by %s", in, e)
 				}
 			}
 		}
@@ -590,7 +577,7 @@ func fixInputs(ctx context.Context, stepDef *StepDef, inputs, excludes []string)
 		r = append(r, in)
 	}
 	if stepDef.rule.Debug {
-		glog.Infof("fixed inputs=%d excludes=%d -> inputs=%d", len(inputs), len(excludes), len(r))
+		log.Infof("fixed inputs=%d excludes=%d -> inputs=%d", len(inputs), len(excludes), len(r))
 	}
 	return r
 }
@@ -628,7 +615,7 @@ func (s StepDef) ExpandedCaseSensitives(ctx context.Context, inputs []string) []
 	}
 	newLen := len(expanded)
 	if oldLen != newLen {
-		glog.Infof("expand case-sensitive %d -> %d", oldLen, newLen)
+		log.Infof("expand case-sensitive %d -> %d", oldLen, newLen)
 	}
 	return expanded
 }
@@ -636,7 +623,7 @@ func (s StepDef) ExpandedCaseSensitives(ctx context.Context, inputs []string) []
 // expandLabels expands labels in given inputs.
 func (s *StepDef) expandLabels(ctx context.Context, inputs []string) []string {
 	if s.rule.Debug {
-		glog.Infof("expands labels")
+		log.Infof("expands labels")
 	}
 	var hasLabel bool
 	for _, input := range inputs {
@@ -665,11 +652,11 @@ func (s *StepDef) expandLabels(ctx context.Context, inputs []string) []string {
 		deps, ok := s.globals.stepConfig.InputDeps[cpath]
 		if !ok {
 			// TODO(b/266759797): make it hard error?
-			glog.Warningf("unknown label %q", cpath)
+			log.Warnf("unknown label %q", cpath)
 			continue
 		}
 		if s.rule.Debug {
-			glog.Infof("expand %s", cpath)
+			log.Infof("expand %s", cpath)
 		}
 		for _, dep := range deps {
 			dep := fromConfigPath(ctx, p, dep)
@@ -688,7 +675,7 @@ func (s *StepDef) expandLabels(ctx context.Context, inputs []string) []string {
 //     etc
 func (s *StepDef) ExpandedInputs(ctx context.Context) []string {
 	if s.rule.Debug {
-		glog.Infof("expanded inputs")
+		log.Infof("expanded inputs")
 	}
 	// it takes too much memory in later build stages.
 	// keep Inputs as is, and expand them when calculating digest ?
@@ -705,13 +692,13 @@ func (s *StepDef) ExpandedInputs(ctx context.Context) []string {
 		if inEdge, ok := in.InEdge(); ok && inEdge.IsPhony() {
 			// replace later after indirect_inputs
 			if s.rule.Debug {
-				glog.Infof("input from ninja(phony deferred): %s", p)
+				log.Infof("input from ninja(phony deferred): %s", p)
 			}
 			phonyEdges = append(phonyEdges, inEdge)
 			continue
 		}
 		if s.rule.Debug {
-			glog.Infof("input from ninja: %s", p)
+			log.Infof("input from ninja: %s", p)
 		}
 		inputs = append(inputs, p)
 	}
@@ -721,7 +708,7 @@ func (s *StepDef) ExpandedInputs(ctx context.Context) []string {
 			continue
 		}
 		if s.rule.Debug {
-			glog.Infof("input from ninja solibs: %s", p)
+			log.Infof("input from ninja solibs: %s", p)
 		}
 		inputs = append(inputs, p)
 	}
@@ -731,13 +718,13 @@ func (s *StepDef) ExpandedInputs(ctx context.Context) []string {
 		}
 		seen[p] = true
 		if s.rule.Debug {
-			glog.Infof("input from rule: %s", p)
+			log.Infof("input from rule: %s", p)
 		}
 		inputs = append(inputs, p)
 	}
 	if s.rule.IndirectInputs.enabled() {
 		if s.rule.Debug {
-			glog.Infof("indirect inputs")
+			log.Infof("indirect inputs")
 		}
 		// need to use different seen, so that replaces/accumulates
 		// works even if indirect inputs see/ignore the inputs.
@@ -778,7 +765,7 @@ func (s *StepDef) ExpandedInputs(ctx context.Context) []string {
 		// check siso rule if it was not checked when input's step was skipped
 		er.ensure(ctx, globals)
 		if s.rule.Debug {
-			glog.Infof("check edgeRule for %s inputs=%d solibs=%d replace=%t accumulate=%t", inputs[i], len(er.edge.Inputs()), len(edgeSolibs(er.edge)), er.replace, er.accumulate)
+			log.Infof("check edgeRule for %s inputs=%d solibs=%d replace=%t accumulate=%t", inputs[i], len(er.edge.Inputs()), len(edgeSolibs(er.edge)), er.replace, er.accumulate)
 		}
 		var ins []string
 		for _, in := range er.edge.Inputs() {
@@ -791,7 +778,7 @@ func (s *StepDef) ExpandedInputs(ctx context.Context) []string {
 		}
 		if er.replace {
 			if s.rule.Debug {
-				glog.Infof("replace %q -> %q", inputs[i], ins)
+				log.Infof("replace %q -> %q", inputs[i], ins)
 			}
 			// some step may want to expand inputs by deps recursively.
 			// inputs=*.stamp
@@ -815,7 +802,7 @@ func (s *StepDef) ExpandedInputs(ctx context.Context) []string {
 			// solibsIns need to check recursively.
 			inputs = append(inputs, solibsIns...)
 			if s.rule.Debug {
-				glog.Infof("solibs %q -> %q", inputs[i], solibsIns)
+				log.Infof("solibs %q -> %q", inputs[i], solibsIns)
 			}
 			changed = true
 		}
@@ -839,7 +826,7 @@ func (s *StepDef) ExpandedInputs(ctx context.Context) []string {
 		}
 		inputs = append(inputs, ins...)
 		if s.rule.Debug {
-			glog.Infof("accumulate %q -> %q", inputs[i], ins)
+			log.Infof("accumulate %q -> %q", inputs[i], ins)
 		}
 		if !changed && len(ins) > 0 {
 			changed = true
@@ -851,7 +838,7 @@ func (s *StepDef) ExpandedInputs(ctx context.Context) []string {
 		copy(inputs, newInputs)
 	}
 	if s.rule.Debug {
-		glog.Infof("expanded inputs -> %d", len(inputs))
+		log.Infof("expanded inputs -> %d", len(inputs))
 	}
 	return inputs
 }
@@ -865,7 +852,7 @@ func replacePhony(ctx context.Context, globals *globals, seen map[string]bool, t
 		}
 		seen[p] = true
 		if debug {
-			glog.Infof("input from ninja(phony): %s -> %s", target, p)
+			log.Infof("input from ninja(phony): %s -> %s", target, p)
 		}
 		if inEdge, ok := in.InEdge(); ok && inEdge.IsPhony() {
 			inputs = append(inputs, replacePhony(ctx, globals, seen, p, inEdge, debug)...)
@@ -891,12 +878,12 @@ func (s *StepDef) appendIndirectInputs(ctx context.Context, filter func(context.
 			seen[p] = true
 			if !filter(ctx, filepath.ToSlash(p), s.rule.Debug) {
 				if s.rule.Debug {
-					glog.Infof("input from ninja indirect[output] ignored: %s: %s", edgeName, p)
+					log.Infof("input from ninja indirect[output] ignored: %s: %s", edgeName, p)
 				}
 				continue
 			}
 			if s.rule.Debug {
-				glog.Infof("input from ninja indirect[output] %s: %s", edgeName, p)
+				log.Infof("input from ninja indirect[output] %s: %s", edgeName, p)
 			}
 			inputs = append(inputs, p)
 		}
@@ -914,12 +901,12 @@ func (s *StepDef) appendIndirectInputs(ctx context.Context, filter func(context.
 		}
 		if !filter(ctx, filepath.ToSlash(p), s.rule.Debug) {
 			if s.rule.Debug {
-				glog.Infof("input from ninja indirect[input] ignored: %s: %s", edgeName, p)
+				log.Infof("input from ninja indirect[input] ignored: %s: %s", edgeName, p)
 			}
 			continue
 		}
 		if s.rule.Debug {
-			glog.Infof("input from ninja indirect[input] %s: %s", edgeName, p)
+			log.Infof("input from ninja indirect[input] %s: %s", edgeName, p)
 		}
 		inputs = append(inputs, p)
 	}
@@ -1019,7 +1006,7 @@ func (s *StepDef) Handle(ctx context.Context, cmd *execute.Cmd) error {
 		// expand here if handler calls cmd.expand_inputs().
 		// if handler is not set, expand later by depsExpandInput in build/builder.go
 		inputs := s.ExpandedInputs(ctx)
-		glog.Infof("cmd.expandedInputs %d", len(inputs))
+		log.Infof("cmd.expandedInputs %d", len(inputs))
 		return inputs
 	})
 	if err != nil {

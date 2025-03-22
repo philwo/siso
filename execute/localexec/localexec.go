@@ -18,7 +18,7 @@ import (
 	"time"
 
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
-	"github.com/golang/glog"
+	"github.com/charmbracelet/log"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -46,7 +46,7 @@ func (LocalExec) Run(ctx context.Context, cmd *execute.Cmd) (err error) {
 	}
 	cmd.SetActionResult(res, false)
 
-	glog.Infof("exit=%d stdout=%d stderr=%d metadata=%s", res.ExitCode, len(res.StdoutRaw), len(res.StderrRaw), res.ExecutionMetadata)
+	log.Infof("exit=%d stdout=%d stderr=%d metadata=%s", res.ExitCode, len(res.StdoutRaw), len(res.StderrRaw), res.ExecutionMetadata)
 
 	if res.ExitCode != 0 {
 		return &execute.ExitError{ExitCode: int(res.ExitCode)}
@@ -80,7 +80,7 @@ func run(ctx context.Context, cmd *execute.Cmd) (*rpb.ActionResult, error) {
 		checkClose := func(f *os.File, s string) {
 			err := f.Close()
 			if err != nil && !errors.Is(err, fs.ErrClosed) {
-				glog.Warningf("close %s: %v", s, err)
+				log.Warnf("close %s: %v", s, err)
 			}
 		}
 		stdoutr, stdoutw, err := os.Pipe()
@@ -107,7 +107,7 @@ func run(ctx context.Context, cmd *execute.Cmd) (*rpb.ActionResult, error) {
 			var buf [1]byte
 			n, err := r.Read(buf[:])
 			if err != nil {
-				glog.Warningf("consoleOut %s: read %v", s, err)
+				log.Warnf("consoleOut %s: read %v", s, err)
 				return
 			}
 			if !cmd.ConsoleOut.Swap(true) {
@@ -115,11 +115,11 @@ func run(ctx context.Context, cmd *execute.Cmd) (*rpb.ActionResult, error) {
 			}
 			_, err = w.Write(buf[:n])
 			if err != nil {
-				glog.Warningf("console write %s: %v", s, err)
+				log.Warnf("console write %s: %v", s, err)
 			}
 			_, err = io.Copy(w, r)
 			if err != nil && !errors.Is(err, os.ErrClosed) {
-				glog.Warningf("console copy %s: %v", s, err)
+				log.Warnf("console copy %s: %v", s, err)
 			}
 		}
 
@@ -155,7 +155,7 @@ func run(ctx context.Context, cmd *execute.Cmd) (*rpb.ActionResult, error) {
 			}
 		}
 		st.Close(ctx)
-		glog.V(1).Infof("%s filetrace=false n_traced_inputs=%d n_traced_outputs=%d err=%v", cmd.ID, len(cmd.Inputs), len(cmd.Outputs), err)
+		log.Debugf("%s filetrace=false n_traced_inputs=%d n_traced_outputs=%d err=%v", cmd.ID, len(cmd.Inputs), len(cmd.Outputs), err)
 	} else {
 		err = forkSema.Do(ctx, func(ctx context.Context) error {
 			return c.Start()
@@ -166,7 +166,7 @@ func run(ctx context.Context, cmd *execute.Cmd) (*rpb.ActionResult, error) {
 		if err == nil {
 			ru = rusage(c)
 		}
-		glog.V(1).Infof("%s filetrace=false %v", cmd.ID, err)
+		log.Debugf("%s filetrace=false %v", cmd.ID, err)
 	}
 	if cmd.Console {
 		consoleCancel()
@@ -192,7 +192,7 @@ func run(ctx context.Context, cmd *execute.Cmd) (*rpb.ActionResult, error) {
 	if ru != nil {
 		p, err := anypb.New(ru)
 		if err != nil {
-			glog.Warningf("pack rusage: %v", err)
+			log.Warnf("pack rusage: %v", err)
 		} else {
 			result.ExecutionMetadata.AuxiliaryMetadata = append(result.ExecutionMetadata.AuxiliaryMetadata, p)
 		}

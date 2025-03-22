@@ -17,7 +17,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/golang/glog"
+	"github.com/charmbracelet/log"
 )
 
 // DepsLog is an in-memory representation of ninja's depslog.
@@ -72,9 +72,7 @@ type depsRecord struct {
 func verifySignature(ctx context.Context, f io.Reader) error {
 	buf := make([]byte, len(fileSignature))
 	n, err := f.Read(buf)
-	if glog.V(3) {
-		glog.Infof("signature=%q: %d %v", buf, n, err)
-	}
+	log.Debugf("signature=%q: %d %v", buf, n, err)
 	if err != nil || n != len(buf) {
 		return fmt.Errorf("failed to read file signature=%d: %w", n, err)
 	}
@@ -87,9 +85,7 @@ func verifySignature(ctx context.Context, f io.Reader) error {
 func verifyVersion(ctx context.Context, f io.Reader) error {
 	var ver int32
 	err := binary.Read(f, binary.LittleEndian, &ver)
-	if glog.V(3) {
-		glog.Infof("version=%d: %v", ver, err)
-	}
+	log.Debugf("version=%d: %v", ver, err)
 	if err != nil {
 		return fmt.Errorf("failed to read version: %w", err)
 	}
@@ -102,9 +98,7 @@ func verifyVersion(ctx context.Context, f io.Reader) error {
 func readRecordHeader(ctx context.Context, f io.Reader) (recordHeader, error) {
 	var header recordHeader
 	err := binary.Read(f, binary.LittleEndian, &header)
-	if glog.V(3) {
-		glog.Infof("header=0x%0x: %v", header, err)
-	}
+	log.Debugf("header=0x%0x: %v", header, err)
 	if err != nil {
 		return -1, err
 	}
@@ -120,9 +114,7 @@ func readDepsRecord(ctx context.Context, buf []byte, size int, depsLogPaths []st
 	//   input path id, ...
 	rec := make([]int32, size/4)
 	err := binary.Read(bytes.NewReader(buf[:size]), binary.LittleEndian, rec)
-	if glog.V(3) {
-		glog.Infof("deps record=%v: %v", rec, err)
-	}
+	log.Debugf("deps record=%v: %v", rec, err)
 	if err != nil {
 		return -1, nil, err
 	}
@@ -134,7 +126,7 @@ func readDepsRecord(ctx context.Context, buf []byte, size int, depsLogPaths []st
 	deps := &depsRecord{mtime: mtime, inputs: make([]string, 0, len(rec))}
 	for _, id := range rec {
 		if int(id) < 0 || int(id) >= len(depsLogPaths) {
-			glog.Warningf("bad path id=%d (depsLog.paths=%d)", id, len(depsLogPaths))
+			log.Warnf("bad path id=%d (depsLog.paths=%d)", id, len(depsLogPaths))
 			return -1, nil, nil
 		}
 		deps.inputs = append(deps.inputs, depsLogPaths[id])
@@ -159,15 +151,11 @@ func readPathRecord(ctx context.Context, buf []byte, size int, numDepsLogPaths i
 		}
 	}
 	pathname := string(buf[:pathSize])
-	if glog.V(3) {
-		glog.Infof("path record %q %d", pathname, numDepsLogPaths)
-	}
+	log.Debugf("path record %q %d", pathname, numDepsLogPaths)
 
 	var checksum int32
 	err := binary.Read(bytes.NewReader(buf[size-4:size]), binary.LittleEndian, &checksum)
-	if glog.V(3) {
-		glog.Infof("checksum %x: %v", checksum, err)
-	}
+	log.Debugf("checksum %x: %v", checksum, err)
 	if err != nil {
 		return "", err
 	}
@@ -191,7 +179,7 @@ func NewDepsLog(ctx context.Context, fname string) (*DepsLog, error) {
 	}
 	fbuf, err := os.ReadFile(fname)
 	if os.IsNotExist(err) {
-		glog.Infof("ninja_deps %s doesn't exist: %v", fname, err)
+		log.Infof("ninja_deps %s doesn't exist: %v", fname, err)
 		createNewDepsLogFile(ctx, fname)
 		return depsLog, nil
 	}
@@ -200,12 +188,12 @@ func NewDepsLog(ctx context.Context, fname string) (*DepsLog, error) {
 	}
 	f := bytes.NewReader(fbuf)
 	if err = verifySignature(ctx, f); err != nil {
-		glog.Warningf("ninja_deps %s error: %v", fname, err)
+		log.Warnf("ninja_deps %s error: %v", fname, err)
 		createNewDepsLogFile(ctx, fname)
 		return depsLog, nil
 	}
 	if err = verifyVersion(ctx, f); err != nil {
-		glog.Warningf("ninja_deps %s error: %v", fname, err)
+		log.Warnf("ninja_deps %s error: %v", fname, err)
 		createNewDepsLogFile(ctx, fname)
 		return depsLog, nil
 	}
@@ -220,38 +208,36 @@ func NewDepsLog(ctx context.Context, fname string) (*DepsLog, error) {
 readLoop:
 	for {
 		offset, err = f.Seek(0, os.SEEK_CUR)
-		if glog.V(3) {
-			glog.Infof("offset=%d: %v", offset, err)
-		}
+		log.Debugf("offset=%d: %v", offset, err)
 		if err != nil {
-			glog.Errorf("failed to get offset: %v", err)
+			log.Errorf("failed to get offset: %v", err)
 			broken = true
 			break readLoop
 		}
 		header, err := readRecordHeader(ctx, f)
 		if err != nil {
 			if err != io.EOF {
-				glog.Errorf("failed to read header at %d: %v", offset, err)
+				log.Errorf("failed to read header at %d: %v", offset, err)
 				broken = true
 			}
 			break readLoop
 		}
 		size := header.RecordSize()
 		if size > maxRecordSize {
-			glog.Errorf("too large record %d at %d", size, offset)
+			log.Errorf("too large record %d at %d", size, offset)
 			broken = true
 			break readLoop
 		}
 		n, err := f.Read(buf[:size])
 		if err != nil || n != size {
-			glog.Errorf("failed to read record %d at %d: n=%d, %v", size, offset, n, err)
+			log.Errorf("failed to read record %d at %d: n=%d, %v", size, offset, n, err)
 			broken = true
 			break readLoop
 		}
 		if header.IsDepsRecord() {
 			outID, deps, err := readDepsRecord(ctx, buf, size, depsLog.paths)
 			if err != nil {
-				glog.Errorf("failed to parse deps record at %d: %v", offset, err)
+				log.Errorf("failed to parse deps record at %d: %v", offset, err)
 				broken = true
 				break readLoop
 			}
@@ -265,7 +251,7 @@ readLoop:
 		} else {
 			pathname, err := readPathRecord(ctx, buf, size, len(depsLog.paths))
 			if err != nil {
-				glog.Errorf("failed to parse path record at %d: %v", offset, err)
+				log.Errorf("failed to parse path record at %d: %v", offset, err)
 				broken = true
 				break readLoop
 			}
@@ -279,7 +265,7 @@ readLoop:
 	const compactionRatio = 3
 	depsLog.needsRecompact = broken || (totalRecords > minCompactionEntryCount && totalRecords > uniqueRecords*compactionRatio) || totalRecords == 0
 
-	glog.Infof("ninja deps %s => paths=%d, deps=%d total=%d unique=%d recompact=%t (broken:%t)", depsLog.fname, len(depsLog.paths), len(depsLog.deps), totalRecords, uniqueRecords, depsLog.needsRecompact, broken)
+	log.Infof("ninja deps %s => paths=%d, deps=%d total=%d unique=%d recompact=%t (broken:%t)", depsLog.fname, len(depsLog.paths), len(depsLog.deps), totalRecords, uniqueRecords, depsLog.needsRecompact, broken)
 	depsLog.rPaths = depsLog.paths
 	maps.Copy(depsLog.rPathIdx, depsLog.pathIdx)
 	depsLog.rDeps = depsLog.deps
@@ -304,7 +290,7 @@ func (d *DepsLog) NeedsRecompact() bool {
 // Recompact recompacts deps log file, i.e.
 // rewrites the known log entries, throwing away old data.
 func (d *DepsLog) Recompact(ctx context.Context) error {
-	glog.Infof(".siso_deps recompact")
+	log.Infof(".siso_deps recompact")
 	err := d.Close()
 	if err != nil {
 		return fmt.Errorf("failed to close before recompact: %w", err)
@@ -394,9 +380,7 @@ func (d *DepsLog) update(ctx context.Context, outID int32, deps *depsRecord) boo
 			d.deps = newDeps
 		}
 	}
-	if glog.V(3) {
-		glog.Infof("update deps out=%d deps=%v", outID, deps)
-	}
+	log.Debugf("update deps out=%d deps=%v", outID, deps)
 	d.deps[outID] = deps
 	return existed
 }
@@ -418,7 +402,7 @@ func (d *DepsLog) Get(ctx context.Context, output string) ([]string, time.Time, 
 		return nil, mtime, fmt.Errorf("no path entry for %s %d: %w", output, i, ErrNoDepsLog)
 	}
 	if d.rPaths[i] != output {
-		glog.Errorf("inconsistent paths %s -> %d -> %s", output, i, d.rPaths[i])
+		log.Errorf("inconsistent paths %s -> %d -> %s", output, i, d.rPaths[i])
 		return nil, mtime, errors.New("inconsistent path in deps log")
 	}
 	if i >= len(d.rDeps) {
@@ -532,22 +516,22 @@ func (d *DepsLog) uniquePathIdx(path string) (int, bool) {
 func createNewDepsLogFile(ctx context.Context, fname string) {
 	f, err := os.Create(fname)
 	if err != nil {
-		glog.Warningf("failed to create new deps log %s: %v", fname, err)
+		log.Warnf("failed to create new deps log %s: %v", fname, err)
 		return
 	}
 	_, err = f.Write([]byte(fileSignature))
 	if err != nil {
-		glog.Warningf("failed to set file signature in %s: %v", fname, err)
+		log.Warnf("failed to set file signature in %s: %v", fname, err)
 	}
 	err = binary.Write(f, binary.LittleEndian, int32(currentVersion))
 	if err != nil {
-		glog.Warningf("failed to set version in %s: %v", fname, err)
+		log.Warnf("failed to set version in %s: %v", fname, err)
 	}
 	err = f.Close()
 	if err != nil {
-		glog.Warningf("failed to close %s: %v", fname, err)
+		log.Warnf("failed to close %s: %v", fname, err)
 	}
-	glog.Infof("created new deps log file: %s", fname)
+	log.Infof("created new deps log file: %s", fname)
 }
 
 func (d *DepsLog) recordPath(ctx context.Context, i int, path string) error {
