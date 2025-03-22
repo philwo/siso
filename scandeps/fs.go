@@ -13,8 +13,7 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/golang/glog"
-
+	"github.com/charmbracelet/log"
 	"go.chromium.org/infra/build/siso/hashfs"
 )
 
@@ -47,9 +46,7 @@ type dircache struct {
 
 // update updates filesystem modification by fi.
 func (fsys *filesystem) update(ctx context.Context, fi *hashfs.FileInfo) {
-	if glog.V(1) {
-		glog.Infof("update %s dir:%t", fi.Path(), fi.IsDir())
-	}
+	log.Debugf("update %s dir:%t", fi.Path(), fi.IsDir())
 	var dname string
 	var base string
 	if !fi.IsDir() {
@@ -72,7 +69,7 @@ func (fsys *filesystem) update(ctx context.Context, fi *hashfs.FileInfo) {
 		select {
 		case <-dc.ready:
 		default:
-			glog.Infof("update race ReadDir&update %s", fi.Path())
+			log.Infof("update race ReadDir&update %s", fi.Path())
 			fsys.dircache.Delete(dname)
 			base = filepath.Base(dname)
 			dname = filepath.ToSlash(filepath.Dir(dname))
@@ -80,7 +77,7 @@ func (fsys *filesystem) update(ctx context.Context, fi *hashfs.FileInfo) {
 		}
 		if dc.err != nil {
 			// negative cache?
-			glog.Infof("update clear negative cache %s %v", fi.Path(), dc.err)
+			log.Infof("update clear negative cache %s %v", fi.Path(), dc.err)
 			fsys.dircache.Delete(dname)
 			base = filepath.Base(dname)
 			dname = filepath.ToSlash(filepath.Dir(dname))
@@ -133,9 +130,7 @@ func (fsys *filesystem) ReadDir(ctx context.Context, execRoot, dname string) (*s
 	dc := dv.(*dircache)
 	if !loaded {
 		go func() {
-			if glog.V(1) {
-				glog.Infof("fsys readdir %s", dname)
-			}
+			log.Debugf("fsys readdir %s", dname)
 			symlinkErr := fmt.Errorf("readdir %s: %w", dname, syscall.ELOOP)
 			const maxSymlinks = 40
 			var dents []hashfs.DirEntry
@@ -148,11 +143,11 @@ func (fsys *filesystem) ReadDir(ctx context.Context, execRoot, dname string) (*s
 				// may be symlink?
 				fi, serr := fsys.hashfs.Stat(ctx, execRoot, dname)
 				if serr != nil {
-					glog.Warningf("stat %s: %v", dname, serr)
+					log.Warnf("stat %s: %v", dname, serr)
 					break
 				}
 				if fi.Target() == "" {
-					glog.Warningf("not symlink? %s", dname)
+					log.Warnf("not symlink? %s", dname)
 					break
 				}
 				target := filepath.Join(filepath.Dir(dname), fi.Target())
@@ -161,14 +156,12 @@ func (fsys *filesystem) ReadDir(ctx context.Context, execRoot, dname string) (*s
 					dname = filepath.Join(execRoot, target)
 					execRoot = ""
 				}
-				glog.Infof("symlink dir: %s -> %s", dname, target)
+				log.Infof("symlink dir: %s -> %s", dname, target)
 				err = symlinkErr
 			}
 			dc.err = err
 			for _, de := range dents {
-				if glog.V(1) {
-					glog.Infof("dirent %q %q", fullpath, de.Name())
-				}
+				log.Debugf("dirent %q %q", fullpath, de.Name())
 				dc.m.Store(fsys.pathIntern(de.Name()), true)
 			}
 			dname = fullpath
@@ -256,27 +249,27 @@ type hmapresult struct {
 // getHmap returns hmap and success flag.
 // If the same hamp has been computed, the results are returned from cache.
 func (fsys *filesystem) getHmap(ctx context.Context, execRoot, fname string) (map[string]string, bool) {
-	glog.Infof("check hmap %s", fname)
+	log.Infof("check hmap %s", fname)
 	v, _ := fsys.hmaps.LoadOrStore(filepath.ToSlash(filepath.Join(execRoot, fname)), new(hmapresult))
 	hr := v.(*hmapresult)
 	hr.mu.Lock()
 	defer hr.mu.Unlock()
 	defer func() { hr.done = true }()
 	if hr.done {
-		glog.Infof("check hmap %s: reuse ok=%t", fname, hr.ok)
+		log.Infof("check hmap %s: reuse ok=%t", fname, hr.ok)
 		return hr.m, hr.ok
 	}
 	buf, err := fsys.hashfs.ReadFile(ctx, execRoot, fname)
 	if err != nil {
-		glog.Warningf("missing hmap %s: %v", fname, err)
+		log.Warnf("missing hmap %s: %v", fname, err)
 		return nil, false
 	}
 	m, err := ParseHeaderMap(ctx, buf)
 	if err != nil {
-		glog.Warningf("failed to parse hmap %s: %v", fname, err)
+		log.Warnf("failed to parse hmap %s: %v", fname, err)
 		return nil, false
 	}
-	glog.Infof("hmap %s %d => %v", fname, len(buf), m)
+	log.Infof("hmap %s %d => %v", fname, len(buf), m)
 	hr.m = m
 	hr.ok = true
 	return hr.m, hr.ok

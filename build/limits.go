@@ -13,7 +13,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/golang/glog"
+	"github.com/charmbracelet/log"
 	"go.chromium.org/infra/build/siso/runtimex"
 	"go.chromium.org/infra/build/siso/ui"
 )
@@ -88,15 +88,15 @@ func DefaultLimits(ctx context.Context) Limits {
 		}
 		for _, ov := range strings.Split(overrides, ",") {
 			ov = strings.TrimSpace(ov)
-			glog.Infof("apply SISO_LIMITS=%s", ov)
+			log.Infof("apply SISO_LIMITS=%s", ov)
 			k, v, ok := strings.Cut(ov, "=")
 			if !ok {
-				glog.Warningf("wrong SISO_LIMITS value %q", ov)
+				log.Warnf("wrong SISO_LIMITS value %q", ov)
 				continue
 			}
 			n, err := strconv.Atoi(v)
 			if err != nil || n < 0 || (n == 0 && k != "fastlocal") {
-				glog.Warningf("wrong limits value for %s: %v", k, v)
+				log.Warnf("wrong limits value for %s: %v", k, v)
 				continue
 			}
 			switch k {
@@ -119,7 +119,7 @@ func DefaultLimits(ctx context.Context) Limits {
 			case "thread":
 				defaultLimits.Thread = n
 			default:
-				glog.Warningf("unknown limits name %q", k)
+				log.Warnf("unknown limits name %q", k)
 				continue
 			}
 			ui.Default.PrintLines(ui.SGR(ui.Yellow, fmt.Sprintf("use SISO_LIMITS=%s=%d\n", k, n)))
@@ -133,7 +133,7 @@ func DefaultLimits(ctx context.Context) Limits {
 // Otherwise, builder will start many steps, so hard to
 // test !hasReady before b.failuresAllowed in Build func in builder.go
 func UnitTestLimits(ctx context.Context) Limits {
-	glog.Infof("UnitTest mode. limit to 2")
+	log.Infof("UnitTest mode. limit to 2")
 	return Limits{
 		Step:     2,
 		Preproc:  2,
@@ -194,7 +194,7 @@ func limitForREWrapper(ctx context.Context, numCPU int) int {
 	if v := os.Getenv("NINJA_CORE_MULTIPLIER"); v != "" {
 		p, err := strconv.Atoi(v)
 		if err != nil {
-			glog.Warningf("wrong $NINJA_CORE_MULTIPLIER=%q; %v", v, err)
+			log.Warnf("wrong $NINJA_CORE_MULTIPLIER=%q; %v", v, err)
 		} else {
 			coreMultiplier = p
 		}
@@ -210,7 +210,7 @@ func limitForREWrapper(ctx context.Context, numCPU int) int {
 	if v := os.Getenv("NINJA_CORE_LIMIT"); v != "" {
 		p, err := strconv.Atoi(v)
 		if err != nil {
-			glog.Warningf("wrong $NINJA_CORE_LIMIT=%q; %v", v, err)
+			log.Warnf("wrong $NINJA_CORE_LIMIT=%q; %v", v, err)
 		} else if limit > p {
 			limit = p
 		}

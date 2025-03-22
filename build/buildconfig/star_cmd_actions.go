@@ -13,7 +13,7 @@ import (
 	"time"
 
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
-	"github.com/golang/glog"
+	"github.com/charmbracelet/log"
 	"go.starlark.net/starlark"
 	"go.starlark.net/starlarkstruct"
 
@@ -64,7 +64,7 @@ func (starCmdValue) Hash() (uint32, error) { return 0, errors.New("execute.Cmd i
 // Starlark function `actions.fix(inputs, tool_inputs, outputs, args, reproxy_config)`
 // to fix the command's inputs/outputs/args in the context.
 func starActionsFix(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-	glog.V(1).Infof("actions.fix args=%s kwargs=%s", args, kwargs)
+	log.Debugf("actions.fix args=%s kwargs=%s", args, kwargs)
 	c, ok := fn.Receiver().(starCmdValue)
 	if !ok {
 		return starlark.None, fmt.Errorf("unexpected receiver: %v", fn.Receiver())
@@ -165,7 +165,7 @@ func starActionsFix(thread *starlark.Thread, fn *starlark.Builtin, args starlark
 
 // Starlark function `actions.write(fname, content, is_executable)` to write the content a file in hashfs.
 func starActionsWrite(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-	glog.V(1).Infof("actions.write args=%s kwargs=%s", args, kwargs)
+	log.Debugf("actions.write args=%s kwargs=%s", args, kwargs)
 	c, ok := fn.Receiver().(starCmdValue)
 	if !ok {
 		return starlark.None, fmt.Errorf("unexpected receiver: %v", fn.Receiver())
@@ -183,7 +183,7 @@ func starActionsWrite(thread *starlark.Thread, fn *starlark.Builtin, args starla
 
 // Starlark function `actions.copy(src, dst, recursive)` to copy a file, or a dir, in hashfs.
 func starActionsCopy(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-	glog.V(1).Infof("actions.copy args=%s kwargs=%s", args, kwargs)
+	log.Debugf("actions.copy args=%s kwargs=%s", args, kwargs)
 	c, ok := fn.Receiver().(starCmdValue)
 	if !ok {
 		return starlark.None, fmt.Errorf("unexpected receiver: %v", fn.Receiver())
@@ -262,7 +262,7 @@ func actionsCopyRecursively(ctx context.Context, cmd *execute.Cmd, src, dst stri
 
 // Starlark function `actions.symlink(target, linkpath)` to create a symlink in hashfs.
 func starActionsSymlink(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-	glog.V(1).Infof("actions.symlink args=%s kwargs=%s", args, kwargs)
+	log.Debugf("actions.symlink args=%s kwargs=%s", args, kwargs)
 	c, ok := fn.Receiver().(starCmdValue)
 	if !ok {
 		return starlark.None, fmt.Errorf("unexpected receiver: %v", fn.Receiver())
@@ -279,7 +279,7 @@ func starActionsSymlink(thread *starlark.Thread, fn *starlark.Builtin, args star
 // Starlark function `actions.exit(exit_status, stdout, stderr)` to finish the execution of the command.
 // can be used when no actual command invocation is needed, such as stamp, copy.
 func starActionsExit(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-	glog.V(1).Infof("actions.exit args=%s kwargs=%s", args, kwargs)
+	log.Debugf("actions.exit args=%s kwargs=%s", args, kwargs)
 	c, ok := fn.Receiver().(starCmdValue)
 	if !ok {
 		return nil, fmt.Errorf("unexpected receiver: %v", fn.Receiver())

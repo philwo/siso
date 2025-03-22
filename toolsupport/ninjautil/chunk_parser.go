@@ -12,8 +12,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/golang/glog"
-
+	"github.com/charmbracelet/log"
 	"go.chromium.org/infra/build/siso/runtimex"
 )
 
@@ -62,9 +61,7 @@ func splitIntoChunks(ctx context.Context, buf []byte) []chunk {
 		if next < len(buf) {
 			next = nextChunk(buf, next)
 		}
-		if glog.V(3) {
-			glog.Infof("chunk %d..%d", start, next)
-		}
+		log.Debugf("chunk %d..%d", start, next)
 		chunks = append(chunks, chunk{
 			buf:   buf,
 			start: start,
@@ -271,14 +268,12 @@ loop:
 		ch.nvar++
 	}
 
-	if glog.V(1) {
-		glog.Infof("scan var:%d rule:%d+%d build:%d+%d pool:%d+%d default:%d include:%d subninja:%d comment:%d: %s",
-			ch.nvar, ch.nrule, ch.nrulevar,
-			ch.nbuild, ch.nbuildvar,
-			ch.npool, ch.npoolvar,
-			ch.ndefault, ch.ninclude, ch.nsubninja, ch.ncomment,
-			time.Since(t))
-	}
+	log.Debugf("scan var:%d rule:%d+%d build:%d+%d pool:%d+%d default:%d include:%d subninja:%d comment:%d: %s",
+		ch.nvar, ch.nrule, ch.nrulevar,
+		ch.nbuild, ch.nbuildvar,
+		ch.npool, ch.npoolvar,
+		ch.ndefault, ch.ninclude, ch.nsubninja, ch.ncomment,
+		time.Since(t))
 	return nil
 }
 
@@ -403,9 +398,7 @@ func (ch *chunk) includeChunks(ctx context.Context, i int, chunks []chunk) {
 // buildGraphInChunk parses build / default / subninja,
 // which requires path (evalString) evaluation.
 func (ch *chunk) buildGraphInChunk(ctx context.Context, state *State, fileState *fileState, scope *fileScope) error {
-	if glog.V(2) {
-		glog.Infof("buildGraphInChunk statements=%d", len(ch.statements))
-	}
+	log.Debugf("buildGraphInChunk statements=%d", len(ch.statements))
 	var buf bytes.Buffer
 	buf.Grow(4096)
 	var err error
@@ -642,9 +635,7 @@ func (ch *chunk) parseRule(ctx context.Context, i int, scope *fileScope, rule *r
 		return 0, fmt.Errorf("line:%d invalid rule name %q: %w", lineno(ch.buf, st.s), ch.buf[st.v:st.e], err)
 	}
 	name := string(s)
-	if glog.V(3) {
-		glog.Infof("rule %q", name)
-	}
+	log.Debugf("rule %q", name)
 	rule.name = name
 	err = scope.setRule(rule)
 	if err != nil {

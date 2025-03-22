@@ -18,7 +18,7 @@ import (
 	"time"
 
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
-	"github.com/golang/glog"
+	"github.com/charmbracelet/log"
 	"github.com/google/uuid"
 	"github.com/klauspost/compress/zstd"
 	bpb "google.golang.org/genproto/googleapis/bytestream"
@@ -82,7 +82,7 @@ var errUploadNotFinished = errors.New("upload not finished")
 func contextWithTimeoutForBytestream(ctx context.Context, d digest.Digest) (context.Context, context.CancelFunc) {
 	timeout := max(time.Duration(d.SizeBytes/bytestreamSlowThroughputPerSec)*time.Second, 10*time.Minute)
 	if timeout > 10*time.Minute {
-		glog.Infof("bytestream timeout for %s: %s", d, timeout)
+		log.Infof("bytestream timeout for %s: %s", d, timeout)
 	}
 	return context.WithTimeout(ctx, timeout)
 }
@@ -186,9 +186,7 @@ func (c *Client) getWithBatchReadBlobs(ctx context.Context, d digest.Digest, nam
 func (c *Client) getWithByteStream(ctx context.Context, d digest.Digest, name string) ([]byte, error) {
 	started := time.Now()
 	resourceName := c.resourceName(d)
-	if glog.V(1) {
-		glog.Infof("get %s", resourceName)
-	}
+	log.Debugf("get %s", resourceName)
 	var buf []byte
 	err := retry.Do(ctx, func() error {
 		ctx, cancel := contextWithTimeoutForBytestream(ctx, d)
@@ -282,7 +280,7 @@ func (c *Client) UploadAll(ctx context.Context, ds *digest.Store) (numUploaded i
 			case errUploadNotFinished:
 				close(uop.ch)
 			default:
-				glog.Infof("upload %s failed: %v", d, uop.err)
+				log.Infof("upload %s failed: %v", d, uop.err)
 				c.knownDigests.CompareAndDelete(d, uop)
 			}
 		}
@@ -345,7 +343,7 @@ func (c *Client) UploadAll(ctx context.Context, ds *digest.Store) (numUploaded i
 		durWaitPending = time.Since(t)
 	}
 
-	glog.Infof("upload all: blobs=%d -> {uploaded=%d, found=%d, pending=%d, skipped=%d}, timing: {find_missing=%s, upload=%s, wait_pending=%s}",
+	log.Infof("upload all: blobs=%d -> {uploaded=%d, found=%d, pending=%d, skipped=%d}, timing: {find_missing=%s, upload=%s, wait_pending=%s}",
 		len(blobs), len(newBlobs), len(foundBlobs), len(pendingBlobs), skippedBlobs,
 		durFindMissing.Round(time.Microsecond),
 		durUpload.Round(time.Microsecond),
@@ -380,7 +378,7 @@ func (c *Client) upload(ctx context.Context, ds *digest.Store, blobs []digest.Di
 
 	// Separate small blobs and large blobs because they are going to use different RPCs.
 	smalls, larges := separateBlobs(c.opt.Instance, blobs, byteLimit)
-	glog.Infof("upload by batch %d out of %d", len(smalls), len(blobs))
+	log.Infof("upload by batch %d out of %d", len(smalls), len(blobs))
 
 	// Upload small blobs with BatchUpdateBlobs rpc.
 	var missing missingError
@@ -474,7 +472,7 @@ func (c *Client) uploadWithBatchUpdateBlobs(ctx context.Context, digests []diges
 				blob := digest.FromProto(res.Digest)
 				data, ok := ds.Get(blob)
 				if !ok {
-					glog.Warningf("Not found %s in store", blob)
+					log.Warnf("Not found %s in store", blob)
 					missingBlobs = append(missingBlobs, missingBlob{
 						Digest: blob,
 						Err:    errBlobNotInReq,
@@ -483,7 +481,7 @@ func (c *Client) uploadWithBatchUpdateBlobs(ctx context.Context, digests []diges
 				}
 				st := status.FromProto(res.GetStatus())
 				if st.Code() != codes.OK {
-					glog.Warningf("Failed to batch-update %s: %v", data, st)
+					log.Warnf("Failed to batch-update %s: %v", data, st)
 					err := status.Errorf(st.Code(), "batch update blobs: %v", res.Status)
 					missingBlobs = append(missingBlobs, missingBlob{
 						Digest: blob,
@@ -492,11 +490,11 @@ func (c *Client) uploadWithBatchUpdateBlobs(ctx context.Context, digests []diges
 					uploads[blob].done(err)
 					continue
 				}
-				glog.Infof("uploaded in batch: %s", data)
+				log.Infof("uploaded in batch: %s", data)
 				uploads[blob].done(nil)
 			}
 			uploaded = true
-			glog.Infof("upload by batch %d blobs (missing:%d)", len(batchReq.Requests), len(missingBlobs))
+			log.Infof("upload by batch %d blobs (missing:%d)", len(batchReq.Requests), len(missingBlobs))
 		}
 	}
 	return missingBlobs, nil
@@ -550,7 +548,7 @@ func lookupBlobsInStore(ctx context.Context, blobs []digest.Digest, ds *digest.S
 			reqs = append(reqs, result.req)
 			continue
 		default:
-			glog.Errorf("lookup of blobs[%d]=%v no error nor req", i, blob)
+			log.Errorf("lookup of blobs[%d]=%v no error nor req", i, blob)
 		}
 	}
 	return reqs, missings
@@ -604,14 +602,14 @@ func readAll(ctx context.Context, data digest.Data) ([]byte, error) {
 }
 
 func (c *Client) uploadWithByteStream(ctx context.Context, digests []digest.Digest, uploads map[digest.Digest]*uploadOp, ds *digest.Store) []missingBlob {
-	glog.Infof("upload by streaming %d", len(digests))
+	log.Infof("upload by streaming %d", len(digests))
 
 	var missingBlobs []missingBlob
 	bsClient := bpb.NewByteStreamClient(c.casConn)
 	for _, d := range digests {
 		data, ok := ds.Get(d)
 		if !ok {
-			glog.Warningf("Not found %s in store", d)
+			log.Warnf("Not found %s in store", d)
 			missingBlobs = append(missingBlobs, missingBlob{
 				Digest: d,
 				Err:    errBlobNotInReq,
@@ -627,9 +625,7 @@ func (c *Client) uploadWithByteStream(ctx context.Context, digests []digest.Dige
 			}
 			defer rd.Close()
 			resourceName := c.uploadResourceName(d)
-			if glog.V(1) {
-				glog.Infof("put %s", resourceName)
-			}
+			log.Infof("put %s", resourceName)
 			wr, err := bytestreamio.Create(ctx, bsClient, c.uploadResourceName(d))
 			if err != nil {
 				return err
@@ -654,16 +650,16 @@ func (c *Client) uploadWithByteStream(ctx context.Context, digests []digest.Dige
 		})
 		uploads[d].done(err)
 		if err != nil {
-			glog.Warningf("Failed to stream %s: %v", data, err)
+			log.Warnf("Failed to stream %s: %v", data, err)
 			missingBlobs = append(missingBlobs, missingBlob{
 				Digest: d,
 				Err:    err,
 			})
 			continue
 		}
-		glog.Infof("uploaded streaming %s err=%v", data, err)
+		log.Infof("uploaded streaming %s err=%v", data, err)
 	}
-	glog.Infof("uploaded by streaming %d blobs (missing:%d)", len(digests), len(missingBlobs))
+	log.Infof("uploaded by streaming %d blobs (missing:%d)", len(digests), len(missingBlobs))
 
 	return missingBlobs
 }

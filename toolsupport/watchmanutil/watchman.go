@@ -14,7 +14,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/golang/glog"
+	"github.com/charmbracelet/log"
 	"go.chromium.org/infra/build/siso/hashfs"
 	pb "go.chromium.org/infra/build/siso/hashfs/proto"
 )
@@ -56,7 +56,7 @@ func (w *Watchman) check(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to parse watch-list %q: %w", buf, err)
 	}
-	glog.Infof("watchman version: %s", wl.Version)
+	log.Infof("watchman version: %s", wl.Version)
 	dir := filepath.Clean(w.dir)
 	for i := range wl.Roots {
 		if filepath.Clean(wl.Roots[i]) == dir {
@@ -151,7 +151,7 @@ func (ws *WatchmanScan) scan(ctx context.Context) {
 		ws.err = fmt.Errorf("failed to parse watchman since: %w", err)
 		return
 	}
-	glog.Infof("watchman since %s->%s %d files in %s", ws.token, ws.since.Clock, len(ws.since.Files), time.Since(started))
+	log.Infof("watchman since %s->%s %d files in %s", ws.token, ws.since.Clock, len(ws.since.Files), time.Since(started))
 	ws.m = make(map[string]*watchSinceFile)
 	for i := range ws.since.Files {
 		fname := filepath.ToSlash(filepath.Join(ws.w.dir, ws.since.Files[i].Name))

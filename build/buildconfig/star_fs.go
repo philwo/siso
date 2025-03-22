@@ -11,7 +11,7 @@ import (
 	"io/fs"
 	"path/filepath"
 
-	"github.com/golang/glog"
+	"github.com/charmbracelet/log"
 	"go.starlark.net/starlark"
 	"go.starlark.net/starlarkstruct"
 
@@ -139,7 +139,7 @@ func starFSSize(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tup
 
 // Starlark function `fs.canonpath(fname)` to canonicalize path from working directory relative path.
 func starFSCanonPath(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-	glog.V(1).Infof("fs.canonpath args=%s kwargs=%s", args, kwargs)
+	log.Debugf("fs.canonpath args=%s kwargs=%s", args, kwargs)
 	r, ok := fn.Receiver().(starFSReceiver)
 	if !ok {
 		return starlark.None, fmt.Errorf("unexpected receiver: %v", fn.Receiver())
