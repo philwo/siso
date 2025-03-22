@@ -1006,7 +1006,11 @@ func (c *ninjaCmdRun) initLogDir(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return c.logSymlink(ctx)
+	err = c.logSymlink(ctx)
+	if err != nil {
+		glog.Warningf("failed to create symlink for log: %v", err)
+	}
+	return nil
 }
 
 func (c *ninjaCmdRun) initFlags(targets []string) map[string]string {
