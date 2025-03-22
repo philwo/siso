@@ -134,12 +134,12 @@ func (p *progress) update(ctx context.Context, b *Builder) {
 			case stepFallbackWait, stepFallbackRun, stepRetryWait, stepRetryRun:
 				msg = ui.SGR(ui.Red, msg)
 			}
-			p.step(ctx, b, si.step, msg)
+			p.step(b, si.step, msg)
 		}
 	}
 }
 
-func (p *progress) stop(ctx context.Context) {
+func (p *progress) stop() {
 	close(p.done)
 	<-p.updateStopped
 }
@@ -169,7 +169,7 @@ const (
 	progressPrefixFallback = "f "
 )
 
-func (p *progress) step(ctx context.Context, b *Builder, step *Step, s string) {
+func (p *progress) step(b *Builder, step *Step, s string) {
 	p.mu.Lock()
 	t := p.ts
 	if step != nil {

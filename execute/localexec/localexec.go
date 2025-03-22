@@ -140,10 +140,10 @@ func run(ctx context.Context, cmd *execute.Cmd) (*rpb.ActionResult, error) {
 	var ru *epb.Rusage
 	var err error
 	if cmd.FileTrace != nil {
-		if !straceutil.Available(ctx) {
+		if !straceutil.Available() {
 			return nil, fmt.Errorf("strace is not available")
 		}
-		st := straceutil.New(ctx, cmd.ID, c)
+		st := straceutil.New(cmd.ID, c)
 		c = st.Cmd(ctx)
 		err = forkSema.Do(ctx, func(ctx context.Context) error {
 			return c.Start()
@@ -154,12 +154,12 @@ func run(ctx context.Context, cmd *execute.Cmd) (*rpb.ActionResult, error) {
 		if err == nil {
 			ru = rusage(c)
 
-			cmd.FileTrace.Inputs, cmd.FileTrace.Outputs, err = st.PostProcess(ctx)
+			cmd.FileTrace.Inputs, cmd.FileTrace.Outputs, err = st.PostProcess()
 			if err != nil {
 				err = fmt.Errorf("failed to postprocess: %w", err)
 			}
 		}
-		st.Close(ctx)
+		st.Close()
 		log.Debugf("%s filetrace=false n_traced_inputs=%d n_traced_outputs=%d err=%v", cmd.ID, len(cmd.Inputs), len(cmd.Outputs), err)
 	} else {
 		err = forkSema.Do(ctx, func(ctx context.Context) error {
@@ -223,6 +223,6 @@ func exitCode(err error) int32 {
 }
 
 // TraceEnabled returns whether file trace is enabled or not.
-func TraceEnabled(ctx context.Context) bool {
-	return straceutil.Available(ctx)
+func TraceEnabled() bool {
+	return straceutil.Available()
 }

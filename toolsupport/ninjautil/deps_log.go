@@ -6,7 +6,6 @@ package ninjautil
 
 import (
 	"bytes"
-	"context"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -68,7 +67,7 @@ type depsRecord struct {
 	inputs []string
 }
 
-func verifySignature(ctx context.Context, f io.Reader) error {
+func verifySignature(f io.Reader) error {
 	buf := make([]byte, len(fileSignature))
 	n, err := f.Read(buf)
 	log.Debugf("signature=%q: %d %v", buf, n, err)
@@ -81,7 +80,7 @@ func verifySignature(ctx context.Context, f io.Reader) error {
 	return nil
 }
 
-func verifyVersion(ctx context.Context, f io.Reader) error {
+func verifyVersion(f io.Reader) error {
 	var ver int32
 	err := binary.Read(f, binary.LittleEndian, &ver)
 	log.Debugf("version=%d: %v", ver, err)
@@ -94,7 +93,7 @@ func verifyVersion(ctx context.Context, f io.Reader) error {
 	return nil
 }
 
-func readRecordHeader(ctx context.Context, f io.Reader) (recordHeader, error) {
+func readRecordHeader(f io.Reader) (recordHeader, error) {
 	var header recordHeader
 	err := binary.Read(f, binary.LittleEndian, &header)
 	log.Debugf("header=0x%0x: %v", header, err)
@@ -104,7 +103,7 @@ func readRecordHeader(ctx context.Context, f io.Reader) (recordHeader, error) {
 	return header, nil
 }
 
-func readDepsRecord(ctx context.Context, buf []byte, size int, depsLogPaths []string) (int32, *depsRecord, error) {
+func readDepsRecord(buf []byte, size int, depsLogPaths []string) (int32, *depsRecord, error) {
 	// dependency record
 	// array of 4-byte integers
 	//   output path id
@@ -134,7 +133,7 @@ func readDepsRecord(ctx context.Context, buf []byte, size int, depsLogPaths []st
 	return outID, deps, nil
 }
 
-func readPathRecord(ctx context.Context, buf []byte, size int, numDepsLogPaths int) (string, error) {
+func readPathRecord(buf []byte, size int, numDepsLogPaths int) (string, error) {
 	// path record
 	//  string name of the path
 	//  up to 3 padding bytes to align on 4 byte boundaries
@@ -167,7 +166,7 @@ func readPathRecord(ctx context.Context, buf []byte, size int, numDepsLogPaths i
 
 // NewDepsLog reads or creates a new deps log.
 // If there are read errors, returns a truncated deps log.
-func NewDepsLog(ctx context.Context, fname string) (*DepsLog, error) {
+func NewDepsLog(fname string) (*DepsLog, error) {
 	if fname == "" {
 		return nil, errors.New("no ninja_deps")
 	}
@@ -179,21 +178,21 @@ func NewDepsLog(ctx context.Context, fname string) (*DepsLog, error) {
 	fbuf, err := os.ReadFile(fname)
 	if os.IsNotExist(err) {
 		log.Infof("ninja_deps %s doesn't exist: %v", fname, err)
-		createNewDepsLogFile(ctx, fname)
+		createNewDepsLogFile(fname)
 		return depsLog, nil
 	}
 	if err != nil {
 		return nil, err
 	}
 	f := bytes.NewReader(fbuf)
-	if err = verifySignature(ctx, f); err != nil {
+	if err = verifySignature(f); err != nil {
 		log.Warnf("ninja_deps %s error: %v", fname, err)
-		createNewDepsLogFile(ctx, fname)
+		createNewDepsLogFile(fname)
 		return depsLog, nil
 	}
-	if err = verifyVersion(ctx, f); err != nil {
+	if err = verifyVersion(f); err != nil {
 		log.Warnf("ninja_deps %s error: %v", fname, err)
-		createNewDepsLogFile(ctx, fname)
+		createNewDepsLogFile(fname)
 		return depsLog, nil
 	}
 	var offset int64
@@ -213,7 +212,7 @@ readLoop:
 			broken = true
 			break readLoop
 		}
-		header, err := readRecordHeader(ctx, f)
+		header, err := readRecordHeader(f)
 		if err != nil {
 			if err != io.EOF {
 				log.Errorf("failed to read header at %d: %v", offset, err)
@@ -234,7 +233,7 @@ readLoop:
 			break readLoop
 		}
 		if header.IsDepsRecord() {
-			outID, deps, err := readDepsRecord(ctx, buf, size, depsLog.paths)
+			outID, deps, err := readDepsRecord(buf, size, depsLog.paths)
 			if err != nil {
 				log.Errorf("failed to parse deps record at %d: %v", offset, err)
 				broken = true
@@ -243,12 +242,12 @@ readLoop:
 			// don't update if deps record is invalid, but allow continuation
 			if outID != -1 {
 				totalRecords++
-				if !depsLog.update(ctx, outID, deps) {
+				if !depsLog.update(outID, deps) {
 					uniqueRecords++
 				}
 			}
 		} else {
-			pathname, err := readPathRecord(ctx, buf, size, len(depsLog.paths))
+			pathname, err := readPathRecord(buf, size, len(depsLog.paths))
 			if err != nil {
 				log.Errorf("failed to parse path record at %d: %v", offset, err)
 				broken = true
@@ -292,7 +291,7 @@ func (d *DepsLog) NeedsRecompact() bool {
 
 // Recompact recompacts deps log file, i.e.
 // rewrites the known log entries, throwing away old data.
-func (d *DepsLog) Recompact(ctx context.Context) error {
+func (d *DepsLog) Recompact() error {
 	log.Infof(".siso_deps recompact")
 	err := d.Close()
 	if err != nil {
@@ -303,13 +302,13 @@ func (d *DepsLog) Recompact(ctx context.Context) error {
 	// openForWrite() opens for append.  Make sure it's not appending to a
 	// left-over file from a previous recompaction attempt that crashed somehow.
 	os.Remove(tempPath)
-	createNewDepsLogFile(ctx, tempPath)
+	createNewDepsLogFile(tempPath)
 	nd := &DepsLog{
 		fname:    tempPath,
 		rPathIdx: make(map[string]int),
 		pathIdx:  make(map[string]int),
 	}
-	err = nd.openForWrite(ctx)
+	err = nd.openForWrite()
 	if err != nil {
 		return err
 	}
@@ -323,7 +322,7 @@ func (d *DepsLog) Recompact(ctx context.Context) error {
 		// TODO: ignore if entry has deps= for now?
 		out := d.rPaths[i]
 		mtime := time.Unix(0, deps.mtime)
-		_, err = nd.Record(ctx, out, mtime, deps.inputs)
+		_, err = nd.Record(out, mtime, deps.inputs)
 		if err != nil {
 			nd.Close()
 			return fmt.Errorf("record in recompaction: %w", err)
@@ -371,7 +370,7 @@ func (d *DepsLog) Close() error {
 
 // update updates deps records of output identified by outID
 // and returns true if updated, false if added.
-func (d *DepsLog) update(ctx context.Context, outID int32, deps *depsRecord) bool {
+func (d *DepsLog) update(outID int32, deps *depsRecord) bool {
 	existed := int(outID) < len(d.deps)
 	if !existed {
 		if int(outID) < cap(d.deps) {
@@ -393,7 +392,7 @@ func (d *DepsLog) update(ctx context.Context, outID int32, deps *depsRecord) boo
 var ErrNoDepsLog = errors.New("deps not found")
 
 // Get returns deps log for the output.
-func (d *DepsLog) Get(ctx context.Context, output string) ([]string, time.Time, error) {
+func (d *DepsLog) Get(output string) ([]string, time.Time, error) {
 	var mtime time.Time
 	if d == nil {
 		return nil, mtime, errors.New("no deps log")
@@ -420,7 +419,7 @@ func (d *DepsLog) Get(ctx context.Context, output string) ([]string, time.Time, 
 	return deps.inputs, time.Unix(0, deps.mtime), nil
 }
 
-func (d *DepsLog) lookupDepRecord(ctx context.Context, i int) (*depsRecord, error) {
+func (d *DepsLog) lookupDepRecord(i int) (*depsRecord, error) {
 	if i >= len(d.deps) {
 		return nil, fmt.Errorf("index=%d (> %d)", i, len(d.deps))
 	}
@@ -431,7 +430,7 @@ func (d *DepsLog) lookupDepRecord(ctx context.Context, i int) (*depsRecord, erro
 	return deps, nil
 }
 
-func (d *DepsLog) openForWrite(ctx context.Context) error {
+func (d *DepsLog) openForWrite() error {
 	var err error
 	d.w, err = os.OpenFile(d.fname, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	return err
@@ -439,7 +438,7 @@ func (d *DepsLog) openForWrite(ctx context.Context) error {
 
 // Record records deps log for the output. This will write to disk.
 // Returns whether any deps were updated.
-func (d *DepsLog) Record(ctx context.Context, output string, mtime time.Time, deps []string) (bool, error) {
+func (d *DepsLog) Record(output string, mtime time.Time, deps []string) (bool, error) {
 	if d == nil {
 		return false, nil
 	}
@@ -448,7 +447,7 @@ func (d *DepsLog) Record(ctx context.Context, output string, mtime time.Time, de
 	defer d.mu.Unlock()
 
 	if d.w == nil {
-		err := d.openForWrite(ctx)
+		err := d.openForWrite()
 		if err != nil {
 			return false, err
 		}
@@ -458,7 +457,7 @@ func (d *DepsLog) Record(ctx context.Context, output string, mtime time.Time, de
 	i, added := d.uniquePathIdx(output)
 	if added {
 		willUpdateDeps = true
-		err := d.recordPath(ctx, i, output)
+		err := d.recordPath(i, output)
 		if err != nil {
 			return false, fmt.Errorf("failed to record for output %s: %w", output, err)
 		}
@@ -470,7 +469,7 @@ func (d *DepsLog) Record(ctx context.Context, output string, mtime time.Time, de
 		deps[i] = d.paths[di]
 		if added {
 			willUpdateDeps = true
-			err := d.recordPath(ctx, di, dep)
+			err := d.recordPath(di, dep)
 			if err != nil {
 				return false, fmt.Errorf("failed to record for dep %s: %w", dep, err)
 			}
@@ -478,7 +477,7 @@ func (d *DepsLog) Record(ctx context.Context, output string, mtime time.Time, de
 		depIDs = append(depIDs, di)
 	}
 	if !willUpdateDeps {
-		dr, err := d.lookupDepRecord(ctx, i)
+		dr, err := d.lookupDepRecord(i)
 		if err != nil {
 			willUpdateDeps = true
 		} else {
@@ -499,8 +498,8 @@ func (d *DepsLog) Record(ctx context.Context, output string, mtime time.Time, de
 	if !willUpdateDeps {
 		return false, nil
 	}
-	d.update(ctx, int32(i), &depsRecord{mtime: mtime.UnixNano(), inputs: deps})
-	err := d.recordDeps(ctx, i, mtime, depIDs)
+	d.update(int32(i), &depsRecord{mtime: mtime.UnixNano(), inputs: deps})
+	err := d.recordDeps(i, mtime, depIDs)
 	if err != nil {
 		return false, err
 	}
@@ -518,7 +517,7 @@ func (d *DepsLog) uniquePathIdx(path string) (int, bool) {
 	return i, true
 }
 
-func createNewDepsLogFile(ctx context.Context, fname string) {
+func createNewDepsLogFile(fname string) {
 	f, err := os.Create(fname)
 	if err != nil {
 		log.Warnf("failed to create new deps log %s: %v", fname, err)
@@ -539,7 +538,7 @@ func createNewDepsLogFile(ctx context.Context, fname string) {
 	log.Infof("created new deps log file: %s", fname)
 }
 
-func (d *DepsLog) recordPath(ctx context.Context, i int, path string) error {
+func (d *DepsLog) recordPath(i int, path string) error {
 	pathSize := len(path)
 	padding := (4 - pathSize%4) % 4 // Pad path to 4 byte boundary.
 	size := pathSize + padding + 4
@@ -561,7 +560,7 @@ func (d *DepsLog) recordPath(ctx context.Context, i int, path string) error {
 	return err
 }
 
-func (d *DepsLog) recordDeps(ctx context.Context, i int, mtime time.Time, inputs []int) error {
+func (d *DepsLog) recordDeps(i int, mtime time.Time, inputs []int) error {
 	size := 4 + 4 + 4 + 4*len(inputs)
 	if size > maxRecordSize {
 		return fmt.Errorf("too large record %d for %s", size, d.paths[i])

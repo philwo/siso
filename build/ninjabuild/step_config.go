@@ -45,7 +45,7 @@ func (ii *IndirectInputs) enabled() bool {
 	return len(ii.Includes) > 0
 }
 
-func (ii *IndirectInputs) filter(ctx context.Context) func(context.Context, string, bool) bool {
+func (ii *IndirectInputs) filter() func(context.Context, string, bool) bool {
 	var m []func(context.Context, string, bool) bool
 	for _, in := range ii.Includes {
 		if in == "*" {
@@ -309,7 +309,7 @@ type StepConfig struct {
 }
 
 // Init initializes StepConfig.
-func (sc StepConfig) Init(ctx context.Context) error {
+func (sc StepConfig) Init() error {
 	seen := make(map[string]bool)
 	for _, rule := range sc.Rules {
 		if rule == nil {
@@ -334,16 +334,16 @@ func (sc StepConfig) Init(ctx context.Context) error {
 }
 
 // UpdateFilegroups updates filegroups (input_deps) in the step config.
-func (sc StepConfig) UpdateFilegroups(ctx context.Context, filegroups map[string][]string) error {
+func (sc StepConfig) UpdateFilegroups(filegroups map[string][]string) error {
 	for k, v := range filegroups {
 		sc.InputDeps[k] = v
 	}
 	return nil
 }
 
-func fromConfigPath(ctx context.Context, p *build.Path, path string) string {
+func fromConfigPath(p *build.Path, path string) string {
 	if strings.HasPrefix(path, "./") {
-		return p.MaybeFromWD(ctx, path)
+		return p.MaybeFromWD(path)
 	}
 	return path
 }
@@ -357,10 +357,10 @@ func toConfigPath(p *build.Path, path string) string {
 }
 
 // Lookup returns a step rule for the edge.
-func (sc StepConfig) Lookup(ctx context.Context, bpath *build.Path, edge *ninjautil.Edge) (StepRule, bool) {
+func (sc StepConfig) Lookup(bpath *build.Path, edge *ninjautil.Edge) (StepRule, bool) {
 	var out, outConfig string
 	if len(edge.Outputs()) > 0 {
-		out = bpath.MaybeFromWD(ctx, edge.Outputs()[0].Path())
+		out = bpath.MaybeFromWD(edge.Outputs()[0].Path())
 		outConfig = toConfigPath(bpath, out)
 	}
 	actionName := edge.RuleName()
@@ -444,14 +444,14 @@ loop:
 		inputs = append(inputs, rule.Inputs...)
 		inputs = append(inputs, opt.Inputs...)
 		for i := range inputs {
-			inputs[i] = fromConfigPath(ctx, bpath, inputs[i])
+			inputs[i] = fromConfigPath(bpath, inputs[i])
 		}
 		rule.Inputs = inputs
 		if len(rule.RemoteInputs) > 0 {
 			m := make(map[string]string)
 			for k, v := range rule.RemoteInputs {
-				k = fromConfigPath(ctx, bpath, k)
-				v = fromConfigPath(ctx, bpath, v)
+				k = fromConfigPath(bpath, k)
+				v = fromConfigPath(bpath, v)
 				m[k] = v
 			}
 			rule.RemoteInputs = m
@@ -460,7 +460,7 @@ loop:
 		outputs = append(outputs, rule.Outputs...)
 		outputs = append(outputs, opt.Outputs...)
 		for i := range outputs {
-			outputs[i] = fromConfigPath(ctx, bpath, outputs[i])
+			outputs[i] = fromConfigPath(bpath, outputs[i])
 		}
 		rule.Outputs = outputs
 
@@ -502,7 +502,7 @@ func (sc StepConfig) ExpandInputs(ctx context.Context, p *build.Path, hashFS *ha
 		if ok {
 			log.Debugf("input-deps expand %s", path)
 			for _, dep := range deps {
-				dep := fromConfigPath(ctx, p, dep)
+				dep := fromConfigPath(p, dep)
 				if strings.Contains(dep, ":") {
 					paths = append(paths, dep)
 					continue

@@ -14,7 +14,7 @@ import (
 )
 
 // CPPScan scans C preprocessor directives for #include/#define in buf.
-func CPPScan(ctx context.Context, fname string, buf []byte) ([]string, map[string][]string, error) {
+func CPPScan(fname string, buf []byte) ([]string, map[string][]string, error) {
 	started := time.Now()
 
 	var includes []string
@@ -81,7 +81,7 @@ func CPPScan(ctx context.Context, fname string, buf []byte) ([]string, map[strin
 				continue
 			}
 			line = bytes.TrimSpace(line)
-			addDefine(ctx, defines, fname, line)
+			addDefine(defines, fname, line)
 			continue
 		default:
 			// ignore other directives
@@ -96,7 +96,7 @@ func CPPScan(ctx context.Context, fname string, buf []byte) ([]string, map[strin
 			log.Debugf("skip %q", logLineStart)
 			continue
 		}
-		includes = addInclude(ctx, includes, line)
+		includes = addInclude(includes, line)
 	}
 	dur := time.Since(started)
 	if dur > time.Second {
@@ -123,7 +123,7 @@ func cppExpandMacros(ctx context.Context, paths []string, incname string, macros
 	return paths
 }
 
-func addInclude(ctx context.Context, paths []string, incpath []byte) []string {
+func addInclude(paths []string, incpath []byte) []string {
 	logIncpath := incpath
 	log.Debugf("addInclude %q", logIncpath)
 	delim := string(incpath[0])
@@ -157,7 +157,7 @@ func addInclude(ctx context.Context, paths []string, incpath []byte) []string {
 	return append(paths, strings.Clone(string(incpath)))
 }
 
-func addDefine(ctx context.Context, defines map[string][]string, fname string, line []byte) {
+func addDefine(defines map[string][]string, fname string, line []byte) {
 	// line
 	//  MACRO "path.h"
 	//  MACRO <path.h>

@@ -27,7 +27,7 @@ func (depsDepfile) DepsAfterRun(ctx context.Context, b *Builder, step *Step) ([]
 		return nil, err
 	}
 	fsys := b.hashFS.FileSystem(ctx, b.path.ExecRoot)
-	depins, err := makeutil.ParseDepsFile(ctx, fsys, step.cmd.Depfile)
+	depins, err := makeutil.ParseDepsFile(fsys, step.cmd.Depfile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse depfile %q: %w", step.cmd.Depfile, err)
 	}

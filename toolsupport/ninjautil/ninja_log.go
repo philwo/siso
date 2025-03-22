@@ -5,7 +5,6 @@
 package ninjautil
 
 import (
-	"context"
 	"encoding/hex"
 	"fmt"
 	"hash/fnv"
@@ -24,7 +23,7 @@ const ninjaLogName = ".ninja_log"
 const ninjaLogVersion = 5
 
 // OpenNinjaLog opens ninja log file or creates a new file with a version header.
-func OpenNinjaLog(ctx context.Context) (*os.File, error) {
+func OpenNinjaLog() (*os.File, error) {
 	f, err := os.OpenFile(ninjaLogName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return nil, err
@@ -48,7 +47,7 @@ func OpenNinjaLog(ctx context.Context) (*os.File, error) {
 // TODO: b/298594790
 //   - Implement MurmurHash64A as Ninja.
 //   - Make mtime compatible on Windows.
-func WriteNinjaLogEntries(ctx context.Context, w io.Writer, start, end int64, mtime time.Time, outputs, command []string) {
+func WriteNinjaLogEntries(w io.Writer, start, end int64, mtime time.Time, outputs, command []string) {
 	h := fnv.New64()
 	h.Write([]byte(strings.Join(command, " ")))
 	hash := hex.EncodeToString(h.Sum(nil))

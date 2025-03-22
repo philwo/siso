@@ -132,7 +132,7 @@ func (s *scanner) nextInputs(ctx context.Context) []string {
 	for s.hasInputs() {
 		incname := s.popInput()
 		if incname == "" {
-			s.popDir(ctx)
+			s.popDir()
 			continue
 		}
 		s.names = s.names[:0]
@@ -142,17 +142,17 @@ func (s *scanner) nextInputs(ctx context.Context) []string {
 	return nil
 }
 
-func (s *scanner) addInputs(ctx context.Context, ins ...string) {
+func (s *scanner) addInputs(ins ...string) {
 	s.inputs = append(append([]string(nil), ins...), s.inputs...)
 }
 
-func (s *scanner) setMacros(ctx context.Context, macros map[string]string) {
+func (s *scanner) setMacros(macros map[string]string) {
 	for k, v := range macros {
 		s.macros[k] = append(s.macros[k], v)
 	}
 }
 
-func (s *scanner) updateMacros(ctx context.Context, macros map[string][]string) {
+func (s *scanner) updateMacros(macros map[string][]string) {
 	for k, vs := range macros {
 		seen := make(map[string]bool)
 		for _, v := range s.macros[k] {
@@ -168,7 +168,7 @@ func (s *scanner) updateMacros(ctx context.Context, macros map[string][]string) 
 	}
 }
 
-func (s *scanner) addInclude(ctx context.Context, fname string) {
+func (s *scanner) addInclude(fname string) {
 	// -include or /FI is equivalent with `#include "filename"`
 	s.pushInputs(`"` + fname + `"`)
 	log.Debugf("include %q", fname)
@@ -199,7 +199,7 @@ func (s *scanner) pushDir(ctx context.Context, dir string) {
 	log.Debugf("push dir <- %s", dir)
 }
 
-func (s *scanner) popDir(ctx context.Context) {
+func (s *scanner) popDir() {
 	if len(s.dirstack) == 0 {
 		return
 	}
@@ -242,10 +242,10 @@ func (s *scanner) find(ctx context.Context, name string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		s.macroCheck(ctx, ".", rel, incpath, sr.includes)
+		s.macroCheck(".", rel, incpath, sr.includes)
 		dir := path.Dir(incpath)
 		s.pushDir(ctx, dir)
-		s.updateMacros(ctx, sr.defines)
+		s.updateMacros(sr.defines)
 		s.pushInputs(sr.includes...)
 		return incpath, nil
 	}
@@ -276,7 +276,7 @@ func (s *scanner) find(ctx context.Context, name string) (string, error) {
 			if err != nil {
 				continue
 			}
-			s.macroCheck(ctx, dir, name, incpath, sr.includes)
+			s.macroCheck(dir, name, incpath, sr.includes)
 
 			// `#include "xx"` in incpath may include "xx"
 			// from the dir of incpath.
@@ -285,7 +285,7 @@ func (s *scanner) find(ctx context.Context, name string) (string, error) {
 
 			log.Debugf("find %s -> includes:%q defines:%q", incpath, sr.includes, sr.defines)
 
-			s.updateMacros(ctx, sr.defines)
+			s.updateMacros(sr.defines)
 			if i >= qi && i < mi {
 				s.pushMacroInputs(sr.includes...)
 			} else {
@@ -315,7 +315,7 @@ func (s *scanner) find(ctx context.Context, name string) (string, error) {
 				if err != nil {
 					continue
 				}
-				s.macroCheck(ctx, dir, name, incpath, sr.includes)
+				s.macroCheck(dir, name, incpath, sr.includes)
 
 				// `#include "xx"` in incpath may include "xx"
 				// from the dir of incpath.
@@ -324,7 +324,7 @@ func (s *scanner) find(ctx context.Context, name string) (string, error) {
 
 				log.Debugf("find %s -> includes:%q defines:%q", incpath, sr.includes, sr.defines)
 
-				s.updateMacros(ctx, sr.defines)
+				s.updateMacros(sr.defines)
 				s.pushInputs(sr.includes...)
 				return incpath, nil
 			}
@@ -334,9 +334,9 @@ func (s *scanner) find(ctx context.Context, name string) (string, error) {
 	return "", fs.ErrNotExist
 }
 
-func (s *scanner) macroCheck(ctx context.Context, dir, name, incpath string, incnames []string) {
+func (s *scanner) macroCheck(dir, name, incpath string, incnames []string) {
 	for _, iname := range incnames {
-		if isMacro(iname) && !s.macroAllUsed(ctx, iname) {
+		if isMacro(iname) && !s.macroAllUsed(iname) {
 			// incname uses macro.
 			// need to try include again
 			// because macro value may have been changed.
@@ -350,7 +350,7 @@ func (s *scanner) macroCheck(ctx context.Context, dir, name, incpath string, inc
 	}
 }
 
-func (s *scanner) macroAllUsed(ctx context.Context, macro string) bool {
+func (s *scanner) macroAllUsed(macro string) bool {
 	if s.macroUsed[macro] == nil {
 		s.macroUsed[macro] = make(map[string]bool)
 	}

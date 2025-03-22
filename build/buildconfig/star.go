@@ -5,7 +5,6 @@
 package buildconfig
 
 import (
-	"context"
 	"fmt"
 	"strings"
 
@@ -40,7 +39,7 @@ const (
 )
 
 // packCmd packs cmd into Starlark struct.
-func packCmd(ctx context.Context, cmd *execute.Cmd, expandedInputs func() []string) (*starlarkstruct.Struct, error) {
+func packCmd(cmd *execute.Cmd, expandedInputs func() []string) (*starlarkstruct.Struct, error) {
 	envs, err := packEnvmap(cmd.Env)
 	if err != nil {
 		return nil, err

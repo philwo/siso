@@ -5,7 +5,6 @@
 package buildconfig
 
 import (
-	"context"
 	"embed"
 	"os/exec"
 	"runtime"
@@ -27,7 +26,7 @@ import (
 //go:embed checkout.star encoding.star path.star runtime.star struct.star lib/gn.star
 var builtinStar embed.FS
 
-func builtinModule(ctx context.Context) map[string]starlark.Value {
+func builtinModule() map[string]starlark.Value {
 	runtimeModule := &starlarkstruct.Module{
 		Name: "runtime",
 		Members: map[string]starlark.Value{

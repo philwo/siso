@@ -24,7 +24,7 @@ var once sync.Once
 var path string
 
 // Available returns whether strace is available or not.
-func Available(ctx context.Context) bool {
+func Available() bool {
 	once.Do(func() {
 		if runtime.GOOS == "windows" {
 			// strace exists in msys, but we don't use this
@@ -51,7 +51,7 @@ type Strace struct {
 }
 
 // New creates a new Strace for cmd.
-func New(ctx context.Context, id string, cmd *exec.Cmd) *Strace {
+func New(id string, cmd *exec.Cmd) *Strace {
 	if path == "" {
 		var err error
 		path, err = exec.LookPath("strace")
@@ -68,7 +68,7 @@ func New(ctx context.Context, id string, cmd *exec.Cmd) *Strace {
 }
 
 // Close closes the strace cmd.
-func (s *Strace) Close(ctx context.Context) {
+func (s *Strace) Close() {
 	err := os.Remove(s.fname)
 	if err != nil {
 		log.Warnf("failed to remove %s: %v", s.fname, err)
@@ -95,13 +95,13 @@ func (s *Strace) Cmd(ctx context.Context) *exec.Cmd {
 
 // PostProcess processes strace outputs and returns inputs/outputs accessed by the cmd.
 // inputs/outputs will be absolute paths or relatives to the working directory of the cmd.
-func (s *Strace) PostProcess(ctx context.Context) (inputs, outputs []string, err error) {
+func (s *Strace) PostProcess() (inputs, outputs []string, err error) {
 	b, err := os.ReadFile(s.fname)
 	if err != nil {
 		return nil, nil, err
 	}
 	log.Debugf("strace for %s\n%s", s.cmd, b)
-	inputs, outputs = scanStraceData(ctx, b)
+	inputs, outputs = scanStraceData(b)
 	for i := 0; i < len(inputs); i++ {
 		target, err := os.Readlink(filepath.Join(s.cmd.Dir, inputs[i]))
 		if err == nil {
@@ -117,7 +117,7 @@ func (s *Strace) PostProcess(ctx context.Context) (inputs, outputs []string, err
 	return inputs, outputs, nil
 }
 
-func scanStraceData(ctx context.Context, buf []byte) ([]string, []string) {
+func scanStraceData(buf []byte) ([]string, []string) {
 	var inputs []string
 	var outputs []string
 	iseen := make(map[string]bool)
@@ -125,7 +125,7 @@ func scanStraceData(ctx context.Context, buf []byte) ([]string, []string) {
 	for len(buf) > 0 {
 		var line []byte
 		line, buf = nextLine(buf)
-		syscall, fnames, wr := parseTraceLine(ctx, line)
+		syscall, fnames, wr := parseTraceLine(line)
 		log.Debugf("trace %q %q wr:%t", syscall, fnames, wr)
 		if len(fnames) == 0 {
 			continue
@@ -235,7 +235,7 @@ func nextLine(buf []byte) (line, remain []byte) {
 	return buf[:i], buf[i+1:]
 }
 
-func parseTraceLine(ctx context.Context, line []byte) (sycall string, fnames []string, wr bool) {
+func parseTraceLine(line []byte) (sycall string, fnames []string, wr bool) {
 	// line:
 	// <pid> access(<path>, ...
 	// <pid> chdir(<path>
