@@ -17,14 +17,10 @@ import (
 	"time"
 
 	"github.com/charmbracelet/log"
-	"go.chromium.org/infra/build/siso/execute"
 	"go.chromium.org/infra/build/siso/toolsupport/makeutil"
 )
 
 type depsProcessor interface {
-	// create new cmd for fast deps run
-	DepsFastCmd(context.Context, *Builder, *execute.Cmd) (*execute.Cmd, error)
-
 	// fix step.cmd and returns deps inputs.
 	// paths are execroot relative.
 	DepsCmd(context.Context, *Builder, *Step) ([]string, error)
@@ -38,65 +34,6 @@ var depsProcessors = map[string]depsProcessor{
 	"depfile": depsDepfile{},
 	"gcc":     depsGCC{},
 	"msvc":    depsMSVC{},
-}
-
-func depsFastStep(ctx context.Context, b *Builder, step *Step) (*Step, error) {
-	if step.useReclient() {
-		return nil, fmt.Errorf("no fast-deps (use reclient)")
-	}
-	if len(step.cmd.Platform) == 0 || step.cmd.Platform["container-image"] == "" {
-		return nil, errors.New("no fast-deps (no remote step)")
-	}
-	if step.def.Binding("no_fast_deps") != "" {
-		return nil, errors.New("no fast-deps (siso config no_fast_deps=true)")
-	}
-	if reason, ok := b.disableFastDeps.Load().(string); ok && reason != "" {
-		return nil, fmt.Errorf("no fast-deps (%s)", reason)
-	}
-	ds, found := depsProcessors[step.cmd.Deps]
-	if !found {
-		return nil, fmt.Errorf("no fast-deps (deps=%q depfile=%q)", step.cmd.Deps, step.cmd.Depfile)
-	}
-	var newCmd *execute.Cmd
-	// protect from thread exhaustion,
-	// because it would access many files, which would call syscalls
-	// and may create new threads.
-	err := b.scanDepsSema.Do(ctx, func(ctx context.Context) error {
-		depsIter, err := step.def.DepInputs(ctx)
-		if err != nil {
-			return fmt.Errorf("failed to get fast deps log (deps=%q): %w", step.cmd.Deps, err)
-		}
-		var depsIns []string
-		depsIter(func(in string) bool {
-			depsIns = append(depsIns, in)
-			return true
-		})
-		newCmd, err = ds.DepsFastCmd(ctx, b, step.cmd)
-		if err != nil {
-			return err
-		}
-		newCmd.ID += "-fast-deps"
-		// Inputs may contains unnecessary inputs.
-		// just needs ToolInputs.
-		stepInputs := newCmd.ToolInputs
-		depsIns = step.def.ExpandedCaseSensitives(ctx, depsIns)
-		inputs, err := fixInputsByDeps(ctx, b, stepInputs, depsIns)
-		if err != nil {
-			log.Warnf("failed to fix inputs by deps: %v", err)
-			return err
-		}
-		log.Infof("fix inputs by deps %d -> %d", len(step.cmd.Inputs), len(inputs))
-		newCmd.Inputs = inputs
-		newCmd.Pure = true
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	fastStep := &Step{}
-	*fastStep = *step
-	fastStep.cmd = newCmd
-	return fastStep, nil
 }
 
 // depsExpandInputs expands step.cmd.Inputs.
@@ -170,7 +107,6 @@ func depsCmd(ctx context.Context, b *Builder, step *Step) error {
 
 	ds, found := depsProcessors[step.cmd.Deps]
 	if found {
-		// TODO: same as depsFastStep
 		var stepInputs []string
 		switch step.cmd.Deps {
 		case "gcc", "msvc":

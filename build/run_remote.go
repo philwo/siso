@@ -30,24 +30,8 @@ var errDepsLog = errors.New("failed to exec with deps log")
 // - Before each remote exec, it checks remote cache before running.
 // - The fallbacks can be disabled via experiment flags.
 func (b *Builder) runRemote(ctx context.Context, step *Step) error {
-	var fastStep *Step
-	var fastOK, fastChecked bool
-	fastNeedCheckCache := true
 	cacheCheck := b.cache != nil && b.reCacheEnableRead
 	if b.fastLocalSema != nil && int(b.progress.numLocal.Load()) < b.fastLocalSema.Capacity() {
-		// TODO: skip fast when step is too new and can't expect cache hit?
-		if cacheCheck {
-			fastStep, fastOK = fastDepsCmd(ctx, b, step)
-			if fastOK {
-				err := b.execRemoteCache(ctx, fastStep)
-				if err == nil {
-					return b.fastStepDone(ctx, step, fastStep)
-				}
-				fastNeedCheckCache = false
-				log.Infof("cmd fast cache miss: %v", err)
-			}
-			fastChecked = true
-		}
 		if ctx, done, err := b.fastLocalSema.TryAcquire(ctx); err == nil {
 			var err error
 			defer func() { done(err) }()
@@ -56,15 +40,6 @@ func (b *Builder) runRemote(ctx context.Context, step *Step) error {
 			// TODO: detach remote for future cache hit.
 			err = b.execLocal(ctx, step)
 			step.metrics.FastLocal = true
-			return err
-		}
-	}
-	if !fastChecked {
-		fastStep, fastOK = fastDepsCmd(ctx, b, step)
-	}
-	if fastOK {
-		err := b.tryFastStep(ctx, step, fastStep, fastNeedCheckCache && cacheCheck)
-		if !errors.Is(err, errDepsLog) {
 			return err
 		}
 	}
@@ -134,46 +109,6 @@ func (b *Builder) runRemote(ctx context.Context, step *Step) error {
 		}
 	}
 	return err
-}
-
-func (b *Builder) tryFastStep(ctx context.Context, step, fastStep *Step, cacheCheck bool) error {
-	err := b.runRemoteStep(ctx, fastStep, cacheCheck)
-	if err == nil {
-		return b.fastStepDone(ctx, step, fastStep)
-	}
-	if errors.Is(err, context.Canceled) {
-		return err
-	}
-	if errors.Is(err, reapi.ErrBadPlatformContainerImage) {
-		return err
-	}
-	step.metrics.DepsLogErr = true
-	stats := b.stats.stats()
-	nFastDeps := stats.FastDepsSuccess + stats.FastDepsFailed + 1
-	if nFastDeps > 100 && (stats.FastDepsFailed+1)*100 > nFastDeps {
-		// many fast-deps failure.
-		// better to use scandeps to reduce retry by fast-deps failure.
-		log.Infof("too many fast-deps failure detected %d/%d", stats.FastDepsFailed+1, stats.FastDepsSuccess)
-		b.disableFastDeps.CompareAndSwap(nil, "too many fast-deps failure")
-	}
-
-	if experiments.Enabled("no-fast-deps-fallback", "fast-deps %s failed", step) {
-		return fmt.Errorf("fast-deps failed: %w", err)
-	}
-	return errDepsLog
-}
-
-func (b *Builder) fastStepDone(ctx context.Context, step, fastStep *Step) error {
-	step.metrics = fastStep.metrics
-	step.metrics.DepsLog = true
-	res := cmdOutput(ctx, cmdOutputResultSUCCESS, fastStep.cmd, step.def.Binding("command"), step.def.RuleName(), nil)
-	if res != nil {
-		b.logOutput(res, step.cmd.Console)
-		if experiments.Enabled("fail-on-stdouterr", "step %s emit stdout/stderr", step) {
-			return fmt.Errorf("%s emit stdout/stderr", step)
-		}
-	}
-	return nil
 }
 
 func (b *Builder) runRemoteStep(ctx context.Context, step *Step, cacheCheck bool) error {

@@ -10,14 +10,6 @@ import (
 	"strings"
 )
 
-func fastDepsCmd(ctx context.Context, b *Builder, step *Step) (*Step, bool) {
-	fastStep, err := depsFastStep(ctx, b, step)
-	if err != nil {
-		return nil, false
-	}
-	return fastStep, true
-}
-
 func uniqueFiles(inputsList ...[]string) []string {
 	seen := make(map[string]bool)
 	var inputs []string
