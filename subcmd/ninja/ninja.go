@@ -126,7 +126,6 @@ type ninjaCmdRun struct {
 	reopt             *reapi.Option
 	reCacheEnableRead bool
 	// reCacheEnableWrite bool
-	reproxyAddr string
 
 	artfsDir      string
 	artfsEndpoint string
@@ -388,7 +387,6 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		log.Warnf("offline mode")
 		c.reopt = new(reapi.Option)
 		c.projectID = ""
-		c.reproxyAddr = ""
 	}
 
 	execRoot, err := c.initWorkdirs()
@@ -912,9 +910,6 @@ func (c *ninjaCmdRun) init() {
 	}
 	c.reopt.RegisterFlags(&c.Flags, envs)
 	c.Flags.BoolVar(&c.reCacheEnableRead, "re_cache_enable_read", true, "remote exec cache enable read")
-	// reclient_helper.py sets the RBE_server_address
-	// https://chromium.googlesource.com/chromium/tools/depot_tools.git/+/e13840bd9a04f464e3bef22afac1976fc15a96a0/reclient_helper.py#138
-	c.reproxyAddr = os.Getenv("RBE_server_address")
 
 	c.Flags.StringVar(&c.artfsDir, "artfs_dir", "", "artfs mount point")
 	c.Flags.StringVar(&c.artfsEndpoint, "artfs_endpoint", "localhost:65001", "artfs server endpoint")
@@ -1114,7 +1109,6 @@ func (c *ninjaCmdRun) initBuildOpts(projectID string, buildPath *build.Path, con
 		newline = "\r\n"
 	}
 	fmt.Fprintf(failedCommandsWriter, "cd %s%s", filepath.Join(buildPath.ExecRoot, buildPath.Dir), newline)
-	// TODO: for reproxy mode, may need to run reproxy for rewrapper commands.
 
 	outputLogWriter, done, err := c.logWriter(c.outputLogFile)
 	if err != nil {
@@ -1177,7 +1171,6 @@ func (c *ninjaCmdRun) initBuildOpts(projectID string, buildPath *build.Path, con
 		HashFS:               hashFS,
 		REAPIClient:          ds.client,
 		RECacheEnableRead:    c.reCacheEnableRead,
-		ReproxyAddr:          c.reproxyAddr,
 		ActionSalt:           actionSaltBytes,
 		OutputLocal:          build.OutputLocalFunc(c.fsopt.OutputLocal),
 		Cache:                cache,

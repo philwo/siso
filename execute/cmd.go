@@ -363,7 +363,6 @@ func (c *Cmd) ActionDigest() digest.Digest {
 }
 
 // SetActionDigest sets action digest.
-// This is used to set the digest provided by Reproxy.
 func (c *Cmd) SetActionDigest(d digest.Digest) {
 	c.actionDigest = d
 }

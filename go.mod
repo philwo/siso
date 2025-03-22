@@ -4,10 +4,7 @@ go 1.24.1
 
 require (
 	cloud.google.com/go/longrunning v0.6.6
-	github.com/Microsoft/go-winio v0.6.2
-	github.com/bazelbuild/reclient/api v0.0.0-20240617160057-89d6134e48e5
 	github.com/bazelbuild/remote-apis v0.0.0-20250311143718-2721568dea74
-	github.com/bazelbuild/remote-apis-sdks v0.0.0-20250207195839-4efbcf8eb020
 	github.com/biogo/hts v1.4.5
 	github.com/charmbracelet/log v0.4.1
 	github.com/google/uuid v1.6.0
@@ -32,7 +29,6 @@ require (
 	cloud.google.com/go/auth v0.15.0 // indirect
 	cloud.google.com/go/auth/oauth2adapt v0.2.7 // indirect
 	cloud.google.com/go/compute/metadata v0.6.0 // indirect
-	github.com/GoogleCloudPlatform/protoc-gen-bq-schema v0.0.0-20190119112626-026f9fcdf705 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/charmbracelet/lipgloss v1.0.0 // indirect
 	github.com/charmbracelet/x/ansi v0.4.2 // indirect
@@ -40,7 +36,6 @@ require (
 	github.com/go-logfmt/logfmt v0.6.0 // indirect
 	github.com/go-logr/logr v1.4.2 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
-	github.com/golang/glog v1.2.4 // indirect
 	github.com/golang/mock v1.7.0-rc.1 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/google/s2a-go v0.1.9 // indirect

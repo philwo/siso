@@ -354,24 +354,3 @@ func NewContext(ctx context.Context, rmd *rpb.RequestMetadata) context.Context {
 		"build.bazel.remote.execution.v2.requestmetadata-bin",
 		string(b))
 }
-
-// MetadataFromOutgoingContext returns request metadata in outgoing context.
-func MetadataFromOutgoingContext(ctx context.Context) (*rpb.RequestMetadata, bool) {
-	md, ok := metadata.FromOutgoingContext(ctx)
-	if !ok {
-		return nil, false
-	}
-	v, ok := md["build.bazel.remote.execution.v2.requestmetadata-bin"]
-	if !ok {
-		return nil, false
-	}
-	if len(v) == 0 {
-		return nil, false
-	}
-	rmd := &rpb.RequestMetadata{}
-	err := proto.Unmarshal([]byte(v[0]), rmd)
-	if err != nil {
-		return nil, false
-	}
-	return rmd, true
-}

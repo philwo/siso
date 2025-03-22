@@ -18,7 +18,6 @@ import (
 	"github.com/charmbracelet/log"
 
 	"go.chromium.org/infra/build/siso/execute"
-	"go.chromium.org/infra/build/siso/execute/reproxyexec"
 )
 
 // StepDef is a build step definition.
@@ -476,16 +475,11 @@ func validateRemoteActionResult(result *rpb.ActionResult) bool {
 		return false
 	}
 
-	// When the action runs locally, Reproxy doesn't add outputs to the result.
-	// Then, the next condition will pass which ends up with retring the same action.
-	switch result.GetExecutionMetadata().GetWorker() {
-	case reproxyexec.WorkerNameFallback, reproxyexec.WorkerNameRacingLocal, reproxyexec.WorkerNameLocal:
-		return true
-	}
+	// Succeeded result should have at least one output. b/350360391
 	if result.ExitCode == 0 && len(result.GetOutputFiles()) == 0 {
-		// succeeded result should have at least one output. b/350360391
 		return false
 	}
+
 	return true
 }
 
