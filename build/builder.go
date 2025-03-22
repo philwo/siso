@@ -184,8 +184,6 @@ type Builder struct {
 	// envfiles: filename -> *envfile
 	envFiles sync.Map
 
-	disableFastDeps atomic.Value // string
-
 	clobber         bool
 	batch           bool
 	prepare         bool
@@ -338,21 +336,6 @@ func New(ctx context.Context, graph Graph, opts Options) (_ *Builder, err error)
 	if opts.Limits.StartLocal > 0 {
 		b.startLocalCounter.Store(int32(opts.Limits.StartLocal))
 	}
-	var disableReason string
-	switch {
-	case b.reapiclient == nil:
-		disableReason = "reapi is not configured"
-	case b.hashFS.OnCog():
-		disableReason = "on Cog"
-	case experiments.Enabled("no-fast-deps", "disable fast-deps and force scandeps"):
-		disableReason = "SISO_EXPERIMENT=no-fast-deps"
-	case !experiments.Enabled("fast-deps", ""):
-		disableReason = "no SISO_EXPERIMENT=fast-deps"
-	}
-	if disableReason != "" {
-		log.Infof("disable fast-deps: %s", disableReason)
-		b.disableFastDeps.Store(disableReason)
-	}
 	if experiments.Enabled("ignore-missing-out-in-depfile", "ignore missing out error in depfile") {
 		makeutil.IgnoreMissingOut = true
 	}
@@ -501,10 +484,9 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 		}
 		var depsStatLine string
 		if b.reapiclient != nil {
-			// fastdeps / scandeps is only used in siso native mode.
-			if stat.FastDepsSuccess != 0 || stat.FastDepsFailed != 0 || stat.ScanDepsFailed != 0 {
-				depsStatLine = fmt.Sprintf("deps log:%d logErr:%d scanErr:%d\n",
-					stat.FastDepsSuccess, stat.FastDepsFailed, stat.ScanDepsFailed)
+			// scandeps is only used in siso native mode.
+			if stat.ScanDepsFailed != 0 {
+				depsStatLine = fmt.Sprintf("deps scanErr:%d\n", stat.ScanDepsFailed)
 			}
 		}
 		msg := fmt.Sprintf("\nlocal:%d remote:%d cache:%d fallback:%d retry:%d skip:%d\n",

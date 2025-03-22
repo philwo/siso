@@ -11,14 +11,6 @@ import (
 	"strings"
 )
 
-func fastDepsCmd(ctx context.Context, b *Builder, step *Step) (*Step, bool) {
-	fastStep, err := depsFastStep(ctx, b, step)
-	if err != nil {
-		return nil, false
-	}
-	return fastStep, true
-}
-
 func preprocCmd(ctx context.Context, b *Builder, step *Step) error {
 	step.setPhase(stepPreproc)
 	err := b.preprocSema.Do(ctx, func(ctx context.Context) error {

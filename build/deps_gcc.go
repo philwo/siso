@@ -27,20 +27,6 @@ type depsGCC struct {
 	treeInput func(context.Context, string) (merkletree.TreeEntry, error)
 }
 
-func (gcc depsGCC) DepsFastCmd(ctx context.Context, b *Builder, cmd *execute.Cmd) (*execute.Cmd, error) {
-	newCmd := &execute.Cmd{}
-	*newCmd = *cmd
-	inputs, err := gcc.fixCmdInputs(ctx, b, newCmd)
-	if err != nil {
-		return nil, err
-	}
-	// sets include dirs + sysroots to ToolInputs.
-	// Inputs will be overridden by deps log data.
-	newCmd.ToolInputs = append(newCmd.ToolInputs, inputs...)
-	gcc.fixForSplitDwarf(newCmd)
-	return newCmd, nil
-}
-
 func (gcc depsGCC) fixCmdInputs(ctx context.Context, b *Builder, cmd *execute.Cmd) ([]string, error) {
 	params := gccutil.ExtractScanDepsParams(cmd.Args, cmd.Env)
 	for i := range params.Files {
@@ -173,7 +159,7 @@ func (gcc depsGCC) depsInputs(ctx context.Context, b *Builder, step *Step) ([]st
 func (depsGCC) scandeps(ctx context.Context, b *Builder, step *Step) ([]string, error) {
 	var ins []string
 	err := b.scanDepsSema.Do(ctx, func(ctx context.Context) error {
-		// fastDeps + remote execution may have already run.
+		// remote execution may have already run.
 		// In this case, do not change ActionStartTime set by the remote exec.
 		if step.metrics.ActionStartTime == 0 {
 			step.metrics.ActionStartTime = IntervalMetric(time.Since(b.start))
