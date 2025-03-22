@@ -55,12 +55,6 @@ func (s *stats) update(m *StepMetric, pure bool) {
 	}
 	s.s.RemoteRetry += m.RemoteRetry
 
-	if m.DepsLog {
-		s.s.FastDepsSuccess++
-	}
-	if m.DepsLogErr {
-		s.s.FastDepsFailed++
-	}
 	if m.ScandepsErr {
 		s.s.ScanDepsFailed++
 	}
@@ -71,20 +65,18 @@ func (s *stats) update(m *StepMetric, pure bool) {
 
 // Stats keeps statistics about the build, such as the number of total, skipped or remote actions.
 type Stats struct {
-	Done            int // completed actions, including skipped, failed
-	Fail            int // failed actions
-	Pure            int // pure actions
-	Skipped         int // skipped actions, because they were still up-to-date
-	NoExec          int // actions that was completed by handler without execute cmds e.g. stamp, copy
-	FastDepsSuccess int // actions that ran successfully when we used deps from the deps cache
-	FastDepsFailed  int // actions that failed when we used deps from the deps cache
-	ScanDepsFailed  int // actions that scandeps failed
-	CacheHit        int // actions for which we got a cache hit
-	Local           int // locally executed actions
-	Remote          int // remote executed actions
-	LocalFallback   int // actions for which remote execution failed, and we did a local fallback
-	RemoteRetry     int // accumulated remote retry counts
-	Total           int // total actions that ran during this build
+	Done           int // completed actions, including skipped, failed
+	Fail           int // failed actions
+	Pure           int // pure actions
+	Skipped        int // skipped actions, because they were still up-to-date
+	NoExec         int // actions that was completed by handler without execute cmds e.g. stamp, copy
+	ScanDepsFailed int // actions that scandeps failed
+	CacheHit       int // actions for which we got a cache hit
+	Local          int // locally executed actions
+	Remote         int // remote executed actions
+	LocalFallback  int // actions for which remote execution failed, and we did a local fallback
+	RemoteRetry    int // accumulated remote retry counts
+	Total          int // total actions that ran during this build
 }
 
 func (s *stats) stats() Stats {
