@@ -80,49 +80,7 @@ func (p *fileParser) parseFile(ctx context.Context, fname string) error {
 // readFile reads a file of fname in parallel.
 func (p *fileParser) readFile(ctx context.Context, fname string) ([]byte, error) {
 	defer trace.StartRegion(ctx, "ninja.read").End()
-	f, err := os.Open(fname)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		_ = f.Close()
-	}()
-	st, err := f.Stat()
-	if err != nil {
-		return nil, err
-	}
-	buf := make([]byte, st.Size())
-	var eg errgroup.Group
-	const chunkSize = 128 * 1024 * 1024
-	for i := int64(0); i < int64(len(buf)); i += chunkSize {
-		chunkBuf := buf[i:min(i+chunkSize, int64(len(buf)))]
-		pos := i
-		eg.Go(func() error {
-			p.sema <- struct{}{}
-			defer func() { <-p.sema }()
-			f, err := os.Open(fname)
-			if err != nil {
-				return err
-			}
-			defer func() {
-				_ = f.Close()
-			}()
-			for len(chunkBuf) > 0 {
-				n, err := f.ReadAt(chunkBuf, pos)
-				if err != nil {
-					return err
-				}
-				chunkBuf = chunkBuf[n:]
-				pos += int64(n)
-			}
-			return nil
-		})
-	}
-	err = eg.Wait()
-	if err != nil {
-		return nil, err
-	}
-	return buf, nil
+	return os.ReadFile(fname)
 }
 
 // parseContent parses ninja file.
