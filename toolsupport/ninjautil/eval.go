@@ -114,8 +114,17 @@ func evaluateAppend(env evalEnv, buf *bytes.Buffer, val evalString, lookups [][]
 				return nil, fmt.Errorf("invalid $-escape? %q", val.v)
 			}
 			switch val.v[i] {
-			case ' ', ':', '$', '\r', '\n': // escape
+			case ' ', ':', '$': // escape
 				buf.WriteByte(val.v[i])
+				continue
+			case '\r', '\n':
+				// whitespace at the beginning of a line after a line continuation is also stripped.
+				for j := range len(val.v[i+1:]) {
+					if !whitespaceChar.contains(val.v[i+j]) {
+						i += j - 1
+						break
+					}
+				}
 				continue
 			}
 			var varname []byte
@@ -133,6 +142,10 @@ func evaluateAppend(env evalEnv, buf *bytes.Buffer, val evalString, lookups [][]
 						i = i + j - 1
 						break
 					}
+				}
+				if len(varname) == 0 {
+					varname = val.v[i:]
+					i = len(val.v)
 				}
 
 			} else {

@@ -437,3 +437,123 @@ build foo: cat bar |@ baz baz2
 		t.Errorf("validations for foo: -want +got:\n%s", diff)
 	}
 }
+
+func TestParser_eval_path(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	err := os.WriteFile(filepath.Join(dir, "build.ninja"), []byte(`
+root=.
+
+rule configure
+  command = ${configure_env}python3 $root/configure.py $configure_args
+  generator = 1
+build build.ninja: configure | $root/configure.py $root/misc/ninja_syntax.py
+`), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state := NewState()
+	p := NewManifestParser(state)
+	p.SetWd(dir)
+	err = p.Load(ctx, "build.ninja")
+	if err != nil {
+		t.Errorf("Load %v", err)
+	}
+	node, ok := state.LookupNodeByPath("build.ninja")
+	if !ok {
+		t.Fatalf("build.ninja not found")
+	}
+	edge, ok := node.InEdge()
+	if !ok {
+		t.Fatalf("no inEdge of build.ninja")
+	}
+	inputs := edge.Inputs()
+	var got []string
+	for _, in := range inputs {
+		got = append(got, in.Path())
+	}
+	want := []string{"configure.py", "misc/ninja_syntax.py"}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("inputs of build.ninja: diff -want +got:\n%s", diff)
+	}
+}
+
+func TestParser_simplevar(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	err := os.WriteFile(filepath.Join(dir, "build.ninja"), []byte(`
+root = .
+rule re2c
+  command = re2c -b -i --no-generation-date --no-version -o $out $in
+  description = RE2C $out
+build $root/src/depfile_parser.cc: re2c $root/src/depfile_parser.in.cc
+`), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state := NewState()
+	p := NewManifestParser(state)
+	p.SetWd(dir)
+	err = p.Load(ctx, "build.ninja")
+	if err != nil {
+		t.Errorf("Load %v", err)
+	}
+	node, ok := state.LookupNodeByPath("src/depfile_parser.cc")
+	if !ok {
+		t.Fatalf("src/depfile_parser.cc not found")
+	}
+	edge, ok := node.InEdge()
+	if !ok {
+		t.Fatalf("no inEdge of src/depfile_parser.cc")
+	}
+	desc := edge.Binding("description")
+	want := "RE2C src/depfile_parser.cc"
+	if desc != want {
+		t.Errorf("description=%q; want=%q", desc, want)
+	}
+	command := edge.Binding("command")
+	want = "re2c -b -i --no-generation-date --no-version -o src/depfile_parser.cc src/depfile_parser.in.cc"
+	if command != want {
+		t.Errorf("command=%q; want=%q", command, want)
+	}
+}
+
+func TestParser_space_in_binding(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	err := os.WriteFile(filepath.Join(dir, "build.ninja"), []byte(`
+two_words_with_one_space = foo $
+    bar
+one_words_with_no_space = foo$
+    bar
+
+rule foo
+    description = $two_words_with_one_space - $one_words_with_no_space
+
+build out: foo in
+`), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state := NewState()
+	p := NewManifestParser(state)
+	p.SetWd(dir)
+	err = p.Load(ctx, "build.ninja")
+	if err != nil {
+		t.Errorf("Load %v", err)
+	}
+	node, ok := state.LookupNodeByPath("out")
+	if !ok {
+		t.Fatalf("out not found")
+	}
+	edge, ok := node.InEdge()
+	if !ok {
+		t.Fatalf("no inEddge of out")
+	}
+	desc := edge.Binding("description")
+	want := "foo bar - foobar"
+	if desc != want {
+		t.Errorf("description=%q; want=%q", desc, want)
+	}
+
+}

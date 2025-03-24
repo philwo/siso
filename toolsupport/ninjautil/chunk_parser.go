@@ -534,8 +534,9 @@ func (ch *chunk) parseBuild(ctx context.Context, i int, buf *bytes.Buffer, state
 		edge.pool = defaultPool
 	}
 	edge.outputs = ch.edgePathSlab.slice(len(outs))[:0]
+	env := &edgeEnv{edge: edge}
 	for i := range outs {
-		n, err := ch.targetNode(&edge.env, buf, outs[i])
+		n, err := ch.targetNode(env, buf, outs[i])
 		if err != nil {
 			return 0, err
 		}
@@ -547,7 +548,7 @@ func (ch *chunk) parseBuild(ctx context.Context, i int, buf *bytes.Buffer, state
 	edge.implicitOuts = implicitOuts
 	edge.inputs = ch.edgePathSlab.slice(len(ins))[:0]
 	for i := range ins {
-		n, err := ch.targetNode(&edge.env, buf, ins[i])
+		n, err := ch.targetNode(env, buf, ins[i])
 		if err != nil {
 			return 0, err
 		}
@@ -559,7 +560,7 @@ func (ch *chunk) parseBuild(ctx context.Context, i int, buf *bytes.Buffer, state
 	edge.orderOnlyDeps = orderOnly
 
 	for i := range validations {
-		n, err := ch.targetNode(&edge.env, buf, validations[i])
+		n, err := ch.targetNode(env, buf, validations[i])
 		if err != nil {
 			return 0, err
 		}
