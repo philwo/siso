@@ -13,10 +13,10 @@ import (
 	"io"
 	"path"
 	"strings"
+	"sync"
 	"time"
 
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
-	"golang.org/x/sync/singleflight"
 	"google.golang.org/api/option"
 	gtransport "google.golang.org/api/transport/grpc"
 	"google.golang.org/grpc"
@@ -102,8 +102,8 @@ type Client struct {
 	opt  Option
 	conn grpcClientConn
 
-	capabilities           *rpb.ServerCapabilities
-	bytestreamSingleflight singleflight.Group
+	capabilities *rpb.ServerCapabilities
+	knownDigests sync.Map // key:digest.Digest, value: *uploadOp or true
 
 	m *iometrics.IOMetrics
 }
@@ -217,12 +217,14 @@ func NewFromConn(ctx context.Context, opt Option, conn grpcClientConn) (*Client,
 			opt.CompressedBlob = 0
 		}
 	}
-	return &Client{
+	c := &Client{
 		opt:          opt,
 		conn:         conn,
 		capabilities: capa,
 		m:            iometrics.New("reapi"),
-	}, nil
+	}
+	c.knownDigests.Store(digest.Empty, true)
+	return c, nil
 }
 
 // Close closes the client.

@@ -53,6 +53,34 @@ const (
 	bytestreamSlowThroughputPerSec = 1 * 1024 * 1024
 )
 
+type uploadOp struct {
+	ch  chan struct{}
+	err error
+}
+
+func newUploadOp() *uploadOp {
+	return &uploadOp{
+		ch:  make(chan struct{}),
+		err: errUploadNotFinished,
+	}
+}
+
+func (u *uploadOp) done(err error) {
+	u.err = err
+	close(u.ch)
+}
+
+func (u *uploadOp) wait(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		return context.Cause(ctx)
+	case <-u.ch:
+		return u.err
+	}
+}
+
+var errUploadNotFinished = errors.New("upload not finished")
+
 func contextWithTimeoutForBytestream(ctx context.Context, d digest.Digest) (context.Context, context.CancelFunc) {
 	timeout := max(time.Duration(d.SizeBytes/bytestreamSlowThroughputPerSec)*time.Second, 10*time.Minute)
 	if timeout > 10*time.Minute {
@@ -206,14 +234,22 @@ func (c *Client) Missing(ctx context.Context, blobs []digest.Digest) ([]digest.D
 		blobspb = append(blobspb, b.Proto())
 	}
 	cas := rpb.NewContentAddressableStorageClient(c.conn)
-	resp, err := cas.FindMissingBlobs(ctx, &rpb.FindMissingBlobsRequest{
-		InstanceName: c.opt.Instance,
-		BlobDigests:  blobspb,
+
+	var resp *rpb.FindMissingBlobsResponse
+	// TODO(b/328332495): grpc should retry by service config?
+	err := retry.Do(ctx, func() error {
+		var err error
+		resp, err = cas.FindMissingBlobs(ctx, &rpb.FindMissingBlobsRequest{
+			InstanceName: c.opt.Instance,
+			BlobDigests:  blobspb,
+		})
+		c.m.OpsDone(err)
+		return err
 	})
-	c.m.OpsDone(err)
 	if err != nil {
 		return nil, err
 	}
+
 	ret := make([]digest.Digest, 0, len(resp.GetMissingBlobDigests()))
 	for _, b := range resp.GetMissingBlobDigests() {
 		ret = append(ret, digest.FromProto(b))
@@ -222,40 +258,124 @@ func (c *Client) Missing(ctx context.Context, blobs []digest.Digest) ([]digest.D
 }
 
 // UploadAll uploads all blobs specified in ds that are still missing in the CAS.
-func (c *Client) UploadAll(ctx context.Context, ds *digest.Store) (int, error) {
+func (c *Client) UploadAll(ctx context.Context, ds *digest.Store) (numUploaded int, err error) {
 	if c.conn == nil {
 		return 0, status.Error(codes.FailedPrecondition, "conn is not configured")
 	}
+
 	ctx, span := trace.NewSpan(ctx, "upload-all")
 	defer span.Close(nil)
 	blobs := ds.List()
 	span.SetAttr("blobs", len(blobs))
-	var missings []digest.Digest
-	// TODO(b/328332495): grpc should retry by service config?
-	err := retry.Do(ctx, func() error {
-		var err error
-		missings, err = c.Missing(ctx, blobs)
-		if err != nil {
-			return fmt.Errorf("missings: %w", err)
+
+	// First, partition the "blobs" list into three possible cases.
+	newBlobs := make(map[digest.Digest]*uploadOp)
+	pendingBlobs := make(map[digest.Digest]*uploadOp)
+	skippedBlobs := 0
+	for _, d := range blobs {
+		uop, loaded := c.knownDigests.LoadOrStore(d, newUploadOp())
+		if loaded {
+			switch v := uop.(type) {
+			case bool:
+				// Case 1: This blob is already present in the CAS, we're done.
+				skippedBlobs++
+			case *uploadOp:
+				// Case 2: We need to wait for another thread to upload this blob.
+				pendingBlobs[d] = v
+			default:
+				panic(fmt.Sprintf("unknown type %T", v))
+			}
+			continue
 		}
-		return nil
-	})
-	if err != nil {
-		return 0, err
+		// Case 3: We need to upload this blob after confirming that it's missing.
+		newBlobs[d] = uop.(*uploadOp)
 	}
-	clog.Infof(ctx, "upload %d -> missing %d", len(blobs), len(missings))
-	span.SetAttr("missings", len(missings))
-	var nuploads int
-	// TODO(b/328332495): grpc should retry by service config?
-	err = retry.Do(ctx, func() error {
-		var err error
-		nuploads, err = c.Upload(ctx, ds, missings)
-		if err != nil {
-			return fmt.Errorf("upload: %w", err)
+
+	defer func() {
+		for d, uop := range newBlobs {
+			switch uop.err {
+			case nil:
+				c.knownDigests.CompareAndSwap(d, uop, true)
+			case errUploadNotFinished:
+				close(uop.ch)
+			default:
+				clog.Infof(ctx, "upload %s failed: %v", d, uop.err)
+				c.knownDigests.CompareAndDelete(d, uop)
+			}
 		}
-		return nil
-	})
-	return nuploads, err
+	}()
+
+	span.SetAttr("upload", len(newBlobs))
+	span.SetAttr("pending", len(pendingBlobs))
+	span.SetAttr("skipped", skippedBlobs)
+
+	// For all "new" blobs, use FindMissingBlobs to ask the remote CAS which of them are
+	// really still missing - they might already be present and we just don't know about it yet.
+	var missingBlobs []digest.Digest
+	var foundBlobs map[digest.Digest]bool
+	var durFindMissing time.Duration
+	if len(newBlobs) > 0 {
+		t := time.Now()
+		newBlobDigests := make([]digest.Digest, 0, len(newBlobs))
+		foundBlobs = make(map[digest.Digest]bool, len(newBlobs))
+		for d := range newBlobs {
+			newBlobDigests = append(newBlobDigests, d)
+			foundBlobs[d] = true
+		}
+		missingBlobs, err = c.Missing(ctx, newBlobDigests)
+		if err != nil {
+			for _, v := range newBlobs {
+				v.done(err)
+			}
+			return 0, err
+		}
+		// All "new" blobs that the remote CAS did *not* report as missing are by inverse confirmed
+		// to be present, so we can memoize this in the knownDigests map and notify any other
+		// threads waiting for them.
+		for _, d := range missingBlobs {
+			delete(foundBlobs, d)
+		}
+		for d := range foundBlobs {
+			c.knownDigests.CompareAndSwap(d, newBlobs[d], true)
+			newBlobs[d].done(nil)
+			delete(newBlobs, d)
+		}
+		span.SetAttr("missing", len(missingBlobs))
+		span.SetAttr("founds", len(foundBlobs))
+		durFindMissing = time.Since(t)
+	}
+
+	// Let's upload the blobs that we know are still missing.
+	var durUpload time.Duration
+	if len(missingBlobs) > 0 {
+		t := time.Now()
+		numUploaded, err = c.upload(ctx, ds, missingBlobs, newBlobs)
+		if err != nil {
+			return numUploaded, fmt.Errorf("upload: %w", err)
+		}
+		span.SetAttr("uploaded", numUploaded)
+		durUpload = time.Since(t)
+	}
+
+	// Finally, wait for any blobs that are being uploaded by other threads, before we return.
+	var durWaitPending time.Duration
+	if len(pendingBlobs) > 0 {
+		t := time.Now()
+		for d, uop := range pendingBlobs {
+			if err := uop.wait(ctx); err != nil {
+				return numUploaded, fmt.Errorf("wait for digest=%s: %w", d, err)
+			}
+		}
+		durWaitPending = time.Since(t)
+	}
+
+	clog.Infof(ctx, "upload all: blobs=%d -> {uploaded=%d, found=%d, pending=%d, skipped=%d}, timing: {find_missing=%s, upload=%s, wait_pending=%s}",
+		len(blobs), len(newBlobs), len(foundBlobs), len(pendingBlobs), skippedBlobs,
+		durFindMissing.Round(time.Microsecond),
+		durUpload.Round(time.Microsecond),
+		durWaitPending.Round(time.Microsecond))
+
+	return numUploaded, err
 }
 
 var (
@@ -275,12 +395,8 @@ func (e missingError) Error() string {
 	return fmt.Sprintf("missing %d blobs", len(e.Blobs))
 }
 
-// Upload uploads blobs in digest stores.
-func (c *Client) Upload(ctx context.Context, ds *digest.Store, blobs []digest.Digest) (int, error) {
-	if len(blobs) == 0 {
-		return 0, nil
-	}
-
+// upload uploads blobs in digest stores.
+func (c *Client) upload(ctx context.Context, ds *digest.Store, blobs []digest.Digest, uploads map[digest.Digest]*uploadOp) (int, error) {
 	ctx, span := trace.NewSpan(ctx, "upload")
 	defer span.Close(nil)
 
@@ -296,15 +412,20 @@ func (c *Client) Upload(ctx context.Context, ds *digest.Store, blobs []digest.Di
 	span.SetAttr("large", len(larges))
 
 	// Upload small blobs with BatchUpdateBlobs rpc.
-	missingBlobs, err := c.uploadWithBatchUpdateBlobs(ctx, smalls, ds, byteLimit)
-	if err != nil {
-		return 0, fmt.Errorf("upload batch: %w", err)
+	var missing missingError
+	if len(smalls) > 0 {
+		missingBlobs, err := c.uploadWithBatchUpdateBlobs(ctx, smalls, uploads, ds, byteLimit)
+		if err != nil {
+			return 0, fmt.Errorf("upload batch: %w", err)
+		}
+		missing.Blobs = missingBlobs
 	}
-	missing := missingError{Blobs: missingBlobs}
 
 	// Upload large blobs with ByteStream API.
-	missingBlobs = c.uploadWithByteStream(ctx, larges, ds)
-	missing.Blobs = append(missing.Blobs, missingBlobs...)
+	if len(larges) > 0 {
+		missingBlobs := c.uploadWithByteStream(ctx, larges, uploads, ds)
+		missing.Blobs = append(missing.Blobs, missingBlobs...)
+	}
 
 	if len(missing.Blobs) > 0 {
 		return len(blobs) - len(missing.Blobs), missing
@@ -351,7 +472,7 @@ func separateBlobs(instance string, blobs []digest.Digest, byteLimit int64) (sma
 
 // uploadWithBatchUpdateBlobs uploads blobs using BatchUpdateBlobs RPC.
 // The blobs will be bundled into multiple batches that fit in the size limit.
-func (c *Client) uploadWithBatchUpdateBlobs(ctx context.Context, digests []digest.Digest, ds *digest.Store, byteLimit int64) ([]missingBlob, error) {
+func (c *Client) uploadWithBatchUpdateBlobs(ctx context.Context, digests []digest.Digest, uploads map[digest.Digest]*uploadOp, ds *digest.Store, byteLimit int64) ([]missingBlob, error) {
 	blobReqs, missingBlobs := lookupBlobsInStore(ctx, digests, ds)
 
 	// Bundle the blobs to multiple batch requests.
@@ -367,11 +488,18 @@ func (c *Client) uploadWithBatchUpdateBlobs(ctx context.Context, digests []diges
 		uploaded := false
 		for !uploaded {
 			var batchResp *rpb.BatchUpdateBlobsResponse
-			batchResp, err := casClient.BatchUpdateBlobs(ctx, batchReq)
+
+			// TODO(b/328332495): grpc should retry by service config?
+			err := retry.Do(ctx, func() error {
+				var err error
+				batchResp, err = casClient.BatchUpdateBlobs(ctx, batchReq)
+				return err
+			})
 			if err != nil {
 				c.m.WriteDone(0, err)
 				return nil, status.Errorf(status.Code(err), "batch update blobs: %v", err)
 			}
+
 			for _, res := range batchResp.Responses {
 				blob := digest.FromProto(res.Digest)
 				data, ok := ds.Get(blob)
@@ -392,10 +520,12 @@ func (c *Client) uploadWithBatchUpdateBlobs(ctx context.Context, digests []diges
 						Err:    err,
 					})
 					c.m.WriteDone(int(res.Digest.SizeBytes), err)
-				} else {
-					clog.Infof(ctx, "uploaded in batch: %s", data)
-					c.m.WriteDone(int(res.Digest.SizeBytes), nil)
+					uploads[blob].done(err)
+					continue
 				}
+				clog.Infof(ctx, "uploaded in batch: %s", data)
+				c.m.WriteDone(int(res.Digest.SizeBytes), nil)
+				uploads[blob].done(nil)
 			}
 			uploaded = true
 			clog.Infof(ctx, "upload by batch %d blobs (missing:%d)", len(batchReq.Requests), len(missingBlobs))
@@ -505,7 +635,7 @@ func readAll(ctx context.Context, data digest.Data) ([]byte, error) {
 	return buf, nil
 }
 
-func (c *Client) uploadWithByteStream(ctx context.Context, digests []digest.Digest, ds *digest.Store) []missingBlob {
+func (c *Client) uploadWithByteStream(ctx context.Context, digests []digest.Digest, uploads map[digest.Digest]*uploadOp, ds *digest.Store) []missingBlob {
 	clog.Infof(ctx, "upload by streaming %d", len(digests))
 
 	var missingBlobs []missingBlob
@@ -520,47 +650,42 @@ func (c *Client) uploadWithByteStream(ctx context.Context, digests []digest.Dige
 			})
 			continue
 		}
-		key := fmt.Sprintf("%s/%d", d.Hash, d.SizeBytes)
-		_, err, shared := c.bytestreamSingleflight.Do(key, func() (any, error) {
-			err := retry.Do(ctx, func() error {
-				ctx, cancel := contextWithTimeoutForBytestream(ctx, d)
-				defer cancel()
-				rd, err := data.Open(ctx)
-				if err != nil {
-					return err
-				}
-				defer rd.Close()
-				resourceName := c.uploadResourceName(d)
-				if log.V(1) {
-					clog.Infof(ctx, "put %s", resourceName)
-				}
-				wr, err := bytestreamio.Create(ctx, bsClient, c.uploadResourceName(d))
-				if err != nil {
-					return err
-				}
-				cwr, err := c.newEncoder(wr, d)
-				if err != nil {
-					wr.Close()
-					return err
-				}
-				_, err = io.Copy(cwr, rd)
-				if err != nil {
-					cwr.Close()
-					wr.Close()
-					return err
-				}
-				err = cwr.Close()
-				if err != nil {
-					wr.Close()
-					return err
-				}
-				return wr.Close()
-			})
-			return nil, err
+		err := retry.Do(ctx, func() error {
+			ctx, cancel := contextWithTimeoutForBytestream(ctx, d)
+			defer cancel()
+			rd, err := data.Open(ctx)
+			if err != nil {
+				return err
+			}
+			defer rd.Close()
+			resourceName := c.uploadResourceName(d)
+			if log.V(1) {
+				clog.Infof(ctx, "put %s", resourceName)
+			}
+			wr, err := bytestreamio.Create(ctx, bsClient, c.uploadResourceName(d))
+			if err != nil {
+				return err
+			}
+			cwr, err := c.newEncoder(wr, d)
+			if err != nil {
+				wr.Close()
+				return err
+			}
+			_, err = io.Copy(cwr, rd)
+			if err != nil {
+				cwr.Close()
+				wr.Close()
+				return err
+			}
+			err = cwr.Close()
+			if err != nil {
+				wr.Close()
+				return err
+			}
+			return wr.Close()
 		})
-		if !shared {
-			c.m.WriteDone(int(d.SizeBytes), err)
-		}
+		c.m.WriteDone(int(d.SizeBytes), err)
+		uploads[d].done(err)
 		if err != nil {
 			clog.Warningf(ctx, "Failed to stream %s: %v", data, err)
 			missingBlobs = append(missingBlobs, missingBlob{
@@ -568,9 +693,8 @@ func (c *Client) uploadWithByteStream(ctx context.Context, digests []digest.Dige
 				Err:    err,
 			})
 			continue
-		} else {
-			clog.Infof(ctx, "uploaded streaming %s shared=%t err=%v", data, shared, err)
 		}
+		clog.Infof(ctx, "uploaded streaming %s err=%v", data, err)
 	}
 	clog.Infof(ctx, "uploaded by streaming %d blobs (missing:%d)", len(digests), len(missingBlobs))
 
