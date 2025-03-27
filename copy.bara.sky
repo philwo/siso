@@ -1,0 +1,23 @@
+core.workflow(
+    name="default",
+    mode="ITERATIVE",
+    origin=git.origin(
+        url="https://chromium.googlesource.com/infra/infra",
+        ref="main",
+        submodules="NO",
+        partial_fetch=True,
+    ),
+    destination=git.destination(
+        url="file:///Users/philwo/src/siso",
+        push="upstream",
+    ),
+    authoring=authoring.pass_thru("Googler <noreply@google.com>"),
+    origin_files=glob(["LICENSE", "go/src/infra/build/siso/**"]),
+    destination_files=glob(["**"]),
+    reversible_check=True,
+    transformations=[
+        core.move(
+            "go/src/infra/build/siso", "", paths=glob(["**"], exclude=["LICENSE"])
+        ),
+    ],
+)
