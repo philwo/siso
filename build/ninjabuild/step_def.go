@@ -53,6 +53,29 @@ type StepDef struct {
 	globals *globals
 }
 
+type edgeRuleHolder struct {
+	mu       sync.Mutex
+	edgeRule *edgeRule
+}
+
+func (h *edgeRuleHolder) reset() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.edgeRule = nil
+}
+
+func (h *edgeRuleHolder) set(er *edgeRule) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.edgeRule = er
+}
+
+func (h *edgeRuleHolder) get() *edgeRule {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.edgeRule
+}
+
 type edgeRule struct {
 	edge *ninjautil.Edge
 
@@ -77,7 +100,7 @@ func (er *edgeRule) ensure(ctx context.Context, globals *globals) (gotRule bool,
 		// remove edgeRule for all outputs of the edge from edgeRules
 		// for non-pure and no solibs step.
 		for _, output := range er.edge.Outputs() {
-			globals.edgeRules[output.ID()] = nil
+			globals.edgeRules[output.ID()].reset()
 		}
 		return true, rule, false
 	}
@@ -104,7 +127,7 @@ func (g *Graph) newStepDef(ctx context.Context, edge *ninjautil.Edge, next build
 		}
 		globals := g.globals
 		for _, out := range edge.Outputs() {
-			globals.edgeRules[out.ID()] = er
+			globals.edgeRules[out.ID()].set(er)
 			if log.V(1) {
 				outPath := globals.targetPath(ctx, out)
 				clog.Infof(ctx, "add edgeRule for %s [newStepDef]", outPath)
@@ -130,7 +153,7 @@ func (s *StepDef) EnsureRule(ctx context.Context) {
 		return
 	}
 	// *edgeRule is stored in newStepDef for all outputs of the edge.
-	er := s.globals.edgeRules[outputs[0].ID()]
+	er := s.globals.edgeRules[outputs[0].ID()].get()
 	if er == nil {
 		// *edgeRule was removed by er.ensure by other output of the edge?
 		outPath := s.globals.targetPath(ctx, outputs[0])
@@ -767,7 +790,7 @@ func (s *StepDef) ExpandedInputs(ctx context.Context) []string {
 			newInputs = append(newInputs, inputs[i])
 			continue
 		}
-		er := globals.edgeRules[innode.ID()]
+		er := globals.edgeRules[innode.ID()].get()
 		if er == nil {
 			newInputs = append(newInputs, inputs[i])
 			continue

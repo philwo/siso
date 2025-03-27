@@ -54,8 +54,8 @@ type globals struct {
 	// node id -> string
 	targetPaths []string
 
-	// node id -> *edgeRule that produces the output
-	edgeRules []*edgeRule
+	// node id -> edgeRuleHolder that produces the output
+	edgeRules []edgeRuleHolder
 
 	phony map[string]bool
 
@@ -213,7 +213,7 @@ func NewGraph(ctx context.Context, fname string, nstate *ninjautil.State, config
 			buildConfig:    config,
 			stepConfig:     stepConfig,
 			targetPaths:    make([]string, nstate.NumNodes()),
-			edgeRules:      make([]*edgeRule, nstate.NumNodes()),
+			edgeRules:      make([]edgeRuleHolder, nstate.NumNodes()),
 			phony:          make(map[string]bool),
 			caseSensitives: make(map[string][]string),
 			gnTargets:      make(map[*ninjautil.Edge]gnTarget),
@@ -266,7 +266,7 @@ func (g *Graph) reset(ctx context.Context) {
 	g.validations = nil
 	g.globals.depsLog.Reset()
 	g.globals.targetPaths = make([]string, g.globals.nstate.NumNodes())
-	g.globals.edgeRules = make([]*edgeRule, g.globals.nstate.NumNodes())
+	g.globals.edgeRules = make([]edgeRuleHolder, g.globals.nstate.NumNodes())
 	g.globals.phony = make(map[string]bool)
 	g.globals.caseSensitives = make(map[string][]string)
 	g.globals.gnTargets = make(map[*ninjautil.Edge]gnTarget)

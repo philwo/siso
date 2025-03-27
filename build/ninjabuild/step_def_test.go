@@ -113,7 +113,7 @@ build target1: __rule target2 | ../../source1 || target3
 				},
 			},
 			targetPaths: make([]string, state.NumNodes()),
-			edgeRules:   make([]*edgeRule, state.NumNodes()),
+			edgeRules:   make([]edgeRuleHolder, state.NumNodes()),
 		},
 	}
 	err = graph.globals.stepConfig.Init(ctx)
@@ -232,7 +232,7 @@ build target1: __rule ../../source1 foo.stamp foo.a
 				},
 			},
 			targetPaths: make([]string, state.NumNodes()),
-			edgeRules:   make([]*edgeRule, state.NumNodes()),
+			edgeRules:   make([]edgeRuleHolder, state.NumNodes()),
 		},
 	}
 	err = graph.globals.stepConfig.Init(ctx)
@@ -321,7 +321,7 @@ build foo.h: __rule | ./protoc
 			hashFS:      hashFS,
 			stepConfig:  &StepConfig{},
 			targetPaths: make([]string, state.NumNodes()),
-			edgeRules:   make([]*edgeRule, state.NumNodes()),
+			edgeRules:   make([]edgeRuleHolder, state.NumNodes()),
 		},
 	}
 	newStepDef := func(target string) *StepDef {
@@ -432,7 +432,7 @@ build target1: __rule ../../source1.cc target2.h target3.h
 				},
 			},
 			targetPaths: make([]string, state.NumNodes()),
-			edgeRules:   make([]*edgeRule, state.NumNodes()),
+			edgeRules:   make([]edgeRuleHolder, state.NumNodes()),
 		},
 	}
 	err = graph.globals.stepConfig.Init(ctx)
