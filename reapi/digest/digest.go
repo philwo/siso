@@ -18,8 +18,6 @@ import (
 
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
 	"google.golang.org/protobuf/proto"
-
-	"go.chromium.org/infra/build/siso/reapi/retry"
 )
 
 // Empty is a digest of empty content.
@@ -135,18 +133,12 @@ func (d Data) String() string {
 // DataToBytes returns byte values from a Data.
 // Note that it reads all content. It should not be used for large blob.
 func DataToBytes(ctx context.Context, d Data) ([]byte, error) {
-	var buf []byte
-	err := retry.Do(ctx, func() error {
-		f, err := d.Open(ctx)
-		if err != nil {
-			return err
-		}
-		defer f.Close()
-		buf, err = io.ReadAll(f)
-		return err
-	})
-	return buf, err
-
+	f, err := d.Open(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	return io.ReadAll(f)
 }
 
 // FromProtoMessage creates Data from proto message.
