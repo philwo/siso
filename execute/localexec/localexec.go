@@ -24,8 +24,6 @@ import (
 
 	"go.chromium.org/infra/build/siso/execute"
 	epb "go.chromium.org/infra/build/siso/execute/proto"
-	"go.chromium.org/infra/build/siso/runtimex"
-	"go.chromium.org/infra/build/siso/sync/semaphore"
 	"go.chromium.org/infra/build/siso/toolsupport/straceutil"
 )
 
@@ -59,9 +57,6 @@ func (LocalExec) Run(ctx context.Context, cmd *execute.Cmd) (err error) {
 	now := time.Now()
 	return cmd.RecordOutputsFromLocal(ctx, now)
 }
-
-// fix for http://b/278658064 windows: fork/exec: Not enough memory resources are available to process this command.
-var forkSema = semaphore.New("fork", runtimex.NumCPU())
 
 func run(ctx context.Context, cmd *execute.Cmd) (*rpb.ActionResult, error) {
 	if len(cmd.Args) == 0 {
@@ -141,9 +136,7 @@ func run(ctx context.Context, cmd *execute.Cmd) (*rpb.ActionResult, error) {
 		}
 		st := straceutil.New(cmd.ID, c)
 		c = st.Cmd(ctx)
-		err = forkSema.Do(ctx, func() error {
-			return c.Start()
-		})
+		err = c.Start()
 		if err == nil {
 			err = c.Wait()
 		}
@@ -157,9 +150,7 @@ func run(ctx context.Context, cmd *execute.Cmd) (*rpb.ActionResult, error) {
 		}
 		st.Close()
 	} else {
-		err = forkSema.Do(ctx, func() error {
-			return c.Start()
-		})
+		err = c.Start()
 		if err == nil {
 			err = c.Wait()
 		}
