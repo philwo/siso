@@ -33,7 +33,6 @@ type Limits struct {
 	Step   int
 	Local  int
 	Remote int
-	REWrap int
 	Thread int
 }
 
@@ -56,7 +55,6 @@ func DefaultLimits() Limits {
 			Step:   stepLimit,
 			Local:  numCPU,
 			Remote: limitForRemote(numCPU),
-			REWrap: limitForREWrapper(numCPU),
 		}
 		// On many cores machine, it would hit default max thread limit = 10000.
 		// Usually, it would require 1/3 of stepLimit threads (cache miss case?).
@@ -89,8 +87,6 @@ func DefaultLimits() Limits {
 				defaultLimits.Local = n
 			case "remote":
 				defaultLimits.Remote = n
-			case "rewrap":
-				defaultLimits.REWrap = n
 			case "thread":
 				defaultLimits.Thread = n
 			default:
@@ -112,53 +108,6 @@ func limitForRemote(numCPU int) int {
 	// Intel Mac has bad performance with a large number of remote actions.
 	if runtime.GOOS == "darwin" && runtime.GOARCH == "amd64" {
 		return min(1000, limit)
-	}
-	return limit
-}
-
-func limitForREWrapper(numCPU int) int {
-	// same logic in depot_tools/autoninja.py
-	// https://chromium.googlesource.com/chromium/tools/depot_tools.git/+/54762c22175e17dce4f4eab18c5942c06e82478f/autoninja.py#166
-	const defaultCoreMultiplier = remoteLimitFactor
-	coreMultiplier := defaultCoreMultiplier
-	if v := os.Getenv("NINJA_CORE_MULTIPLIER"); v != "" {
-		p, err := strconv.Atoi(v)
-		if err != nil {
-			log.Warnf("wrong $NINJA_CORE_MULTIPLIER=%q; %v", v, err)
-		} else {
-			coreMultiplier = p
-		}
-	}
-	if runtime.GOARCH == "amd64" {
-		// autoninja half num_cores for platform.machine is 'x86_64' or 'AMD64'.
-		numCPU /= 2
-		if numCPU == 0 {
-			numCPU = 1
-		}
-	}
-	limit := numCPU * coreMultiplier
-	if v := os.Getenv("NINJA_CORE_LIMIT"); v != "" {
-		p, err := strconv.Atoi(v)
-		if err != nil {
-			log.Warnf("wrong $NINJA_CORE_LIMIT=%q; %v", v, err)
-		} else if limit > p {
-			limit = p
-		}
-	}
-	switch runtime.GOOS {
-	case "windows":
-		// on Windows, higher than 1000 does not improve build
-		// performance, but may cause namedpipe timeout
-		// b/70640154 b/223211029
-		if limit > 1000 {
-			limit = 1000
-		}
-	case "darwin":
-		// on macOS, higher than 800 causes 'Too many open files' error
-		// (crbug.com/936864).
-		if limit > 800 {
-			limit = 800
-		}
 	}
 	return limit
 }
