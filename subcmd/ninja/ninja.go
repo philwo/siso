@@ -835,7 +835,7 @@ func (c *ninjaCmdRun) init() {
 	c.Flags.BoolVar(&c.dryRun, "n", false, "dry run")
 	c.Flags.BoolVar(&c.clobber, "clobber", false, "clobber build")
 	c.Flags.BoolVar(&c.prepare, "prepare", false, "build inputs of targets, but not build target itself.")
-	c.Flags.BoolVar(&c.strictRemote, "strict_remote", false, "don't use local for remote step. i.e. no fastlocal, no local fallback")
+	c.Flags.BoolVar(&c.strictRemote, "strict_remote", false, "don't use local for remote step. i.e. no local fallback")
 	c.Flags.IntVar(&c.failuresAllowed, "k", 1, "keep going until N jobs fail (0 means inifinity)")
 	c.Flags.StringVar(&c.actionSalt, "action_salt", "", "action salt")
 

@@ -211,10 +211,6 @@ func (p *progress) step(b *Builder, step *Step, s string) {
 	// 		localWaits += p.NumWaits()
 	// 		localServs += p.NumServs()
 	// 	}
-	// 	// no wait for fastLocalSema since it only use TryAcquire,
-	// 	// so no need to count b.fastLocalSema.NumWaits.
-	// 	// fastLocal step also acquires localSema,
-	// 	// so no need to count b.fastLocalSema.NumServ.
 	// 	p.numLocal.Store(int32(localWaits + localServs))
 	// 	localProgress := runProgress(localWaits, localServs)
 	//

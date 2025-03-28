@@ -144,8 +144,6 @@ type Builder struct {
 
 	rewrapSema *semaphore.Semaphore
 
-	fastLocalSema *semaphore.Semaphore
-
 	remoteSema        *semaphore.Semaphore
 	remoteExec        *remoteexec.RemoteExec
 	reCacheEnableRead bool
@@ -226,8 +224,7 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 		opts.Limits = DefaultLimits()
 	}
 	if opts.StrictRemote {
-		log.Infof("strict remote.  no fastlocal, no local fallback")
-		opts.Limits.FastLocal = 0
+		log.Infof("strict remote.  no local fallback")
 	}
 	// On many cores machine, it would hit default max thread limit = 10000.
 	// Usually, it would require 1/3 of stepLimit threads (cache miss case?).
@@ -240,10 +237,6 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 	}
 	log.Infof("numcpu=%d threads:%d - limits=%#v", numCPU, maxThreads, opts.Limits)
 
-	var fastLocalSema *semaphore.Semaphore
-	if opts.Limits.FastLocal > 0 {
-		fastLocalSema = semaphore.New("fastlocal", opts.Limits.FastLocal)
-	}
 	b := &Builder{
 		jobID:     opts.JobID,
 		id:        opts.ID,
@@ -259,7 +252,6 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 		localSema:         semaphore.New("localexec", opts.Limits.Local),
 		localExec:         le,
 		rewrapSema:        semaphore.New("rewrap", opts.Limits.REWrap),
-		fastLocalSema:     fastLocalSema,
 		remoteSema:        semaphore.New("remoteexec", opts.Limits.Remote),
 		remoteExec:        re,
 		reCacheEnableRead: opts.RECacheEnableRead,
