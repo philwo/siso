@@ -16,7 +16,6 @@ import (
 	"go.chromium.org/infra/build/siso/build/cachestore"
 	"go.chromium.org/infra/build/siso/execute"
 	"go.chromium.org/infra/build/siso/reapi/digest"
-	"go.chromium.org/infra/build/siso/sync/semaphore"
 )
 
 // CacheOptions is cache options.
@@ -27,8 +26,6 @@ type CacheOptions struct {
 // Cache is a cache used in the builder.
 type Cache struct {
 	store cachestore.CacheStore
-
-	sema *semaphore.Semaphore
 }
 
 // NewCache creates new cache.
@@ -48,12 +45,7 @@ func (c *Cache) GetActionResult(ctx context.Context, cmd *execute.Cmd) error {
 		return status.Error(codes.NotFound, "cache is not configured")
 	}
 
-	var d digest.Digest
-	err := c.sema.Do(ctx, func() error {
-		var err error
-		d, err = cmd.Digest(ctx, nil)
-		return err
-	})
+	d, err := cmd.Digest(ctx, nil)
 	if err != nil {
 		return err
 	}
