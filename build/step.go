@@ -190,7 +190,7 @@ func (s *stepState) SetPhase(phase stepPhase) {
 	defer s.mu.Unlock()
 	s.phase = phase
 	switch phase {
-	case stepLocalWait, stepREWrapperWait, stepRemoteWait, stepFallbackWait, stepRetryWait:
+	case stepLocalWait, stepRemoteWait, stepFallbackWait, stepRetryWait:
 		s.waitStart = time.Now()
 	default:
 		if !s.waitStart.IsZero() {
@@ -251,8 +251,6 @@ const (
 	stepInput
 	stepLocalWait
 	stepLocalRun
-	stepREWrapperWait
-	stepREWrapperRun
 	stepRemoteWait
 	stepRemoteRun
 	stepFallbackWait
@@ -279,10 +277,6 @@ func (s stepPhase) String() string {
 		return "wait-local"
 	case stepLocalRun:
 		return "local"
-	case stepREWrapperWait:
-		return "wait-rewrap"
-	case stepREWrapperRun:
-		return "rewrap"
 	case stepRemoteWait:
 		return "wait-remote"
 	case stepRemoteRun:
@@ -308,8 +302,6 @@ func (s stepPhase) wait() stepPhase {
 	switch s {
 	case stepLocalRun:
 		return stepLocalWait
-	case stepREWrapperRun:
-		return stepREWrapperWait
 	case stepRemoteRun:
 		return stepRemoteWait
 	case stepFallbackRun:
@@ -353,12 +345,6 @@ func (s *Step) getWeightedDuration() time.Duration {
 	s.state.mu.Lock()
 	defer s.state.mu.Unlock()
 	return s.state.weightedDuration
-}
-
-// useReclient returns true if the step uses Reclient via rewrapper or reproxy.
-// A step with reclient doesn't need to collect dependencies and check action result caches on Siso side.
-func (s *Step) useReclient() bool {
-	return s.def.Binding("use_remote_exec_wrapper") != "" || s.cmd.REProxyConfig != nil
 }
 
 func (s *Step) init(ctx context.Context, b *Builder, stepManifest *stepManifest) {

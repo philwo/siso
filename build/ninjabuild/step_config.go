@@ -192,12 +192,6 @@ type StepRule struct {
 	// UseSystemInput indicates to allow extra inputs outside exec root.
 	UseSystemInput bool `json:"use_system_input,omitempty"`
 
-	// UseRemoteExecWrapper indicates the command uses remote exec wrapper
-	// (e.g. gomacc, rewrapper), so
-	// - no need to run `clang -M`
-	// - run locally but more parallelism
-	// - no file access trace
-	UseRemoteExecWrapper bool `json:"use_remote_exec_wrapper,omitempty"`
 	// REProxyConfig specifies configuration options for using reproxy.
 	REProxyConfig *execute.REProxyConfig `json:"reproxy_config,omitempty"`
 

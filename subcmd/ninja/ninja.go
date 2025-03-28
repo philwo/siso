@@ -496,7 +496,6 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	}
 	if c.remoteJobs > 0 {
 		limits.Remote = c.remoteJobs
-		limits.REWrap = c.remoteJobs
 	}
 
 	projectID := c.reopt.UpdateProjectID(c.projectID)
@@ -624,7 +623,6 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 			return fname == ninjaLogFname
 		}
 	}
-	// TODO: pass reopt for reclient mode?
 	cogfs, err := cogutil.New(ctx, execRoot, c.reopt)
 	if err != nil && !errors.Is(err, errors.ErrUnsupported) {
 		log.Warnf("unable to use cog? %v", err)

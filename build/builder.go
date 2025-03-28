@@ -151,8 +151,6 @@ type Builder struct {
 	poolSemas map[string]*semaphore.Semaphore
 	localExec localexec.LocalExec
 
-	rewrapSema *semaphore.Semaphore
-
 	startLocalCounter atomic.Int32
 
 	remoteSema         *semaphore.Semaphore
@@ -286,7 +284,6 @@ func New(ctx context.Context, graph Graph, opts Options) (_ *Builder, err error)
 		scanDeps:           scandeps.New(opts.HashFS, graph.InputDeps(ctx)),
 		localSema:          semaphore.New("localexec", opts.Limits.Local),
 		localExec:          le,
-		rewrapSema:         semaphore.New("rewrap", opts.Limits.REWrap),
 		remoteSema:         semaphore.New("remoteexec", opts.Limits.Remote),
 		remoteExec:         re,
 		reExecEnable:       opts.REExecEnable,

@@ -68,13 +68,6 @@ func (b *Builder) execLocal(ctx context.Context, step *Step) error {
 		log.Warnf("unsupported sandbox %q", sandbox)
 	}
 
-	// native integration is handled by exec_reproxy.go
-	if step.def.Binding("use_remote_exec_wrapper") != "" {
-		// no sandbox and no need to file trace for gomacc/rewwapper.
-		stateMessage = "remote exec wrapper"
-		phase = stepREWrapperRun
-		sema = b.rewrapSema
-	}
 	if phase == stepLocalRun && step.metrics.Fallback {
 		phase = stepFallbackRun
 		stateMessage = "local exec [fallback]"
