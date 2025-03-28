@@ -13,17 +13,11 @@ import (
 
 func preprocCmd(ctx context.Context, b *Builder, step *Step) error {
 	step.setPhase(stepPreproc)
-	err := b.preprocSema.Do(ctx, func() error {
-		err := depsCmd(ctx, b, step)
-		if err != nil {
-			// disable remote execution. b/289143861
-			step.cmd.Platform = nil
-			return fmt.Errorf("disable remote: failed to get %s deps: %w", step.cmd.Deps, err)
-		}
-		return nil
-	})
+	err := depsCmd(ctx, b, step)
 	if err != nil {
-		return err
+		// disable remote execution. b/289143861
+		step.cmd.Platform = nil
+		return fmt.Errorf("disable remote: failed to get %s deps: %w", step.cmd.Deps, err)
 	}
 	dedupInputs(step.cmd)
 	return nil

@@ -142,8 +142,6 @@ type Builder struct {
 
 	stepSema *semaphore.Semaphore
 
-	preprocSema *semaphore.Semaphore
-
 	// for subtree: dir -> *subtree
 	trees sync.Map
 
@@ -296,7 +294,6 @@ func New(ctx context.Context, graph Graph, opts Options) (_ *Builder, err error)
 		start:              start,
 		graph:              graph,
 		stepSema:           semaphore.New("step", opts.Limits.Step),
-		preprocSema:        semaphore.New("preproc", opts.Limits.Preproc),
 		scanDepsSema:       semaphore.New("scandeps", opts.Limits.ScanDeps),
 		scanDeps:           scandeps.New(opts.HashFS, graph.InputDeps(ctx)),
 		localSema:          semaphore.New("localexec", opts.Limits.Local),

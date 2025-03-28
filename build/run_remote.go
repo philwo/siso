@@ -74,6 +74,8 @@ func (b *Builder) runRemote(ctx context.Context, step *Step) error {
 	if err == nil {
 		err = b.runRemoteStep(ctx, step, needCheckCache && cacheCheck)
 	}
+	dedupInputs(step.cmd)
+	err = b.runRemoteStep(ctx, step, cacheCheck)
 	if err != nil {
 		if errors.Is(err, errRemoteExecDisabled) {
 			return b.execLocal(ctx, step)
