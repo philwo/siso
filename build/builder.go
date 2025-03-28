@@ -136,8 +136,7 @@ type Builder struct {
 	// for subtree: dir -> *subtree
 	trees sync.Map
 
-	scanDepsSema *semaphore.Semaphore
-	scanDeps     *scandeps.ScanDeps
+	scanDeps *scandeps.ScanDeps
 
 	localSema *semaphore.Semaphore
 	poolSemas map[string]*semaphore.Semaphore
@@ -256,7 +255,6 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 		start:             start,
 		graph:             graph,
 		stepSema:          semaphore.New("step", opts.Limits.Step),
-		scanDepsSema:      semaphore.New("scandeps", opts.Limits.ScanDeps),
 		scanDeps:          scandeps.New(opts.HashFS, graph.InputDeps(ctx)),
 		localSema:         semaphore.New("localexec", opts.Limits.Local),
 		localExec:         le,
