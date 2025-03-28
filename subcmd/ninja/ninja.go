@@ -107,11 +107,6 @@ type ninjaCmdRun struct {
 	localJobs  int
 	fname      string
 
-	cacheDir         string
-	localCacheEnable bool
-	cacheEnableRead  bool
-	// cacheEnableWrite bool
-
 	configRepoDir  string
 	configFilename string
 
@@ -895,10 +890,6 @@ func (c *ninjaCmdRun) init() {
 	c.Flags.IntVar(&c.remoteJobs, "remote_jobs", 0, "run N remote jobs in parallel. when the value is no positive, the default will be computed based on # of CPUs.")
 	c.Flags.StringVar(&c.fname, "f", "build.ninja", "input build manifest filename (relative to -C)")
 
-	c.Flags.StringVar(&c.cacheDir, "cache_dir", defaultCacheDir(), "cache directory")
-	c.Flags.BoolVar(&c.localCacheEnable, "local_cache_enable", false, "local cache enable")
-	c.Flags.BoolVar(&c.cacheEnableRead, "cache_enable_read", true, "cache enable read")
-
 	c.Flags.StringVar(&c.configRepoDir, "config_repo_dir", "build/config/siso", "config repo directory (relative to exec root)")
 	c.Flags.StringVar(&c.configFilename, "load", "@config//main.star", "config filename (@config// is --config_repo_dir)")
 	c.Flags.StringVar(&c.outputLocalStrategy, "output_local_strategy", "full", `strategy for output_local. "full": download all outputs. "greedy": downloads most outputs except intermediate objs. "minimum": downloads as few as possible`)
@@ -1167,8 +1158,7 @@ func (c *ninjaCmdRun) initBuildOpts(projectID string, buildPath *build.Path, con
 	}
 
 	cache, err := build.NewCache(build.CacheOptions{
-		Store:      ds.cache,
-		EnableRead: c.cacheEnableRead,
+		Store: ds.cache,
 	})
 	if err != nil {
 		log.Warnf("no cache enabled: %v", err)
@@ -1244,15 +1234,6 @@ func (c *ninjaCmdRun) logWriter(fname string) (io.Writer, func(errp *error), err
 			*errp = cerr
 		}
 	}, nil
-}
-
-func defaultCacheDir() string {
-	d, err := os.UserCacheDir()
-	if err != nil {
-		log.Warnf("Failed to get user cache dir: %v", err)
-		return ""
-	}
-	return filepath.Join(d, "siso")
 }
 
 func rebuildManifest(ctx context.Context, graph *ninjabuild.Graph, bopts build.Options) error {
@@ -1362,17 +1343,6 @@ type dataSource struct {
 
 func (c *ninjaCmdRun) initDataSource(ctx context.Context, credential cred.Cred) (dataSource, error) {
 	layeredCache := build.NewLayeredCache()
-	if c.localCacheEnable {
-		cache, err := build.NewLocalCache(c.cacheDir)
-		if err != nil {
-			log.Warnf("failed to create local cache - no local cache enabled: %v", err)
-		} else {
-			layeredCache.AddLayer(cache)
-			cache.GarbageCollectIfRequired(ctx)
-		}
-	} else {
-		c.cacheDir = ""
-	}
 	var ds dataSource
 	var err error
 	if c.reopt.IsValid() {
