@@ -19,15 +19,7 @@ import (
 )
 
 func (b *Builder) execRemote(ctx context.Context, step *Step) error {
-	noFallback := !b.localFallbackEnabled()
 	var timeout time.Duration
-	if noFallback {
-		// In no-fallback mode, remote execution will be tried 4 times at most.
-		// Since an execution sets cmd.Timeout * 2 as action timeout, the 2nd try might be deduplicated by RBE scheduler. 3rd or 4th try should successfully restart a new execution.
-		// Alternatively, Siso could avoid extending action timeout in no-fallback mode.
-		// However, this will lose the opportunity to cache long actions.
-		timeout = step.cmd.Timeout * 4
-	}
 	step.cmd.RecordPreOutputs(ctx)
 	phase := stepRemoteRun
 	if step.metrics.DepsLogErr {
@@ -83,7 +75,7 @@ func (b *Builder) execRemote(ctx context.Context, step *Step) error {
 			return err
 		})
 		reExecDur += time.Duration(step.metrics.RunTime)
-		if code := status.Code(err); noFallback && (code == codes.DeadlineExceeded || errors.Is(err, context.DeadlineExceeded)) && reExecDur < timeout {
+		if code := status.Code(err); code == codes.DeadlineExceeded || errors.Is(err, context.DeadlineExceeded) && reExecDur < timeout {
 			log.Warnf("remote execution timed out: duration=%s timeout=%s err=%v", reExecDur, timeout, err)
 			err = status.Errorf(codes.Unavailable, "reapi timedout %v", err)
 		}

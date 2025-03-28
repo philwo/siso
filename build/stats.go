@@ -47,9 +47,6 @@ func (s *stats) update(m *StepMetric, pure bool) {
 		log.Warnf("unexpected metrics? %#v", m)
 	}
 
-	if m.Fallback {
-		s.s.LocalFallback++
-	}
 	if m.Err {
 		s.s.Fail++
 	}
@@ -74,7 +71,6 @@ type Stats struct {
 	CacheHit       int // actions for which we got a cache hit
 	Local          int // locally executed actions
 	Remote         int // remote executed actions
-	LocalFallback  int // actions for which remote execution failed, and we did a local fallback
 	RemoteRetry    int // accumulated remote retry counts
 	Total          int // total actions that ran during this build
 }
