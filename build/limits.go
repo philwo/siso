@@ -30,12 +30,11 @@ const (
 // Limits specifies the resource limits used in siso build process.
 // zero limit means default.
 type Limits struct {
-	Step      int
-	Local     int
-	FastLocal int
-	Remote    int
-	REWrap    int
-	Thread    int
+	Step   int
+	Local  int
+	Remote int
+	REWrap int
+	Thread int
 }
 
 var (
@@ -54,11 +53,10 @@ func DefaultLimits() Limits {
 		numCPU := runtimex.NumCPU()
 		stepLimit := limitForStep(numCPU)
 		defaultLimits = Limits{
-			Step:      stepLimit,
-			Local:     numCPU,
-			FastLocal: limitForFastLocal(numCPU),
-			Remote:    limitForRemote(numCPU),
-			REWrap:    limitForREWrapper(numCPU),
+			Step:   stepLimit,
+			Local:  numCPU,
+			Remote: limitForRemote(numCPU),
+			REWrap: limitForREWrapper(numCPU),
 		}
 		// On many cores machine, it would hit default max thread limit = 10000.
 		// Usually, it would require 1/3 of stepLimit threads (cache miss case?).
@@ -80,7 +78,7 @@ func DefaultLimits() Limits {
 				continue
 			}
 			n, err := strconv.Atoi(v)
-			if err != nil || n < 0 || (n == 0 && k != "fastlocal") {
+			if err != nil || n < 0 || n == 0 {
 				log.Warnf("wrong limits value for %s: %v", k, v)
 				continue
 			}
@@ -89,8 +87,6 @@ func DefaultLimits() Limits {
 				defaultLimits.Step = n
 			case "local":
 				defaultLimits.Local = n
-			case "fastlocal":
-				defaultLimits.FastLocal = n
 			case "remote":
 				defaultLimits.Remote = n
 			case "rewrap":
@@ -118,16 +114,6 @@ func limitForRemote(numCPU int) int {
 		return min(1000, limit)
 	}
 	return limit
-}
-
-func limitForFastLocal(numCPU int) int {
-	// We want to use local resources on powerful machine (but not so
-	// many, as it needs to run local only steps too),
-	// but not want to use on cheap machine (*-standard-8 etc).
-	// So don't use fast local if cpus < 32.
-	// 64 cpus -> 2
-	// 128 cpus -> 6
-	return max(0, numCPU-32) / 16
 }
 
 func limitForREWrapper(numCPU int) int {
