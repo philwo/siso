@@ -180,25 +180,8 @@ func (b byteSource) String() string {
 	return b.name
 }
 
-// FromLocalFile creates Data from local file source.
-// it requires LocalFileSource because it doesn't handle
-// retriable err from src.
-func FromLocalFile(ctx context.Context, src Source) (Data, error) {
-	fd, ok := src.(fileDigester)
-	if ok {
-		d, err := fd.FileDigestFromXattr(ctx)
-		if err == nil {
-			return Data{
-				digest: d,
-				source: src,
-			}, nil
-		}
-	}
-	_, ok = src.(LocalFileSource)
-	if !ok {
-		return Data{}, fmt.Errorf("src=%T is not LocalFileSource", src)
-	}
-
+// FromSource creates Data from a digest.Source.
+func FromSource(ctx context.Context, src Source) (Data, error) {
 	f, err := src.Open(ctx)
 	if err != nil {
 		return Data{}, err
@@ -212,14 +195,4 @@ func FromLocalFile(ctx context.Context, src Source) (Data, error) {
 		digest: d,
 		source: src,
 	}, nil
-}
-
-type fileDigester interface {
-	FileDigestFromXattr(context.Context) (Digest, error)
-}
-
-// LocalFileSource is a source for local file.
-type LocalFileSource interface {
-	Source
-	IsLocal()
 }

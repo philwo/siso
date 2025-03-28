@@ -65,8 +65,6 @@ type HashFS struct {
 
 	notifies []NotifyFunc
 
-	digester digester
-
 	// loadErr keeps load error.
 	loadErr error
 
@@ -112,12 +110,6 @@ func New(ctx context.Context, opt Option) (*HashFS, error) {
 	fsys := &HashFS{
 		opt:       opt,
 		directory: &directory{isRoot: true},
-
-		digester: digester{
-			q:    make(chan digestReq, 1000),
-			quit: make(chan struct{}),
-			done: make(chan struct{}),
-		},
 	}
 	if opt.StateFile != "" {
 		start := time.Now()
@@ -165,7 +157,6 @@ func New(ctx context.Context, opt Option) (*HashFS, error) {
 			fsys.journal = f
 		}
 	}
-	go fsys.digester.start()
 	return fsys, nil
 }
 
@@ -220,7 +211,6 @@ func (hfs *HashFS) SetBuildTargets(buildTargets []string, success bool) {
 // Close closes the HashFS.
 // Persists current state in opt.StateFile.
 func (hfs *HashFS) Close(ctx context.Context) error {
-	hfs.digester.stop()
 	if hfs.opt.StateFile == "" {
 		return nil
 	}
@@ -349,7 +339,7 @@ func (hfs *HashFS) dirStoreAndNotify(ctx context.Context, fullname string, e *en
 	if err != nil {
 		return err
 	}
-	hfs.digester.lazyCompute(ctx, fullname, ee)
+	go ee.compute(ctx)
 	for _, f := range hfs.notifies {
 		f(ctx, &FileInfo{fname: fullname, e: ee})
 	}
@@ -421,7 +411,7 @@ func (hfs *HashFS) Stat(ctx context.Context, root, fname string) (FileInfo, erro
 	if e.err != nil {
 		return FileInfo{}, e.err
 	}
-	hfs.digester.lazyCompute(ctx, fname, e)
+	go e.compute(ctx)
 	return FileInfo{root: root, fname: fname, e: e}, nil
 }
 
@@ -499,7 +489,7 @@ func (hfs *HashFS) ReadFile(ctx context.Context, root, fname string) ([]byte, er
 	if len(e.buf) > 0 {
 		return e.buf, nil
 	}
-	hfs.digester.compute(ctx, fname, e)
+	e.compute(ctx)
 	if e.d.IsZero() {
 		return nil, fmt.Errorf("read file %s: no data", fname)
 	}
@@ -596,7 +586,7 @@ func (hfs *HashFS) Copy(ctx context.Context, root, src, dst string, mtime time.T
 		return fmt.Errorf("is a directory: %s", srcfname)
 	}
 	if e.target == "" {
-		hfs.digester.compute(ctx, srcfname, e)
+		e.compute(ctx)
 	}
 	lready := make(chan bool, 1)
 	lready <- true
@@ -859,7 +849,7 @@ func (hfs *HashFS) Entries(ctx context.Context, root string, inputs []string) ([
 					nwait++
 					go func() {
 						defer wg.Done()
-						hfs.digester.compute(ctx, fname, e)
+						e.compute(ctx)
 					}()
 				}
 			}
@@ -879,7 +869,7 @@ func (hfs *HashFS) Entries(ctx context.Context, root string, inputs []string) ([
 		nwait++
 		go func() {
 			defer wg.Done()
-			hfs.digester.compute(ctx, fname, e)
+			e.compute(ctx)
 		}()
 	}
 	// wait ensures all entries have computed the digests.
@@ -922,7 +912,7 @@ func (hfs *HashFS) Entries(ctx context.Context, root string, inputs []string) ([
 					if err != nil {
 						return nil, err
 					}
-					hfs.digester.lazyCompute(ctx, name, elink)
+					go elink.compute(ctx)
 				}
 				if elink.err != nil || elink.target == "" {
 					break
@@ -930,7 +920,7 @@ func (hfs *HashFS) Entries(ctx context.Context, root string, inputs []string) ([
 			}
 			if e != elink {
 				target = elink.target
-				hfs.digester.compute(ctx, name, elink)
+				elink.compute(ctx)
 				d := elink.digest()
 				data = digest.NewData(elink.src, d)
 				isExecutable = elink.mode&0111 != 0
@@ -1339,7 +1329,7 @@ func (hfs *HashFS) Flush(ctx context.Context, execRoot string, files []string) e
 		case <-ctx.Done():
 			return fmt.Errorf("flush %s: %w", fname, context.Cause(ctx))
 		}
-		hfs.digester.compute(ctx, fname, e)
+		e.compute(ctx)
 		done, err := FlushSemaphore.WaitAcquire(ctx)
 		if err != nil {
 			return fmt.Errorf("flush %s: %w", fname, err)
@@ -1475,7 +1465,7 @@ func (e *entry) init(fname string, executables map[string]bool) {
 	}
 }
 
-func (e *entry) compute(ctx context.Context, fname string) error {
+func (e *entry) compute(ctx context.Context) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if e.err != nil {
@@ -1487,7 +1477,7 @@ func (e *entry) compute(ctx context.Context, fname string) error {
 	if e.src == nil {
 		return nil
 	}
-	data, err := localDigest(ctx, e.src, fname)
+	data, err := digest.FromSource(ctx, e.src)
 	if err != nil {
 		return err
 	}
@@ -1602,19 +1592,7 @@ func (e *entry) flush(ctx context.Context, fname string) error {
 	defer close(e.lready)
 
 	if errors.Is(e.err, fs.ErrNotExist) {
-		// to protect concurrent digest calculation and removal
-		// on Windows.
-		digestLock.Lock()
-		for {
-			if _, ok := digestFnames[fname]; !ok {
-				break
-			}
-			// wait if digest calculation on fname is under progress
-			digestCond.Wait()
-		}
-		err := os.Remove(fname)
-		digestLock.Unlock()
-		return err
+		return os.Remove(fname)
 	}
 	d := e.digest()
 	mtime := e.getMtime()
@@ -1678,7 +1656,7 @@ func (e *entry) flush(ctx context.Context, fname string) error {
 			// to write hashfs entry to the disk.
 			var fileDigest digest.Digest
 			src := osfs.NewFileSource(fname)
-			ld, err := localDigest(ctx, src, fname)
+			ld, err := digest.FromSource(ctx, src)
 			if err == nil {
 				fileDigest = ld.Digest()
 				if fileDigest == d {

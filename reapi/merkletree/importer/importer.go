@@ -56,7 +56,7 @@ func (Importer) Import(ctx context.Context, dir string, ds *digest.Store) (diges
 		if err != nil {
 			return err
 		}
-		data, err := digest.FromLocalFile(ctx, osfs.NewFileSource(path))
+		data, err := digest.FromSource(ctx, osfs.NewFileSource(path))
 		if err != nil {
 			return err
 		}
