@@ -16,7 +16,6 @@ import (
 	"io/fs"
 	"math"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
@@ -47,7 +46,6 @@ import (
 	"go.chromium.org/infra/build/siso/toolsupport/artfsutil"
 	"go.chromium.org/infra/build/siso/toolsupport/cogutil"
 	"go.chromium.org/infra/build/siso/toolsupport/ninjautil"
-	"go.chromium.org/infra/build/siso/toolsupport/watchmanutil"
 	"go.chromium.org/infra/build/siso/ui"
 )
 
@@ -401,7 +399,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 			log.Warnf("lockfile is not supported")
 		case err != nil:
 			return stats, err
-		case err == nil:
+		default:
 			var owner string
 			spin := ui.Default.NewSpinner()
 			for {
@@ -600,35 +598,6 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		}
 		ui.Default.PrintLines(ui.SGR(ui.Yellow, "build on artfs"))
 		c.fsopt.ArtFS = artfs
-	}
-
-	if fsmonitor := os.Getenv("SISO_FSMONITOR"); fsmonitor != "" {
-		var fsmonitorPath string
-		if !filepath.IsAbs(fsmonitor) {
-			fsmonitorPath, err = exec.LookPath(fsmonitor)
-			if err != nil {
-				log.Warnf("failed to find fsmonitor %q: %v", fsmonitor, err)
-				fmt.Fprintln(os.Stderr, ui.SGR(ui.BackgroundRed, fmt.Sprintf("SISO_FSMONITOR=%q: failed %v", fsmonitor, err)))
-			}
-		} else {
-			fsmonitorPath = fsmonitor
-		}
-		if fsmonitorPath != "" {
-			fsm := strings.TrimSuffix(filepath.Base(fsmonitor), filepath.Ext(fsmonitor))
-			switch fsm {
-			case "watchman":
-				fsm, err := watchmanutil.New(ctx, fsmonitorPath, execRoot)
-				if err != nil {
-					log.Warnf("failed to initialize watchman: %v", err)
-					fmt.Fprintln(os.Stderr, ui.SGR(ui.BackgroundRed, fmt.Sprintf("SISO_FSMONITOR=watchman: failed %v", err)))
-				} else {
-					fmt.Fprintln(os.Stdout, ui.SGR(ui.Yellow, fmt.Sprintf("use watchman as fsmonitor: %s", fsmonitorPath)))
-					c.fsopt.FSMonitor = fsm
-				}
-			default:
-				fmt.Fprintln(os.Stderr, ui.SGR(ui.BackgroundRed, fmt.Sprintf("unknown SISO_FSMONITOR=%q (%q)", fsmonitor, fsm)))
-			}
-		}
 	}
 
 	spin.Start("loading fs state")
