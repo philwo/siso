@@ -131,7 +131,7 @@ func (p *progress) update(ctx context.Context, b *Builder) {
 				msg = fmt.Sprintf("[%s]: %s", phase, si.desc)
 			}
 			switch phase {
-			case stepFallbackWait, stepFallbackRun, stepRetryWait, stepRetryRun:
+			case stepRetryWait, stepRetryRun:
 				msg = ui.SGR(ui.Red, msg)
 			}
 			p.step(b, si.step, msg)
@@ -153,7 +153,6 @@ const (
 	progressPrefixStart    = "S "
 	progressPrefixFinish   = "F "
 	progressPrefixRetry    = "r "
-	progressPrefixFallback = "f "
 )
 
 func (p *progress) step(b *Builder, step *Step, s string) {
@@ -222,10 +221,6 @@ func (p *progress) step(b *Builder, step *Step, s string) {
 	// 	if stat.Remote+stat.CacheHit > 0 {
 	// 		cacheHitRatio = fmt.Sprintf("cache:%5.02f%% ", float64(stat.CacheHit)/float64(stat.CacheHit+stat.Remote)*100.0)
 	// 	}
-	// 	var fallback string
-	// 	if stat.LocalFallback > 0 {
-	// 		fallback = "fallback:" + ui.SGR(ui.BackgroundRed, fmt.Sprintf("%d", stat.LocalFallback)) + " "
-	// 	}
 	// 	var retry string
 	// 	if stat.RemoteRetry > 0 {
 	// 		retry = "retry:" + ui.SGR(ui.BackgroundRed, fmt.Sprintf("%d", stat.RemoteRetry)) + " "
@@ -237,7 +232,6 @@ func (p *progress) step(b *Builder, step *Step, s string) {
 	// 			remoteProgress,
 	// 			stepsPerSec,
 	// 			cacheHitRatio,
-	// 			fallback,
 	// 			retry,
 	// 		))
 	// 	}

@@ -19,7 +19,6 @@ type cmdOutputResult int
 const (
 	cmdOutputResultFAILED cmdOutputResult = iota
 	cmdOutputResultSUCCESS
-	cmdOutputResultFALLBACK
 	cmdOutputResultRETRY
 )
 
@@ -29,8 +28,6 @@ func (r cmdOutputResult) String() string {
 		return "FAILED"
 	case cmdOutputResultSUCCESS:
 		return "SUCCESS"
-	case cmdOutputResultFALLBACK:
-		return "FALLBACK"
 	case cmdOutputResultRETRY:
 		return "RETRY"
 	}
@@ -38,7 +35,7 @@ func (r cmdOutputResult) String() string {
 }
 
 type cmdOutputLog struct {
-	// result is cmd result (FAILED/SUCCESS/FALLBACK/RETRY)
+	// result is cmd result (FAILED/SUCCESS/RETRY)
 	result cmdOutputResult
 	// phase is when it finished cmd handling.
 	phase string
@@ -190,13 +187,7 @@ func (b *Builder) logOutput(cmdOutput *cmdOutputLog, console bool) string {
 	}
 	if b.outputLogWriter != nil {
 		fmt.Fprint(b.outputLogWriter, cmdOutput.String()+"\f\n")
-		if cmdOutput.result == cmdOutputResultFALLBACK {
-			return ""
-		}
 		return cmdOutput.Msg(console, b.verboseFailures)
-	}
-	if cmdOutput.result == cmdOutputResultFALLBACK {
-		return ""
 	}
 	return cmdOutput.Msg(console, true)
 }

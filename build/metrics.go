@@ -90,7 +90,6 @@ type StepMetric struct {
 	IsLocal     bool `json:"is_local,omitempty"`     // whether the action uses local result.
 	StartLocal  bool `json:"start_local,omitempty"`  // whether the action chooses local for start in incremental build.
 	Cached      bool `json:"cached,omitempty"`       // whether the action was a cache hit.
-	Fallback    bool `json:"fallback,omitempty"`     // whether the action failed remotely and was retried locally.
 	Err         bool `json:"err,omitempty"`          // whether the action failed.
 	RemoteRetry int  `json:"remote_retry,omitempty"` // count of remote retry
 
@@ -101,7 +100,7 @@ type StepMetric struct {
 	// strategies in execution metadata of result.
 
 	// ActionStartTime is the time it took since build start until
-	// the action starts. After ActionStartTime, scandeps/retry/fallback
+	// the action starts. After ActionStartTime, scandeps or retry
 	// may happen and there might be internal waiting time. e.g. remote
 	// exec semaphore.
 	ActionStartTime IntervalMetric `json:"action_start,omitempty"`

@@ -226,14 +226,6 @@ type Cmd struct {
 	// actionResult is cached result if cachedResult is true.
 	cachedResult bool
 
-	// remoteFallbackResult is rpb.ActionResult from remote execution.
-	// This is used to distinguish from actionResult when local fallback happens.
-	remoteFallbackResult *rpb.ActionResult
-
-	// remoteFallbackError is an error returned while running remote execution.
-	// This is used to distinguish from an error when local fallback happens.
-	remoteFallbackError error
-
 	outputResult string
 }
 
@@ -292,7 +284,6 @@ func (c *Cmd) RemoteArgs() ([]string, error) {
 		}
 	}
 	if c.RemoteCommand != "" {
-		// Replace the first args. But don't modify the Cmd.Args for fallback.
 		args = append([]string{c.RemoteCommand}, args[1:]...)
 	}
 	if c.RemoteWrapper != "" {
@@ -728,17 +719,6 @@ func (c *Cmd) SetActionResult(result *rpb.ActionResult, cached bool) {
 // ActionResult returns the action result of the cmd.
 func (c *Cmd) ActionResult() (*rpb.ActionResult, bool) {
 	return c.actionResult, c.cachedResult
-}
-
-// SetRemoteFallbackResult sets remote action failed result and remote error of the cmd, which ended up with local fallback.
-func (c *Cmd) SetRemoteFallbackResult(result *rpb.ActionResult, err error) {
-	c.remoteFallbackResult = result
-	c.remoteFallbackError = err
-}
-
-// RemoteFallbackResult returns the remote action failed result and remote error of the cmd, which ended up with local fallback.
-func (c *Cmd) RemoteFallbackResult() (*rpb.ActionResult, error) {
-	return c.remoteFallbackResult, c.remoteFallbackError
 }
 
 // entriesFromResult returns output file entries and additional entries for the cmd and result.

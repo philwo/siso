@@ -68,11 +68,6 @@ func (b *Builder) execLocal(ctx context.Context, step *Step) error {
 		log.Warnf("unsupported sandbox %q", sandbox)
 	}
 
-	if phase == stepLocalRun && step.metrics.Fallback {
-		phase = stepFallbackRun
-		stateMessage = "local exec [fallback]"
-	}
-
 	queueTime := time.Now()
 	var dur time.Duration
 	step.setPhase(phase.wait())
@@ -82,12 +77,8 @@ func (b *Builder) execLocal(ctx context.Context, step *Step) error {
 			b.progress.startConsoleCmd(step.cmd)
 		}
 		started := time.Now()
-		// local exec might be called as fallback.
-		// Do not change ActionStartTime if it's already set.
-		if step.metrics.ActionStartTime == 0 {
-			step.metrics.ActionStartTime = IntervalMetric(started.Sub(b.start))
-		}
-		err := executor.Run(ctx, step.cmd)
+		step.metrics.ActionStartTime = IntervalMetric(started.Sub(b.start))
+		err := b.localExec.Run(ctx, step.cmd)
 		dur = time.Since(started)
 		step.setPhase(stepOutput)
 		if step.cmd.Console {

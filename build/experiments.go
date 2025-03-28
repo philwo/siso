@@ -21,7 +21,6 @@ var knownExperiments = map[string]string{
 	"check-deps":                  "",
 	"fail-on-stdouterr":           "",
 	"fail-on-bad-deps":            "",
-	"fallback-on-exec-error":      "",
 	"file-access-trace":           "",
 	"gvisor":                      "",
 	"ignore-missing-local-inputs": "",
@@ -33,7 +32,6 @@ var knownExperiments = map[string]string{
 	"keep-going-handle-error": "",
 	"keep-going-impure":       "check siso_localexec",
 	"oom-score-adj":           "",
-	"no-fallback":             "",
 	"prepare-header-only":     "",
 }
 

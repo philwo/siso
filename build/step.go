@@ -190,7 +190,7 @@ func (s *stepState) SetPhase(phase stepPhase) {
 	defer s.mu.Unlock()
 	s.phase = phase
 	switch phase {
-	case stepLocalWait, stepRemoteWait, stepFallbackWait, stepRetryWait:
+	case stepLocalWait, stepRemoteWait, stepRetryWait:
 		s.waitStart = time.Now()
 	default:
 		if !s.waitStart.IsZero() {
@@ -253,8 +253,6 @@ const (
 	stepLocalRun
 	stepRemoteWait
 	stepRemoteRun
-	stepFallbackWait
-	stepFallbackRun
 	stepRetryWait
 	stepRetryRun
 	stepOutput
@@ -281,10 +279,6 @@ func (s stepPhase) String() string {
 		return "wait-remote"
 	case stepRemoteRun:
 		return "remote"
-	case stepFallbackWait:
-		return "wait-fallback"
-	case stepFallbackRun:
-		return "fallback"
 	case stepRetryWait:
 		return "wait-retry"
 	case stepRetryRun:
@@ -304,8 +298,6 @@ func (s stepPhase) wait() stepPhase {
 		return stepLocalWait
 	case stepRemoteRun:
 		return stepRemoteWait
-	case stepFallbackRun:
-		return stepFallbackWait
 	case stepRetryRun:
 		return stepRetryWait
 	default:
