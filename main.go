@@ -24,7 +24,6 @@ import (
 	"go.chromium.org/luci/common/system/signals"
 
 	"go.chromium.org/infra/build/siso/auth/cred"
-	"go.chromium.org/infra/build/siso/hashfs/osfs"
 	"go.chromium.org/infra/build/siso/subcmd/authcheck"
 	"go.chromium.org/infra/build/siso/subcmd/help"
 	"go.chromium.org/infra/build/siso/subcmd/ninja"
@@ -54,7 +53,6 @@ func getApplication(authOpts cred.Options) *cli.Application {
 			help.Cmd(),
 			ninja.Cmd(authOpts, versionID),
 			query.Cmd(),
-			osfs.HelperCmd(),
 			scandeps.Cmd(),
 			authcheck.Cmd(authOpts),
 
