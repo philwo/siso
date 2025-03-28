@@ -29,13 +29,6 @@ import (
 
 	"go.chromium.org/infra/build/siso/reapi/bytestreamio"
 	"go.chromium.org/infra/build/siso/reapi/digest"
-	"go.chromium.org/infra/build/siso/runtimex"
-	"go.chromium.org/infra/build/siso/sync/semaphore"
-)
-
-var (
-	// FileSemaphore limits concurrent file access to create BatchUpdateBlobgs to protect from runtime thread exhaustion.
-	FileSemaphore = semaphore.New("reapi-cas-file", runtimex.NumCPU())
 )
 
 const (
