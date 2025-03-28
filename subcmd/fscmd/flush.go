@@ -203,8 +203,6 @@ func isDirEnt(ent *pb.Entry) bool {
 // childEntries returns entries from stm that exists under fullpath.
 // We only need hashfs's entry since if file already exists locally,
 // flush need nothing to do.
-// Note that `siso isolate` need to collect local files to send isolate server,
-// so should use hashfs Walk to collect files.
 func childEntries(stm map[string]*pb.Entry, fullpath string) []*pb.Entry {
 	var fnames []string
 	for k := range stm {
