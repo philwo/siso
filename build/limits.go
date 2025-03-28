@@ -35,7 +35,6 @@ const (
 // zero limit means default.
 type Limits struct {
 	Step      int
-	Preproc   int
 	ScanDeps  int
 	Local     int
 	FastLocal int
@@ -61,7 +60,6 @@ func DefaultLimits() Limits {
 		stepLimit := limitForStep(numCPU)
 		defaultLimits = Limits{
 			Step:      stepLimit,
-			Preproc:   stepLimit,
 			ScanDeps:  scanDepsLimitFactor * numCPU,
 			Local:     numCPU,
 			FastLocal: limitForFastLocal(numCPU),
@@ -95,8 +93,6 @@ func DefaultLimits() Limits {
 			switch k {
 			case "step":
 				defaultLimits.Step = n
-			case "preproc":
-				defaultLimits.Preproc = n
 			case "scandeps":
 				defaultLimits.ScanDeps = n
 			case "local":
