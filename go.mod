@@ -11,7 +11,6 @@ require (
 	github.com/klauspost/compress v1.18.0
 	github.com/klauspost/cpuid/v2 v2.2.10
 	github.com/maruel/subcommands v1.1.1
-	github.com/pkg/xattr v0.4.10
 	go.chromium.org/luci v0.0.0-20250321144226-119db4c5a855
 	go.starlark.net v0.0.0-20250318223901-d9371fef63fe
 	golang.org/x/oauth2 v0.28.0
