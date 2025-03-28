@@ -44,19 +44,14 @@ func (b *Builder) runRemote(ctx context.Context, step *Step) error {
 		}
 	}
 	step.setPhase(stepPreproc)
-	err := b.preprocSema.Do(ctx, func() error {
-		err := depsCmd(ctx, b, step)
-		if err != nil {
-			// disable remote execution. b/289143861
-			step.cmd.Platform = nil
-			return fmt.Errorf("disable remote: failed to get %s deps: %w", step.cmd.Deps, err)
-		}
-		return nil
-	})
-	if err == nil {
-		dedupInputs(step.cmd)
-		err = b.runRemoteStep(ctx, step, cacheCheck)
+	err := depsCmd(ctx, b, step)
+	if err != nil {
+		// disable remote execution. b/289143861
+		step.cmd.Platform = nil
+		return fmt.Errorf("disable remote: failed to get %s deps: %w", step.cmd.Deps, err)
 	}
+	dedupInputs(step.cmd)
+	err = b.runRemoteStep(ctx, step, cacheCheck)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
 			return err
