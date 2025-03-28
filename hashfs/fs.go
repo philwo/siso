@@ -33,20 +33,11 @@ import (
 	pb "go.chromium.org/infra/build/siso/hashfs/proto"
 	"go.chromium.org/infra/build/siso/reapi/digest"
 	"go.chromium.org/infra/build/siso/reapi/merkletree"
-	"go.chromium.org/infra/build/siso/runtimex"
-	"go.chromium.org/infra/build/siso/sync/semaphore"
 )
 
 // Linux imposes a limit of at most 40 symlinks in any one path lookup.
 // see: https://lwn.net/Articles/650786/
 const maxSymlinks = 40
-
-// ForgetMissingsSemaphore is a semaphore to control concurrent ForgetMissings.
-// os.Lstat in ForgetMissings would create lots of thread. b/325565625
-var ForgetMissingsSemaphore = semaphore.New("fs-forget", runtimex.NumCPU()*2)
-
-// FlushSemaphore is a semaphore to control concurrent flushes.
-var FlushSemaphore = semaphore.New("fs-flush", runtimex.NumCPU()*2)
 
 func isExecutable(fi fs.FileInfo, fname string, m map[string]bool) bool {
 	if fi.Mode()&0111 != 0 {
@@ -774,19 +765,16 @@ func (hfs *HashFS) ForgetMissingsInDir(ctx context.Context, root, dir string) {
 		}
 		needCheck = append(needCheck, fname)
 	}
-	err := ForgetMissingsSemaphore.Do(ctx, func() error {
-		for _, fname := range needCheck {
-			fullname := makeFullpath(root, fname)
-			_, err := os.Lstat(fullname)
+	for _, fname := range needCheck {
+		fullname := makeFullpath(root, fname)
+		_, err := os.Lstat(fullname)
+		if err != nil {
 			if errors.Is(err, fs.ErrNotExist) {
 				hfs.directory.delete(fullname)
 				continue
 			}
+			log.Errorf("lstat failed for %q: %v", fullname, err)
 		}
-		return nil
-	})
-	if err != nil {
-		log.Warnf("forget missings in dir: %v", err)
 	}
 }
 
@@ -797,12 +785,16 @@ func (hfs *HashFS) ForgetMissingsInDir(ctx context.Context, root, dir string) {
 func (hfs *HashFS) ForgetMissings(ctx context.Context, root string, inputs []string) []string {
 	availables := make([]string, 0, len(inputs))
 	needCheck := make([]string, 0, len(inputs))
+
 	for _, fname := range inputs {
 		fi, err := hfs.Stat(ctx, root, fname)
-		if errors.Is(err, fs.ErrNotExist) {
-			// If it doesn't exist in hashfs,
-			// no need to check with os.Lstat.
-			continue
+		if err != nil {
+			if errors.Is(err, fs.ErrNotExist) {
+				// If it doesn't exist in hashfs,
+				// no need to check with os.Lstat.
+				continue
+			}
+			log.Errorf("stat failed for %q: %v", fname, err)
 		}
 		if err == nil && (fi.IsChanged() || fi.IsMissingChecked()) {
 			// it is explicit generated file.
@@ -813,27 +805,25 @@ func (hfs *HashFS) ForgetMissings(ctx context.Context, root string, inputs []str
 		needCheck = append(needCheck, fname)
 	}
 
-	err := ForgetMissingsSemaphore.Do(ctx, func() error {
-		for _, fname := range needCheck {
-			fullname := makeFullpath(root, fname)
-			_, err := os.Lstat(fullname)
+	for _, fname := range needCheck {
+		fullname := makeFullpath(root, fname)
+		_, err := os.Lstat(fullname)
+		if err != nil {
 			if errors.Is(err, fs.ErrNotExist) {
 				hfs.directory.delete(fullname)
 				continue
 			}
-			fi, err := hfs.Stat(ctx, root, fname)
-			if err == nil {
-				fi.e.mu.Lock()
-				fi.e.isMissingChecked = true
-				fi.e.mu.Unlock()
-			}
-			availables = append(availables, fname)
+			log.Errorf("lstat failed for %q: %v", fullname, err)
 		}
-		return nil
-	})
-	if err != nil {
-		log.Warnf("forget missings: %v", err)
+		fi, err := hfs.Stat(ctx, root, fname)
+		if err == nil {
+			fi.e.mu.Lock()
+			fi.e.isMissingChecked = true
+			fi.e.mu.Unlock()
+		}
+		availables = append(availables, fname)
 	}
+
 	return availables
 }
 
@@ -1361,12 +1351,7 @@ func (hfs *HashFS) Flush(ctx context.Context, execRoot string, files []string) e
 			return fmt.Errorf("flush %s: %w", fname, context.Cause(ctx))
 		}
 		hfs.digester.compute(ctx, fname, e)
-		done, err := FlushSemaphore.WaitAcquire(ctx)
-		if err != nil {
-			return fmt.Errorf("flush %s: %w", fname, err)
-		}
 		eg.Go(func() (err error) {
-			defer done()
 			err = e.flush(ctx, fname)
 			// flush should not fail with cas not found error.
 			// but if it failed, current recorded digest should
