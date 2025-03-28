@@ -584,21 +584,23 @@ func (c *Client) uploadAllWithByteStream(ctx context.Context, digests []digest.D
 	log.Infof("uploading %d blobs by streaming", len(digests))
 
 	bsClient := bpb.NewByteStreamClient(c.casConn)
+	eg, ctx := errgroup.WithContext(ctx)
 	for _, d := range digests {
-		var err error
-		data, ok := ds.Get(d)
-		if !ok {
-			err = fmt.Errorf("blob %s not found in store", d)
-		} else {
-			err = c.uploadWithByteStream(ctx, bsClient, data)
-		}
-		uploads[d].done(err)
-		if err != nil {
-			return fmt.Errorf("failed to upload blob %s: %v", err)
-		}
+		eg.Go(func() (err error) {
+			data, ok := ds.Get(d)
+			if !ok {
+				err = fmt.Errorf("blob %s not found in store", d)
+			} else {
+				err = c.uploadWithByteStream(ctx, bsClient, data)
+			}
+			uploads[d].done(err)
+			if err != nil {
+				return fmt.Errorf("failed to upload blob %s: %v", d, err)
+			}
+			return nil
+		})
 	}
-
-	return nil
+	return eg.Wait()
 }
 
 // resourceName constructs a resource name for uploading the blob identified by the digest.
