@@ -28,7 +28,6 @@ import (
 	"go.chromium.org/infra/build/siso/subcmd/help"
 	"go.chromium.org/infra/build/siso/subcmd/ninja"
 	"go.chromium.org/infra/build/siso/subcmd/ninjafrontend"
-	"go.chromium.org/infra/build/siso/subcmd/ps"
 	"go.chromium.org/infra/build/siso/subcmd/query"
 	"go.chromium.org/infra/build/siso/subcmd/scandeps"
 	"go.chromium.org/infra/build/siso/subcmd/version"
@@ -57,7 +56,6 @@ func getApplication(authOpts cred.Options) *cli.Application {
 			ninjafrontend.Cmd(),
 			query.Cmd(),
 			osfs.HelperCmd(),
-			ps.Cmd(),
 			scandeps.Cmd(),
 			authcheck.Cmd(authOpts),
 
