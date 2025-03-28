@@ -60,8 +60,6 @@ type Option struct {
 
 	KeepTainted bool // keep manually modified generated file
 
-	OSFSOption osfs.Option
-
 	FSMonitor FSMonitor
 
 	DataSource  DataSource
@@ -81,7 +79,6 @@ func (o *Option) RegisterFlags(flagSet *flag.FlagSet) {
 	flagSet.IntVar(&o.CompressLevel, "fs_state_compression_level", 3, "fs state compression level (0 = uncompressed, 1 = fastest, 10 = best)")
 	flagSet.IntVar(&o.CompressThreads, "fs_state_compression_threads", defaultCompressThreads, "number of threads to use for data compression")
 	flagSet.BoolVar(&o.KeepTainted, "fs_keep_tainted", false, "keep manually modified generated file")
-	o.OSFSOption.RegisterFlags(flagSet)
 }
 
 // DataSource is an interface to get digest source for digest and its name.
@@ -304,7 +301,7 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 					}
 					return nil
 				}
-				e, _ := newStateEntry(ctx, ent, time.Time{}, hfs.opt.DataSource, hfs.OS)
+				e, _ := newStateEntry(ctx, ent, time.Time{}, hfs.opt.DataSource)
 				e.cmdhash = h
 				e.action = toDigest(ent.Action)
 				entries[i] = e
@@ -326,7 +323,7 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 				log.Warnf("future timestamp on %q: mtime=%s now=%s", ent.Name, fi.ModTime(), now)
 				return fmt.Errorf("future timestamp on %q: mtime=%s now=%s", ent.Name, fi.ModTime(), now)
 			}
-			e, et := newStateEntry(ctx, ent, fi.ModTime(), hfs.opt.DataSource, hfs.OS)
+			e, et := newStateEntry(ctx, ent, fi.ModTime(), hfs.opt.DataSource)
 			e.cmdhash = h
 			e.action = toDigest(ent.Action)
 			ftype := "file"
@@ -364,11 +361,11 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 				// check digest is the same and fix mtime if it matches.
 				// don't reconcile for source (non-generated file),
 				// as user may want to trigger build by touch.
-				src := hfs.OS.FileSource(ent.Name, fi.Size())
+				src := osfs.NewFileSource(ent.Name)
 				data, err := localDigest(ctx, src, ent.Name)
 				if err == nil && data.Digest() == e.d {
 					et = entryEqLocal
-					err = hfs.OS.Chtimes(ent.Name, time.Now(), e.mtime)
+					err = os.Chtimes(ent.Name, time.Now(), e.mtime)
 					if logw != nil {
 						fmt.Fprintf(logw, "reconcile mtime %q %v -> %v: %v\n", ent.Name, fi.ModTime(), e.mtime, err)
 					}
@@ -419,7 +416,7 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 				// keep this entry to preserve cmdhash
 				// but use mtime of actual file.
 				le := newLocalEntry()
-				le.init(ctx, ent.Name, hfs.executables, hfs.OS)
+				le.init(ent.Name, hfs.executables)
 				le.cmdhash = e.cmdhash
 				le.action = e.action
 				e = le
@@ -511,7 +508,7 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 	return nil
 }
 
-func newStateEntry(ctx context.Context, ent *pb.Entry, ftime time.Time, dataSource DataSource, osfs *osfs.OSFS) (*entry, entryStateType) {
+func newStateEntry(ctx context.Context, ent *pb.Entry, ftime time.Time, dataSource DataSource) (*entry, entryStateType) {
 	lready := make(chan bool, 1)
 	entTime := time.Unix(0, ent.Id.ModTime)
 	var entType entryStateType
@@ -539,7 +536,7 @@ func newStateEntry(ctx context.Context, ent *pb.Entry, ftime time.Time, dataSour
 	entDigest := toDigest(ent.Digest)
 	if !entDigest.IsZero() {
 		if entType == entryEqLocal {
-			src = osfs.FileSource(ent.Name, entDigest.SizeBytes)
+			src = osfs.NewFileSource(ent.Name)
 		} else {
 			// not the same as local, but digest is in state.
 			// probably, exists in RBE side, or local cache.

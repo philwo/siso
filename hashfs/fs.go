@@ -65,9 +65,6 @@ type HashFS struct {
 
 	notifies []NotifyFunc
 
-	// OS wraps of OS I/O operations in the HashFS.
-	OS *osfs.OSFS
-
 	digester digester
 
 	// loadErr keeps load error.
@@ -115,7 +112,6 @@ func New(ctx context.Context, opt Option) (*HashFS, error) {
 	fsys := &HashFS{
 		opt:       opt,
 		directory: &directory{isRoot: true},
-		OS:        osfs.New("fs", opt.OSFSOption),
 
 		digester: digester{
 			q:    make(chan digestReq, 1000),
@@ -372,7 +368,7 @@ func (hfs *HashFS) Stat(ctx context.Context, root, fname string) (FileInfo, erro
 			// where hashfs doesn't know. e.g. add new file
 			// in the directory by local run.
 			fullname := filepath.Join(root, fname)
-			lfi, err := hfs.OS.Lstat(ctx, fullname)
+			lfi, err := os.Lstat(fullname)
 			switch {
 			case errors.Is(err, fs.ErrNotExist):
 				// virtually created dir in hashfs,
@@ -405,7 +401,7 @@ func (hfs *HashFS) Stat(ctx context.Context, root, fname string) (FileInfo, erro
 	}
 	fname = filepath.ToSlash(fname)
 	e = newLocalEntry()
-	e.init(ctx, fname, hfs.executables, hfs.OS)
+	e.init(fname, hfs.executables)
 	if errors.Is(e.err, context.Canceled) {
 		return FileInfo{}, e.err
 	}
@@ -439,7 +435,7 @@ func (hfs *HashFS) ReadDir(ctx context.Context, root, name string) (dents []DirE
 	e, _, ok := hfs.directory.lookup(ctx, dname)
 	if !ok {
 		e = newLocalEntry()
-		e.init(ctx, dname, hfs.executables, hfs.OS)
+		e.init(dname, hfs.executables)
 		if errors.Is(e.err, context.Canceled) {
 			return nil, e.err
 		}
@@ -485,7 +481,7 @@ func (hfs *HashFS) ReadFile(ctx context.Context, root, fname string) ([]byte, er
 	e, _, ok := hfs.directory.lookup(ctx, fname)
 	if !ok {
 		e = newLocalEntry()
-		e.init(ctx, fname, hfs.executables, hfs.OS)
+		e.init(fname, hfs.executables)
 		if errors.Is(e.err, context.Canceled) {
 			return nil, e.err
 		}
@@ -581,7 +577,7 @@ func (hfs *HashFS) Copy(ctx context.Context, root, src, dst string, mtime time.T
 	e, _, ok := hfs.directory.lookup(ctx, srcfname)
 	if !ok {
 		e = newLocalEntry()
-		e.init(ctx, srcfname, hfs.executables, hfs.OS)
+		e.init(srcfname, hfs.executables)
 		if errors.Is(e.err, context.Canceled) {
 			return e.err
 		}
@@ -631,19 +627,19 @@ func (hfs *HashFS) Mkdir(ctx context.Context, root, dirname string, cmdhash []by
 	hfs.clean.Store(false)
 	dirname = filepath.Join(root, dirname)
 	dirname = filepath.ToSlash(dirname)
-	fi, err := hfs.OS.Lstat(ctx, dirname)
+	fi, err := os.Lstat(dirname)
 	mtime := time.Now()
 	if err == nil && fi.IsDir() {
-		err := hfs.OS.Chtimes(dirname, time.Time{}, mtime)
+		err := os.Chtimes(dirname, time.Time{}, mtime)
 		if err != nil {
 			log.Warnf("failed to set dir mtime %s: %v: %v", dirname, mtime, err)
 		}
 	} else {
-		err := hfs.OS.MkdirAll(dirname, 0755)
+		err := os.MkdirAll(dirname, 0755)
 		if err != nil {
 			return err
 		}
-		fi, err := hfs.OS.Lstat(ctx, dirname)
+		fi, err := os.Lstat(dirname)
 		if err != nil {
 			return err
 		}
@@ -766,7 +762,7 @@ func (hfs *HashFS) ForgetMissingsInDir(ctx context.Context, root, dir string) {
 		for _, fname := range needCheck {
 			fullname := filepath.Join(root, fname)
 			fullname = filepath.ToSlash(fullname)
-			_, err := hfs.OS.Lstat(ctx, fullname)
+			_, err := os.Lstat(fullname)
 			if errors.Is(err, fs.ErrNotExist) {
 				hfs.directory.delete(fullname)
 				continue
@@ -806,7 +802,7 @@ func (hfs *HashFS) ForgetMissings(ctx context.Context, root string, inputs []str
 		for _, fname := range needCheck {
 			fullname := filepath.Join(root, fname)
 			fullname = filepath.ToSlash(fullname)
-			_, err := hfs.OS.Lstat(ctx, fullname)
+			_, err := os.Lstat(fullname)
 			if errors.Is(err, fs.ErrNotExist) {
 				hfs.directory.delete(fullname)
 				continue
@@ -870,7 +866,7 @@ func (hfs *HashFS) Entries(ctx context.Context, root string, inputs []string) ([
 			continue
 		}
 		e = newLocalEntry()
-		e.init(ctx, fname, hfs.executables, hfs.OS)
+		e.init(fname, hfs.executables)
 		if errors.Is(e.err, context.Canceled) {
 			return nil, e.err
 		}
@@ -920,7 +916,7 @@ func (hfs *HashFS) Entries(ctx context.Context, root string, inputs []string) ([
 				elink, _, ok = hfs.directory.lookup(ctx, name)
 				if !ok {
 					elink = newLocalEntry()
-					elink.init(ctx, name, hfs.executables, hfs.OS)
+					elink.init(name, hfs.executables)
 					var err error
 					elink, err = hfs.directory.store(ctx, name, elink)
 					if err != nil {
@@ -1073,7 +1069,7 @@ func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []Update
 				e.mu.Unlock()
 			} else {
 				e = newLocalEntry()
-				e.init(ctx, fname, hfs.executables, hfs.OS)
+				e.init(fname, hfs.executables)
 				e.mtime = ent.ModTime
 				e.cmdhash = ent.CmdHash
 				e.action = ent.Action
@@ -1095,7 +1091,7 @@ func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []Update
 				// since os.Chtimes updates the mtime of target
 				// and it makes the target invalidated
 				// in .siso_fs_state since mtime doesn't match.
-				err := hfs.OS.Chtimes(fname, time.Time{}, e.getMtime())
+				err := os.Chtimes(fname, time.Time{}, e.getMtime())
 				if errors.Is(err, fs.ErrNotExist) {
 					log.Warnf("failed to update mtime of %s: %v", fname, err)
 					continue
@@ -1136,7 +1132,7 @@ func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []Update
 			}
 			hfs.journalEntry(ctx, fname, e)
 			if ent.IsLocal && e.isChanged {
-				err = hfs.OS.Chtimes(fname, time.Time{}, e.getMtime())
+				err = os.Chtimes(fname, time.Time{}, e.getMtime())
 				if errors.Is(err, fs.ErrNotExist) {
 					log.Warnf("failed to update mtime of %s: %v", fname, err)
 					continue
@@ -1195,7 +1191,7 @@ func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []Update
 				return err
 			}
 			hfs.journalEntry(ctx, fname, e)
-			err = hfs.OS.Chtimes(fname, time.Time{}, ent.ModTime)
+			err = os.Chtimes(fname, time.Time{}, ent.ModTime)
 			if err != nil {
 				log.Warnf("failed to update dir mtime %s: %v", fname, err)
 			}
@@ -1241,7 +1237,7 @@ func (hfs *HashFS) RetrieveUpdateEntriesFromLocal(ctx context.Context, root stri
 	for _, fname := range fnames {
 		fullname := filepath.Join(root, fname)
 		fullname = filepath.ToSlash(fullname)
-		lfi, err := hfs.OS.Lstat(ctx, fullname)
+		lfi, err := os.Lstat(fullname)
 		if errors.Is(err, fs.ErrNotExist) {
 			log.Warnf("missing local %s: %v", fname, err)
 			hfs.directory.delete(fullname)
@@ -1324,7 +1320,7 @@ func (hfs *HashFS) Flush(ctx context.Context, execRoot string, files []string) e
 					// since os.Chtimes updates the mtime of target
 					// and it makes the target invalidated
 					// in .siso_fs_state since mtime doesn't match.
-					err := hfs.OS.Chtimes(fname, time.Time{}, e.mtime)
+					err := os.Chtimes(fname, time.Time{}, e.mtime)
 					if err == nil {
 						e.mtimeUpdated = false
 					}
@@ -1350,7 +1346,7 @@ func (hfs *HashFS) Flush(ctx context.Context, execRoot string, files []string) e
 		}
 		eg.Go(func() (err error) {
 			defer done()
-			err = e.flush(ctx, fname, hfs.OS)
+			err = e.flush(ctx, fname)
 			// flush should not fail with cas not found error.
 			// but if it failed, current recorded digest should
 			// be wrong, so should delete from the hashfs.
@@ -1433,8 +1429,8 @@ func (e *entry) String() string {
 	return fmt.Sprintf("size:%d mode:%s mtime:%s", e.size, e.mode, e.getMtime())
 }
 
-func (e *entry) init(ctx context.Context, fname string, executables map[string]bool, osfs *osfs.OSFS) {
-	fi, err := osfs.Lstat(ctx, fname)
+func (e *entry) init(fname string, executables map[string]bool) {
+	fi, err := os.Lstat(fname)
 	if errors.Is(err, fs.ErrNotExist) {
 		e.err = err
 		return
@@ -1455,7 +1451,7 @@ func (e *entry) init(ctx context.Context, fname string, executables map[string]b
 		e.mode = 0644 | fs.ModeDir
 	case fi.Mode().Type() == fs.ModeSymlink:
 		e.mode = 0644 | fs.ModeSymlink
-		e.target, err = osfs.Readlink(fname)
+		e.target, err = os.Readlink(fname)
 		if err != nil {
 			e.err = err
 		}
@@ -1465,7 +1461,7 @@ func (e *entry) init(ctx context.Context, fname string, executables map[string]b
 			e.mode |= 0111
 		}
 		e.size = fi.Size()
-		e.src = osfs.FileSource(fname, fi.Size())
+		e.src = osfs.NewFileSource(fname)
 	default:
 		e.err = fmt.Errorf("unexpected filetype not regular %s: %s", fi.Mode(), fname)
 		log.Errorf("tree entry %s: unknown filetype %s", fname, fi.Mode())
@@ -1602,7 +1598,7 @@ func (e *entry) getDir() *directory {
 	return e.directory
 }
 
-func (e *entry) flush(ctx context.Context, fname string, osfs *osfs.OSFS) error {
+func (e *entry) flush(ctx context.Context, fname string) error {
 	defer close(e.lready)
 
 	if errors.Is(e.err, fs.ErrNotExist) {
@@ -1616,7 +1612,7 @@ func (e *entry) flush(ctx context.Context, fname string, osfs *osfs.OSFS) error 
 			// wait if digest calculation on fname is under progress
 			digestCond.Wait()
 		}
-		err := osfs.Remove(fname)
+		err := os.Remove(fname)
 		digestLock.Unlock()
 		return err
 	}
@@ -1625,27 +1621,27 @@ func (e *entry) flush(ctx context.Context, fname string, osfs *osfs.OSFS) error 
 	switch {
 	case e.directory != nil:
 		// directory
-		fi, err := osfs.Lstat(ctx, fname)
+		fi, err := os.Lstat(fname)
 		if err == nil && fi.IsDir() && fi.ModTime().Equal(mtime) {
 			return nil
 		}
-		err = osfs.MkdirAll(fname, 0755)
+		err = os.MkdirAll(fname, 0755)
 		if err != nil {
 		} else {
-			err = osfs.Chtimes(fname, time.Time{}, mtime)
+			err = os.Chtimes(fname, time.Time{}, mtime)
 		}
 		return err
 	case d.IsZero() && e.target != "":
-		target, err := osfs.Readlink(fname)
+		target, err := os.Readlink(fname)
 		if err == nil && e.target == target {
 			return nil
 		}
 		e.mu.Lock()
-		err = osfs.Symlink(e.target, fname)
+		err = os.Symlink(e.target, fname)
 		if errors.Is(err, fs.ErrExist) {
-			err = osfs.Remove(fname)
+			err = os.Remove(fname)
 			if err == nil {
-				err = osfs.Symlink(e.target, fname)
+				err = os.Symlink(e.target, fname)
 			}
 		}
 		e.mu.Unlock()
@@ -1653,7 +1649,7 @@ func (e *entry) flush(ctx context.Context, fname string, osfs *osfs.OSFS) error 
 		return err
 	default:
 	}
-	fi, err := osfs.Lstat(ctx, fname)
+	fi, err := os.Lstat(fname)
 	// need to remove the file after it reads from data source,
 	// since data source will read from the local disk.
 	var removeReason string
@@ -1681,13 +1677,13 @@ func (e *entry) flush(ctx context.Context, fname string, osfs *osfs.OSFS) error 
 			// if size differs, no need to check and force
 			// to write hashfs entry to the disk.
 			var fileDigest digest.Digest
-			src := osfs.FileSource(fname, fi.Size())
+			src := osfs.NewFileSource(fname)
 			ld, err := localDigest(ctx, src, fname)
 			if err == nil {
 				fileDigest = ld.Digest()
 				if fileDigest == d {
 					if !fi.ModTime().Equal(mtime) {
-						err = osfs.Chtimes(fname, time.Time{}, mtime)
+						err = os.Chtimes(fname, time.Time{}, mtime)
 					}
 					return err
 				}
@@ -1696,24 +1692,24 @@ func (e *entry) flush(ctx context.Context, fname string, osfs *osfs.OSFS) error 
 		}
 		if removeReason == "" && fi.Mode()&0200 == 0 {
 			// need to be writable. otherwise os.WriteFile fails with permission denied.
-			err = osfs.Chmod(fname, fi.Mode()|0200)
+			err = os.Chmod(fname, fi.Mode()|0200)
 			log.Warnf("flush %s: not writable? %s: %v", fname, fi.Mode(), err)
 		}
 	}
-	err = osfs.MkdirAll(filepath.Dir(fname), 0755)
+	err = os.MkdirAll(filepath.Dir(fname), 0755)
 	if err != nil {
 		log.Warnf("flush %s: mkdir: %v", fname, err)
 		return fmt.Errorf("failed to create directory for %s: %w", fname, err)
 	}
 	if d.SizeBytes == 0 {
 		if removeReason != "" {
-			err = osfs.Remove(fname)
+			err = os.Remove(fname)
 		}
-		err := osfs.WriteFile(fname, nil, 0644)
+		err := os.WriteFile(fname, nil, 0644)
 		if err != nil {
 			return err
 		}
-		err = osfs.Chtimes(fname, time.Time{}, mtime)
+		err = os.Chtimes(fname, time.Time{}, mtime)
 		if err != nil {
 			return err
 		}
@@ -1722,7 +1718,7 @@ func (e *entry) flush(ctx context.Context, fname string, osfs *osfs.OSFS) error 
 	buf := e.buf
 	removeBeforeWrite := func() {
 		if removeReason != "" {
-			err = osfs.Remove(fname)
+			err = os.Remove(fname)
 		}
 	}
 	if len(buf) == 0 {
@@ -1733,23 +1729,16 @@ func (e *entry) flush(ctx context.Context, fname string, osfs *osfs.OSFS) error 
 			// check if hashfs entry is copy of local file,
 			// i.e. created by hashfs Copy method.
 			// if hashfs entry is set by remote action,
-			// it would not be osfs.FileSource
-			lsrc, ok := osfs.AsFileSource(e.src)
-			type clonefiler interface {
-				Clonefile(context.Context, string, string) error
-			}
-			var osfsany any = osfs
-			osfsc, cok := osfsany.(clonefiler)
-			if ok && cok {
+			// it would not be NewFileSource
+			lsrc, ok := e.src.(osfs.FileSource)
+			if ok && osfs.HasClonefile {
 				if lsrc.Fname == fname {
-					err = osfs.Chmod(fname, e.mode)
-					return err
+					return os.Chmod(fname, e.mode)
 				}
 				removeBeforeWrite()
-				err := osfsc.Clonefile(ctx, lsrc.Fname, fname)
+				err := osfs.Clonefile(lsrc.Fname, fname)
 				if err == nil {
-					err = osfs.Chmod(fname, e.mode)
-					return err
+					return os.Chmod(fname, e.mode)
 				}
 				// clonefile err, fallback to normal copy
 				log.Warnf("clonefile failed: %v", err)
@@ -1759,22 +1748,36 @@ func (e *entry) flush(ctx context.Context, fname string, osfs *osfs.OSFS) error 
 			// we may need to remove fname for some reason
 			// (hardlink etc).
 			tmpname := filepath.Join(filepath.Dir(fname), "."+filepath.Base(fname)+".tmp")
-			err := osfs.WriteDigestData(ctx, tmpname, e.src, e.mode)
+
+			r, err := e.src.Open(ctx)
 			if err != nil {
-				return fmt.Errorf("flush tmp %s size=%d: %w", tmpname, d.SizeBytes, err)
+				return err
 			}
+			defer r.Close()
+			w, err := os.OpenFile(tmpname, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, e.mode)
+			if err != nil {
+				return err
+			}
+			_, err = io.Copy(w, r)
+			cerr := w.Close()
+			if err == nil {
+				err = cerr
+			}
+			if err != nil {
+				return err
+			}
+
 			removeBeforeWrite()
-			err = osfs.Rename(tmpname, fname)
-			return err
+			return os.Rename(tmpname, fname)
 		}()
 	} else {
 		removeBeforeWrite()
-		err = osfs.WriteFile(fname, buf, e.mode)
+		err = os.WriteFile(fname, buf, e.mode)
 	}
 	if err != nil {
 		return err
 	}
-	err = osfs.Chtimes(fname, time.Time{}, mtime)
+	err = os.Chtimes(fname, time.Time{}, mtime)
 	if err != nil {
 		return err
 	}
