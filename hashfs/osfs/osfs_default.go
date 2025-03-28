@@ -2,17 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-//go:build darwin
+//go:build !darwin
 
 package osfs
 
-import (
-	"golang.org/x/sys/unix"
-)
+import "errors"
 
-const HasClonefile = true
+const HasClonefile = false
 
-// Clonefile copies src to dst by using clonefile.
 func Clonefile(src, dst string) error {
-	return unix.Clonefile(src, dst, unix.CLONE_NOFOLLOW)
+	return errors.ErrUnsupported
 }
