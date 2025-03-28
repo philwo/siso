@@ -189,6 +189,61 @@ func (p *progress) step(b *Builder, step *Step, s string) {
 			ui.Default.Infof(outputResult)
 		}
 	}
+
+	// case ui.IsTerminal():
+	// 	runProgress := func(waits, servs int) string {
+	// 		if waits > 0 {
+	// 			return ui.SGR(ui.BackgroundRed, fmt.Sprintf("%d", waits+servs))
+	// 		}
+	// 		return fmt.Sprintf("%d", servs)
+	// 	}
+	// 	preprocWaits := b.preprocSema.NumWaits()
+	// 	preprocServs := b.preprocSema.NumServs()
+	// 	preprocProgress := runProgress(preprocWaits, preprocServs)
+	//
+	// 	localWaits := b.localSema.NumWaits()
+	// 	localServs := b.localSema.NumServs()
+	// 	for _, p := range b.poolSemas {
+	// 		localWaits += p.NumWaits()
+	// 		localServs += p.NumServs()
+	// 	}
+	// 	p.numLocal.Store(int32(localWaits + localServs))
+	// 	localProgress := runProgress(localWaits, localServs)
+	//
+	// 	remoteWaits := b.remoteSema.NumWaits()
+	// 	remoteServs := b.remoteSema.NumServs()
+	// 	remoteWaits += b.rewrapSema.NumWaits()
+	// 	remoteServs += b.rewrapSema.NumServs()
+	// 	remoteProgress := runProgress(remoteWaits, remoteServs)
+	//
+	// 	var stepsPerSec string
+	// 	if stat.Done-stat.Skipped > 0 {
+	// 		stepsPerSec = fmt.Sprintf("%.1f/s ", float64(stat.Done-stat.Skipped)/time.Since(p.started).Seconds())
+	// 	}
+	// 	var cacheHitRatio string
+	// 	if stat.Remote+stat.CacheHit > 0 {
+	// 		cacheHitRatio = fmt.Sprintf("cache:%5.02f%% ", float64(stat.CacheHit)/float64(stat.CacheHit+stat.Remote)*100.0)
+	// 	}
+	// 	var fallback string
+	// 	if stat.LocalFallback > 0 {
+	// 		fallback = "fallback:" + ui.SGR(ui.BackgroundRed, fmt.Sprintf("%d", stat.LocalFallback)) + " "
+	// 	}
+	// 	var retry string
+	// 	if stat.RemoteRetry > 0 {
+	// 		retry = "retry:" + ui.SGR(ui.BackgroundRed, fmt.Sprintf("%d", stat.RemoteRetry)) + " "
+	// 	}
+	// 	if outputResult == "" {
+	// 		lines = append(lines, fmt.Sprintf("pre:%s local:%s remote:%s %s%s%s%s",
+	// 			preprocProgress,
+	// 			localProgress,
+	// 			remoteProgress,
+	// 			stepsPerSec,
+	// 			cacheHitRatio,
+	// 			fallback,
+	// 			retry,
+	// 		))
+	// 	}
+	// 	fallthrough
 }
 
 type ActiveStepInfo struct {

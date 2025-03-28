@@ -153,7 +153,6 @@ type Builder struct {
 
 	rewrapSema *semaphore.Semaphore
 
-	fastLocalSema     *semaphore.Semaphore
 	startLocalCounter atomic.Int32
 
 	remoteSema         *semaphore.Semaphore
@@ -257,13 +256,8 @@ func New(ctx context.Context, graph Graph, opts Options) (_ *Builder, err error)
 	if (opts.Limits == Limits{}) {
 		opts.Limits = DefaultLimits()
 	}
-	switch {
-	case opts.StrictRemote:
-		log.Infof("strict remote.  no fastlocal, no local fallback")
-		opts.Limits.FastLocal = 0
-	case opts.Batch:
-		log.Infof("batch mode. no fastlocal")
-		opts.Limits.FastLocal = 0
+	if opts.StrictRemote {
+		log.Infof("strict remote. no local fallback")
 	}
 	// On many cores machine, it would hit default max thread limit = 10000.
 	// Usually, it would require 1/3 of stepLimit threads (cache miss case?).
@@ -276,10 +270,6 @@ func New(ctx context.Context, graph Graph, opts Options) (_ *Builder, err error)
 	}
 	log.Infof("numcpu=%d threads:%d - limits=%#v", numCPU, maxThreads, opts.Limits)
 
-	var fastLocalSema *semaphore.Semaphore
-	if opts.Limits.FastLocal > 0 {
-		fastLocalSema = semaphore.New("fastlocal", opts.Limits.FastLocal)
-	}
 	b := &Builder{
 		jobID:     opts.JobID,
 		id:        opts.ID,
@@ -297,7 +287,6 @@ func New(ctx context.Context, graph Graph, opts Options) (_ *Builder, err error)
 		localSema:          semaphore.New("localexec", opts.Limits.Local),
 		localExec:          le,
 		rewrapSema:         semaphore.New("rewrap", opts.Limits.REWrap),
-		fastLocalSema:      fastLocalSema,
 		remoteSema:         semaphore.New("remoteexec", opts.Limits.Remote),
 		remoteExec:         re,
 		reExecEnable:       opts.REExecEnable,

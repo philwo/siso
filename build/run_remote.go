@@ -44,28 +44,6 @@ func (b *Builder) runRemote(ctx context.Context, step *Step) error {
 		err := b.execLocal(ctx, step)
 		step.metrics.StartLocal = true
 		return err
-	} else if b.fastLocalSema != nil && int(b.progress.numLocal.Load()) < b.fastLocalSema.Capacity() {
-		// TODO: skip check cache when step is too new and can't expect cache hit?
-		if cacheCheck {
-			preprocErr = preprocCmd(ctx, b, step)
-			if len(step.cmd.Platform) > 0 && preprocErr == nil {
-				err := b.execRemoteCache(ctx, step)
-				if err == nil {
-					return nil
-				}
-				needCheckCache = false
-				log.Infof("cmd cache miss: %v", err)
-			}
-		}
-		if done, err := b.fastLocalSema.TryAcquire(ctx); err == nil {
-			var err error
-			defer done()
-			log.Infof("fast local %s", step.cmd.Desc)
-			// TODO: detach remote for future cache hit.
-			err = b.execLocal(ctx, step)
-			step.metrics.FastLocal = true
-			return err
-		}
 	}
 	if preprocErr == errNeedPreproc {
 		preprocErr = preprocCmd(ctx, b, step)

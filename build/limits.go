@@ -31,7 +31,6 @@ const (
 type Limits struct {
 	Step       int
 	Local      int
-	FastLocal  int
 	StartLocal int
 	Remote     int
 	REWrap     int
@@ -54,10 +53,8 @@ func DefaultLimits() Limits {
 		numCPU := runtimex.NumCPU()
 		stepLimit := limitForStep(numCPU)
 		defaultLimits = Limits{
-			Step:      stepLimit,
-			Local:     numCPU,
-			FastLocal: limitForFastLocal(numCPU),
-			// TODO(crbug.com/429473708): set reasonable default for StartLocal
+			Step:   stepLimit,
+			Local:  numCPU,
 			Remote: limitForRemote(numCPU),
 			REWrap: limitForREWrapper(numCPU),
 		}
@@ -81,7 +78,7 @@ func DefaultLimits() Limits {
 				continue
 			}
 			n, err := strconv.Atoi(v)
-			if err != nil || n < 0 || (n == 0 && k != "fastlocal") {
+			if err != nil || n < 0 || n == 0 {
 				log.Warnf("wrong limits value for %s: %v", k, v)
 				continue
 			}
@@ -90,8 +87,6 @@ func DefaultLimits() Limits {
 				defaultLimits.Step = n
 			case "local":
 				defaultLimits.Local = n
-			case "fastlocal":
-				defaultLimits.FastLocal = n
 			case "startlocal":
 				defaultLimits.StartLocal = n
 			case "remote":
@@ -121,21 +116,6 @@ func limitForRemote(numCPU int) int {
 		return min(1000, limit)
 	}
 	return limit
-}
-
-func limitForFastLocal(numCPU int) int {
-	// We want to use local resources on powerful machine (but not so
-	// many, as it needs to run local only steps too),
-	// but not want to use on cheap machine (*-standard-8 etc) on builder.
-	// we'll set 0 in batch mode in ninja.go
-	// <32 cpus -> 1
-	// 64 cpus -> 2
-	// 128 cpus -> 6
-	n := max(0, numCPU-32) / 16
-	if n == 0 {
-		n = 1
-	}
-	return n
 }
 
 func limitForREWrapper(numCPU int) int {
