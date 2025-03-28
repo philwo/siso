@@ -16,7 +16,6 @@ import (
 	"io/fs"
 	"math"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
@@ -50,7 +49,6 @@ import (
 	"go.chromium.org/infra/build/siso/toolsupport/cogutil"
 	"go.chromium.org/infra/build/siso/toolsupport/ninjautil"
 	"go.chromium.org/infra/build/siso/toolsupport/soongutil"
-	"go.chromium.org/infra/build/siso/toolsupport/watchmanutil"
 	"go.chromium.org/infra/build/siso/ui"
 )
 
@@ -642,35 +640,6 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		}
 		ui.Default.Warningf("build on artfs")
 		c.fsopt.ArtFS = artfs
-	}
-
-	if fsmonitor := os.Getenv("SISO_FSMONITOR"); fsmonitor != "" {
-		var fsmonitorPath string
-		if !filepath.IsAbs(fsmonitor) {
-			fsmonitorPath, err = exec.LookPath(fsmonitor)
-			if err != nil {
-				log.Warnf("failed to find fsmonitor %q: %v", fsmonitor, err)
-				ui.Default.Warningf(ui.SGR(ui.BackgroundRed, fmt.Sprintf("SISO_FSMONITOR=%q: failed %v\n", fsmonitor, err)))
-			}
-		} else {
-			fsmonitorPath = fsmonitor
-		}
-		if fsmonitorPath != "" {
-			fsm := strings.TrimSuffix(filepath.Base(fsmonitor), filepath.Ext(fsmonitor))
-			switch fsm {
-			case "watchman":
-				fsm, err := watchmanutil.New(ctx, fsmonitorPath, execRoot)
-				if err != nil {
-					log.Warnf("failed to initialize watchman: %v", err)
-					ui.Default.Errorf(ui.SGR(ui.BackgroundRed, fmt.Sprintf("SISO_FSMONITOR=watchman: failed %v\n", err)))
-				} else {
-					ui.Default.Infof(ui.SGR(ui.Yellow, fmt.Sprintf("use watchman as fsmonitor: %s\n", fsmonitorPath)))
-					c.fsopt.FSMonitor = fsm
-				}
-			default:
-				ui.Default.Errorf(ui.SGR(ui.BackgroundRed, fmt.Sprintf("unknown SISO_FSMONITOR=%q (%q)\n", fsmonitor, fsm)))
-			}
-		}
 	}
 
 	spin.Start("loading fs state")
