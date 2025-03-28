@@ -19,12 +19,7 @@ import (
 	"go.chromium.org/infra/build/siso/reapi/digest"
 	"go.chromium.org/infra/build/siso/reapi/merkletree"
 	_ "go.chromium.org/infra/build/siso/reapi/proto" // for auxiliary metadata
-	"go.chromium.org/infra/build/siso/runtimex"
-	"go.chromium.org/infra/build/siso/sync/semaphore"
 )
-
-// Semaphore enforces a limit on parallel digest calculations to prevent an OOM.
-var Semaphore = semaphore.New("remoteexec-digest", runtimex.NumCPU()*10)
 
 // RemoteExec is executor with remote exec API.
 type RemoteExec struct {
@@ -39,21 +34,16 @@ func New(client *reapi.Client) *RemoteExec {
 }
 
 func (re *RemoteExec) prepareInputs(ctx context.Context, cmd *execute.Cmd) (digest.Digest, error) {
-	var actionDigest digest.Digest
-	err := Semaphore.Do(ctx, func() error {
-		var err error
-		ds := digest.NewStore()
-		actionDigest, err = cmd.Digest(ctx, ds)
-		if err != nil {
-			return err
-		}
-		_, err = re.client.UploadAll(ctx, ds)
-		if err != nil {
-			return fmt.Errorf("failed to upload all %s: %w", cmd, err)
-		}
-		return nil
-	})
-	return actionDigest, err
+	ds := digest.NewStore()
+	actionDigest, err := cmd.Digest(ctx, ds)
+	if err != nil {
+		return actionDigest, err
+	}
+	_, err = re.client.UploadAll(ctx, ds)
+	if err != nil {
+		return actionDigest, fmt.Errorf("failed to upload all %s: %w", cmd, err)
+	}
+	return actionDigest, nil
 }
 
 // Run runs a cmd.
