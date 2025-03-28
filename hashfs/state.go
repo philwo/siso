@@ -60,8 +60,6 @@ type Option struct {
 
 	KeepTainted bool // keep manually modified generated file
 
-	FSMonitor FSMonitor
-
 	DataSource  DataSource
 	OutputLocal OutputLocalFunc
 	Ignore      IgnoreFunc
@@ -237,19 +235,6 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 	} else {
 		hfs.buildTargets = nil
 	}
-	var fsm FileInfoer = osfsInfoer{}
-	if hfs.opt.FSMonitor != nil && state.LastChecked != "" {
-		f, err := hfs.opt.FSMonitor.Scan(ctx, state.LastChecked)
-		if err != nil {
-			log.Warnf("failed to fsmonitor scan %q: %v", state.LastChecked, err)
-		} else {
-			log.Infof("use fsmonitor scan %q", state.LastChecked)
-			if logw != nil {
-				fmt.Fprintf(logw, "use fsmonitor scan %q\n", state.LastChecked)
-			}
-			fsm = f
-		}
-	}
 	outputLocal := hfs.opt.OutputLocal
 	var neq, nnew, nnotexist, nfail, ninvalidate atomic.Int64
 	var dirty atomic.Bool
@@ -283,7 +268,7 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 				}
 				return nil
 			}
-			fi, err := fsm.FileInfo(ctx, ent)
+			fi, err := os.Lstat(ent.Name)
 			if errors.Is(err, fs.ErrNotExist) {
 				nnotexist.Add(1)
 				if len(h) == 0 {
@@ -773,21 +758,12 @@ func (hfs *HashFS) State(ctx context.Context) *pb.State {
 			}
 		}
 	}
-	if hfs.opt.FSMonitor != nil {
-		token, err := hfs.opt.FSMonitor.ClockToken(ctx)
-		if err != nil {
-			log.Warnf("failed to get fsmonitor token: %v", err)
-		} else {
-			log.Infof("fsmonitor last checked = %q", token)
-			state.LastChecked = token
-		}
-	}
 	if hfs.buildTargets != nil {
 		state.BuildTargets = &pb.BuildTargets{
 			Targets: hfs.buildTargets,
 		}
 	}
-	log.Infof("state %d entries token:%q buildTargets:%v: %s", len(state.Entries), state.LastChecked, state.BuildTargets, time.Since(started))
+	log.Infof("state %d entries buildTargets:%v: %s", len(state.Entries), state.BuildTargets, time.Since(started))
 	return state
 }
 
