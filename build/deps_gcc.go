@@ -151,58 +151,50 @@ func (gcc depsGCC) depsInputs(ctx context.Context, b *Builder, step *Step) ([]st
 }
 
 func (depsGCC) scandeps(ctx context.Context, b *Builder, step *Step) ([]string, error) {
-	var ins []string
-	err := b.scanDepsSema.Do(ctx, func() error {
-		// remote execution may have already run.
-		// In this case, do not change ActionStartTime set by the remote exec.
-		if step.metrics.ActionStartTime == 0 {
-			step.metrics.ActionStartTime = IntervalMetric(time.Since(b.start))
-		}
-		params := gccutil.ExtractScanDepsParams(step.cmd.Args, step.cmd.Env)
-		for i := range params.Sources {
-			params.Sources[i] = b.path.MaybeFromWD(params.Sources[i])
-		}
-		for i := range params.Includes {
-			params.Includes[i] = b.path.MaybeFromWD(params.Includes[i])
-		}
-		for i := range params.Files {
-			params.Files[i] = b.path.MaybeFromWD(params.Files[i])
-		}
-		for i := range params.Dirs {
-			params.Dirs[i] = b.path.MaybeFromWD(params.Dirs[i])
-		}
-		for i := range params.Frameworks {
-			params.Frameworks[i] = b.path.MaybeFromWD(params.Frameworks[i])
-		}
-		for i := range params.Sysroots {
-			params.Sysroots[i] = b.path.MaybeFromWD(params.Sysroots[i])
-		}
-		req := scandeps.Request{
-			Defines:    params.Defines,
-			Sources:    params.Sources,
-			Includes:   params.Includes,
-			Dirs:       params.Dirs,
-			Frameworks: params.Frameworks,
-			Sysroots:   params.Sysroots,
-			Timeout:    step.cmd.Timeout,
-		}
-		if !b.localFallbackEnabled() {
-			// no-fallback has longer timeout for scandeps
-			req.Timeout = 2 * req.Timeout
-		}
-		var err error
-		ins, err = b.scanDeps.Scan(ctx, b.path.ExecRoot, req)
-		if err != nil {
-			buf, berr := json.Marshal(req)
-			log.Warnf("scandeps failed Request %s %v: %v", buf, berr, err)
-			return err
-		}
-		ins = append(ins, params.Files...)
-		return nil
-	})
+	// remote execution may have already run.
+	// In this case, do not change ActionStartTime set by the remote exec.
+	if step.metrics.ActionStartTime == 0 {
+		step.metrics.ActionStartTime = IntervalMetric(time.Since(b.start))
+	}
+	params := gccutil.ExtractScanDepsParams(step.cmd.Args, step.cmd.Env)
+	for i := range params.Sources {
+		params.Sources[i] = b.path.MaybeFromWD(params.Sources[i])
+	}
+	for i := range params.Includes {
+		params.Includes[i] = b.path.MaybeFromWD(params.Includes[i])
+	}
+	for i := range params.Files {
+		params.Files[i] = b.path.MaybeFromWD(params.Files[i])
+	}
+	for i := range params.Dirs {
+		params.Dirs[i] = b.path.MaybeFromWD(params.Dirs[i])
+	}
+	for i := range params.Frameworks {
+		params.Frameworks[i] = b.path.MaybeFromWD(params.Frameworks[i])
+	}
+	for i := range params.Sysroots {
+		params.Sysroots[i] = b.path.MaybeFromWD(params.Sysroots[i])
+	}
+	req := scandeps.Request{
+		Defines:    params.Defines,
+		Sources:    params.Sources,
+		Includes:   params.Includes,
+		Dirs:       params.Dirs,
+		Frameworks: params.Frameworks,
+		Sysroots:   params.Sysroots,
+		Timeout:    step.cmd.Timeout,
+	}
+	if !b.localFallbackEnabled() {
+		// no-fallback has longer timeout for scandeps
+		req.Timeout = 2 * req.Timeout
+	}
+	ins, err := b.scanDeps.Scan(ctx, b.path.ExecRoot, req)
 	if err != nil {
+		buf, berr := json.Marshal(req)
+		log.Warnf("scandeps failed Request %s %v: %v", buf, berr, err)
 		return nil, err
 	}
+	ins = append(ins, params.Files...)
 	for i := range ins {
 		ins[i] = b.path.Intern(ins[i])
 	}

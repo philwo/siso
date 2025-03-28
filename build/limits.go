@@ -22,10 +22,6 @@ const (
 	// to protect from out of memory, or too many threads.
 	stepLimitFactor = 512
 
-	// limit # of concurrent scandeps steps at most 2 times of num cpus
-	// to protect from out of memory, reduce contention
-	scanDepsLimitFactor = 2
-
 	// limit # of concurrent steps at most 80 times of num cpus
 	// to protect from out of memory, or DDoS to RE API.
 	remoteLimitFactor = 80
@@ -35,7 +31,6 @@ const (
 // zero limit means default.
 type Limits struct {
 	Step      int
-	ScanDeps  int
 	Local     int
 	FastLocal int
 	Remote    int
@@ -60,7 +55,6 @@ func DefaultLimits() Limits {
 		stepLimit := limitForStep(numCPU)
 		defaultLimits = Limits{
 			Step:      stepLimit,
-			ScanDeps:  scanDepsLimitFactor * numCPU,
 			Local:     numCPU,
 			FastLocal: limitForFastLocal(numCPU),
 			Remote:    limitForRemote(numCPU),
@@ -93,8 +87,6 @@ func DefaultLimits() Limits {
 			switch k {
 			case "step":
 				defaultLimits.Step = n
-			case "scandeps":
-				defaultLimits.ScanDeps = n
 			case "local":
 				defaultLimits.Local = n
 			case "fastlocal":
