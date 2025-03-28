@@ -274,23 +274,6 @@ func (c *Cmd) AllOutputs() []string {
 	return outputs
 }
 
-// remoteArgsWithWrapper returns arguments to the remote command.
-// The original args are adjusted with RemoteWrapper, RemoteCommand, Platform.
-// TODO: b/379584977 - Merge remoteArgsWithWrapper and RemoteArgs when dropping
-// Reproxy integration. We have two similar methods because RemoteWrapper needs
-// to be passed to Reproxy as a different field to distinguish between remote
-// and local commands.
-func (c *Cmd) remoteArgsWithWrapper() ([]string, error) {
-	args, err := c.RemoteArgs()
-	if err != nil {
-		return nil, err
-	}
-	if c.RemoteWrapper != "" {
-		args = append([]string{c.RemoteWrapper}, args...)
-	}
-	return args, nil
-}
-
 // RemoteArgs returns arguments to the remote command.
 // The original args are adjusted with RemoteCommand, Platform.
 func (c *Cmd) RemoteArgs() ([]string, error) {
@@ -311,6 +294,9 @@ func (c *Cmd) RemoteArgs() ([]string, error) {
 	if c.RemoteCommand != "" {
 		// Replace the first args. But don't modify the Cmd.Args for fallback.
 		args = append([]string{c.RemoteCommand}, args[1:]...)
+	}
+	if c.RemoteWrapper != "" {
+		args = append([]string{c.RemoteWrapper}, args...)
 	}
 	return args, nil
 }
@@ -688,7 +674,7 @@ func (c *Cmd) commandDigest(ds *digest.Store) (digest.Digest, error) {
 		outs = append(outs, filepath.ToSlash(rout))
 	}
 	sort.Strings(outs)
-	args, err := c.remoteArgsWithWrapper()
+	args, err := c.RemoteArgs()
 	if err != nil {
 		return digest.Digest{}, err
 	}
