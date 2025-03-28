@@ -25,7 +25,6 @@ import (
 	"go.chromium.org/infra/build/siso/auth/cred"
 	"go.chromium.org/infra/build/siso/hashfs/osfs"
 	"go.chromium.org/infra/build/siso/subcmd/authcheck"
-	"go.chromium.org/infra/build/siso/subcmd/fetch"
 	"go.chromium.org/infra/build/siso/subcmd/fscmd"
 	"go.chromium.org/infra/build/siso/subcmd/help"
 	"go.chromium.org/infra/build/siso/subcmd/ninja"
@@ -60,7 +59,6 @@ func getApplication(authOpts cred.Options) *cli.Application {
 			query.Cmd(),
 			fscmd.Cmd(authOpts),
 			osfs.HelperCmd(),
-			fetch.Cmd(authOpts),
 			ps.Cmd(),
 			scandeps.Cmd(),
 			authcheck.Cmd(authOpts),
