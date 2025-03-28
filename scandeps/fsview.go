@@ -17,11 +17,7 @@ import (
 	"sync"
 
 	"github.com/charmbracelet/log"
-	"go.chromium.org/infra/build/siso/runtimex"
-	"go.chromium.org/infra/build/siso/sync/semaphore"
 )
-
-var cppScanSema = semaphore.New("cppscan", runtimex.NumCPU())
 
 // fsview is a view of filesystem per scandeps process.
 // It will reduce unnecessary contention to filesystem.
@@ -150,13 +146,7 @@ func (fv *fsview) scanFile(ctx context.Context, fname string) (*scanResult, erro
 	if err != nil {
 		return sr, sr.err
 	}
-	var includes []string
-	var defines map[string][]string
-	err = cppScanSema.Do(ctx, func() error {
-		var err error
-		includes, defines, err = CPPScan(fname, buf)
-		return err
-	})
+	includes, defines, err := CPPScan(fname, buf)
 	sr.err = err
 	sr.includes = make([]string, 0, len(includes))
 	for _, incname := range includes {
