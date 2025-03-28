@@ -347,7 +347,7 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 				// don't reconcile for source (non-generated file),
 				// as user may want to trigger build by touch.
 				src := osfs.NewFileSource(ent.Name)
-				data, err := localDigest(ctx, src, ent.Name)
+				data, err := digest.FromSource(ctx, src)
 				if err == nil && data.Digest() == e.d {
 					et = entryEqLocal
 					err = os.Chtimes(ent.Name, time.Now(), e.mtime)
@@ -718,7 +718,7 @@ func (hfs *HashFS) State(ctx context.Context) *pb.State {
 					if e.src == nil {
 						log.Warnf("wrong entry for %s?", name)
 					} else {
-						err := e.compute(ctx, name)
+						err := e.compute(ctx)
 						if err != nil {
 							log.Warnf("failed to calculate digest for %s: %v", name, err)
 						}
@@ -827,7 +827,7 @@ func (hfs *HashFS) journalEntry(ctx context.Context, fname string, e *entry) {
 		return
 	}
 	if e.digest().IsZero() {
-		hfs.digester.compute(ctx, fname, e)
+		e.compute(ctx)
 	}
 	e.mu.Lock()
 	ent := &pb.Entry{
