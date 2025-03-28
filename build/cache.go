@@ -22,14 +22,12 @@ import (
 
 // CacheOptions is cache options.
 type CacheOptions struct {
-	Store      cachestore.CacheStore
-	EnableRead bool
+	Store cachestore.CacheStore
 }
 
 // Cache is a cache used in the builder.
 type Cache struct {
-	store      cachestore.CacheStore
-	enableRead bool
+	store cachestore.CacheStore
 
 	sema *semaphore.Semaphore
 }
@@ -40,8 +38,7 @@ func NewCache(opts CacheOptions) (*Cache, error) {
 		return nil, errors.New("cache: store is not set")
 	}
 	return &Cache{
-		store:      opts.Store,
-		enableRead: opts.EnableRead,
+		store: opts.Store,
 
 		// TODO(b/274038010): cache-digest semaphore should share with execute/remotecache?
 		sema: semaphore.New("cache-digest", runtimex.NumCPU()*10),
@@ -53,9 +50,6 @@ func (c *Cache) GetActionResult(ctx context.Context, cmd *execute.Cmd) error {
 	now := time.Now()
 	if c == nil || c.store == nil {
 		return status.Error(codes.NotFound, "cache is not configured")
-	}
-	if !c.enableRead {
-		return status.Error(codes.NotFound, "cache disable raed")
 	}
 
 	var d digest.Digest

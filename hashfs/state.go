@@ -524,7 +524,7 @@ func newStateEntry(ctx context.Context, ent *pb.Entry, ftime time.Time, dataSour
 			src = osfs.NewFileSource(ent.Name)
 		} else {
 			// not the same as local, but digest is in state.
-			// probably, exists in RBE side, or local cache.
+			// probably, exists in RBE side.
 			src = dataSource.Source(ctx, entDigest, ent.Name)
 		}
 	} else if ent.Target != "" {

@@ -29,6 +29,5 @@ func (b *Builder) runLocal(ctx context.Context, step *Step) error {
 	// but we already flushed generated *.h etc, no need to
 	// preproc for local run.
 	dedupInputs(step.cmd)
-	// TODO: use local cache?
 	return b.execLocal(ctx, step)
 }
