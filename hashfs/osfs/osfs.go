@@ -13,8 +13,6 @@ import (
 )
 
 // FileSource creates new FileSource for name.
-// For FileDigestFromXattr, if size is non-negative, it will be used.
-// If size is negative, it will check file info.
 func NewFileSource(name string) FileSource {
 	return FileSource{Fname: name}
 }
