@@ -40,12 +40,6 @@ func (b *Builder) execLocal(ctx context.Context, step *Step) error {
 	phase := stepLocalRun
 	enableTrace := experiments.Enabled("file-access-trace", "enable file-access-trace")
 	switch {
-	// TODO(b/273407069): native integration instead of spwaning gomacc/rewrapper?
-	case step.def.Binding("use_remote_exec_wrapper") != "":
-		// no need to file trace for gomacc/rewwapper.
-		stateMessage = "remote exec wrapper"
-		phase = stepREWrapperRun
-		sema = b.rewrapSema
 	case localexec.TraceEnabled():
 		// check impure explicitly set in config,
 		// rather than step.cmd.Pure.
