@@ -10,7 +10,7 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// Clonefile copies src to dst by using cloneline.
+// Clonefile copies src to dst by using clonefile.
 func (fs *OSFS) Clonefile(src, dst string) error {
 	return unix.Clonefile(src, dst, unix.CLONE_NOFOLLOW)
 }

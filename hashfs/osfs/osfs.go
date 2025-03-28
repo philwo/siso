@@ -127,7 +127,7 @@ func (ofs *OSFS) Symlink(oldname, newname string) error {
 
 // WriteFile writes data to the named file, creating it if necessary.
 func (ofs *OSFS) WriteFile(name string, data []byte, perm fs.FileMode) error {
-	return writeFile(name, data, perm)
+	return os.WriteFile(name, data, perm)
 }
 
 // WriteDigestData writes digest source into the named file.
@@ -138,7 +138,7 @@ func (ofs *OSFS) WriteDigestData(ctx context.Context, name string, src digest.So
 			return err
 		}
 		defer r.Close()
-		w, err := openForWrite(name, perm)
+		w, err := os.OpenFile(name, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, perm)
 		if err != nil {
 			return err
 		}
