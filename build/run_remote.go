@@ -31,18 +31,6 @@ var errDepsLog = errors.New("failed to exec with deps log")
 // - The fallbacks can be disabled via experiment flags.
 func (b *Builder) runRemote(ctx context.Context, step *Step) error {
 	cacheCheck := b.cache != nil && b.reCacheEnableRead
-	if b.fastLocalSema != nil && int(b.progress.numLocal.Load()) < b.fastLocalSema.Capacity() {
-		if done, err := b.fastLocalSema.TryAcquire(ctx); err == nil {
-			var err error
-			defer done()
-			log.Infof("fast local %s", step.cmd.Desc)
-			// TODO: check cache if input age is old enough.
-			// TODO: detach remote for future cache hit.
-			err = b.execLocal(ctx, step)
-			step.metrics.FastLocal = true
-			return err
-		}
-	}
 	step.setPhase(stepPreproc)
 	err := depsCmd(ctx, b, step)
 	if err != nil {
