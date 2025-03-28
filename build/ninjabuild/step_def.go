@@ -87,7 +87,7 @@ type edgeRule struct {
 
 // ensure ensures edgeRule checks pure/replace/accumulate of siso rule for the edge.
 // siso rule might not be checked for the edge when it was skipped.
-func (er *edgeRule) ensure(ctx context.Context, globals *globals) (gotRule bool, rule StepRule, pure bool) {
+func (er *edgeRule) ensure(globals *globals) (gotRule bool, rule StepRule, pure bool) {
 	er.mu.Lock()
 	defer er.mu.Unlock()
 	if er.ruleChecked {
@@ -155,7 +155,7 @@ func (s *StepDef) EnsureRule(ctx context.Context) {
 		return
 	}
 	var gotRule bool
-	gotRule, s.rule, s.pure = er.ensure(ctx, s.globals)
+	gotRule, s.rule, s.pure = er.ensure(s.globals)
 	if !gotRule {
 		s.rule, s.pure = s.globals.stepConfig.Lookup(s.globals.path, s.edge)
 	}
@@ -752,7 +752,7 @@ func (s *StepDef) ExpandedInputs(ctx context.Context) []string {
 			continue
 		}
 		// check siso rule if it was not checked when input's step was skipped
-		er.ensure(ctx, globals)
+		er.ensure(globals)
 		if s.rule.Debug {
 			log.Infof("check edgeRule for %s inputs=%d solibs=%d replace=%t accumulate=%t", inputs[i], len(er.edge.Inputs()), len(edgeSolibs(er.edge)), er.replace, er.accumulate)
 		}
