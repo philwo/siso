@@ -199,10 +199,6 @@ func (depsMSVC) scandeps(ctx context.Context, b *Builder, step *Step) ([]string,
 		Sysroots: params.Sysroots,
 		Timeout:  step.cmd.Timeout,
 	}
-	if !b.localFallbackEnabled() {
-		// no-fallback has longer timeout for scandeps
-		req.Timeout = 2 * req.Timeout
-	}
 	ins, err := b.scanDeps.Scan(ctx, b.path.ExecRoot, req)
 	if err != nil {
 		buf, berr := json.Marshal(req)
