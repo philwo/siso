@@ -33,7 +33,6 @@ import (
 	"go.chromium.org/infra/build/siso/subcmd/ps"
 	"go.chromium.org/infra/build/siso/subcmd/query"
 	"go.chromium.org/infra/build/siso/subcmd/recall"
-	"go.chromium.org/infra/build/siso/subcmd/report"
 	"go.chromium.org/infra/build/siso/subcmd/scandeps"
 	"go.chromium.org/infra/build/siso/subcmd/version"
 	"go.chromium.org/infra/build/siso/ui"
@@ -62,7 +61,6 @@ func getApplication(authOpts cred.Options) *cli.Application {
 			fscmd.Cmd(authOpts),
 			osfs.HelperCmd(),
 			recall.Cmd(authOpts),
-			report.Cmd(),
 			fetch.Cmd(authOpts),
 			ps.Cmd(),
 			scandeps.Cmd(),
