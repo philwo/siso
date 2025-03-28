@@ -26,7 +26,7 @@ var path string
 // Available returns whether strace is available or not.
 func Available() bool {
 	once.Do(func() {
-		if runtime.GOOS == "windows" {
+		if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
 			// strace exists in msys, but we don't use this
 			return
 		}
