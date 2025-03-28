@@ -158,124 +158,119 @@ func (gcc depsGCC) depsInputs(ctx context.Context, b *Builder, step *Step) ([]st
 
 func (depsGCC) scandeps(ctx context.Context, b *Builder, step *Step) ([]string, error) {
 	var ins []string
-	err := b.scanDepsSema.Do(ctx, func() error {
-		// remote execution may have already run.
-		// In this case, do not change ActionStartTime set by the remote exec.
-		if step.metrics.ActionStartTime == 0 {
-			step.metrics.ActionStartTime = IntervalMetric(time.Since(b.start))
-		}
-		params := gccutil.ExtractScanDepsParams(step.cmd.Args, step.cmd.Env)
-		if len(params.Sources) == 0 {
-			// If ExtractScanDepsParams doesn't return Sources, such action uses inputs from ninja build file directly, as the action doesn't need include scanning.
-			// e.g. clang modules, rust and etc.
-			return nil
-		}
+	// remote execution may have already run.
+	// In this case, do not change ActionStartTime set by the remote exec.
+	if step.metrics.ActionStartTime == 0 {
+		step.metrics.ActionStartTime = IntervalMetric(time.Since(b.start))
+	}
+	params := gccutil.ExtractScanDepsParams(step.cmd.Args, step.cmd.Env)
+	if len(params.Sources) == 0 {
+		// If ExtractScanDepsParams doesn't return Sources, such action uses inputs from ninja build file directly, as the action doesn't need include scanning.
+		// e.g. clang modules, rust and etc.
+		return nil, nil
+	}
 
-		// externals stores non local paths.
-		// usually error, but can be used for scandeps for cros chroot case.
-		var externals []string
+	// externals stores non local paths.
+	// usually error, but can be used for scandeps for cros chroot case.
+	var externals []string
+	for i := range params.Sources {
+		params.Sources[i] = b.path.MaybeFromWD(params.Sources[i])
+		if !filepath.IsLocal(params.Sources[i]) {
+			externals = append(externals, params.Sources[i])
+		}
+	}
+	for i := range params.Includes {
+		params.Includes[i] = b.path.MaybeFromWD(params.Includes[i])
+		if !filepath.IsLocal(params.Includes[i]) {
+			externals = append(externals, params.Includes[i])
+		}
+	}
+	for i := range params.Files {
+		params.Files[i] = b.path.MaybeFromWD(params.Files[i])
+		if !filepath.IsLocal(params.Files[i]) {
+			externals = append(externals, params.Files[i])
+		}
+	}
+	for i := range params.Dirs {
+		params.Dirs[i] = b.path.MaybeFromWD(params.Dirs[i])
+		if !filepath.IsLocal(params.Dirs[i]) {
+			externals = append(externals, params.Dirs[i])
+		}
+	}
+	for i := range params.Frameworks {
+		params.Frameworks[i] = b.path.MaybeFromWD(params.Frameworks[i])
+		if !filepath.IsLocal(params.Frameworks[i]) {
+			externals = append(externals, params.Frameworks[i])
+		}
+	}
+	for i := range params.Sysroots {
+		params.Sysroots[i] = b.path.MaybeFromWD(params.Sysroots[i])
+		if !filepath.IsLocal(params.Sysroots[i]) {
+			externals = append(externals, params.Sysroots[i])
+		}
+	}
+	execRoot := b.path.ExecRoot
+	if len(externals) > 0 {
+		if !step.cmd.RemoteChroot() {
+			n := len(externals)
+			v := externals[:min(len(externals), 5)]
+			return nil, fmt.Errorf("inputs are not under exec root %d %q...: platform=%q", n, v, step.cmd.Platform)
+		}
+		// Convert paths from relative to exec root to relative to /
+		// e.g.
+		//  execRoot: /path/to/chromium/src
+		//     path:  ../../../../usr/include
+		// ->
+		//  execRoot: /
+		//     path:  usr/include
+		execRoot = "/"
 		for i := range params.Sources {
-			params.Sources[i] = b.path.MaybeFromWD(params.Sources[i])
-			if !filepath.IsLocal(params.Sources[i]) {
-				externals = append(externals, params.Sources[i])
-			}
+			params.Sources[i] = filepath.Join(b.path.ExecRoot, params.Sources[i])[1:]
 		}
 		for i := range params.Includes {
-			params.Includes[i] = b.path.MaybeFromWD(params.Includes[i])
-			if !filepath.IsLocal(params.Includes[i]) {
-				externals = append(externals, params.Includes[i])
-			}
+			params.Includes[i] = filepath.Join(b.path.ExecRoot, params.Includes[i])[1:]
 		}
 		for i := range params.Files {
-			params.Files[i] = b.path.MaybeFromWD(params.Files[i])
-			if !filepath.IsLocal(params.Files[i]) {
-				externals = append(externals, params.Files[i])
-			}
+			params.Files[i] = filepath.Join(b.path.ExecRoot, params.Files[i])[1:]
 		}
 		for i := range params.Dirs {
-			params.Dirs[i] = b.path.MaybeFromWD(params.Dirs[i])
-			if !filepath.IsLocal(params.Dirs[i]) {
-				externals = append(externals, params.Dirs[i])
-			}
+			params.Dirs[i] = filepath.Join(b.path.ExecRoot, params.Dirs[i])[1:]
 		}
 		for i := range params.Frameworks {
-			params.Frameworks[i] = b.path.MaybeFromWD(params.Frameworks[i])
-			if !filepath.IsLocal(params.Frameworks[i]) {
-				externals = append(externals, params.Frameworks[i])
-			}
+			params.Frameworks[i] = filepath.Join(b.path.ExecRoot, params.Frameworks[i])[1:]
 		}
 		for i := range params.Sysroots {
-			params.Sysroots[i] = b.path.MaybeFromWD(params.Sysroots[i])
-			if !filepath.IsLocal(params.Sysroots[i]) {
-				externals = append(externals, params.Sysroots[i])
-			}
+			params.Sysroots[i] = filepath.Join(b.path.ExecRoot, params.Sysroots[i])[1:]
 		}
-		execRoot := b.path.ExecRoot
-		if len(externals) > 0 {
-			if !step.cmd.RemoteChroot() {
-				n := len(externals)
-				v := externals[:min(len(externals), 5)]
-				return fmt.Errorf("inputs are not under exec root %d %q...: platform=%q", n, v, step.cmd.Platform)
-			}
-			// Convert paths from relative to exec root to relative to /
-			// e.g.
-			//  execRoot: /path/to/chromium/src
-			//     path:  ../../../../usr/include
-			// ->
-			//  execRoot: /
-			//     path:  usr/include
-			execRoot = "/"
-			for i := range params.Sources {
-				params.Sources[i] = filepath.Join(b.path.ExecRoot, params.Sources[i])[1:]
-			}
-			for i := range params.Includes {
-				params.Includes[i] = filepath.Join(b.path.ExecRoot, params.Includes[i])[1:]
-			}
-			for i := range params.Files {
-				params.Files[i] = filepath.Join(b.path.ExecRoot, params.Files[i])[1:]
-			}
-			for i := range params.Dirs {
-				params.Dirs[i] = filepath.Join(b.path.ExecRoot, params.Dirs[i])[1:]
-			}
-			for i := range params.Frameworks {
-				params.Frameworks[i] = filepath.Join(b.path.ExecRoot, params.Frameworks[i])[1:]
-			}
-			for i := range params.Sysroots {
-				params.Sysroots[i] = filepath.Join(b.path.ExecRoot, params.Sysroots[i])[1:]
-			}
-		}
-		req := scandeps.Request{
-			Defines:    params.Defines,
-			Sources:    params.Sources,
-			Includes:   params.Includes,
-			Dirs:       params.Dirs,
-			Frameworks: params.Frameworks,
-			Sysroots:   params.Sysroots,
-			Timeout:    step.cmd.Timeout,
-		}
-		if !b.localFallbackEnabled() {
-			// no-fallback has longer timeout for scandeps
-			req.Timeout = 2 * req.Timeout
-		}
-		var err error
-		ins, err = b.scanDeps.Scan(ctx, execRoot, req)
-		if err != nil {
-			buf, berr := json.Marshal(req)
-			log.Warnf("scandeps failed Request %s %v: %v", buf, berr, err)
-			return err
-		}
-		ins = append(ins, params.Files...)
-		if len(externals) > 0 {
-			// make ins[i] full absolute paths.
-			for i := range ins {
-				ins[i] = filepath.Join(execRoot, ins[i])
-			}
-		}
-		return nil
-	})
+	}
+	req := scandeps.Request{
+		Defines:    params.Defines,
+		Sources:    params.Sources,
+		Includes:   params.Includes,
+		Dirs:       params.Dirs,
+		Frameworks: params.Frameworks,
+		Sysroots:   params.Sysroots,
+		Timeout:    step.cmd.Timeout,
+	}
+	if !b.localFallbackEnabled() {
+		// no-fallback has longer timeout for scandeps
+		req.Timeout = 2 * req.Timeout
+	}
+	var err error
+	ins, err = b.scanDeps.Scan(ctx, execRoot, req)
 	if err != nil {
+		buf, berr := json.Marshal(req)
+		log.Warnf("scandeps failed Request %s %v: %v", buf, berr, err)
 		return nil, err
 	}
+	ins = append(ins, params.Files...)
+	if len(externals) > 0 {
+		// make ins[i] full absolute paths.
+		for i := range ins {
+			ins[i] = filepath.Join(execRoot, ins[i])
+		}
+	}
+	ins = append(ins, params.Files...)
 	for i := range ins {
 		ins[i] = b.path.Intern(ins[i])
 	}
