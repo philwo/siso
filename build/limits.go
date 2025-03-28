@@ -41,7 +41,6 @@ type Limits struct {
 	StartLocal int
 	Remote     int
 	REWrap     int
-	Cache      int
 	Thread     int
 }
 
@@ -69,7 +68,6 @@ func DefaultLimits() Limits {
 			// TODO(crbug.com/429473708): set reasonable default for StartLocal
 			Remote: limitForRemote(numCPU),
 			REWrap: limitForREWrapper(numCPU),
-			Cache:  stepLimitFactor * numCPU,
 		}
 		// On many cores machine, it would hit default max thread limit = 10000.
 		// Usually, it would require 1/3 of stepLimit threads (cache miss case?).
@@ -112,8 +110,6 @@ func DefaultLimits() Limits {
 				defaultLimits.Remote = n
 			case "rewrap":
 				defaultLimits.REWrap = n
-			case "cache":
-				defaultLimits.Cache = n
 			case "thread":
 				defaultLimits.Thread = n
 			default:
