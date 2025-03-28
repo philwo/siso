@@ -87,9 +87,6 @@ type Options struct {
 	// DryRun just prints the command to build, but does nothing.
 	DryRun bool
 
-	// don't use local for remote steps.
-	StrictRemote bool
-
 	// allow failures at most FailuresAllowed.
 	FailuresAllowed int
 
@@ -171,7 +168,6 @@ type Builder struct {
 	verbose         bool
 	verboseFailures bool
 	dryRun          bool
-	strictRemote    bool
 
 	failures failures
 
@@ -221,9 +217,6 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 	if (opts.Limits == Limits{}) {
 		opts.Limits = DefaultLimits()
 	}
-	if opts.StrictRemote {
-		log.Infof("strict remote.  no local fallback")
-	}
 	// On many cores machine, it would hit default max thread limit = 10000.
 	// Usually, it would require 1/3 of stepLimit threads (cache miss case?).
 	// For safe, sets 1/2 of stepLimit for max threads. b/325565625
@@ -270,7 +263,6 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 		verbose:              opts.Verbose,
 		verboseFailures:      opts.VerboseFailures,
 		dryRun:               opts.DryRun,
-		strictRemote:         opts.StrictRemote,
 		failures:             failures{allowed: opts.FailuresAllowed},
 		keepRSP:              opts.KeepRSP,
 		rebuildManifest:      opts.RebuildManifest,
@@ -407,8 +399,8 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 				depsStatLine = fmt.Sprintf("deps scanErr:%d\n", stat.ScanDepsFailed)
 			}
 		}
-		msg := fmt.Sprintf("local:%d remote:%d cache:%d fallback:%d retry:%d skip:%d",
-			stat.Local+stat.NoExec, stat.Remote, stat.CacheHit, stat.LocalFallback, stat.RemoteRetry, stat.Skipped) +
+		msg := fmt.Sprintf("local:%d remote:%d cache:%d retry:%d skip:%d",
+			stat.Local+stat.NoExec, stat.Remote, stat.CacheHit, stat.RemoteRetry, stat.Skipped) +
 			depsStatLine
 		ui.Default.PrintLines(msg)
 	}()
@@ -758,11 +750,6 @@ func (b *Builder) progressStepRetry(step *Step) {
 	b.progress.step(b, step, progressPrefixRetry+step.cmd.Desc)
 }
 
-// progressStepFallback shows progress of the fallback step.
-func (b *Builder) progressStepFallback(step *Step) {
-	b.progress.step(b, step, progressPrefixFallback+step.cmd.Desc)
-}
-
 var errNotRelocatable = errors.New("request is not relocatable")
 
 func (b *Builder) updateDeps(ctx context.Context, step *Step) error {
@@ -846,8 +833,4 @@ func (b *Builder) prepareAllOutDirs(ctx context.Context) error {
 
 func (b *Builder) ActiveSteps() []ActiveStepInfo {
 	return b.progress.ActiveSteps()
-}
-
-func (b *Builder) localFallbackEnabled() bool {
-	return !b.strictRemote && !experiments.Enabled("no-fallback", "") && !b.hashFS.OnCog()
 }

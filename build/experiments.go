@@ -21,14 +21,12 @@ var knownExperiments = map[string]string{
 	"check-deps":                  "",
 	"fail-on-stdouterr":           "",
 	"fail-on-bad-deps":            "",
-	"fallback-on-exec-error":      "",
 	"file-access-trace":           "",
 	"gvisor":                      "",
 	"ignore-missing-local-inputs": "",
 	"ignore-missing-targets":      "",
 	"keep-going-handle-error":     "",
 	"keep-going-impure":           "check siso_localexec",
-	"no-fallback":                 "",
 	"prepare-header-only":         "",
 }
 

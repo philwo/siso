@@ -55,10 +55,6 @@ func (b *Builder) execLocal(ctx context.Context, step *Step) error {
 	case enableTrace:
 		log.Warnf("unable to use file-access-trace")
 	}
-	if phase == stepLocalRun && step.metrics.Fallback {
-		phase = stepFallbackRun
-		stateMessage = "local exec [fallback]"
-	}
 
 	queueTime := time.Now()
 	var dur time.Duration
@@ -69,11 +65,7 @@ func (b *Builder) execLocal(ctx context.Context, step *Step) error {
 			b.progress.startConsoleCmd(step.cmd)
 		}
 		started := time.Now()
-		// local exec might be called as fallback.
-		// Do not change ActionStartTime if it's already set.
-		if step.metrics.ActionStartTime == 0 {
-			step.metrics.ActionStartTime = IntervalMetric(started.Sub(b.start))
-		}
+		step.metrics.ActionStartTime = IntervalMetric(started.Sub(b.start))
 		err := b.localExec.Run(ctx, step.cmd)
 		dur = time.Since(started)
 		step.setPhase(stepOutput)
