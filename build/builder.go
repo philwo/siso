@@ -156,8 +156,7 @@ type Builder struct {
 
 	outputLocal OutputLocalFunc
 
-	cacheSema *semaphore.Semaphore
-	cache     *Cache
+	cache *Cache
 
 	explainWriter        io.Writer
 	failureSummaryWriter io.Writer
@@ -265,7 +264,6 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 		reapiclient: opts.REAPIClient,
 
 		outputLocal:          opts.OutputLocal,
-		cacheSema:            semaphore.New("cache", opts.Limits.Cache),
 		cache:                opts.Cache,
 		failureSummaryWriter: opts.FailureSummaryWriter,
 		failedCommandsWriter: opts.FailedCommandsWriter,
