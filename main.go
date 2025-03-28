@@ -29,7 +29,6 @@ import (
 	"go.chromium.org/infra/build/siso/subcmd/fetch"
 	"go.chromium.org/infra/build/siso/subcmd/fscmd"
 	"go.chromium.org/infra/build/siso/subcmd/help"
-	"go.chromium.org/infra/build/siso/subcmd/isolate"
 	"go.chromium.org/infra/build/siso/subcmd/metricscmd"
 	"go.chromium.org/infra/build/siso/subcmd/ninja"
 	"go.chromium.org/infra/build/siso/subcmd/ps"
@@ -62,7 +61,6 @@ func getApplication(authOpts cred.Options) *cli.Application {
 			ninja.Cmd(authOpts, versionID),
 			query.Cmd(),
 			fscmd.Cmd(authOpts),
-			isolate.Cmd(authOpts),
 			osfs.HelperCmd(),
 			recall.Cmd(authOpts),
 			report.Cmd(),
