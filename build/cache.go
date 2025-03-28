@@ -16,7 +16,6 @@ import (
 	"go.chromium.org/infra/build/siso/build/cachestore"
 	"go.chromium.org/infra/build/siso/execute"
 	"go.chromium.org/infra/build/siso/reapi/digest"
-	"go.chromium.org/infra/build/siso/runtimex"
 	"go.chromium.org/infra/build/siso/sync/semaphore"
 )
 
@@ -39,9 +38,6 @@ func NewCache(opts CacheOptions) (*Cache, error) {
 	}
 	return &Cache{
 		store: opts.Store,
-
-		// TODO(b/274038010): cache-digest semaphore should share with execute/remotecache?
-		sema: semaphore.New("cache-digest", runtimex.NumCPU()*10),
 	}, nil
 }
 
