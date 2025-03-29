@@ -109,7 +109,6 @@ type ninjaCmdRun struct {
 	logDir             string
 	failureSummaryFile string
 	outputLogFile      string
-	localexecLogFile   string
 
 	fsopt             *hashfs.Option
 	reopt             *reapi.Option
@@ -808,7 +807,6 @@ func (c *ninjaCmdRun) init() {
 	c.Flags.StringVar(&c.logDir, "log_dir", ".", "log directory (relative to -C")
 	c.Flags.StringVar(&c.failureSummaryFile, "failure_summary", "", "filename for failure summary (relative to -log_dir)")
 	c.Flags.StringVar(&c.outputLogFile, "output_log", "siso_output", "output log filename (relative to -log_dir")
-	c.Flags.StringVar(&c.localexecLogFile, "localexec_log", "siso_localexec", "localexec log filename (relative to -log_dir")
 
 	c.fsopt = new(hashfs.Option)
 	c.fsopt.StateFile = ".siso_fs_state"
@@ -1009,12 +1007,6 @@ func (c *ninjaCmdRun) initBuildOpts(projectID string, buildPath *build.Path, con
 	}
 	dones = append(dones, done)
 
-	localexecLogWriter, done, err := c.logWriter(c.localexecLogFile)
-	if err != nil {
-		return bopts, nil, err
-	}
-	dones = append(dones, done)
-
 	var actionSaltBytes []byte
 	if c.actionSalt != "" {
 		actionSaltBytes = []byte(c.actionSalt)
@@ -1039,7 +1031,6 @@ func (c *ninjaCmdRun) initBuildOpts(projectID string, buildPath *build.Path, con
 		Cache:                cache,
 		FailureSummaryWriter: failureSummaryWriter,
 		OutputLogWriter:      outputLogWriter,
-		LocalexecLogWriter:   localexecLogWriter,
 		Clobber:              c.clobber,
 		Prepare:              c.prepare,
 		Verbose:              c.verbose,
