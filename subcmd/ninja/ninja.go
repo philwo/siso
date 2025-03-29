@@ -93,9 +93,6 @@ type ninjaCmdRun struct {
 	failuresAllowed int
 	actionSalt      string
 
-	ninjaJobs      int
-	ninjaLoadLimit int
-
 	remoteJobs int
 	localJobs  int
 	fname      string
@@ -106,7 +103,6 @@ type ninjaCmdRun struct {
 	outputLocalStrategy string
 
 	depsLogFile string
-	// depsLogBucket
 
 	frontendFile string
 
@@ -115,10 +111,6 @@ type ninjaCmdRun struct {
 	reExecEnable       bool
 	reCacheEnableRead  bool
 	reCacheEnableWrite bool
-
-	// enableCPUProfiler bool
-
-	adjustWarn string
 
 	startDir string
 }
@@ -289,18 +281,8 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		cancel(errInterrupted{})
 	})()
 
-	if c.ninjaJobs >= 0 {
-		ui.Default.Warningf("-j is not supported. use -remote_jobs and -local_jobs instead\n")
-	}
-	if c.ninjaLoadLimit >= 0 {
-		ui.Default.Warningf("-l is not supported.\n")
-	}
 	if c.failuresAllowed <= 0 {
 		c.failuresAllowed = math.MaxInt
-	}
-
-	if c.adjustWarn != "" {
-		ui.Default.Warningf("-w is specified. but not supported. b/288807840\n")
 	}
 
 	if c.offline {
@@ -369,10 +351,6 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		}
 	}
 	c.checkResourceLimits(limits)
-
-	log.Infof("project id: %q", projectID)
-	log.Infof("commandline %q", os.Args)
-	log.Infof("is_terminal=%t", ui.IsTerminal())
 
 	spin := ui.Default.NewSpinner()
 
@@ -567,10 +545,8 @@ func (c *ninjaCmdRun) init() {
 	c.Flags.IntVar(&c.failuresAllowed, "k", 1, "keep going until N jobs fail (0 means inifinity)")
 	c.Flags.StringVar(&c.actionSalt, "action_salt", "", "action salt")
 
-	c.Flags.IntVar(&c.ninjaJobs, "j", -1, "not supported. use -remote_jobs and -local_jobs instead")
-	c.Flags.IntVar(&c.ninjaLoadLimit, "l", -1, "not supported.")
 	c.Flags.IntVar(&c.localJobs, "local_jobs", 0, "run N local jobs in parallel. when the value is no positive, the default will be computed based on # of CPUs.")
-	c.Flags.IntVar(&c.remoteJobs, "remote_jobs", 0, "run N remote jobs in parallel. when the value is no positive, the default will be computed based on # of CPUs.")
+	c.Flags.IntVar(&c.remoteJobs, "remote_jobs", 0, "run N remote jobs in parallel. when the value is <= 0, it will be computed based on # of CPUs.")
 	c.Flags.StringVar(&c.fname, "f", "build.ninja", "input build manifest filename (relative to -C)")
 
 	c.Flags.StringVar(&c.configRepoDir, "config_repo_dir", "build/config/siso", "config repo directory (relative to exec root)")
@@ -590,8 +566,6 @@ func (c *ninjaCmdRun) init() {
 	c.Flags.BoolVar(&c.reExecEnable, "re_exec_enable", true, "remote exec enable")
 	c.Flags.BoolVar(&c.reCacheEnableRead, "re_cache_enable_read", true, "remote exec cache enable read")
 	c.Flags.BoolVar(&c.reCacheEnableWrite, "re_cache_enable_write", false, "remote exec cache allow local trusted uploads")
-
-	c.Flags.StringVar(&c.adjustWarn, "w", "", "adjust warnings. not supported b/288807840")
 }
 
 func (c *ninjaCmdRun) initWorkdirs() (string, error) {
