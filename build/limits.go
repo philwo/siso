@@ -32,7 +32,6 @@ type Limits struct {
 	Step   int
 	Local  int
 	Remote int
-	Thread int
 }
 
 var (
@@ -54,13 +53,6 @@ func DefaultLimits() Limits {
 			Step:   stepLimit,
 			Local:  numCPU,
 			Remote: limitForRemote(numCPU),
-		}
-		// On many cores machine, it would hit default max thread limit = 10000.
-		// Usually, it would require 1/3 of stepLimit threads (cache miss case?).
-		// For safe, sets 1/2 of stepLimit for max threads. b/325565625
-		maxThreads := defaultLimits.Step / 2
-		if maxThreads > 10000 {
-			defaultLimits.Thread = maxThreads
 		}
 		overrides := os.Getenv("SISO_LIMITS")
 		if overrides == "" {
@@ -86,8 +78,6 @@ func DefaultLimits() Limits {
 				defaultLimits.Local = n
 			case "remote":
 				defaultLimits.Remote = n
-			case "thread":
-				defaultLimits.Thread = n
 			default:
 				log.Warnf("unknown limits name %q", k)
 				continue

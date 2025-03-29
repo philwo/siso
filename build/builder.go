@@ -13,7 +13,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"runtime/debug"
 	"sort"
 	"strings"
 	"sync"
@@ -156,16 +155,7 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 	if (opts.Limits == Limits{}) {
 		opts.Limits = DefaultLimits()
 	}
-	// On many cores machine, it would hit default max thread limit = 10000.
-	// Usually, it would require 1/3 of stepLimit threads (cache miss case?).
-	// For safe, sets 1/2 of stepLimit for max threads. b/325565625
-	maxThreads := opts.Limits.Step / 2
-	if maxThreads > 10000 {
-		debug.SetMaxThreads(maxThreads)
-	} else {
-		maxThreads = 10000
-	}
-	log.Infof("numcpu=%d threads:%d - limits=%#v", numCPU, maxThreads, opts.Limits)
+	log.Infof("numcpu=%d - limits=%#v", numCPU, opts.Limits)
 
 	b := &Builder{
 		jobID:     opts.JobID,
