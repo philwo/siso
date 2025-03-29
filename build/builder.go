@@ -248,7 +248,7 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 
 	stat := b.Stats()
 	if stat.Total == 0 {
-		ui.Default.PrintLines(ninjaNoWorkToDo)
+		log.Info(ninjaNoWorkToDo)
 		return nil
 	}
 
@@ -297,7 +297,7 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 			}
 			log.Infof("rebuild manifest %#v %s: %s->%s: %s", stat, b.rebuildManifest, mftime, fi.ModTime(), time.Since(started))
 			if fi.ModTime().After(mftime) || stat.Done != stat.Skipped {
-				ui.Default.PrintLines(fmt.Sprintf("%6s Regenerating ninja files", ui.FormatDuration(time.Since(started))))
+				log.Infof("%6s Regenerating ninja files", ui.FormatDuration(time.Since(started)))
 				err = ErrManifestModified
 				return
 			}
@@ -305,7 +305,7 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 		}
 		log.Infof("build %s %s: %v", time.Since(started), time.Since(b.start), err)
 		if stat.Skipped == stat.Total {
-			ui.Default.PrintLines(ninjaNoWorkToDo)
+			log.Info(ninjaNoWorkToDo)
 			return
 		}
 	}()
@@ -436,9 +436,9 @@ loop:
 	close(errch)
 	err = <-errdone
 	if err == nil {
-		ui.Default.PrintLines(fmt.Sprintf("%s finished", name))
+		log.Infof("%s finished", name)
 	} else {
-		ui.Default.PrintLines(fmt.Sprintf("%s failed", name))
+		log.Infof("%s failed", name)
 	}
 	return err
 }

@@ -202,7 +202,7 @@ func schedule(ctx context.Context, sched *scheduler, graph Graph, args ...string
 			targetNames = append(targetNames, sched.path.MaybeToWD(targetPath(ctx, graph, t)))
 		}
 		if !slices.Equal(args, targetNames) {
-			ui.Default.PrintLines(fmt.Sprintf("target: %q\n    ->  %q\n\n", args, targetNames))
+			log.Infof("target: %q\n    ->  %q\n\n", args, targetNames)
 		}
 	}
 	for _, t := range targets {
@@ -406,7 +406,7 @@ func (s *scheduler) mark(ctx context.Context, graph Graph, target Target, next S
 }
 
 func (s *scheduler) progressReport(format string, args ...any) {
-	ui.Default.PrintLines(fmt.Sprintf(format, args...))
+	log.Infof(format, args...)
 }
 
 // finish finishes the scheduling.
