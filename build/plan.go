@@ -203,10 +203,7 @@ func schedule(ctx context.Context, sched *scheduler, graph Graph, args ...string
 	targets, err := graph.Targets(ctx, args...)
 	started := time.Now()
 	if err != nil {
-		if !experiments.Enabled("ignore-missing-targets", "") {
-			return TargetError{err: err, Suggests: suggestTargets(ctx, sched, graph, args...)}
-		}
-		ui.Default.PrintLines(ui.SGR(ui.Yellow, fmt.Sprintf("WARNING: ignore missing targets: %v\n\n", err)))
+		return TargetError{err: err, Suggests: suggestTargets(ctx, sched, graph, args...)}
 	}
 	if len(targets) == 0 {
 		return TargetError{err: errors.New("no targets")}
@@ -437,11 +434,6 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 // newScheduler creates new scheduler.
 func newScheduler(opt schedulerOption) *scheduler {
 	var prepareHeaderOnly bool
-	if opt.Prepare {
-		if experiments.Enabled("prepare-header-only", "prepare header only") {
-			prepareHeaderOnly = true
-		}
-	}
 	return &scheduler{
 		path:   opt.Path,
 		hashFS: opt.HashFS,

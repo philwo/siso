@@ -15,9 +15,6 @@ import (
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
 	"github.com/charmbracelet/log"
 	"google.golang.org/protobuf/types/known/timestamppb"
-
-	"go.chromium.org/infra/build/siso/execute"
-	"go.chromium.org/infra/build/siso/execute/localexec"
 )
 
 func (b *Builder) execLocal(ctx context.Context, step *Step) error {
@@ -25,7 +22,7 @@ func (b *Builder) execLocal(ctx context.Context, step *Step) error {
 
 	step.setPhase(stepInput)
 	err := b.prepareLocalInputs(ctx, step)
-	if err != nil && !experiments.Enabled("ignore-missing-local-inputs", "step %s missing inputs: %v", step, err) {
+	if err != nil {
 		return err
 	}
 	step.cmd.RecordPreOutputs(ctx)
@@ -39,22 +36,6 @@ func (b *Builder) execLocal(ctx context.Context, step *Step) error {
 		stateMessage += " (pool=" + pool + ")"
 	}
 	phase := stepLocalRun
-	enableTrace := experiments.Enabled("file-access-trace", "enable file-access-trace")
-	switch {
-	case localexec.TraceEnabled():
-		// check impure explicitly set in config,
-		// rather than step.cmd.Pure.
-		// step.cmd.Pure may be false when config is not set
-		// for the step too, but we want to disable
-		// file-access-trace only for the step with impure=true.
-		// http://b/261655377 errorprone_plugin_tests: too slow under strace?
-		impure := step.def.Binding("impure") == "true"
-		if !impure && enableTrace {
-			step.cmd.FileTrace = &execute.FileTrace{}
-		}
-	case enableTrace:
-		log.Warnf("unable to use file-access-trace")
-	}
 
 	queueTime := time.Now()
 	var dur time.Duration

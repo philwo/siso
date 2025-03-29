@@ -198,8 +198,3 @@ func exitCode(err error) int32 {
 	}
 	return int32(eerr.ProcessState.ExitCode())
 }
-
-// TraceEnabled returns whether file trace is enabled or not.
-func TraceEnabled() bool {
-	return straceutil.Available()
-}

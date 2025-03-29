@@ -5,7 +5,6 @@
 package build
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -228,21 +227,6 @@ func checkDeps(ctx context.Context, b *Builder, step *Step, deps []string) error
 			continue
 		}
 		checkInputs = append(checkInputs, input)
-	}
-	if experiments.Enabled("check-deps", "") || experiments.Enabled("fail-on-bad-deps", "") {
-		unknownBadDep, err := step.def.CheckInputDeps(ctx, checkInputs)
-		if err != nil {
-			log.Warnf("deps error: %v", err)
-			if unknownBadDep && experiments.Enabled("fail-on-bad-deps", "") {
-				return fmt.Errorf("deps error: %w", err)
-			}
-			stderr := step.cmd.Stderr()
-			w := step.cmd.StderrWriter()
-			if len(stderr) != 0 && !bytes.HasSuffix(stderr, []byte("\n")) {
-				fmt.Fprintf(w, "\n")
-			}
-			fmt.Fprintf(w, "deps error: %v\n", err)
-		}
 	}
 	return nil
 }
