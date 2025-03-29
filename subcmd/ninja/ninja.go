@@ -283,11 +283,6 @@ type errInterrupted struct{}
 func (errInterrupted) Error() string        { return "interrupt by signal" }
 func (errInterrupted) Is(target error) bool { return target == context.Canceled }
 
-const (
-	// relative to -log_dir
-	failedTargetsFile = ".siso_failed_targets"
-)
-
 func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	ctx, cancel := context.WithCancelCause(ctx)
 	defer signals.HandleInterrupt(func() {
@@ -474,8 +469,6 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		return stats, err
 	}
 
-	failedTargetsFilename := c.logFilename(failedTargetsFile, "")
-
 	var eg errgroup.Group
 	var localDepsLog *ninjautil.DepsLog
 	eg.Go(func() error {
@@ -562,14 +555,6 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 			if !errors.As(errBuild.err, &stepError) {
 				return
 			}
-			// store failed targets only when build steps failed.
-			// i.e., don't store with error like context canceled, etc.
-			log.Infof("record failed targets: %q", stepError.Target)
-			serr := saveTargets(failedTargetsFilename, targets, []string{stepError.Target})
-			if serr != nil {
-				log.Warnf("failed to save failed targets: %v", serr)
-				return
-			}
 		}
 	}()
 	defer func() {
@@ -584,18 +569,8 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		fmt.Fprintln(os.Stderr, ui.SGR(ui.BackgroundRed, fmt.Sprintf("unable to do incremental build as fs state is corrupted: %v", hashFSErr)))
 	}
 
-	_, err = os.Stat(failedTargetsFilename)
-	lastFailed := err == nil
 	isClean := hashFS.IsClean(targets)
-	log.Infof("hashfs loaderr: %v clean: %t (%q) last failed: %t", hashFSErr, isClean, targets, lastFailed)
-	// if not using non-default log_dir, it would see different
-	// .siso_last_targets, which won't match with .siso_fs_state.
-	// in this case, don't shortcut noop build, but better to check
-	// build graph again.
-	if !c.clobber && !c.batch && !c.dryRun && c.subtool != "cleandead" && isLogDirDefault && hashFSErr == nil && isClean && !lastFailed {
-		// TODO: better to check digest of .siso_fs_state?
-		return stats, errNothingToDo
-	}
+	log.Infof("hashfs loaderr: %v clean: %t (%q)", hashFSErr, isClean, targets)
 
 	bopts, done, err := c.initBuildOpts(projectID, buildPath, config, ds, hashFS, limits)
 	if err != nil {
@@ -637,26 +612,14 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 
 	graph := ninjabuild.NewGraph(c.fname, nstate, config, buildPath, hashFS, stepConfig, localDepsLog)
 
-	var lastFailedTargets []string
-	if !c.batch && !c.clobber {
-		lastFailedTargets, _ = checkTargets(failedTargetsFilename, targets)
-	}
-	err = os.Remove(failedTargetsFilename)
-	if err != nil && !errors.Is(err, fs.ErrNotExist) {
-		log.Warnf("failed to remove %s: %v", failedTargetsFilename, err)
-	}
 	return runNinja(ctx, c.fname, graph, bopts, targets, runNinjaOpts{
-		checkFailedTargets: lastFailedTargets,
-		cleandead:          c.cleandead,
-		subtool:            c.subtool,
-		enableStatusz:      true,
+		cleandead:     c.cleandead,
+		subtool:       c.subtool,
+		enableStatusz: true,
 	})
 }
 
 type runNinjaOpts struct {
-	// build the last failed targets first.
-	checkFailedTargets []string
-
 	// whether to perform cleandead or not.
 	cleandead bool
 
@@ -669,50 +632,10 @@ type runNinjaOpts struct {
 }
 
 func runNinja(ctx context.Context, fname string, graph *ninjabuild.Graph, bopts build.Options, targets []string, nopts runNinjaOpts) (build.Stats, error) {
-	var stats build.Stats
 	spin := ui.Default.NewSpinner()
 
 	for {
 		log.Infof("build starts")
-		if len(nopts.checkFailedTargets) > 0 {
-			failedTargets := nopts.checkFailedTargets
-			ui.Default.PrintLines(fmt.Sprintf("Building last failed targets: %s...", failedTargets))
-			var err error
-			stats, err = doBuild(ctx, graph, bopts, nopts, failedTargets...)
-			if errors.Is(err, build.ErrManifestModified) {
-				if bopts.DryRun {
-					return stats, nil
-				}
-				log.Infof("%s modified.", fname)
-				spin.Start("reloading")
-				err := graph.Reload(ctx)
-				if err != nil {
-					spin.Stop(err)
-					return stats, err
-				}
-				spin.Stop(nil)
-				log.Infof("reload done. build retry")
-				continue
-			}
-			var errBuild buildError
-			if errors.As(err, &errBuild) {
-				var stepError build.StepError
-				if errors.As(errBuild.err, &stepError) {
-					// last failed is not fixed yet.
-					return stats, err
-				}
-			}
-			nopts.checkFailedTargets = nil
-			if err != nil {
-				ui.Default.PrintLines(fmt.Sprintf(" %s: %s: %v", ui.SGR(ui.Yellow, "err in last failed targets, rebuild again"), failedTargets, err))
-			} else {
-				ui.Default.PrintLines(fmt.Sprintf(" %s: %s", ui.SGR(ui.Green, "last failed targets fixed"), failedTargets))
-			}
-			err = graph.Reset(ctx)
-			if err != nil {
-				return stats, err
-			}
-		}
 		stats, err := doBuild(ctx, graph, bopts, nopts, targets...)
 		if errors.Is(err, build.ErrManifestModified) {
 			if bopts.DryRun {
