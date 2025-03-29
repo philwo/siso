@@ -27,8 +27,6 @@ import (
 	"go.chromium.org/infra/build/siso/execute/remoteexec"
 	"go.chromium.org/infra/build/siso/hashfs"
 	"go.chromium.org/infra/build/siso/reapi"
-	"go.chromium.org/infra/build/siso/reapi/digest"
-	"go.chromium.org/infra/build/siso/reapi/merkletree"
 	"go.chromium.org/infra/build/siso/scandeps"
 	"go.chromium.org/infra/build/siso/sync/semaphore"
 	"go.chromium.org/infra/build/siso/ui"
@@ -240,14 +238,6 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 			}
 		}
 	}()
-
-	if b.rebuildManifest == "" && b.reapiclient != nil {
-		// upload build.ninja in background.
-		// if build finished earilier, we'll cancel the uploading
-		// since it would be better to finish build soon rather
-		// than waiting for uploading build.ninja.
-		go b.uploadBuildNinja(ctx)
-	}
 
 	// scheduling
 	// TODO: run asynchronously?
@@ -461,34 +451,6 @@ loop:
 		}
 	}
 	return err
-}
-
-func (b *Builder) uploadBuildNinja(ctx context.Context) {
-	inputs := b.graph.Filenames()
-	inputs = append(inputs, "args.gn")
-	ents, err := b.hashFS.Entries(ctx, filepath.Join(b.path.ExecRoot, b.path.Dir), inputs)
-	if err != nil {
-		log.Warnf("failed to get build files entries: %v", err)
-		return
-	}
-	ds := digest.NewStore()
-	tree := merkletree.New(ds)
-	for _, ent := range ents {
-		err := tree.Set(ent)
-		if err != nil {
-			log.Warnf("failed to set %s: %v", ent.Name, err)
-		}
-	}
-	d, err := tree.Build(ctx)
-	if err != nil {
-		log.Warnf("failed to calculate tree: %v", err)
-		return
-	}
-	_, err = b.reapiclient.UploadAll(ctx, ds)
-	if err != nil {
-		log.Warnf("failed to upload build files tree %s: %v", d, err)
-		return
-	}
 }
 
 // dedupInputs deduplicates inputs.
