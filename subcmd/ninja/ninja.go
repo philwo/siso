@@ -79,7 +79,6 @@ type ninjaCmdRun struct {
 	projectID  string
 
 	offline    bool
-	verbose    bool
 	dryRun     bool
 	clobber    bool
 	actionSalt string
@@ -480,8 +479,6 @@ func (c *ninjaCmdRun) init() {
 			}
 		}
 	}
-	c.Flags.BoolVar(&c.verbose, "verbose", false, "show all command lines while building")
-	c.Flags.BoolVar(&c.verbose, "v", false, "show all command lines while building (alias of --verbose)")
 	c.Flags.BoolVar(&c.dryRun, "n", false, "dry run")
 	c.Flags.BoolVar(&c.clobber, "clobber", false, "clobber build")
 	c.Flags.StringVar(&c.actionSalt, "action_salt", "", "action salt")
@@ -661,7 +658,6 @@ func (c *ninjaCmdRun) initBuildOpts(projectID string, buildPath *build.Path, con
 		OutputLocal:       build.OutputLocalFunc(c.fsopt.OutputLocal),
 		Cache:             cache,
 		Clobber:           c.clobber,
-		Verbose:           c.verbose,
 		DryRun:            c.dryRun,
 		Limits:            limits,
 	}
