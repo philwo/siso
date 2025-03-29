@@ -117,7 +117,6 @@ type ninjaCmdRun struct {
 	logDir             string
 	frontendFile       string
 	failureSummaryFile string
-	outputLogFile      string
 
 	fsopt              *hashfs.Option
 	reopt              *reapi.Option
@@ -224,15 +223,7 @@ func (c *ninjaCmdRun) Run(a subcommands.Application, args []string, env subcomma
 				dur = ui.SGR(ui.Bold, dur)
 				msgPrefix = ui.SGR(ui.BackgroundRed, msgPrefix)
 			}
-			ui.Default.Errorf("\n%6s %s: %d done %d failed %d remaining - %.02f/s\n %v\n", dur, msgPrefix, stats.Done-stats.Skipped, stats.Fail, stats.Total-stats.Done, sps, errBuild.err)
-			suggest := fmt.Sprintf("see %s for full command line and output", c.logFilename(c.outputLogFile, c.startDir))
-			if c.sisoInfoLog != "" {
-				suggest += fmt.Sprintf("\n or %s", c.logFilename(c.sisoInfoLog, c.startDir))
-			}
-			if ui.IsTerminal() {
-				suggest = ui.SGR(ui.Bold, suggest)
-			}
-			ui.Default.Warningf("%s\n", suggest)
+			fmt.Fprintf(os.Stderr, "\n%6s %s: %d done %d remaining - %.02f/s\n %v\n", dur, msgPrefix, stats.Done-stats.Skipped, stats.Total-stats.Done, sps, errBuild.err)
 		default:
 			msgPrefix := "Error"
 			if ui.IsTerminal() {
@@ -871,7 +862,6 @@ func (c *ninjaCmdRun) init() {
 	c.Flags.StringVar(&c.frontendFile, "frontend_file", "", "frontend FIFO file to report build status to soong ui, or `-` to report to stdout.")
 
 	c.Flags.StringVar(&c.failureSummaryFile, "failure_summary", "", "filename for failure summary (relative to -log_dir)")
-	c.Flags.StringVar(&c.outputLogFile, "output_log", "siso_output", "output log filename (relative to -log_dir")
 
 	c.fsopt = new(hashfs.Option)
 	c.fsopt.StateFile = ".siso_fs_state"
@@ -1066,10 +1056,6 @@ func (c *ninjaCmdRun) initBuildOpts(projectID string, buildPath *build.Path, con
 		}
 	})
 
-	outputLogWriter, done, err := c.logWriter(c.outputLogFile)
-	if err != nil {
-		return bopts, nil, err
-	}
 	dones = append(dones, done)
 
 	var actionSaltBytes []byte
@@ -1097,7 +1083,6 @@ func (c *ninjaCmdRun) initBuildOpts(projectID string, buildPath *build.Path, con
 		OutputLocal:          build.OutputLocalFunc(c.fsopt.OutputLocal),
 		Cache:                cache,
 		FailureSummaryWriter: failureSummaryWriter,
-		OutputLogWriter:      outputLogWriter,
 		Clobber:              c.clobber,
 		Batch:                c.batch,
 		Prepare:              c.prepare,

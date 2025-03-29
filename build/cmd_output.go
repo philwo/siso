@@ -37,8 +37,6 @@ func (r cmdOutputResult) String() string {
 type cmdOutputLog struct {
 	// result is cmd result (FAILED/SUCCESS/RETRY)
 	result cmdOutputResult
-	// phase is when it finished cmd handling.
-	phase string
 
 	cmd      *execute.Cmd
 	cmdline  string
@@ -49,54 +47,7 @@ type cmdOutputLog struct {
 	stderr   []byte
 }
 
-func (c *cmdOutputLog) phaseText() string {
-	if c.phase == "" {
-		return ""
-	}
-	return fmt.Sprintf("[%s]", c.phase)
-}
-
-func (c *cmdOutputLog) String() string {
-	if c == nil {
-		return ""
-	}
-	var sb strings.Builder
-	fmt.Fprintf(&sb, "%s%s: %s %q %s\n", c.result, c.phaseText(), c.cmd, c.output, c.cmd.Desc)
-	if c.err != nil {
-		fmt.Fprintf(&sb, "err: %v\n", c.err)
-		if berr, ok := c.err.(interface{ Backtrace() string }); ok {
-			fmt.Fprintf(&sb, "stacktrace: %s\n", berr.Backtrace())
-		}
-	}
-	digest := c.cmd.ActionDigest()
-	if !digest.IsZero() {
-		fmt.Fprintf(&sb, "digest: %s\n", digest.String())
-	}
-	fmt.Fprintf(&sb, "build step: %s %q\n", c.cmd.ActionName, c.output)
-	if c.sisoRule != "" {
-		fmt.Fprintf(&sb, "siso_rule: %s\n", c.sisoRule)
-	}
-	fmt.Fprintf(&sb, "%s\n", c.cmdline)
-	rsp := c.cmd.RSPFile
-	if rsp != "" {
-		fmt.Fprintf(&sb, " %s=%q\n", rsp, c.cmd.RSPFileContent)
-	}
-	if len(c.stdout) > 0 {
-		fmt.Fprintf(&sb, "stdout:\n%s", string(c.stdout))
-		if c.stdout[len(c.stdout)-1] != '\n' {
-			fmt.Fprintf(&sb, "\n")
-		}
-	}
-	if len(c.stderr) > 0 {
-		fmt.Fprintf(&sb, "stderr:\n%s", string(c.stderr))
-		if c.stderr[len(c.stderr)-1] != '\n' {
-			fmt.Fprintf(&sb, "\n")
-		}
-	}
-	return sb.String()
-}
-
-func (c *cmdOutputLog) Msg(console, verboseFailure bool) string {
+func (c *cmdOutputLog) Msg(console bool) string {
 	if c == nil {
 		return ""
 	}
@@ -126,7 +77,7 @@ func (c *cmdOutputLog) Msg(console, verboseFailure bool) string {
 		return sb.String()
 	}
 
-	result := fmt.Sprintf("%s%s: %s %q %s\n", c.result, c.phaseText(), c.cmd, c.output, c.cmd.Desc)
+	result := fmt.Sprintf("%s: %s %q %s\n", c.result, c.cmd, c.output, c.cmd.Desc)
 	switch c.result {
 	case cmdOutputResultFAILED:
 		fmt.Fprint(&sb, ui.SGR(ui.Red, result))
@@ -185,9 +136,5 @@ func (b *Builder) logOutput(cmdOutput *cmdOutputLog, console bool) string {
 	if cmdOutput == nil {
 		return ""
 	}
-	if b.outputLogWriter != nil {
-		fmt.Fprint(b.outputLogWriter, cmdOutput.String()+"\f\n")
-		return cmdOutput.Msg(console, b.verboseFailures)
-	}
-	return cmdOutput.Msg(console, true)
+	return cmdOutput.Msg(console)
 }

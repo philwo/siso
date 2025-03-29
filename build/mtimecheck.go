@@ -51,7 +51,6 @@ func (b *Builder) checkUpToDate(ctx context.Context, stepDef StepDef, stepManife
 	_, inmtime, err := inputMtime(ctx, b, stepDef)
 
 	// TODO(b/288419130): make sure it covers all cases as ninja does.
-
 	if err != nil {
 		return false
 	}
