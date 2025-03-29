@@ -17,7 +17,6 @@ import (
 	"math"
 	"os"
 	"path/filepath"
-	"runtime"
 	"runtime/debug"
 	"sort"
 	"strconv"
@@ -118,7 +117,6 @@ type ninjaCmdRun struct {
 	logDir             string
 	frontendFile       string
 	failureSummaryFile string
-	failedCommandsFile string
 	outputLogFile      string
 	explainFile        string
 	localexecLogFile   string
@@ -232,13 +230,6 @@ func (c *ninjaCmdRun) Run(a subcommands.Application, args []string, env subcomma
 			suggest := fmt.Sprintf("see %s for full command line and output", c.logFilename(c.outputLogFile, c.startDir))
 			if c.sisoInfoLog != "" {
 				suggest += fmt.Sprintf("\n or %s", c.logFilename(c.sisoInfoLog, c.startDir))
-			}
-			failedCommandsFile := c.logFilename(c.failedCommandsFile, "")
-			if failedCommandsFile != "" {
-				_, err := os.Stat(failedCommandsFile)
-				if err == nil {
-					suggest += fmt.Sprintf("\nuse %s to re-run failed commands", c.logFilename(c.failedCommandsFile, c.startDir))
-				}
 			}
 			if ui.IsTerminal() {
 				suggest = ui.SGR(ui.Bold, suggest)
@@ -655,10 +646,6 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 			}
 			var stepError build.StepError
 			if !errors.As(errBuild.err, &stepError) {
-				rerr := os.Remove(c.logFilename(c.failedCommandsFile, ""))
-				if rerr != nil {
-					log.Warnf("failed to remove failed command file: %v", rerr)
-				}
 				return
 			}
 			// store failed targets only when build steps failed.
@@ -668,11 +655,6 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 			if serr != nil {
 				log.Warnf("failed to save failed targets: %v", serr)
 				return
-			}
-		} else {
-			rerr := os.Remove(c.logFilename(c.failedCommandsFile, ""))
-			if rerr != nil {
-				log.Warnf("failed to remove failed command file: %v", rerr)
 			}
 		}
 	}()
@@ -891,11 +873,6 @@ func (c *ninjaCmdRun) init() {
 	c.Flags.StringVar(&c.frontendFile, "frontend_file", "", "frontend FIFO file to report build status to soong ui, or `-` to report to stdout.")
 
 	c.Flags.StringVar(&c.failureSummaryFile, "failure_summary", "", "filename for failure summary (relative to -log_dir)")
-	c.failedCommandsFile = "siso_failed_commands.sh"
-	if runtime.GOOS == "windows" {
-		c.failedCommandsFile = "siso_failed_commands.bat"
-	}
-	c.Flags.StringVar(&c.failedCommandsFile, "failed_commands", c.failedCommandsFile, "script file to rerun the last failed commands")
 	c.Flags.StringVar(&c.outputLogFile, "output_log", "siso_output", "output log filename (relative to -log_dir")
 	c.Flags.StringVar(&c.explainFile, "explain_log", "siso_explain", "explain log filename (relative to -log_dir")
 	c.Flags.StringVar(&c.localexecLogFile, "localexec_log", "siso_localexec", "localexec log filename (relative to -log_dir")
@@ -1086,30 +1063,12 @@ func (c *ninjaCmdRun) initBuildOpts(projectID string, buildPath *build.Path, con
 		return bopts, nil, err
 	}
 	dones = append(dones, done)
+
 	dones = append(dones, func(errp *error) {
 		if failureSummaryWriter != nil && *errp != nil {
 			fmt.Fprintf(failureSummaryWriter, "error: %v\n", *errp)
 		}
 	})
-	failedCommandsWriter, done, err := c.logWriter(c.failedCommandsFile)
-	if err != nil {
-		return bopts, nil, err
-	}
-	dones = append(dones, done)
-	newline := "\n"
-	if runtime.GOOS != "windows" {
-		if f, ok := failedCommandsWriter.(*os.File); ok {
-			err = f.Chmod(0755)
-			if err != nil {
-				return bopts, nil, err
-			}
-		}
-		fmt.Fprintf(failedCommandsWriter, "#!/bin/sh\n")
-		fmt.Fprintf(failedCommandsWriter, "set -ve\n")
-	} else {
-		newline = "\r\n"
-	}
-	fmt.Fprintf(failedCommandsWriter, "cd %s%s", filepath.Join(buildPath.ExecRoot, buildPath.Dir), newline)
 
 	outputLogWriter, done, err := c.logWriter(c.outputLogFile)
 	if err != nil {
@@ -1160,7 +1119,6 @@ func (c *ninjaCmdRun) initBuildOpts(projectID string, buildPath *build.Path, con
 		OutputLocal:          build.OutputLocalFunc(c.fsopt.OutputLocal),
 		Cache:                cache,
 		FailureSummaryWriter: failureSummaryWriter,
-		FailedCommandsWriter: failedCommandsWriter,
 		OutputLogWriter:      outputLogWriter,
 		ExplainWriter:        explainWriter,
 		LocalexecLogWriter:   localexecLogWriter,
