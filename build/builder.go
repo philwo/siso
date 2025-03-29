@@ -63,7 +63,6 @@ type Options struct {
 	Cache                *Cache
 	FailureSummaryWriter io.Writer
 	OutputLogWriter      io.Writer
-	LocalexecLogWriter   io.Writer
 
 	// Clobber forces to rebuild ignoring existing generated files.
 	Clobber bool
@@ -146,7 +145,6 @@ type Builder struct {
 	cache *Cache
 
 	failureSummaryWriter io.Writer
-	localexecLogWriter   io.Writer
 	outputLogWriter      io.Writer
 
 	// envfiles: filename -> *envfile
@@ -171,10 +169,6 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 	start := opts.StartTime
 	if start.IsZero() {
 		start = time.Now()
-	}
-	lelw := opts.LocalexecLogWriter
-	if lelw == nil {
-		lelw = io.Discard
 	}
 
 	if err := opts.Path.Check(); err != nil {
@@ -229,7 +223,6 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 		cache:                opts.Cache,
 		failureSummaryWriter: opts.FailureSummaryWriter,
 		outputLogWriter:      opts.OutputLogWriter,
-		localexecLogWriter:   lelw,
 		clobber:              opts.Clobber,
 		prepare:              opts.Prepare,
 		verbose:              opts.Verbose,
