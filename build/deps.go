@@ -30,57 +30,56 @@ type depsProcessor interface {
 var depsProcessors = map[string]depsProcessor{
 	"depfile": depsDepfile{},
 	"gcc":     depsGCC{},
-	"msvc":    depsMSVC{},
 }
 
 // depsExpandInputs expands step.cmd.Inputs.
 // result will not contain labels nor non-existing files.
 func depsExpandInputs(ctx context.Context, b *Builder, step *Step) {
-	// deps=gcc, msvc will get correct inputs from deps log,
+	// deps=gcc will get correct inputs from deps log,
 	// so no need to expand inputs here.
-	switch step.cmd.Deps {
-	case "gcc", "msvc":
-	default:
-		oldlen := len(step.cmd.Inputs)
-		expanded := step.def.ExpandedInputs(ctx)
-		inputs := make([]string, 0, oldlen+len(expanded))
-		seen := make(map[string]bool)
-		for _, in := range step.cmd.Inputs {
-			if seen[in] {
-				continue
-			}
-			seen[in] = true
-			// labels are expanded in expanded,
-			// so no need to preserve it in inputs.
-			if strings.Contains(in, ":") {
-				if runtime.GOOS == "windows" && filepath.IsAbs(in) {
-					if strings.Contains(in[2:], ":") {
-						continue
-					}
-				} else {
+	if step.cmd.Deps == "gcc" {
+		return
+	}
+
+	oldlen := len(step.cmd.Inputs)
+	expanded := step.def.ExpandedInputs(ctx)
+	inputs := make([]string, 0, oldlen+len(expanded))
+	seen := make(map[string]bool)
+	for _, in := range step.cmd.Inputs {
+		if seen[in] {
+			continue
+		}
+		seen[in] = true
+		// labels are expanded in expanded,
+		// so no need to preserve it in inputs.
+		if strings.Contains(in, ":") {
+			if runtime.GOOS == "windows" && filepath.IsAbs(in) {
+				if strings.Contains(in[2:], ":") {
 					continue
 				}
-			}
-			if _, err := b.hashFS.Stat(ctx, b.path.ExecRoot, in); err != nil {
-				log.Warnf("deps stat error %s: %v", in, err)
+			} else {
 				continue
 			}
-			inputs = append(inputs, in)
 		}
-		for _, in := range expanded {
-			if seen[in] {
-				continue
-			}
-			seen[in] = true
-			if _, err := b.hashFS.Stat(ctx, b.path.ExecRoot, in); err != nil {
-				log.Warnf("deps stat error %s: %v", in, err)
-				continue
-			}
-			inputs = append(inputs, in)
+		if _, err := b.hashFS.Stat(ctx, b.path.ExecRoot, in); err != nil {
+			log.Warnf("deps stat error %s: %v", in, err)
+			continue
 		}
-		step.cmd.Inputs = make([]string, len(inputs))
-		copy(step.cmd.Inputs, inputs)
+		inputs = append(inputs, in)
 	}
+	for _, in := range expanded {
+		if seen[in] {
+			continue
+		}
+		seen[in] = true
+		if _, err := b.hashFS.Stat(ctx, b.path.ExecRoot, in); err != nil {
+			log.Warnf("deps stat error %s: %v", in, err)
+			continue
+		}
+		inputs = append(inputs, in)
+	}
+	step.cmd.Inputs = make([]string, len(inputs))
+	copy(step.cmd.Inputs, inputs)
 }
 
 func depsFixCmd(ctx context.Context, b *Builder, step *Step, deps []string) {
@@ -101,9 +100,9 @@ func depsCmd(ctx context.Context, b *Builder, step *Step) error {
 	if found {
 		var stepInputs []string
 		switch step.cmd.Deps {
-		case "gcc", "msvc":
+		case "gcc":
 			// Inputs may contains unnecessary inputs.
-			// just needs ToolInputs for deps=gcc, msvc.
+			// just needs ToolInputs for deps=gcc.
 			stepInputs = step.cmd.ToolInputs
 		default:
 			stepInputs = step.def.Inputs(ctx) // use ToolInputs?

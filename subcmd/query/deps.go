@@ -201,8 +201,8 @@ func lookupDeps(ctx context.Context, state *ninjautil.State, hashFS *hashfs.Hash
 	}
 	depsType := edge.Binding("deps")
 	switch depsType {
-	case "gcc", "msvc":
-		// for deps=gcc|msvc, deps is recorded in deps log.
+	case "gcc":
+		// for deps=gcc, deps is recorded in deps log.
 		return "", nil, time.Time{}, depState, ninjautil.ErrNoDepsLog
 	case "":
 		// check depfile
