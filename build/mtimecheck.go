@@ -54,23 +54,11 @@ func (b *Builder) checkUpToDate(ctx context.Context, stepDef StepDef, outputs []
 	rspfileContent := stepDef.Binding("rspfile_content")
 	stepCmdHash := calculateCmdHash(cmdline, rspfileContent)
 
-	out0, outmtime, cmdhash := outputMtime(ctx, b, outputs, stepDef.Binding("restat") != "")
-	lastIn, inmtime, err := inputMtime(ctx, b, stepDef)
+	_, outmtime, cmdhash := outputMtime(ctx, b, outputs, stepDef.Binding("restat") != "")
+	_, inmtime, err := inputMtime(ctx, b, stepDef)
 
 	// TODO(b/288419130): make sure it covers all cases as ninja does.
-
-	outname := b.path.MaybeToWD(out0)
-	lastInName := b.path.MaybeToWD(lastIn)
 	if err != nil {
-		reason := "missing-inputs"
-		switch {
-		case errors.Is(err, ErrMissingDeps):
-			reason = "missing-deps"
-		case errors.Is(err, ErrStaleDeps):
-			reason = "stale-deps"
-		case errors.Is(err, errDirty):
-			reason = "dirty"
-		}
 		return false
 	}
 	if outmtime.IsZero() {
