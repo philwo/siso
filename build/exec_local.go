@@ -65,18 +65,13 @@ func (b *Builder) execLocal(ctx context.Context, step *Step) error {
 			b.progress.startConsoleCmd(step.cmd)
 		}
 		started := time.Now()
-		step.metrics.ActionStartTime = IntervalMetric(started.Sub(b.start))
 		err := b.localExec.Run(ctx, step.cmd)
 		dur = time.Since(started)
 		step.setPhase(stepOutput)
 		if step.cmd.Console {
 			b.progress.finishConsoleCmd()
 		}
-		step.metrics.IsLocal = true
-		result, cached := step.cmd.ActionResult()
-		if cached {
-			step.metrics.Cached = true
-		}
+		result, _ := step.cmd.ActionResult()
 		if result != nil {
 			if result.ExecutionMetadata == nil {
 				result.ExecutionMetadata = &rpb.ExecutedActionMetadata{}
@@ -84,8 +79,6 @@ func (b *Builder) execLocal(ctx context.Context, step *Step) error {
 			result.ExecutionMetadata.QueuedTimestamp = timestamppb.New(queueTime)
 			result.ExecutionMetadata.WorkerStartTimestamp = timestamppb.New(started)
 		}
-		step.metrics.RunTime = IntervalMetric(time.Since(started))
-		step.metrics.done(step, b.start)
 		return err
 	})
 	if !errors.Is(err, context.Canceled) {
