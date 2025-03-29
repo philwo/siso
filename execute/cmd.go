@@ -186,9 +186,6 @@ type Cmd struct {
 	// working directory or not.
 	CanonicalizeDir bool
 
-	// DoNotCache specifies whether it won't update cache in remote execution.
-	DoNotCache bool
-
 	// Timeout specifies timeout of the cmd.
 	Timeout time.Duration
 
@@ -362,7 +359,6 @@ func (c *Cmd) Digest(ctx context.Context, ds *digest.Store) (digest.Digest, erro
 		CommandDigest:   commandDigest.Proto(),
 		InputRootDigest: inputRootDigest.Proto(),
 		Timeout:         timeout,
-		DoNotCache:      c.DoNotCache,
 		Salt:            c.ActionSalt,
 		Platform:        c.remoteExecutionPlatform(),
 	})

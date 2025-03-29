@@ -346,8 +346,6 @@ func newCmd(ctx context.Context, b *Builder, stepDef StepDef) *execute.Cmd {
 		REProxyConfig:   stepDef.REProxyConfig().Copy(),
 		CanonicalizeDir: stepDef.Binding("canonicalize_dir") != "",
 
-		// TODO(b/266518906): enable DoNotCache for read-only client
-		// DoNotCache: !b.reCacheEnableWrite,
 		SkipCacheLookup: !b.reCacheEnableRead,
 		Timeout:         stepTimeout(stepDef.Binding("timeout")),
 		ActionSalt:      b.actionSalt,
