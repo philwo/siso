@@ -37,30 +37,32 @@ func (b *Builder) execLocal(ctx context.Context, step *Step) error {
 	phase := stepLocalRun
 
 	queueTime := time.Now()
-	var dur time.Duration
 	step.setPhase(phase.wait())
-	err = sema.Do(ctx, func() error {
-		step.setPhase(phase)
-		if step.cmd.Console {
-			b.progress.startConsoleCmd(step.cmd)
-		}
-		started := time.Now()
-		err := b.localExec.Run(ctx, step.cmd)
-		dur = time.Since(started)
-		step.setPhase(stepOutput)
-		if step.cmd.Console {
-			b.progress.finishConsoleCmd()
-		}
-		result, _ := step.cmd.ActionResult()
-		if result != nil {
-			if result.ExecutionMetadata == nil {
-				result.ExecutionMetadata = &rpb.ExecutedActionMetadata{}
-			}
-			result.ExecutionMetadata.QueuedTimestamp = timestamppb.New(queueTime)
-			result.ExecutionMetadata.WorkerStartTimestamp = timestamppb.New(started)
-		}
+
+	if err = sema.Acquire(ctx, 1); err != nil {
 		return err
-	})
+	}
+	step.setPhase(phase)
+	if step.cmd.Console {
+		b.progress.startConsoleCmd(step.cmd)
+	}
+	started := time.Now()
+	err = b.localExec.Run(ctx, step.cmd)
+	dur := time.Since(started)
+	step.setPhase(stepOutput)
+	if step.cmd.Console {
+		b.progress.finishConsoleCmd()
+	}
+	result := step.cmd.ActionResult()
+	if result != nil {
+		if result.ExecutionMetadata == nil {
+			result.ExecutionMetadata = &rpb.ExecutedActionMetadata{}
+		}
+		result.ExecutionMetadata.QueuedTimestamp = timestamppb.New(queueTime)
+		result.ExecutionMetadata.WorkerStartTimestamp = timestamppb.New(started)
+	}
+	sema.Release(1)
+
 	if !errors.Is(err, context.Canceled) {
 		b.logLocalExec(step, dur)
 	}
@@ -71,6 +73,7 @@ func (b *Builder) execLocal(ctx context.Context, step *Step) error {
 	if err != nil {
 		return err
 	}
+
 	return b.checkLocalOutputs(ctx, step)
 	// no need to call b.outputs, as all outputs are already on disk
 	// so no need to flush.
@@ -92,7 +95,7 @@ func (b *Builder) prepareLocalInputs(ctx context.Context, step *Step) error {
 // If not, it returns error.
 // It ignores missing outputs added by siso config.
 func (b *Builder) checkLocalOutputs(ctx context.Context, step *Step) error {
-	result, _ := step.cmd.ActionResult()
+	result := step.cmd.ActionResult()
 	if result.GetExitCode() != 0 {
 		return nil
 	}
