@@ -159,11 +159,10 @@ type plan struct {
 
 // schedulerOption is scheduler option.
 type schedulerOption struct {
-	NumTargets  int
-	Path        *Path
-	HashFS      *hashfs.HashFS
-	Prepare     bool
-	EnableTrace bool
+	NumTargets int
+	Path       *Path
+	HashFS     *hashfs.HashFS
+	Prepare    bool
 }
 
 // scheduler creates a plan.
@@ -186,8 +185,6 @@ type scheduler struct {
 	// prepareHeaderOnly runs steps to generate headers needed for
 	// the requested targets.
 	prepareHeaderOnly bool
-
-	enableTrace bool
 }
 
 func targetPath(ctx context.Context, g Graph, t Target) string {
@@ -452,7 +449,6 @@ func newScheduler(opt schedulerOption) *scheduler {
 		},
 		prepare:           opt.Prepare,
 		prepareHeaderOnly: prepareHeaderOnly,
-		enableTrace:       opt.EnableTrace,
 	}
 }
 

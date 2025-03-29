@@ -216,19 +216,8 @@ type StepRule struct {
 	// TODO: better to have `require_local_inputs`=[<globs>] to reduce unnecessary downloads?
 	OutputLocal bool `json:"output_local,omitempty"`
 
-	// IgnoreExtraInputPattern specifies regexp to ignore extra inputs.
-	// ignore extra input detected by strace if it matches with this pattern
-	// e.g. cache file
-	IgnoreExtraInputPattern string `json:"ignore_extra_input_pattern,omitempty"`
-
-	// IgnoreExtraOutputPattern specifies regexp to ignore extra outputs.
-	// ignore extra output detected by strace if it matches with this pattern
-	// e.g. cache file
-	IgnoreExtraOutputPattern string `json:"ignore_extra_output_pattern,omitempty"`
-
 	// Impure marks the step is impure, i.e. allow extra inputs/outputs.
 	// Better to use above options if possible.
-	// Impure disables file access trace.
 	Impure bool `json:"impure,omitempty"`
 
 	// Replace replaces the outputs, when used by other step,
