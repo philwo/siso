@@ -38,7 +38,6 @@ import (
 // It will return error if pure:true/false case, except
 //
 // - for deps=gcc/msvc, we believe deps is correct by `clang -M` so never return error.
-// - if `keeps-going-impure` experiment flag is set, not return error.
 func (b *Builder) checkTrace(ctx context.Context, step *Step, dur time.Duration) error {
 	command := step.def.Binding("command")
 	if len(command) > 256 {
@@ -250,9 +249,6 @@ func depsImpureCheck(step *Step, command string) error {
 	case "gcc", "msvc":
 		return nil
 	default:
-		if experiments.Enabled("keep-going-impure", "impure cmd %s %s %s marked as pure", step, step.cmd.ActionName, command) {
-			return nil
-		}
+		return fmt.Errorf("impure cmd %s %s %s marked as pure", step, step.cmd.ActionName, command)
 	}
-	return fmt.Errorf("impure cmd %s %s %s marked as pure", step, step.cmd.ActionName, command)
 }

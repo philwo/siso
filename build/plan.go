@@ -420,11 +420,6 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 // newScheduler creates new scheduler.
 func newScheduler(opt schedulerOption) *scheduler {
 	var prepareHeaderOnly bool
-	if opt.Prepare {
-		if experiments.Enabled("prepare-header-only", "prepare header only") {
-			prepareHeaderOnly = true
-		}
-	}
 	return &scheduler{
 		path:   opt.Path,
 		hashFS: opt.HashFS,
