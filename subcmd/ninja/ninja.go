@@ -83,7 +83,6 @@ type ninjaCmdRun struct {
 	verbose         bool
 	dryRun          bool
 	clobber         bool
-	prepare         bool
 	failuresAllowed int
 	actionSalt      string
 
@@ -523,9 +522,6 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 			// don't modify .siso_failed_targets, .siso_last_targets by subtool.
 			return
 		}
-		if c.prepare {
-			return
-		}
 		if err != nil {
 			// when batch mode, no need to record failed targets,
 			// as it will build full targets when rebuilding
@@ -544,7 +540,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		}
 	}()
 	defer func() {
-		hashFS.SetBuildTargets(targets, !c.dryRun && c.subtool == "" && !c.prepare && err == nil)
+		hashFS.SetBuildTargets(targets, !c.dryRun && c.subtool == "" && err == nil)
 		err := hashFS.Close(ctx)
 		if err != nil {
 			log.Errorf("close hashfs: %v", err)
@@ -661,7 +657,6 @@ func (c *ninjaCmdRun) init() {
 	c.Flags.BoolVar(&c.verbose, "v", false, "show all command lines while building (alias of --verbose)")
 	c.Flags.BoolVar(&c.dryRun, "n", false, "dry run")
 	c.Flags.BoolVar(&c.clobber, "clobber", false, "clobber build")
-	c.Flags.BoolVar(&c.prepare, "prepare", false, "build inputs of targets, but not build target itself.")
 	c.Flags.IntVar(&c.failuresAllowed, "k", 1, "keep going until N jobs fail (0 means inifinity)")
 	c.Flags.StringVar(&c.actionSalt, "action_salt", "", "action salt")
 
@@ -846,7 +841,6 @@ func (c *ninjaCmdRun) initBuildOpts(projectID string, buildPath *build.Path, con
 		OutputLocal:       build.OutputLocalFunc(c.fsopt.OutputLocal),
 		Cache:             cache,
 		Clobber:           c.clobber,
-		Prepare:           c.prepare,
 		Verbose:           c.verbose,
 		DryRun:            c.dryRun,
 		FailuresAllowed:   c.failuresAllowed,
@@ -864,7 +858,6 @@ func rebuildManifest(ctx context.Context, graph *ninjabuild.Graph, bopts build.O
 	log.Infof("rebuild manifest")
 	mfbopts := bopts
 	mfbopts.Clobber = false
-	mfbopts.Prepare = false
 	mfbopts.RebuildManifest = graph.Filename()
 	mfb, err := build.New(ctx, graph, mfbopts)
 	if err != nil {

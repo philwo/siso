@@ -63,9 +63,6 @@ type Options struct {
 	// Clobber forces to rebuild ignoring existing generated files.
 	Clobber bool
 
-	// Build inputs of targets, but not build targets itself.
-	Prepare bool
-
 	// Verbose shows all command lines while building rather than step description.
 	Verbose bool
 
@@ -138,7 +135,6 @@ type Builder struct {
 	envFiles sync.Map
 
 	clobber bool
-	prepare bool
 	verbose bool
 	dryRun  bool
 
@@ -205,7 +201,6 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 		outputLocal:     opts.OutputLocal,
 		cache:           opts.Cache,
 		clobber:         opts.Clobber,
-		prepare:         opts.Prepare,
 		verbose:         opts.Verbose,
 		dryRun:          opts.DryRun,
 		failures:        failures{allowed: opts.FailuresAllowed},
@@ -261,7 +256,6 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 		NumTargets: b.graph.NumTargets(),
 		Path:       b.path,
 		HashFS:     b.hashFS,
-		Prepare:    b.prepare,
 	}
 	sched := newScheduler(schedOpts)
 	err = schedule(ctx, sched, b.graph, args...)
