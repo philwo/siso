@@ -162,18 +162,7 @@ func (b *Builder) prepareLocalInputs(ctx context.Context, step *Step) error {
 	err := b.hashFS.Flush(ctx, step.cmd.ExecRoot, inputs)
 	// now, all inputs are expected to be on disk.
 	// for local, no need to scan deps.
-	// but need to remove missing inputs from cmd.Inputs
-	// because we'll record header inputs for deps=msvc in deps log.
-	// TODO: b/322712783 - minimize local disk check.
-	if step.cmd.Deps == "msvc" {
-		// we need to check this against local disk, not hashfs.
-		// because command may add/remove files that are not
-		// known in ninja build graph.
-		inputs = b.hashFS.ForgetMissings(ctx, step.cmd.ExecRoot, step.cmd.Inputs)
-	} else {
-		// if deps is not "msvc", just check against hashfs.
-		inputs = b.hashFS.Availables(ctx, step.cmd.ExecRoot, step.cmd.Inputs)
-	}
+	inputs = b.hashFS.Availables(ctx, step.cmd.ExecRoot, step.cmd.Inputs)
 	if len(inputs) != len(step.cmd.Inputs) {
 		step.cmd.Inputs = inputs
 	}

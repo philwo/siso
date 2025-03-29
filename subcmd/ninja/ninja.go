@@ -1318,7 +1318,7 @@ func (c *ninjaCmdRun) initOutputLocal() (func(context.Context, string) bool, err
 	case "minimum":
 		return func(ctx context.Context, fname string) bool {
 			// force to output local for inputs
-			// .h,/.hxx/.hpp/.inc/.c/.cc/.cxx/.cpp/.m/.mm for gcc deps or msvc showIncludes
+			// .h,/.hxx/.hpp/.inc/.c/.cc/.cxx/.cpp/.m/.mm for gcc deps
 			// .json/.js/.ts for tsconfig.json, .js for grit etc.
 			// .py for protobuf py etc.
 			switch filepath.Ext(fname) {

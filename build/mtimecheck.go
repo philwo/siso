@@ -99,7 +99,7 @@ func (b *Builder) checkUpToDate(ctx context.Context, stepDef StepDef, stepManife
 		}
 		if depFile != "" {
 			switch stepDef.Binding("deps") {
-			case "gcc", "msvc":
+			case "gcc":
 			default:
 				if b.outputLocal(ctx, depFile) {
 					localOutputs = append(localOutputs, depFile)

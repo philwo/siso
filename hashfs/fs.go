@@ -773,55 +773,6 @@ func (hfs *HashFS) ForgetMissingsInDir(ctx context.Context, root, dir string) {
 	}
 }
 
-// ForgetMissings forgets cached entry for input under root
-// if it doesn't exist on local disk, and returns valid inputs.
-// It is currently used for deps=msvc only to workaround clang-cl issue.
-// https://github.com/llvm/llvm-project/issues/58726
-func (hfs *HashFS) ForgetMissings(ctx context.Context, root string, inputs []string) []string {
-	availables := make([]string, 0, len(inputs))
-	needCheck := make([]string, 0, len(inputs))
-
-	for _, fname := range inputs {
-		fi, err := hfs.Stat(ctx, root, fname)
-		if err != nil {
-			if errors.Is(err, fs.ErrNotExist) {
-				// If it doesn't exist in hashfs,
-				// no need to check with os.Lstat.
-				continue
-			}
-			log.Errorf("stat failed for %q: %v", fname, err)
-		}
-		if err == nil && (fi.IsChanged() || fi.IsMissingChecked()) {
-			// it is explicit generated file.
-			// no need to check on disk.
-			availables = append(availables, fname)
-			continue
-		}
-		needCheck = append(needCheck, fname)
-	}
-
-	for _, fname := range needCheck {
-		fullname := makeFullpath(root, fname)
-		_, err := os.Lstat(fullname)
-		if err != nil {
-			if errors.Is(err, fs.ErrNotExist) {
-				hfs.directory.delete(fullname)
-				continue
-			}
-			log.Errorf("lstat failed for %q: %v", fullname, err)
-		}
-		fi, err := hfs.Stat(ctx, root, fname)
-		if err == nil {
-			fi.e.mu.Lock()
-			fi.e.isMissingChecked = true
-			fi.e.mu.Unlock()
-		}
-		availables = append(availables, fname)
-	}
-
-	return availables
-}
-
 // Availables returns valid inputs (i.e. exist in hashfs).
 func (hfs *HashFS) Availables(ctx context.Context, root string, inputs []string) []string {
 	availables := make([]string, 0, len(inputs))
@@ -1360,8 +1311,6 @@ type entry struct {
 	local bool
 	// isChanged indicates the file is changed in the session.
 	isChanged bool
-	// isMissingChecked indicates the file is checked in ForgetMissings.
-	isMissingChecked bool
 
 	target string // symlink.
 
@@ -2177,14 +2126,6 @@ func (fi FileInfo) IsChanged() bool {
 	fi.e.mu.RLock()
 	defer fi.e.mu.RUnlock()
 	return fi.e.isChanged
-}
-
-// IsMissingChecked returns true if file has been checked existence
-// for ForgetMissings.
-func (fi FileInfo) IsMissingChecked() bool {
-	fi.e.mu.RLock()
-	defer fi.e.mu.RUnlock()
-	return fi.e.isMissingChecked
 }
 
 // IsDir returns true if it is the directory.

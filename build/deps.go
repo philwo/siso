@@ -17,7 +17,6 @@ import (
 	"github.com/charmbracelet/log"
 	"go.chromium.org/infra/build/siso/toolsupport/gccutil"
 	"go.chromium.org/infra/build/siso/toolsupport/makeutil"
-	"go.chromium.org/infra/build/siso/toolsupport/msvcutil"
 )
 
 type depsProcessor interface {
@@ -33,7 +32,6 @@ type depsProcessor interface {
 var depsProcessors = map[string]depsProcessor{
 	"depfile": depsDepfile{},
 	"gcc":     depsGCC{},
-	"msvc":    depsMSVC{},
 }
 
 // depsExpandInputs expands step.cmd.Inputs.
@@ -41,9 +39,6 @@ var depsProcessors = map[string]depsProcessor{
 func depsExpandInputs(ctx context.Context, b *Builder, step *Step) {
 	// deps=gcc,msvc with sources doesn't need to expand inputs.
 	if step.cmd.Deps == "gcc" && len(gccutil.ExtractScanDepsParams(step.cmd.Args, step.cmd.Env).Sources) > 0 {
-		return
-	}
-	if step.cmd.Deps == "msvc" && len(msvcutil.ExtractScanDepsParams(step.cmd.Args, step.cmd.Env).Sources) > 0 {
 		return
 	}
 
@@ -84,7 +79,6 @@ func depsExpandInputs(ctx context.Context, b *Builder, step *Step) {
 		}
 		inputs = append(inputs, in)
 	}
-	log.Infof("deps expands %d -> %d", len(step.cmd.Inputs), len(inputs))
 	step.cmd.Inputs = make([]string, len(inputs))
 	copy(step.cmd.Inputs, inputs)
 }
@@ -108,9 +102,9 @@ func depsCmd(ctx context.Context, b *Builder, step *Step) error {
 	if found {
 		var stepInputs []string
 		switch step.cmd.Deps {
-		case "gcc", "msvc":
+		case "gcc":
 			// Inputs may contains unnecessary inputs.
-			// just needs ToolInputs for deps=gcc, msvc.
+			// just needs ToolInputs for deps=gcc.
 			stepInputs = step.cmd.ToolInputs
 		default:
 			stepInputs = step.def.Inputs(ctx) // use ToolInputs?
