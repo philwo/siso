@@ -154,7 +154,7 @@ func (b *Builder) handleStep(ctx context.Context, step *Step) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	result, _ := step.cmd.ActionResult()
+	result := step.cmd.ActionResult()
 	exited := result != nil
 	return exited, nil
 }
