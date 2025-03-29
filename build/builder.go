@@ -9,13 +9,11 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
-	"runtime/pprof"
 	"slices"
 	"sort"
 	"strings"
@@ -59,9 +57,8 @@ type Options struct {
 	// RECacheEnableWrite bool
 	ActionSalt []byte
 
-	OutputLocal          OutputLocalFunc
-	Cache                *Cache
-	FailureSummaryWriter io.Writer
+	OutputLocal OutputLocalFunc
+	Cache       *Cache
 
 	// Clobber forces to rebuild ignoring existing generated files.
 	Clobber bool
@@ -140,8 +137,6 @@ type Builder struct {
 
 	cache *Cache
 
-	failureSummaryWriter io.Writer
-
 	// envfiles: filename -> *envfile
 	envFiles sync.Map
 
@@ -211,16 +206,15 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 		actionSalt:  opts.ActionSalt,
 		reapiclient: opts.REAPIClient,
 
-		outputLocal:          opts.OutputLocal,
-		cache:                opts.Cache,
-		failureSummaryWriter: opts.FailureSummaryWriter,
-		clobber:              opts.Clobber,
-		prepare:              opts.Prepare,
-		verbose:              opts.Verbose,
-		verboseFailures:      opts.VerboseFailures,
-		dryRun:               opts.DryRun,
-		failures:             failures{allowed: opts.FailuresAllowed},
-		rebuildManifest:      opts.RebuildManifest,
+		outputLocal:     opts.OutputLocal,
+		cache:           opts.Cache,
+		clobber:         opts.Clobber,
+		prepare:         opts.Prepare,
+		verbose:         opts.Verbose,
+		verboseFailures: opts.VerboseFailures,
+		dryRun:          opts.DryRun,
+		failures:        failures{allowed: opts.FailuresAllowed},
+		rebuildManifest: opts.RebuildManifest,
 	}
 	return b, nil
 }
@@ -277,9 +271,6 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 	sched := newScheduler(schedOpts)
 	err = schedule(ctx, sched, b.graph, args...)
 	if err != nil {
-		if b.failureSummaryWriter != nil {
-			fmt.Fprintf(b.failureSummaryWriter, "%v\n", err)
-		}
 		return err
 	}
 	b.plan = sched.plan
@@ -480,31 +471,6 @@ loop:
 		} else {
 			ui.Default.PrintLines(fmt.Sprintf("%s failed", name))
 		}
-	}
-	if b.rebuildManifest == "" && !ui.IsTerminal() && b.failureSummaryWriter != nil {
-		// non batch mode (ui.IsTerminal) may build last failed command
-		// so should not trigger this check at the end of build.
-		// also check it uses failureSummaryWriter (which is mainly
-		// used on builder only), as we want to check this builder only.
-		// developer would kill/interrupt if it won't finish.
-		finished := time.Now()
-		go func() {
-			time.Sleep(10 * time.Minute)
-			// expect siso process finishes before it runs
-			fmt.Fprintf(os.Stderr, "\nBUG: http://b/360961799 - siso didn't finish in %s after build finished \ndump all goroutines:\n", time.Since(finished))
-			err := pprof.Lookup("goroutine").WriteTo(os.Stderr, 1)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "failed to WriteTo: %v\n", err)
-			}
-			fmt.Fprintf(os.Stderr, "\nwait more 10 minutes.\n")
-			time.Sleep(10 * time.Minute)
-			fmt.Fprintf(os.Stderr, "siso still didn't finish in %s after build finished \ndump all goroutines:\n", time.Since(finished))
-			err = pprof.Lookup("goroutine").WriteTo(os.Stderr, 1)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "failed to WriteTo: %v\n", err)
-			}
-			os.Exit(1)
-		}()
 	}
 	return err
 }
