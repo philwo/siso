@@ -392,7 +392,7 @@ func (s *scheduler) mark(ctx context.Context, graph Graph, target Target, next S
 }
 
 func (s *scheduler) progressReport(format string, args ...any) {
-	ui.Default.PrintLines(fmt.Sprintf(format, args...))
+	log.Infof(format, args...)
 }
 
 // finish finishes the scheduling.

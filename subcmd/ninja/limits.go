@@ -32,6 +32,6 @@ func (c *ninjaCmdRun) checkResourceLimits() {
 		nfile += uint64(limits.Remote) * 4
 	}
 	if lim.Cur < nfile {
-		ui.Default.PrintLines(ui.SGR(ui.Yellow, fmt.Sprintf("WARNING: too low file limit=%d. would fail with too many open files\n", lim.Cur)))
+		log.Info(ui.SGR(ui.Yellow, fmt.Sprintf("WARNING: too low file limit=%d. would fail with too many open files\n", lim.Cur)))
 	}
 }
