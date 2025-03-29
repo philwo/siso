@@ -15,11 +15,13 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sync"
+	"syscall"
 	"time"
 
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
 	"github.com/charmbracelet/log"
 	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.chromium.org/infra/build/siso/execute"
@@ -55,6 +57,21 @@ func (LocalExec) Run(ctx context.Context, cmd *execute.Cmd) (err error) {
 	// TODO(b/254158307): calculate action digest if cmd is pure?
 	now := time.Now()
 	return cmd.RecordOutputsFromLocal(ctx, now)
+}
+
+func rusage(cmd *exec.Cmd) *epb.Rusage {
+	if u, ok := cmd.ProcessState.SysUsage().(*syscall.Rusage); ok {
+		return &epb.Rusage{
+			// 32bit arch may use int32 for Maxrss etc.
+			MaxRss:  u.Maxrss,
+			Majflt:  u.Majflt,
+			Inblock: u.Inblock,
+			Oublock: u.Oublock,
+			Utime:   &durationpb.Duration{Seconds: u.Utime.Sec, Nanos: int32(u.Utime.Usec)},
+			Stime:   &durationpb.Duration{Seconds: u.Stime.Sec, Nanos: int32(u.Stime.Usec)},
+		}
+	}
+	return nil
 }
 
 func run(ctx context.Context, cmd *execute.Cmd) (*rpb.ActionResult, error) {
