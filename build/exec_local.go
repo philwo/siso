@@ -149,8 +149,4 @@ command: %q %d
 		step, step.cmd.Pure, step.cmd.Restat, dur,
 		step.cmd.ActionName, output,
 		command, dur.Milliseconds())
-	_, err := b.localexecLogWriter.Write(buf.Bytes())
-	if err != nil {
-		log.Warnf("failed to log localexec: %v", err)
-	}
 }
