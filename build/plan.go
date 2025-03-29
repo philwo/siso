@@ -162,7 +162,6 @@ type schedulerOption struct {
 	NumTargets int
 	Path       *Path
 	HashFS     *hashfs.HashFS
-	Prepare    bool
 }
 
 // scheduler creates a plan.
@@ -177,14 +176,6 @@ type scheduler struct {
 
 	lastProgress time.Time
 	visited      int
-
-	// prepare runs steps to generate inputs for the requested targets,
-	// but not run steps to generate requested targets.
-	prepare bool
-
-	// prepareHeaderOnly runs steps to generate headers needed for
-	// the requested targets.
-	prepareHeaderOnly bool
 }
 
 func targetPath(ctx context.Context, g Graph, t Target) string {
@@ -225,28 +216,27 @@ func schedule(ctx context.Context, sched *scheduler, graph Graph, args ...string
 			continue
 		}
 
-		validationQueue, err = scheduleTarget(ctx, sched, graph, t, nil, sched.prepare, validationQueue)
+		validationQueue, err = scheduleTarget(ctx, sched, graph, t, nil, validationQueue)
 		if err != nil {
 			return fmt.Errorf("failed in schedule %s: %w", targetPath(ctx, graph, t), err)
 		}
 	}
-	if !sched.prepare {
-		for len(validationQueue) > 0 {
-			t := validationQueue[0]
-			validationQueue = validationQueue[1:]
-			switch sched.plan.targets[t].scan {
-			case scanStateNotVisited:
-			case scanStateVisiting:
-				return fmt.Errorf("scan state %q: visiting", targetPath(ctx, graph, t))
-			case scanStateDone, scanStateIgnored:
-				continue
-			}
-			validationQueue, err = scheduleTarget(ctx, sched, graph, t, nil, false, validationQueue)
-			if err != nil {
-				return fmt.Errorf("failed in schedule %s: %w", targetPath(ctx, graph, t), err)
-			}
+	for len(validationQueue) > 0 {
+		t := validationQueue[0]
+		validationQueue = validationQueue[1:]
+		switch sched.plan.targets[t].scan {
+		case scanStateNotVisited:
+		case scanStateVisiting:
+			return fmt.Errorf("scan state %q: visiting", targetPath(ctx, graph, t))
+		case scanStateDone, scanStateIgnored:
+			continue
+		}
+		validationQueue, err = scheduleTarget(ctx, sched, graph, t, nil, false, validationQueue)
+		if err != nil {
+			return fmt.Errorf("failed in schedule %s: %w", targetPath(ctx, graph, t), err)
 		}
 	}
+
 	sched.finish(time.Since(started))
 	return nil
 }
@@ -262,17 +252,13 @@ func (d DependencyCycleError) Error() string {
 
 // scheduleTarget schedules a build plan for target, which is required to next StepDef, from graph into sched.
 // It also returns validationQueue updated while scheduling.
-func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target Target, next StepDef, ignore bool, validationQueue []Target) ([]Target, error) {
+func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target Target, next StepDef, validationQueue []Target) ([]Target, error) {
 	targets := sched.plan.targets
 	scanState := targets[target].scan
 	switch scanState {
 	case scanStateNotVisited:
 		targets[target].scan = scanStateVisiting
 		defer func() {
-			if ignore {
-				targets[target].scan = scanStateIgnored
-				return
-			}
 			targets[target].scan = scanStateDone
 		}()
 	case scanStateVisiting:
@@ -280,9 +266,6 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 			Targets: []string{targetPath(ctx, graph, target)},
 		}
 	case scanStateIgnored:
-		if ignore {
-			return validationQueue, nil
-		}
 		targets[target].scan = scanStateVisiting
 		defer func() {
 			targets[target].scan = scanStateDone
@@ -316,9 +299,6 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 	// mark all other outputs are done, or ignored.
 	defer func() {
 		nextState := scanStateDone
-		if ignore {
-			nextState = scanStateIgnored
-		}
 		for _, out := range newEdge.Outputs {
 			switch targets[out].scan {
 			case scanStateNotVisited:
@@ -337,25 +317,6 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 	case <-ctx.Done():
 		return validationQueue, fmt.Errorf("interrupted in schedule: %w", context.Cause(ctx))
 	default:
-	}
-
-	if ignore && sched.prepareHeaderOnly {
-		// If this step generates header (even if build dependency
-		// doesn't explicitly depend on the header), don't ignore this.
-		// b/358693473
-	outCheck:
-		for _, out := range newEdge.Outputs {
-			fname, err := graph.TargetPath(ctx, out)
-			if err != nil {
-				return validationQueue, fmt.Errorf("schedule bad target %s: %w", targetPath(ctx, graph, out), err)
-			}
-			switch filepath.Ext(fname) {
-			case ".h", ".hxx", ".hpp", ".inc":
-				ignore = false
-				break outCheck
-			}
-
-		}
 	}
 
 	// we might not need to use depfile's dependencies to construct
@@ -378,22 +339,7 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 	orderOnlyIndex := len(newEdge.Inputs)
 	for i, in := range append(newEdge.Inputs, newEdge.OrderOnly...) {
 		if targets[in].scan != scanStateDone {
-			// if this target is ignored, but "in" is header,
-			// then it will not ignore steps to generate "in"
-			// and "in"'s inputs recursively.
-			var inIgnore bool
-			if ignore && sched.prepareHeaderOnly {
-				fname, err := graph.TargetPath(ctx, in)
-				if err != nil {
-					return validationQueue, fmt.Errorf("schedule bad target %s: %w", targetPath(ctx, graph, in), err)
-				}
-				switch filepath.Ext(fname) {
-				case ".h", ".hxx", ".hpp", ".inc":
-				default:
-					inIgnore = true
-				}
-			}
-			validationQueue, err = scheduleTarget(ctx, sched, graph, in, next, inIgnore, validationQueue)
+			validationQueue, err = scheduleTarget(ctx, sched, graph, in, next, validationQueue)
 			if err != nil {
 				var cycleErr DependencyCycleError
 				if errors.As(err, &cycleErr) {
@@ -406,7 +352,7 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 				return validationQueue, fmt.Errorf("schedule %s: %w", targetPath(ctx, graph, in), err)
 			}
 		}
-		if !targets[in].source && !ignore {
+		if !targets[in].source {
 			// If in is not marked (i.e. source), some step
 			// will generate it, so need to wait for it
 			// before running this step.
@@ -428,9 +374,6 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 			return validationQueue, fmt.Errorf("schedule: non phony_output %q depends on phony_output %q", targetPath(ctx, graph, target), targetPath(ctx, graph, in))
 		}
 	}
-	if ignore {
-		return validationQueue, nil
-	}
 	step.outputs = newEdge.Outputs
 	sched.add(step)
 	return validationQueue, nil
@@ -438,7 +381,6 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 
 // newScheduler creates new scheduler.
 func newScheduler(opt schedulerOption) *scheduler {
-	var prepareHeaderOnly bool
 	return &scheduler{
 		path:   opt.Path,
 		hashFS: opt.HashFS,
@@ -447,8 +389,6 @@ func newScheduler(opt schedulerOption) *scheduler {
 			q:       make(chan *Step, 10000),
 			targets: make([]targetInfo, opt.NumTargets),
 		},
-		prepare:           opt.Prepare,
-		prepareHeaderOnly: prepareHeaderOnly,
 	}
 }
 

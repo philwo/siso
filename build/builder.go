@@ -65,9 +65,6 @@ type Options struct {
 	// Clobber forces to rebuild ignoring existing generated files.
 	Clobber bool
 
-	// Build inputs of targets, but not build targets itself.
-	Prepare bool
-
 	// Batch modes for throughput.
 	// non-batch mode for low latency, interactive.
 	Batch bool
@@ -148,7 +145,6 @@ type Builder struct {
 
 	clobber bool
 	batch   bool
-	prepare bool
 	verbose bool
 	dryRun  bool
 
@@ -222,7 +218,6 @@ func New(ctx context.Context, graph Graph, opts Options) (_ *Builder, err error)
 		cache:           opts.Cache,
 		clobber:         opts.Clobber,
 		batch:           opts.Batch,
-		prepare:         opts.Prepare,
 		verbose:         opts.Verbose,
 		dryRun:          opts.DryRun,
 		failures:        failures{allowed: opts.FailuresAllowed},
@@ -296,7 +291,6 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 		NumTargets: b.graph.NumTargets(),
 		Path:       b.path,
 		HashFS:     b.hashFS,
-		Prepare:    b.prepare,
 	}
 	sched := newScheduler(schedOpts)
 	err = schedule(ctx, sched, b.graph, args...)
