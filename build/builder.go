@@ -31,7 +31,6 @@ import (
 	"go.chromium.org/infra/build/siso/reapi"
 	"go.chromium.org/infra/build/siso/reapi/digest"
 	"go.chromium.org/infra/build/siso/reapi/merkletree"
-	"go.chromium.org/infra/build/siso/runtimex"
 	"go.chromium.org/infra/build/siso/scandeps"
 	"go.chromium.org/infra/build/siso/sync/semaphore"
 	"go.chromium.org/infra/build/siso/ui"
@@ -181,7 +180,7 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 		log.Infof("remote execution enabled")
 		re = remoteexec.New(opts.REAPIClient)
 	}
-	numCPU := runtimex.NumCPU()
+	numCPU := runtime.NumCPU()
 	if (opts.Limits == Limits{}) {
 		opts.Limits = DefaultLimits()
 	}
@@ -545,19 +544,11 @@ func (b *Builder) uploadBuildNinja(ctx context.Context) {
 }
 
 // dedupInputs deduplicates inputs.
-// For windows worker, which uses case insensitive file system, it also
-// deduplicates filenames with different cases, e.g. "Windows.h" vs "windows.h".
-// TODO(b/275452106): support Mac worker
 func dedupInputs(cmd *execute.Cmd) {
-	// need to dedup input with different case in intermediate dir on win and mac?
-	caseInsensitive := cmd.Platform["OSFamily"] == "Windows"
 	m := make(map[string]string)
 	inputs := make([]string, 0, len(cmd.Inputs))
 	for _, input := range cmd.Inputs {
 		key := input
-		if caseInsensitive {
-			key = strings.ToLower(input)
-		}
 		if _, found := m[key]; found {
 			continue
 		}

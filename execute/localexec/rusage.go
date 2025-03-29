@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-//go:build unix
-
 package localexec
 
 import (
@@ -23,8 +21,8 @@ func rusage(cmd *exec.Cmd) *epb.Rusage {
 			Majflt:  u.Majflt,
 			Inblock: u.Inblock,
 			Oublock: u.Oublock,
-			Utime:   &durationpb.Duration{Seconds: u.Utime.Sec, Nanos: u.Utime.Usec},
-			Stime:   &durationpb.Duration{Seconds: u.Stime.Sec, Nanos: u.Stime.Usec},
+			Utime:   &durationpb.Duration{Seconds: u.Utime.Sec, Nanos: int32(u.Utime.Usec)},
+			Stime:   &durationpb.Duration{Seconds: u.Stime.Sec, Nanos: int32(u.Stime.Usec)},
 		}
 	}
 	return nil

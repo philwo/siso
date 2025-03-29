@@ -1031,15 +1031,6 @@ func (c *ninjaCmdRun) logFilename(fname, startDir string) string {
 	return "." + string(os.PathSeparator) + rel
 }
 
-// glogFilename returns filename of glog logfile. i.e. siso.INFO.
-// func (c *ninjaCmdRun) glogFilename() string {
-// 	logFilename := "siso.INFO"
-// 	if runtime.GOOS == "windows" {
-// 		logFilename = "siso.exe.INFO"
-// 	}
-// 	return filepath.Join(c.logDir, logFilename)
-// }
-
 func (c *ninjaCmdRun) logWriter(fname string) (io.Writer, func(errp *error), error) {
 	fname = c.logFilename(fname, "")
 	if fname == "" {
@@ -1148,33 +1139,6 @@ func doBuild(ctx context.Context, graph *ninjabuild.Graph, bopts build.Options, 
 	// TODO(b/266518906): wait for completion of uploading manifest
 	return stats, err
 }
-
-// func (c *ninjaCmdRun) logSymlink(ctx context.Context) error {
-// 	logFilename := c.glogFilename()
-// 	rotateFiles(ctx, logFilename)
-// 	logfiles, err := log.Names("INFO")
-// 	if err != nil {
-// 		return fmt.Errorf("failed to get glog INFO level log files: %w", err)
-// 	}
-// 	if len(logfiles) == 0 {
-// 		return fmt.Errorf("no glog INFO level log files")
-// 	}
-// 	err = os.Symlink(logfiles[0], logFilename)
-// 	if err != nil {
-// 		log.Warnf("failed to create %s: %v", logFilename, err)
-// 		// On Windows, it failed to create symlink.
-// 		// just same filename in *.redirected file.
-// 		err = os.WriteFile(logFilename+".redirected", []byte(logfiles[0]), 0644)
-// 		if err != nil {
-// 			log.Warnf("failed to write %s.redirected: %v", logFilename, err)
-// 		}
-// 		c.sisoInfoLog = logfiles[0]
-// 		return nil
-// 	}
-// 	log.Infof("logfile: %q", logfiles)
-// 	c.sisoInfoLog = filepath.Base(logFilename)
-// 	return nil
-// }
 
 type dataSource struct {
 	cache  cachestore.CacheStore
