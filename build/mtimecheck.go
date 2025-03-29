@@ -47,43 +47,24 @@ func (b *Builder) needToRun(ctx context.Context, stepDef StepDef, stepManifest *
 func (b *Builder) checkUpToDate(ctx context.Context, stepDef StepDef, stepManifest *stepManifest) bool {
 	generator := stepDef.Binding("generator") != ""
 
-	out0, outmtime, cmdhash, edgehash := outputMtime(ctx, b, stepManifest.outputs, stepDef.Binding("restat") != "")
-	lastIn, inmtime, err := inputMtime(ctx, b, stepDef)
+	_, outmtime, cmdhash, edgehash := outputMtime(ctx, b, stepManifest.outputs, stepDef.Binding("restat") != "")
+	_, inmtime, err := inputMtime(ctx, b, stepDef)
 
 	// TODO(b/288419130): make sure it covers all cases as ninja does.
 
-	outname := b.path.MaybeToWD(out0)
-	lastInName := b.path.MaybeToWD(lastIn)
 	if err != nil {
-		reason := "missing-inputs"
-		switch {
-		case errors.Is(err, ErrMissingDeps):
-			reason = "missing-deps"
-		case errors.Is(err, ErrStaleDeps):
-			reason = "stale-deps"
-		case errors.Is(err, errDirty):
-			reason = "dirty"
-		}
-		fmt.Fprintf(b.explainWriter, "deps for %s %s: %v\n", outname, reason, err)
 		return false
 	}
 	if outmtime.IsZero() {
-		fmt.Fprintf(b.explainWriter, "output %s doesn't exist\n", outname)
 		return false
 	}
 	if inmtime.After(outmtime) {
-		fmt.Fprintf(b.explainWriter, "output %s older than most recent input %s: out:%s in:+%s\n", outname, lastInName, outmtime.Format(time.RFC3339), inmtime.Sub(outmtime))
 		return false
 	}
 	if !generator && !bytes.Equal(cmdhash, stepManifest.cmdHash) {
 		// TODO: remove old cmdhash support
 		oldCmdHash := calculateOldCmdHash(stepManifest.cmdline, stepManifest.rspfileContent)
 		if !bytes.Equal(cmdhash, oldCmdHash) {
-			if len(cmdhash) == 0 {
-				fmt.Fprintf(b.explainWriter, "command line not found in log for %s\n", outname)
-			} else {
-				fmt.Fprintf(b.explainWriter, "command line changed for %s\n", outname)
-			}
 			return false
 		}
 		// match with old cmd hash.
@@ -94,11 +75,9 @@ func (b *Builder) checkUpToDate(ctx context.Context, stepDef StepDef, stepManife
 		log.Warnf("missing edgehash in output")
 	} else if !bytes.Equal(edgehash, stepManifest.edgeHash) {
 		log.Infof("need: edgehash differ %q -> %q", base64.StdEncoding.EncodeToString(edgehash), base64.StdEncoding.EncodeToString(stepManifest.edgeHash))
-		fmt.Fprintf(b.explainWriter, "edge changed for %s\n", outname)
 		return false
 	}
 	if b.clobber {
-		// explain once at the beginning of the build.
 		return false
 	}
 	if b.outputLocal != nil {
@@ -131,7 +110,6 @@ func (b *Builder) checkUpToDate(ctx context.Context, stepDef StepDef, stepManife
 		if len(localOutputs) > 0 {
 			err := b.hashFS.Flush(ctx, b.path.ExecRoot, localOutputs)
 			if err != nil {
-				fmt.Fprintf(b.explainWriter, "output %s flush error %s: %v", outname, localOutputs, err)
 				return false
 			}
 		}
