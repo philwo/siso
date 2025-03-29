@@ -32,39 +32,6 @@ type Executor interface {
 	Run(ctx context.Context, cmd *Cmd) error
 }
 
-// REProxyConfig specifies configuration options for using reproxy.
-type REProxyConfig struct {
-	CanonicalizeWorkingDir bool              `json:"canonicalize_working_dir,omitempty"`
-	DownloadOutputs        bool              `json:"download_outputs,omitempty"`
-	PreserveSymlinks       bool              `json:"preserve_symlinks,omitempty"`
-	ExecStrategy           string            `json:"exec_strategy,omitempty"`
-	ExecTimeout            string            `json:"exec_timeout,omitempty"` // duration format
-	Inputs                 []string          `json:"inputs,omitempty"`
-	ToolchainInputs        []string          `json:"toolchain_inputs,omitempty"`
-	Labels                 map[string]string `json:"labels,omitempty"`
-	Platform               map[string]string `json:"platform,omitempty"`
-	RemoteWrapper          string            `json:"remote_wrapper,omitempty"`
-	ServerAddress          string            `json:"server_address,omitempty"`
-}
-
-// Copy returns a deep copy of *REProxyConfig which can be safely mutated.
-// Will return nil if given *REProxyConfig is nil.
-func (c *REProxyConfig) Copy() *REProxyConfig {
-	if c == nil {
-		return nil
-	}
-	copy := *c
-	copy.Labels = make(map[string]string, len(c.Labels))
-	for k := range c.Labels {
-		copy.Labels[k] = c.Labels[k]
-	}
-	copy.Platform = make(map[string]string, len(c.Platform))
-	for k := range c.Platform {
-		copy.Platform[k] = c.Platform[k]
-	}
-	return &copy
-}
-
 // Cmd includes all the information required to run a build command.
 type Cmd struct {
 	// ID is used as a unique identifier for this action in logs and tracing.
@@ -177,10 +144,6 @@ type Cmd struct {
 	// The value is the filename on local disk.
 	// The file names are relative to ExecRoot.
 	RemoteInputs map[string]string
-
-	// REProxyConfig specifies configuration options for using reproxy.
-	// If using reproxy, this config takes precedence over options in this struct.
-	REProxyConfig *REProxyConfig
 
 	// CanonicalizeDir specifies whether remote execution will canonicalize
 	// working directory or not.
