@@ -62,7 +62,6 @@ type Options struct {
 	OutputLocal          OutputLocalFunc
 	Cache                *Cache
 	FailureSummaryWriter io.Writer
-	OutputLogWriter      io.Writer
 
 	// Clobber forces to rebuild ignoring existing generated files.
 	Clobber bool
@@ -145,7 +144,6 @@ type Builder struct {
 	cache *Cache
 
 	failureSummaryWriter io.Writer
-	outputLogWriter      io.Writer
 
 	// envfiles: filename -> *envfile
 	envFiles sync.Map
@@ -222,7 +220,6 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 		outputLocal:          opts.OutputLocal,
 		cache:                opts.Cache,
 		failureSummaryWriter: opts.FailureSummaryWriter,
-		outputLogWriter:      opts.OutputLogWriter,
 		clobber:              opts.Clobber,
 		prepare:              opts.Prepare,
 		verbose:              opts.Verbose,
