@@ -131,8 +131,6 @@ type Step struct {
 	// endTime is the time that the step ends.
 	endTime time.Time
 
-	metrics StepMetric
-
 	state *stepState
 }
 
@@ -286,21 +284,6 @@ func (s *Step) servDuration() time.Duration {
 // Done checks the step is done.
 func (s *Step) Done() bool {
 	return s.state.Phase() == stepDone
-}
-
-func (s *Step) addWeightedDuration(d time.Duration) {
-	s.state.mu.Lock()
-	defer s.state.mu.Unlock()
-	if s.state.phase == stepDone {
-		return
-	}
-	s.state.weightedDuration += d
-}
-
-func (s *Step) getWeightedDuration() time.Duration {
-	s.state.mu.Lock()
-	defer s.state.mu.Unlock()
-	return s.state.weightedDuration
 }
 
 func (s *Step) init(ctx context.Context, b *Builder) {

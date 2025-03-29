@@ -22,23 +22,13 @@ func (b *Builder) execRemote(ctx context.Context, step *Step) error {
 	var timeout time.Duration
 	step.cmd.RecordPreOutputs(ctx)
 	phase := stepRemoteRun
-	if step.metrics.DepsLogErr {
-		phase = stepRetryRun
-	}
 	var reExecDur time.Duration
 	err := retry.Do(ctx, func() error {
 		step.setPhase(phase.wait())
 		err := b.remoteSema.Do(ctx, func() error {
 			step.setPhase(phase)
 			if phase == stepRetryRun {
-				step.metrics.RemoteRetry++
 				b.progressStepRetry(step)
-			}
-			reExecStarted := time.Now()
-			// Record ActionStartTime only when it's not set, yet.
-			// This avoids overriding ActionStartTime for retries.
-			if step.metrics.ActionStartTime == 0 {
-				step.metrics.ActionStartTime = IntervalMetric(reExecStarted.Sub(b.start))
 			}
 			ctx = reapi.NewContext(ctx, &rpb.RequestMetadata{
 				ActionId:                step.cmd.ID,
@@ -50,33 +40,24 @@ func (b *Builder) execRemote(ctx context.Context, step *Step) error {
 			phase = stepRetryRun
 			err := b.remoteExec.Run(ctx, step.cmd)
 			step.setPhase(stepOutput)
-			step.metrics.IsRemote = true
-			result, cached := step.cmd.ActionResult()
+			result, _ := step.cmd.ActionResult()
 			if err == nil && !validateRemoteActionResult(result) {
 				log.Errorf("no outputs in action result. retry without cache lookup. b/350360391")
 				res := cmdOutput(ctx, cmdOutputResultRETRY, step.cmd, step.def.Binding("command"), step.def.RuleName(), err)
 				b.logOutput(res, false)
-				step.metrics.RemoteRetry++
 				step.cmd.SkipCacheLookup = true
 				step.setPhase(phase)
 				err = b.remoteExec.Run(ctx, step.cmd)
 				step.setPhase(stepOutput)
-				step.metrics.IsRemote = true
-				result, cached = step.cmd.ActionResult()
+				result, _ = step.cmd.ActionResult()
 				if err == nil && !validateRemoteActionResult(result) {
 					log.Errorf("no outputs in action result again. b/350360391")
 				}
 			}
-			if cached {
-				step.metrics.Cached = true
-			}
-			step.metrics.RunTime = IntervalMetric(time.Since(reExecStarted))
-			step.metrics.done(step, b.start)
 			return err
 		})
-		reExecDur += time.Duration(step.metrics.RunTime)
 		if code := status.Code(err); code == codes.DeadlineExceeded || errors.Is(err, context.DeadlineExceeded) && reExecDur < timeout {
-			log.Warnf("remote execution timed out: duration=%s timeout=%s err=%v", reExecDur, timeout, err)
+			log.Warnf("remote execution timed out: timeout=%s err=%v", timeout, err)
 			err = status.Errorf(codes.Unavailable, "reapi timedout %v", err)
 		}
 		return err
@@ -93,8 +74,6 @@ func (b *Builder) execRemote(ctx context.Context, step *Step) error {
 }
 
 func (b *Builder) execRemoteCache(ctx context.Context, step *Step) error {
-	start := time.Now()
-	step.metrics.ActionStartTime = IntervalMetric(start.Sub(b.start))
 	err := b.cache.GetActionResult(ctx, step.cmd)
 	if err != nil {
 		return err
@@ -109,9 +88,6 @@ func (b *Builder) execRemoteCache(ctx context.Context, step *Step) error {
 		return errors.New("no output in action result")
 	}
 	b.progressStepCacheHit(step)
-	step.metrics.RunTime = IntervalMetric(time.Since(start))
-	step.metrics.done(step, b.start)
-	step.metrics.Cached = true
 	// need to update deps for cache hit for deps=gcc, msvc.
 	// even if cache hit, deps should be updated with gcc depsfile,
 	// or with msvc showIncludes outputs.
