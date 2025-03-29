@@ -42,8 +42,6 @@ func (e StepError) Unwrap() error {
 //   - try cmd with deps log cache (fast deps)
 //   - if failed, preproc runs deps command (e.g.clang -M)
 //   - run cmd
-//
-// can control the flows with the experiment ids, defined in experiments.go.
 func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 	step.startTime = time.Now()
 
@@ -94,12 +92,10 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 	step.setPhase(stepHandler)
 	exited, err := b.handleStep(ctx, step)
 	if err != nil {
-		if !experiments.Enabled("keep-going-handle-error", "handle %s failed: %v", step, err) {
-			res := cmdOutput(ctx, cmdOutputResultFAILED, step.cmd, step.def.Binding("command"), step.def.RuleName(), err)
-			step.cmd.SetOutputResult(b.logOutput(res, step.cmd.Console))
-			log.Warnf("Failed to exec(handle): %v", err)
-			return fmt.Errorf("failed to run handler for %s: %w", step, err)
-		}
+		res := cmdOutput(ctx, cmdOutputResultFAILED, step.cmd, step.def.Binding("command"), step.def.RuleName(), err)
+		step.cmd.SetOutputResult(b.logOutput(res, step.cmd.Console))
+		log.Warnf("Failed to exec(handle): %v", err)
+		return fmt.Errorf("failed to run handler for %s: %w", step, err)
 	} else if exited {
 		// store handler generated outputs to local disk.
 		// better to upload to CAS, or store in fs_state?
@@ -159,9 +155,6 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 	res := cmdOutput(ctx, cmdOutputResultSUCCESS, step.cmd, step.def.Binding("command"), step.def.RuleName(), nil)
 	if res != nil {
 		step.cmd.SetOutputResult(b.logOutput(res, step.cmd.Console))
-		if experiments.Enabled("fail-on-stdouterr", "step %s emit stdout/stderr", step) {
-			return fmt.Errorf("%s emit stdout/stderr", step)
-		}
 	}
 	b.plan.done(step)
 	return nil

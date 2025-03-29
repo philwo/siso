@@ -216,7 +216,6 @@ func New(ctx context.Context, graph Graph, opts Options) (_ *Builder, err error)
 		log.Infof("remote execution enabled")
 		re = remoteexec.New(opts.REAPIClient)
 	}
-	experiments.ShowOnce()
 	numCPU := runtimex.NumCPU()
 	if (opts.Limits == Limits{}) {
 		opts.Limits = DefaultLimits()

@@ -25,7 +25,7 @@ func (b *Builder) execLocal(ctx context.Context, step *Step) error {
 
 	step.setPhase(stepInput)
 	err := b.prepareLocalInputs(ctx, step)
-	if err != nil && !experiments.Enabled("ignore-missing-local-inputs", "step %s missing inputs: %v", step, err) {
+	if err != nil {
 		return err
 	}
 	step.cmd.RecordPreOutputs(ctx)
@@ -39,34 +39,6 @@ func (b *Builder) execLocal(ctx context.Context, step *Step) error {
 		stateMessage += " (pool=" + pool + ")"
 	}
 	phase := stepLocalRun
-	var executor execute.Executor = b.localExec
-	logLocalExec := b.logLocalExec
-	switch sandbox := step.def.Binding("sandbox"); sandbox {
-	// TODO(crbug.com/420752996): add sandbox supports
-	case "":
-		enableTrace := experiments.Enabled("file-access-trace", "enable file-access-trace")
-		if enableTrace {
-			// check impure explicitly set in config,
-			// rather than step.cmd.Pure.
-			// step.cmd.Pure may be false when config is not set
-			// for the step too, but we want to disable
-			// file-access-trace only for the step with impure=true.
-			// http://b/261655377 errorprone_plugin_tests: too slow under strace?
-			impure := step.def.Binding("impure") == "true"
-			if impure {
-				log.Warnf("disable file-access-trace by impure")
-			} else {
-				traceExecutor, err := newFileTraceExecutor(b, executor)
-				if err != nil {
-					return fmt.Errorf("unable to perform file-access-trace: %w", err)
-				}
-				executor = traceExecutor
-				logLocalExec = traceExecutor.logLocalExec
-			}
-		}
-	default:
-		log.Warnf("unsupported sandbox %q", sandbox)
-	}
 
 	queueTime := time.Now()
 	var dur time.Duration
