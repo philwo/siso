@@ -78,12 +78,11 @@ type ninjaCmdRun struct {
 	configName string
 	projectID  string
 
-	offline         bool
-	verbose         bool
-	dryRun          bool
-	clobber         bool
-	failuresAllowed int
-	actionSalt      string
+	offline    bool
+	verbose    bool
+	dryRun     bool
+	clobber    bool
+	actionSalt string
 
 	remoteJobs int
 	fname      string
@@ -245,10 +244,6 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	defer signals.HandleInterrupt(func() {
 		cancel(errInterrupted{})
 	})()
-
-	if c.failuresAllowed <= 0 {
-		c.failuresAllowed = math.MaxInt
-	}
 
 	if c.offline {
 		fmt.Fprintln(os.Stderr, ui.SGR(ui.Red, "offline mode"))
@@ -489,7 +484,6 @@ func (c *ninjaCmdRun) init() {
 	c.Flags.BoolVar(&c.verbose, "v", false, "show all command lines while building (alias of --verbose)")
 	c.Flags.BoolVar(&c.dryRun, "n", false, "dry run")
 	c.Flags.BoolVar(&c.clobber, "clobber", false, "clobber build")
-	c.Flags.IntVar(&c.failuresAllowed, "k", 1, "keep going until N jobs fail (0 means inifinity)")
 	c.Flags.StringVar(&c.actionSalt, "action_salt", "", "action salt")
 
 	c.Flags.IntVar(&c.remoteJobs, "remote_jobs", 0, "run N remote jobs in parallel. when the value is <= 0, it will be computed based on # of CPUs.")
@@ -669,7 +663,6 @@ func (c *ninjaCmdRun) initBuildOpts(projectID string, buildPath *build.Path, con
 		Clobber:           c.clobber,
 		Verbose:           c.verbose,
 		DryRun:            c.dryRun,
-		FailuresAllowed:   c.failuresAllowed,
 		Limits:            limits,
 	}
 	return bopts, nil
