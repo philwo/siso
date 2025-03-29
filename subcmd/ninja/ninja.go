@@ -107,8 +107,6 @@ type ninjaCmdRun struct {
 
 	// enableCPUProfiler bool
 
-	subtool    string
-	cleandead  bool
 	adjustWarn string
 
 	startDir string
@@ -280,39 +278,6 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	defer signals.HandleInterrupt(func() {
 		cancel(errInterrupted{})
 	})()
-	switch c.subtool {
-	case "":
-	case "list":
-		return stats, flagError{
-			err: errors.New(`ninja subtools:
-  commands   Use "siso query commands" instead
-  deps       Use "siso query deps" instead
-  inputs     Use "siso query inputs" instead
-  targets    Use "siso query targets" instead
-  cleandead  clean built files that are no longer produced by the manifest`),
-		}
-	case "commands":
-		return stats, flagError{
-			err: errors.New("use `siso query commands` instead"),
-		}
-	case "deps":
-		return stats, flagError{
-			err: errors.New("use `siso query deps` instead"),
-		}
-	case "inputs":
-		return stats, flagError{
-			err: errors.New("use `siso query inputs` instead"),
-		}
-	case "targets":
-		return stats, flagError{
-			err: errors.New("use `siso query targets` instead"),
-		}
-
-	case "cleandead":
-		c.cleandead = true
-	default:
-		return stats, flagError{err: fmt.Errorf("unknown tool %q", c.subtool)}
-	}
 
 	if c.ninjaJobs >= 0 {
 		fmt.Fprintf(os.Stderr, "-j is not supported. use -remote_jobs instead\n")
@@ -518,10 +483,6 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		if c.dryRun {
 			return
 		}
-		if c.subtool != "" {
-			// don't modify .siso_failed_targets, .siso_last_targets by subtool.
-			return
-		}
 		if err != nil {
 			// when batch mode, no need to record failed targets,
 			// as it will build full targets when rebuilding
@@ -540,7 +501,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		}
 	}()
 	defer func() {
-		hashFS.SetBuildTargets(targets, !c.dryRun && c.subtool == "" && err == nil)
+		hashFS.SetBuildTargets(targets, !c.dryRun && err == nil)
 		err := hashFS.Close(ctx)
 		if err != nil {
 			log.Errorf("close hashfs: %v", err)
@@ -594,20 +555,11 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	graph := ninjabuild.NewGraph(c.fname, nstate, config, buildPath, hashFS, stepConfig, localDepsLog)
 
 	return runNinja(ctx, c.fname, graph, bopts, targets, runNinjaOpts{
-		cleandead:     c.cleandead,
-		subtool:       c.subtool,
 		enableStatusz: true,
 	})
 }
 
 type runNinjaOpts struct {
-	// whether to perform cleandead or not.
-	cleandead bool
-
-	// subtool name.
-	// if "cleandead", it returns after cleandead performed.
-	subtool string
-
 	// enable statusz (for `siso ps`)
 	enableStatusz bool
 }
@@ -682,8 +634,6 @@ func (c *ninjaCmdRun) init() {
 	c.reopt.RegisterFlags(&c.Flags, envs)
 	c.Flags.BoolVar(&c.reCacheEnableRead, "re_cache_enable_read", true, "remote exec cache enable read")
 
-	c.Flags.StringVar(&c.subtool, "t", "", "run a subtool (use '-t list' to list subtools)")
-	c.Flags.BoolVar(&c.cleandead, "cleandead", false, "clean built files that are no longer produced by the manifest")
 	c.Flags.StringVar(&c.adjustWarn, "w", "", "adjust warnings. not supported b/288807840")
 }
 
@@ -707,7 +657,7 @@ func (c *ninjaCmdRun) initWorkdirs() (string, error) {
 	// subsequent commands.
 	// Don't print this if a tool is being used, so that tool output
 	// can be piped into a file without this string showing up.
-	if c.subtool == "" && c.dir != "." {
+	if c.dir != "." {
 		ui.Default.PrintLines(fmt.Sprintf("ninja: Entering directory `%s'", c.dir))
 	}
 	err = os.Chdir(c.dir)
@@ -876,21 +826,6 @@ func doBuild(ctx context.Context, graph *ninjabuild.Graph, bopts build.Options, 
 	err = rebuildManifest(ctx, graph, bopts)
 	if err != nil {
 		return stats, err
-	}
-
-	if !bopts.DryRun && nopts.cleandead {
-		spin := ui.Default.NewSpinner()
-		spin.Start("cleaning deadfiles")
-		n, total, err := graph.CleanDead(ctx)
-		if err != nil {
-			spin.Stop(err)
-			return stats, err
-		}
-		if nopts.subtool == "cleandead" {
-			spin.Done("%d/%d generated files", n, total)
-			return stats, nil
-		}
-		spin.Stop(nil)
 	}
 
 	b, err := build.New(ctx, graph, bopts)
