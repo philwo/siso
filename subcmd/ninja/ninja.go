@@ -482,22 +482,15 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		return stats, err
 	}
 
-	return runNinja(ctx, c.fname, graph, bopts, targets, runNinjaOpts{
-		enableStatusz: true,
-	})
+	return runNinja(ctx, c.fname, graph, bopts, targets)
 }
 
-type runNinjaOpts struct {
-	// enable statusz (for `siso ps`)
-	enableStatusz bool
-}
-
-func runNinja(ctx context.Context, fname string, graph *ninjabuild.Graph, bopts build.Options, targets []string, nopts runNinjaOpts) (build.Stats, error) {
+func runNinja(ctx context.Context, fname string, graph *ninjabuild.Graph, bopts build.Options, targets []string) (build.Stats, error) {
 	spin := ui.Default.NewSpinner()
 
 	for {
 		log.Infof("build starts")
-		stats, err := doBuild(ctx, graph, bopts, nopts, targets...)
+		stats, err := doBuild(ctx, graph, bopts, targets...)
 		if errors.Is(err, build.ErrManifestModified) {
 			if bopts.DryRun {
 				return stats, nil
@@ -747,7 +740,7 @@ func rebuildManifest(ctx context.Context, graph *ninjabuild.Graph, bopts build.O
 	return err
 }
 
-func doBuild(ctx context.Context, graph *ninjabuild.Graph, bopts build.Options, nopts runNinjaOpts, args ...string) (stats build.Stats, err error) {
+func doBuild(ctx context.Context, graph *ninjabuild.Graph, bopts build.Options, args ...string) (stats build.Stats, err error) {
 	err = rebuildManifest(ctx, graph, bopts)
 	if err != nil {
 		return stats, err
@@ -757,16 +750,6 @@ func doBuild(ctx context.Context, graph *ninjabuild.Graph, bopts build.Options, 
 	if err != nil {
 		return stats, err
 	}
-	hctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	if nopts.enableStatusz {
-		go func() {
-			err := newStatuszServer(hctx, b)
-			if err != nil {
-				log.Warnf("statusz: %v", err)
-			}
-		}()
-	}
 
 	defer func(ctx context.Context) {
 		cerr := b.Close()
@@ -774,9 +757,7 @@ func doBuild(ctx context.Context, graph *ninjabuild.Graph, bopts build.Options, 
 			log.Warnf("failed to close builder: %v", cerr)
 		}
 	}(ctx)
-	// prof := newCPUProfiler(ctx, "build")
 	err = b.Build(ctx, "build", args...)
-	// prof.stop(ctx)
 
 	if err != nil {
 		if errors.As(err, &build.MissingSourceError{}) {
