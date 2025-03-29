@@ -402,12 +402,6 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		return stats, err
 	}
 
-	resetCrashOutput, err := c.setupCrashOutput()
-	if err != nil {
-		return stats, err
-	}
-	defer resetCrashOutput()
-
 	buildPath := build.NewPath(execRoot, c.dir)
 
 	// compute default limits based on fstype of work dir, not of exec root.
@@ -1187,18 +1181,4 @@ func gcinfo() string {
 		fmt.Fprintf(&sb, " (GOGC=%s)", v)
 	}
 	return sb.String()
-}
-
-func (c *ninjaCmdRun) setupCrashOutput() (func(), error) {
-	fname := c.logFilename("siso_crash", "")
-	rotateFiles(fname)
-	crashFile, err := os.Create(fname)
-	if err != nil {
-		return nil, err
-	}
-	err = debug.SetCrashOutput(crashFile, debug.CrashOptions{})
-	if err != nil {
-		return nil, err
-	}
-	return func() { debug.SetCrashOutput(nil, debug.CrashOptions{}) }, crashFile.Close()
 }
