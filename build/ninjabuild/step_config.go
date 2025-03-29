@@ -205,7 +205,6 @@ type StepRule struct {
 	// Deps specifies deps type.
 	//
 	//   deps="gcc": Use `gcc -M` or deps log.
-	//   deps="msvc": Use `clang-cl /showIncludes` or deps log.
 	//   deps="depfile": Use `depfile` if `depfile` is specified.
 	//   deps="none": ignore deps of the step.
 	Deps string `json:"deps,omitempty"`

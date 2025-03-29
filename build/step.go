@@ -5,7 +5,6 @@
 package build
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"fmt"
@@ -353,9 +352,6 @@ func newCmd(ctx context.Context, b *Builder, stepDef StepDef) *execute.Cmd {
 		Timeout:         stepTimeout(stepDef.Binding("timeout")),
 		ActionSalt:      b.actionSalt,
 	}
-	if envfile := stepDef.Binding("envfile"); envfile != "" {
-		cmd.Env = b.loadEnvfile(ctx, envfile)
-	}
 	if stepDef.Binding("pool") == "console" {
 		// pool=console needs to attach stdin/stdout/stderr
 		// so run locally.
@@ -435,41 +431,4 @@ func validateRemoteActionResult(result *rpb.ActionResult) bool {
 	}
 
 	return true
-}
-
-type envfile struct {
-	once sync.Once
-	envs []string
-}
-
-func (b *Builder) loadEnvfile(ctx context.Context, fname string) []string {
-	env := &envfile{}
-	v, loaded := b.envFiles.LoadOrStore(fname, env)
-	if loaded {
-		env = v.(*envfile)
-	}
-	env.once.Do(func() {
-		// https://ninja-build.org/manual.html#_extra_tools
-		// ninja -t msvc -e ENVFILE -- cl.exe <arguments>
-		//  Where ENVFILE is a binary file that contains an environment block suitable for CreateProcessA() on Windows (i.e. a series of zero-terminated strings that look like NAME=VALUE, followed by an extra zero terminator).
-		buf, err := b.hashFS.ReadFile(ctx, b.path.ExecRoot, b.path.MaybeFromWD(fname))
-		if err != nil {
-			log.Warnf("failed to load envfile %q: %v", fname, err)
-			return
-		}
-		for len(buf) > 0 {
-			i := bytes.IndexByte(buf, '\000')
-			if i < 0 {
-				env.envs = append(env.envs, string(buf))
-				break
-			}
-			e := string(buf[:i])
-			buf = buf[i+1:]
-			if e != "" {
-				env.envs = append(env.envs, e)
-			}
-		}
-		log.Infof("load envfile %q: %d", fname, len(env.envs))
-	})
-	return env.envs
 }

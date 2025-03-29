@@ -582,8 +582,8 @@ func (b *Builder) outputs(ctx context.Context, step *Step) error {
 
 	if step.cmd.Depfile != "" {
 		switch step.cmd.Deps {
-		case "gcc", "msvc":
-			// for deps=gcc,msvc, ninja will record it in
+		case "gcc":
+			// for deps=gcc, ninja will record it in
 			// deps log and remove depfile.
 		default:
 			outputs = append(outputs, step.cmd.Depfile)
