@@ -6,13 +6,10 @@ package scandeps
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"hash/maphash"
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/log"
 	"go.chromium.org/infra/build/siso/hashfs"
 )
 
@@ -65,8 +62,6 @@ type Request struct {
 
 // Scan scans C/C++ source/header files for req to get C/C++ dependencies.
 func (s *ScanDeps) Scan(ctx context.Context, execRoot string, req Request) ([]string, error) {
-	started := time.Now()
-
 	// Assume sysroots use precomputed tree.
 	var precomputedTrees []string
 	precomputedTrees = append(precomputedTrees, req.Sysroots...)
@@ -92,37 +87,15 @@ func (s *ScanDeps) Scan(ctx context.Context, execRoot string, req Request) ([]st
 		scanner.addFrameworkDir(ctx, dir)
 	}
 
-	setupDur := time.Since(started)
-	if setupDur > 500*time.Millisecond {
-		log.Infof("scan setup dirs:%d %s", len(req.Dirs), setupDur)
-	}
-	started = time.Now()
-
-	// max scandeps time in chromium/linux all build on P920 is 12s
-	// as of 2023-06-26
-	// but we see some timeout with 20s on linux-build-perf-developer builder
-	// as of 2023-08-31 b/298142575, 2023-10-23 b/307202429
-	// it was introduced to mitigate scanning that does not terminate,
-	// but we see such scan recently, so set sufficient large timeout
-	// to avoid scan failure due to timed out.
-	scanTimeout := max(req.Timeout, 60*time.Second)
-
 	icnt := 0
 	ncnt := 0
 	for scanner.hasInputs() {
 		icnt++
-		dur := time.Since(started)
-		if dur > scanTimeout {
-			return nil, fmt.Errorf("too slow scandeps: dirs:%d ds:%d i:%d n:%d %s %s", len(req.Dirs), scanner.maxDirstack, icnt, ncnt, setupDur, dur)
-		}
 		names := scanner.nextInputs(ctx)
 		for _, name := range names {
 			ncnt++
 			incpath, err := scanner.find(ctx, name)
 			if err != nil {
-				if errors.Is(err, ctx.Err()) {
-					return nil, fmt.Errorf("timeout dirs:%d ds:%d i:%d n:%d %s %s: %w", len(req.Dirs), scanner.maxDirstack, icnt, ncnt, setupDur, time.Since(started), err)
-				}
 				continue
 			}
 			if incpath == "" {
@@ -132,7 +105,6 @@ func (s *ScanDeps) Scan(ctx context.Context, execRoot string, req Request) ([]st
 			if deps, ok := s.inputDeps[incpath]; ok {
 				scanner.addInputs(deps...)
 			}
-			// if not found, fallback to `clang -M`?
 		}
 	}
 	results := scanner.results()

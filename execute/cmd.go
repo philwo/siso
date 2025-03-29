@@ -576,8 +576,8 @@ func (c *Cmd) SetActionResult(result *rpb.ActionResult, cached bool) {
 }
 
 // ActionResult returns the action result of the cmd.
-func (c *Cmd) ActionResult() (*rpb.ActionResult, bool) {
-	return c.actionResult, c.cachedResult
+func (c *Cmd) ActionResult() *rpb.ActionResult {
+	return c.actionResult
 }
 
 // entriesFromResult returns output file entries and additional entries for the cmd and result.

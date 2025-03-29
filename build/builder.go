@@ -15,11 +15,11 @@ import (
 	"runtime"
 	"slices"
 	"sort"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/charmbracelet/log"
+	"golang.org/x/sync/semaphore"
 
 	"go.chromium.org/infra/build/siso/build/metadata"
 	"go.chromium.org/infra/build/siso/execute"
@@ -28,7 +28,6 @@ import (
 	"go.chromium.org/infra/build/siso/hashfs"
 	"go.chromium.org/infra/build/siso/reapi"
 	"go.chromium.org/infra/build/siso/scandeps"
-	"go.chromium.org/infra/build/siso/sync/semaphore"
 	"go.chromium.org/infra/build/siso/ui"
 )
 
@@ -98,23 +97,23 @@ type Builder struct {
 	// record phony targets state.
 	phony sync.Map
 
-	stepSema *semaphore.Semaphore
+	stepSema *semaphore.Weighted
 
 	// for subtree: dir -> *subtree
 	trees sync.Map
 
 	scanDeps *scandeps.ScanDeps
 
-	localSema *semaphore.Semaphore
-	poolSemas map[string]*semaphore.Semaphore
+	localSema *semaphore.Weighted
+	poolSemas map[string]*semaphore.Weighted
 	localExec localexec.LocalExec
 
-	remoteSema        *semaphore.Semaphore
+	remoteSema        *semaphore.Weighted
 	remoteExec        *remoteexec.RemoteExec
 	reCacheEnableRead bool
-	// TODO(b/266518906): enable reCacheEnableWrite option for read-only client.
-	// reCacheEnableWrite bool
-	reapiclient *reapi.Client
+	reapiclient       *reapi.Client
+
+	limits Limits
 
 	actionSalt []byte
 
@@ -168,16 +167,16 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 		hashFS:            opts.HashFS,
 		start:             start,
 		graph:             graph,
-		stepSema:          semaphore.New("step", opts.Limits.Step),
+		stepSema:          semaphore.NewWeighted(int64(opts.Limits.Step)),
 		scanDeps:          scandeps.New(opts.HashFS, graph.InputDeps(ctx)),
-		localSema:         semaphore.New("localexec", opts.Limits.Local),
+		localSema:         semaphore.NewWeighted(int64(opts.Limits.Local)),
 		localExec:         le,
-		remoteSema:        semaphore.New("remoteexec", opts.Limits.Remote),
+		remoteSema:        semaphore.NewWeighted(int64(opts.Limits.Remote)),
 		remoteExec:        re,
 		reCacheEnableRead: opts.RECacheEnableRead,
-		// reCacheEnableWrite: opts.RECacheEnableWrite,
-		actionSalt:  opts.ActionSalt,
-		reapiclient: opts.REAPIClient,
+		actionSalt:        opts.ActionSalt,
+		reapiclient:       opts.REAPIClient,
+		limits:            opts.Limits,
 
 		outputLocal:     opts.OutputLocal,
 		cache:           opts.Cache,
@@ -244,27 +243,20 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 	}
 
 	var pools []string
-	localLimit := b.localSema.Capacity()
+	localLimit := b.limits.Local
 	stepLimits := b.graph.StepLimits(ctx)
 	for k := range stepLimits {
 		pools = append(pools, k)
 	}
 	sort.Strings(pools)
-	b.poolSemas = map[string]*semaphore.Semaphore{}
+	b.poolSemas = map[string]*semaphore.Weighted{}
 	for _, k := range pools {
 		v := stepLimits[k]
-		name := "pool=" + k
-		if strings.HasSuffix(name, "_pool") {
-			// short name for semaphore/resource name
-			// e.g. build_toolchain_action_pool -> pool=action
-			s := strings.Split(name, "_")
-			name = "pool=" + s[len(s)-2]
-		}
 		// No matter what pools you specify, ninja will never run more concurrent jobs than the default parallelism,
 		if v > localLimit {
 			v = localLimit
 		}
-		b.poolSemas[k] = semaphore.New(name, v)
+		b.poolSemas[k] = semaphore.NewWeighted(int64(v))
 	}
 
 	var mftime time.Time
@@ -321,7 +313,7 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 
 loop:
 	for {
-		done, err := b.stepSema.WaitAcquire(ctx)
+		err := b.stepSema.Acquire(ctx, 1)
 		if err != nil {
 			cancel()
 			return err
@@ -332,28 +324,18 @@ loop:
 		select {
 		case step, ok = <-b.plan.q:
 			if !ok {
-				done()
+				b.stepSema.Release(1)
 				break loop
 			}
 		case err := <-errch:
-			done()
-			var shouldFail bool
-			if err != nil {
-				shouldFail = b.failures.shouldFail(err)
-			}
-			numServs := b.stepSema.NumServs()
-			hasReady := b.plan.hasReady()
-			// no active steps and no ready steps?
-			if !stuck {
-				stuck = numServs == 0 && !hasReady
-			}
-			if shouldFail || stuck {
+			b.stepSema.Release(1)
+			if err != nil && b.failures.shouldFail(err) {
 				cancel()
 				break loop
 			}
 			continue
 		case <-ctx.Done():
-			done()
+			b.stepSema.Release(1)
 			cancel()
 			b.plan.dump(ctx, b.graph)
 			return context.Cause(ctx)
@@ -387,7 +369,7 @@ loop:
 					err = fmt.Errorf("panic: %v: %s", r, loc)
 				}
 			}()
-			defer done()
+			defer b.stepSema.Release(1)
 
 			err = b.runStep(ctx, step)
 			select {
