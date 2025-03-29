@@ -73,9 +73,6 @@ type Options struct {
 	// DryRun just prints the command to build, but does nothing.
 	DryRun bool
 
-	// allow failures at most FailuresAllowed.
-	FailuresAllowed int
-
 	// RebuildManifest is a build manifest filename (i.e. build.ninja)
 	// when rebuilding manifest.
 	// empty for normal build.
@@ -218,7 +215,7 @@ func New(ctx context.Context, graph Graph, opts Options) (_ *Builder, err error)
 		batch:           opts.Batch,
 		verbose:         opts.Verbose,
 		dryRun:          opts.DryRun,
-		failures:        failures{allowed: opts.FailuresAllowed},
+		failures:        failures{allowed: 1},
 		rebuildManifest: opts.RebuildManifest,
 	}
 	if opts.Limits.StartLocal > 0 {
