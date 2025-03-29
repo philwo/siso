@@ -364,11 +364,6 @@ func newCmd(ctx context.Context, b *Builder, stepDef StepDef) *execute.Cmd {
 		cmd.RemoteCommand = ""
 		cmd.RemoteInputs = nil
 		cmd.REProxyConfig = nil
-	} else if experiments.Enabled("gvisor", "Force gVisor") {
-		if len(cmd.Platform) == 0 {
-			cmd.Platform = map[string]string{}
-		}
-		cmd.Platform["dockerRuntime"] = "runsc"
 	}
 	cmd.InitOutputs()
 	return cmd
