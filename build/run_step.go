@@ -63,7 +63,6 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 			step.metrics.ActionEndTime = IntervalMetric(step.endTime.Sub(b.start))
 			step.metrics.Err = err != nil
 			b.recordMetrics(step.metrics)
-			b.recordNinjaLogs(step)
 			b.stats.update(&step.metrics, step.cmd.Pure)
 			b.outputFailureSummary(step, err)
 			b.outputFailedCommands(step, err)

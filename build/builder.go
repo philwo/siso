@@ -35,7 +35,6 @@ import (
 	"go.chromium.org/infra/build/siso/runtimex"
 	"go.chromium.org/infra/build/siso/scandeps"
 	"go.chromium.org/infra/build/siso/sync/semaphore"
-	"go.chromium.org/infra/build/siso/toolsupport/ninjautil"
 	"go.chromium.org/infra/build/siso/ui"
 )
 
@@ -69,7 +68,6 @@ type Options struct {
 	ExplainWriter        io.Writer
 	LocalexecLogWriter   io.Writer
 	MetricsJSONWriter    io.Writer
-	NinjaLogWriter       io.Writer
 
 	// Clobber forces to rebuild ignoring existing generated files.
 	Clobber bool
@@ -156,7 +154,6 @@ type Builder struct {
 	failedCommandsWriter io.Writer
 	localexecLogWriter   io.Writer
 	metricsJSONWriter    io.Writer
-	ninjaLogWriter       io.Writer
 	outputLogWriter      io.Writer
 
 	// envfiles: filename -> *envfile
@@ -193,10 +190,6 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 	mw := opts.MetricsJSONWriter
 	if mw == nil {
 		mw = io.Discard
-	}
-	nw := opts.NinjaLogWriter
-	if nw == nil {
-		nw = io.Discard
 	}
 
 	if err := opts.Path.Check(); err != nil {
@@ -256,7 +249,6 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 		explainWriter:        ew,
 		localexecLogWriter:   lelw,
 		metricsJSONWriter:    mw,
-		ninjaLogWriter:       nw,
 		clobber:              opts.Clobber,
 		prepare:              opts.Prepare,
 		verbose:              opts.Verbose,
@@ -622,20 +614,6 @@ func (b *Builder) recordMetrics(m StepMetric) {
 		return
 	}
 	fmt.Fprintf(b.metricsJSONWriter, "%s\n", mb)
-}
-
-func (b *Builder) recordNinjaLogs(s *Step) {
-	// TODO: b/298594790 - Use the same mtime with hashFS.
-	start := time.Duration(s.metrics.ActionStartTime).Milliseconds()
-	end := time.Duration(s.metrics.ActionEndTime).Milliseconds()
-
-	// Remove prefixed working directory path from Outputs.
-	outputs := make([]string, 0, len(s.cmd.Outputs))
-	buildDir := s.cmd.Dir + "/"
-	for _, output := range s.cmd.Outputs {
-		outputs = append(outputs, strings.TrimPrefix(output, buildDir))
-	}
-	ninjautil.WriteNinjaLogEntries(b.ninjaLogWriter, start, end, s.endTime, outputs, s.cmd.Args)
 }
 
 // dedupInputs deduplicates inputs.

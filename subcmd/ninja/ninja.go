@@ -562,12 +562,6 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 			}
 			return false
 		}
-	} else {
-		// expect logDir is out of exec root.
-		ninjaLogFname := filepath.Join(execRoot, c.dir, ".ninja_log")
-		c.fsopt.Ignore = func(ctx context.Context, fname string) bool {
-			return fname == ninjaLogFname
-		}
 	}
 	cogfs, err := cogutil.New(ctx, execRoot, c.reopt)
 	if err != nil && !errors.Is(err, errors.ErrUnsupported) {
@@ -1087,16 +1081,6 @@ func (c *ninjaCmdRun) initBuildOpts(projectID string, buildPath *build.Path, con
 	}
 	dones = append(dones, done)
 
-	ninjaLogWriter, err := ninjautil.OpenNinjaLog()
-	if err != nil {
-		return bopts, nil, err
-	}
-	dones = append(dones, func(errp *error) {
-		cerr := ninjaLogWriter.Close()
-		if *errp == nil {
-			*errp = cerr
-		}
-	})
 	var actionSaltBytes []byte
 	if c.actionSalt != "" {
 		actionSaltBytes = []byte(c.actionSalt)
