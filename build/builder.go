@@ -60,9 +60,6 @@ type Options struct {
 	// Clobber forces to rebuild ignoring existing generated files.
 	Clobber bool
 
-	// Verbose shows all command lines while building rather than step description.
-	Verbose bool
-
 	// DryRun just prints the command to build, but does nothing.
 	DryRun bool
 
@@ -129,7 +126,6 @@ type Builder struct {
 	envFiles sync.Map
 
 	clobber bool
-	verbose bool
 	dryRun  bool
 
 	failures failures
@@ -195,7 +191,6 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 		outputLocal:     opts.OutputLocal,
 		cache:           opts.Cache,
 		clobber:         opts.Clobber,
-		verbose:         opts.Verbose,
 		dryRun:          opts.DryRun,
 		failures:        failures{allowed: 1},
 		rebuildManifest: opts.RebuildManifest,
@@ -440,12 +435,10 @@ loop:
 	wg.Wait()
 	close(errch)
 	err = <-errdone
-	if !b.verbose {
-		if err == nil {
-			ui.Default.PrintLines(fmt.Sprintf("%s finished", name))
-		} else {
-			ui.Default.PrintLines(fmt.Sprintf("%s failed", name))
-		}
+	if err == nil {
+		ui.Default.PrintLines(fmt.Sprintf("%s finished", name))
+	} else {
+		ui.Default.PrintLines(fmt.Sprintf("%s failed", name))
 	}
 	return err
 }
