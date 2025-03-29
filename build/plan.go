@@ -494,12 +494,6 @@ func (p *plan) pushReady() {
 	}
 }
 
-func (p *plan) hasReady() bool {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return len(p.q) > 0 || len(p.ready) > 0
-}
-
 func (p *plan) done(step *Step) {
 	outs := step.outputs
 	p.mu.Lock()
