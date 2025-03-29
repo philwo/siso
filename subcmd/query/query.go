@@ -25,7 +25,6 @@ func Cmd() *subcommands.Command {
 						cmdCommands(),
 						cmdDeps(),
 						cmdDigraph(),
-						cmdIDEAnalysis(),
 						cmdInputs(),
 						cmdRule(),
 						cmdTargets(),
