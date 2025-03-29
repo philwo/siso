@@ -5,16 +5,13 @@
 package build
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/charmbracelet/log"
 	"go.chromium.org/infra/build/siso/reapi"
-	"go.chromium.org/infra/build/siso/ui"
 )
 
 // StepError is step execution error.
@@ -57,7 +54,6 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 			return
 		}
 		b.stats.update(false)
-		b.outputFailureSummary(step, err)
 	}()
 
 	stepManifest := newStepManifest(ctx, step.def)
@@ -165,27 +161,4 @@ func (b *Builder) handleStep(ctx context.Context, step *Step) (bool, error) {
 	result, _ := step.cmd.ActionResult()
 	exited := result != nil
 	return exited, nil
-}
-
-func (b *Builder) outputFailureSummary(step *Step, err error) {
-	if err == nil || b.failureSummaryWriter == nil || step.cmd == nil {
-		return
-	}
-	stat := b.stats.stats()
-	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "[%d/%d] %s\n", stat.Done-stat.Skipped, stat.Total-stat.Skipped, step.cmd.Desc)
-	fmt.Fprintf(&buf, "%s\n", strings.Join(step.cmd.Args, " "))
-	stderr := step.cmd.Stderr()
-	stdout := step.cmd.Stdout()
-	if len(stderr) > 0 {
-		fmt.Fprint(&buf, ui.StripANSIEscapeCodes(string(stderr)))
-	}
-	if len(stdout) > 0 {
-		fmt.Fprint(&buf, ui.StripANSIEscapeCodes(string(stdout)))
-	}
-	fmt.Fprintf(&buf, "%v\n", err)
-	_, err = b.failureSummaryWriter.Write(buf.Bytes())
-	if err != nil {
-		log.Warnf("failed to write failure_summary: %v", err)
-	}
 }

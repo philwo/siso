@@ -111,9 +111,7 @@ type ninjaCmdRun struct {
 	depsLogFile string
 	// depsLogBucket
 
-	logDir             string
-	frontendFile       string
-	failureSummaryFile string
+	frontendFile string
 
 	fsopt              *hashfs.Option
 	reopt              *reapi.Option
@@ -127,8 +125,7 @@ type ninjaCmdRun struct {
 	cleandead  bool
 	adjustWarn string
 
-	sisoInfoLog string // abs or relative to logDir
-	startDir    string
+	startDir string
 }
 
 // Run runs the `ninja` subcommand.
@@ -431,11 +428,6 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		}
 	}
 
-	err = c.initLogDir()
-	if err != nil {
-		return stats, err
-	}
-
 	buildPath := build.NewPath(execRoot, c.dir)
 
 	// compute default limits based on fstype of work dir, not of exec root.
@@ -538,28 +530,27 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	if err != nil {
 		return stats, err
 	}
-	if c.logDir == "." || c.logDir == filepath.Join(execRoot, c.dir) {
-		cwd := filepath.Join(execRoot, c.dir)
-		// ignore siso files not to be captured by ReadDir
-		// (i.g. scandeps for -I.)
-		c.fsopt.Ignore = func(ctx context.Context, fname string) bool {
-			dir, base := filepath.Split(fname)
-			// allow siso prefix in other dir.
-			// e.g. siso.gni exists in build/config/siso.
-			if filepath.Clean(dir) != cwd {
-				return false
-			}
-			if strings.HasPrefix(base, ".siso_") {
-				return true
-			}
-			if strings.HasPrefix(base, "siso.") {
-				return true
-			}
-			if strings.HasPrefix(base, "siso_") {
-				return true
-			}
+	cwd := filepath.Join(execRoot, c.dir)
+
+	// ignore siso files not to be captured by ReadDir
+	// (i.g. scandeps for -I.)
+	c.fsopt.Ignore = func(ctx context.Context, fname string) bool {
+		dir, base := filepath.Split(fname)
+		// allow siso prefix in other dir.
+		// e.g. siso.gni exists in build/config/siso.
+		if filepath.Clean(dir) != cwd {
 			return false
 		}
+		if strings.HasPrefix(base, ".siso_") {
+			return true
+		}
+		if strings.HasPrefix(base, "siso.") {
+			return true
+		}
+		if strings.HasPrefix(base, "siso_") {
+			return true
+		}
+		return false
 	}
 
 	spin.Start("loading fs state")
@@ -612,11 +603,10 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	isClean := hashFS.IsClean(targets)
 	log.Infof("hashfs loaderr: %v clean: %t (%q)", hashFSErr, isClean, targets)
 
-	bopts, done, err := c.initBuildOpts(projectID, buildPath, config, ds, hashFS, limits)
+	bopts, err := c.initBuildOpts(projectID, buildPath, config, ds, hashFS, limits)
 	if err != nil {
 		return stats, err
 	}
-	defer done(&err)
 	spin.Start("loading/recompacting deps log")
 	err = eg.Wait()
 	spin.Stop(err)
@@ -740,12 +730,8 @@ func (c *ninjaCmdRun) init() {
 	c.Flags.StringVar(&c.outputLocalStrategy, "output_local_strategy", "full", `strategy for output_local. "full": download all outputs. "greedy": downloads most outputs except intermediate objs. "minimum": downloads as few as possible`)
 	c.Flags.StringVar(&c.depsLogFile, "deps_log", ".siso_deps", "deps log filename (relative to -C)")
 
-	c.Flags.StringVar(&c.logDir, "log_dir", ".", "log directory (relative to -C")
-
 	// https://android.googlesource.com/platform/build/soong/+/refs/heads/main/ui/build/ninja.go
 	c.Flags.StringVar(&c.frontendFile, "frontend_file", "", "frontend FIFO file to report build status to soong ui, or `-` to report to stdout.")
-
-	c.Flags.StringVar(&c.failureSummaryFile, "failure_summary", "", "filename for failure summary (relative to -log_dir)")
 
 	c.fsopt = new(hashfs.Option)
 	c.fsopt.StateFile = ".siso_fs_state"
@@ -831,25 +817,6 @@ func (c *ninjaCmdRun) initWorkdirs() (string, error) {
 	return execRoot, err
 }
 
-func (c *ninjaCmdRun) initLogDir() error {
-	if !filepath.IsAbs(c.logDir) {
-		logDir, err := filepath.Abs(c.logDir)
-		if err != nil {
-			return fmt.Errorf("abspath for log dir: %w", err)
-		}
-		c.logDir = logDir
-	}
-	err := os.MkdirAll(c.logDir, 0755)
-	if err != nil {
-		return err
-	}
-	// err = c.logSymlink(ctx)
-	// if err != nil {
-	// 	log.Warnf("failed to create symlink for log: %v", err)
-	// }
-	return nil
-}
-
 func (c *ninjaCmdRun) initFlags(targets []string) map[string]string {
 	flags := make(map[string]string)
 	c.Flags.Visit(func(f *flag.Flag) {
@@ -913,31 +880,7 @@ func (c *ninjaCmdRun) initDepsLog() (*ninjautil.DepsLog, error) {
 	return depsLog, nil
 }
 
-func (c *ninjaCmdRun) initBuildOpts(projectID string, buildPath *build.Path, config *buildconfig.Config, ds dataSource, hashFS *hashfs.HashFS, limits build.Limits) (bopts build.Options, done func(*error), err error) {
-	var dones []func(*error)
-	defer func() {
-		if err != nil {
-			for i := len(dones) - 1; i >= 0; i++ {
-				dones[i](&err)
-			}
-			dones = nil
-		}
-	}()
-
-	failureSummaryWriter, done, err := c.logWriter(c.failureSummaryFile)
-	if err != nil {
-		return bopts, nil, err
-	}
-	dones = append(dones, done)
-
-	dones = append(dones, func(errp *error) {
-		if failureSummaryWriter != nil && *errp != nil {
-			fmt.Fprintf(failureSummaryWriter, "error: %v\n", *errp)
-		}
-	})
-
-	dones = append(dones, done)
-
+func (c *ninjaCmdRun) initBuildOpts(projectID string, buildPath *build.Path, config *buildconfig.Config, ds dataSource, hashFS *hashfs.HashFS, limits build.Limits) (bopts build.Options, err error) {
 	var actionSaltBytes []byte
 	if c.actionSalt != "" {
 		actionSaltBytes = []byte(c.actionSalt)
@@ -950,68 +893,28 @@ func (c *ninjaCmdRun) initBuildOpts(projectID string, buildPath *build.Path, con
 		log.Warnf("no cache enabled: %v", err)
 	}
 	bopts = build.Options{
-		StartTime:            c.started,
-		ProjectID:            projectID,
-		Metadata:             config.Metadata,
-		Path:                 buildPath,
-		HashFS:               hashFS,
-		REAPIClient:          ds.client,
-		REExecEnable:         c.reExecEnable,
-		RECacheEnableRead:    c.reCacheEnableRead,
-		RECacheEnableWrite:   c.reCacheEnableWrite,
-		ActionSalt:           actionSaltBytes,
-		OutputLocal:          build.OutputLocalFunc(c.fsopt.OutputLocal),
-		Cache:                cache,
-		FailureSummaryWriter: failureSummaryWriter,
-		Clobber:              c.clobber,
-		Batch:                c.batch,
-		Prepare:              c.prepare,
-		Verbose:              c.verbose,
-		VerboseFailures:      c.verboseFailures,
-		DryRun:               c.dryRun,
-		FailuresAllowed:      c.failuresAllowed,
-		Limits:               limits,
+		StartTime:          c.started,
+		ProjectID:          projectID,
+		Metadata:           config.Metadata,
+		Path:               buildPath,
+		HashFS:             hashFS,
+		REAPIClient:        ds.client,
+		REExecEnable:       c.reExecEnable,
+		RECacheEnableRead:  c.reCacheEnableRead,
+		RECacheEnableWrite: c.reCacheEnableWrite,
+		ActionSalt:         actionSaltBytes,
+		OutputLocal:        build.OutputLocalFunc(c.fsopt.OutputLocal),
+		Cache:              cache,
+		Clobber:            c.clobber,
+		Batch:              c.batch,
+		Prepare:            c.prepare,
+		Verbose:            c.verbose,
+		VerboseFailures:    c.verboseFailures,
+		DryRun:             c.dryRun,
+		FailuresAllowed:    c.failuresAllowed,
+		Limits:             limits,
 	}
-	return bopts, func(err *error) {
-		for i := len(dones) - 1; i >= 0; i-- {
-			dones[i](err)
-		}
-	}, nil
-}
-
-// logFilename returns siso's log filename relative to startDir, or absolute path.
-func (c *ninjaCmdRun) logFilename(fname, startDir string) string {
-	if fname == "" {
-		return ""
-	}
-	if !filepath.IsAbs(fname) {
-		fname = filepath.Join(c.logDir, fname)
-	}
-	if startDir == "" {
-		return fname
-	}
-	rel, err := filepath.Rel(startDir, fname)
-	if err != nil || !filepath.IsLocal(rel) {
-		return fname
-	}
-	return "." + string(os.PathSeparator) + rel
-}
-
-func (c *ninjaCmdRun) logWriter(fname string) (io.Writer, func(errp *error), error) {
-	fname = c.logFilename(fname, "")
-	if fname == "" {
-		return nil, func(*error) {}, nil
-	}
-	f, err := os.Create(fname)
-	if err != nil {
-		return nil, func(*error) {}, err
-	}
-	return f, func(errp *error) {
-		cerr := f.Close()
-		if *errp == nil {
-			*errp = cerr
-		}
-	}, nil
+	return bopts, nil
 }
 
 func rebuildManifest(ctx context.Context, graph *ninjabuild.Graph, bopts build.Options) error {
