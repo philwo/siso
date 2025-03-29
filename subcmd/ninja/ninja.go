@@ -126,7 +126,6 @@ type ninjaCmdRun struct {
 
 	subtool    string
 	cleandead  bool
-	debugMode  debugMode
 	adjustWarn string
 
 	sisoInfoLog string // abs or relative to logDir
@@ -326,10 +325,6 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	defer signals.HandleInterrupt(func() {
 		cancel(errInterrupted{})
 	})()
-	err = c.debugMode.check()
-	if err != nil {
-		return stats, flagError{err: err}
-	}
 	switch c.subtool {
 	case "":
 	case "list":
@@ -853,7 +848,6 @@ func (c *ninjaCmdRun) init() {
 
 	c.Flags.StringVar(&c.subtool, "t", "", "run a subtool (use '-t list' to list subtools)")
 	c.Flags.BoolVar(&c.cleandead, "cleandead", false, "clean built files that are no longer produced by the manifest")
-	c.Flags.Var(&c.debugMode, "d", "enable debugging (use '-d list' to list modes)")
 	c.Flags.StringVar(&c.adjustWarn, "w", "", "adjust warnings. not supported b/288807840")
 }
 
@@ -1065,8 +1059,6 @@ func (c *ninjaCmdRun) initBuildOpts(projectID string, buildPath *build.Path, con
 		VerboseFailures:      c.verboseFailures,
 		DryRun:               c.dryRun,
 		FailuresAllowed:      c.failuresAllowed,
-		KeepRSP:              c.debugMode.Keeprsp,
-		KeepDepfile:          c.debugMode.Keepdepfile,
 		Limits:               limits,
 	}
 	return bopts, func(err *error) {

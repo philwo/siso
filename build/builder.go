@@ -87,12 +87,6 @@ type Options struct {
 	// allow failures at most FailuresAllowed.
 	FailuresAllowed int
 
-	// don't delete @response files on success
-	KeepRSP bool
-
-	// don't delete depfile.
-	KeepDepfile bool
-
 	// RebuildManifest is a build manifest filename (i.e. build.ninja)
 	// when rebuilding manifest.
 	// empty for normal build.
@@ -169,10 +163,6 @@ type Builder struct {
 
 	failures failures
 
-	// ninja debug modes
-	keepRSP     bool
-	keepDepfile bool
-
 	rebuildManifest string
 }
 
@@ -247,8 +237,6 @@ func New(ctx context.Context, graph Graph, opts Options) (_ *Builder, err error)
 		verboseFailures:      opts.VerboseFailures,
 		dryRun:               opts.DryRun,
 		failures:             failures{allowed: opts.FailuresAllowed},
-		keepRSP:              opts.KeepRSP,
-		keepDepfile:          opts.KeepDepfile,
 		rebuildManifest:      opts.RebuildManifest,
 	}
 	if opts.Limits.StartLocal > 0 {
