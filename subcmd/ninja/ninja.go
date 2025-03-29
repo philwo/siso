@@ -18,7 +18,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/debug"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -315,11 +314,6 @@ type errInterrupted struct{}
 func (errInterrupted) Error() string        { return "interrupt by signal" }
 func (errInterrupted) Is(target error) bool { return target == context.Canceled }
 
-const (
-	// relative to -log_dir
-	failedTargetsFile = ".siso_failed_targets"
-)
-
 func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	ctx, cancel := context.WithCancelCause(ctx)
 	defer signals.HandleInterrupt(func() {
@@ -437,7 +431,6 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		}
 	}
 
-	isLogDirDefault := c.logDir == "."
 	err = c.initLogDir()
 	if err != nil {
 		return stats, err
@@ -514,8 +507,6 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	if err != nil {
 		return stats, err
 	}
-
-	failedTargetsFilename := c.logFilename(failedTargetsFile, "")
 
 	var eg errgroup.Group
 	var localDepsLog *ninjautil.DepsLog
@@ -610,14 +601,6 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 			if !errors.As(errBuild.err, &stepError) {
 				return
 			}
-			// store failed targets only when build steps failed.
-			// i.e., don't store with error like context canceled, etc.
-			log.Infof("record failed targets: %q", stepError.Target)
-			serr := saveTargets(failedTargetsFilename, targets, []string{stepError.Target})
-			if serr != nil {
-				log.Warnf("failed to save failed targets: %v", serr)
-				return
-			}
 		}
 	}()
 	defer func() {
@@ -632,18 +615,8 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		ui.Default.Errorf(ui.SGR(ui.BackgroundRed, fmt.Sprintf("unable to do incremental build as fs state is corrupted: %v\n", hashFSErr)))
 	}
 
-	_, err = os.Stat(failedTargetsFilename)
-	lastFailed := err == nil
 	isClean := hashFS.IsClean(targets)
-	log.Infof("hashfs loaderr: %v clean: %t (%q) last failed: %t", hashFSErr, isClean, targets, lastFailed)
-	// if not using non-default log_dir, it would see different
-	// .siso_last_targets, which won't match with .siso_fs_state.
-	// in this case, don't shortcut noop build, but better to check
-	// build graph again.
-	if !c.clobber && !c.batch && !c.dryRun && c.subtool != "cleandead" && isLogDirDefault && hashFSErr == nil && isClean && !lastFailed {
-		// TODO: better to check digest of .siso_fs_state?
-		return stats, errNothingToDo
-	}
+	log.Infof("hashfs loaderr: %v clean: %t (%q)", hashFSErr, isClean, targets)
 
 	bopts, done, err := c.initBuildOpts(projectID, buildPath, config, ds, hashFS, limits)
 	if err != nil {
@@ -685,15 +658,6 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 
 	graph := ninjabuild.NewGraph(c.fname, nstate, config, buildPath, hashFS, stepConfig, localDepsLog)
 
-	var lastFailedTargets []string
-	if !c.batch && !c.clobber {
-		lastFailedTargets, _ = checkTargets(failedTargetsFilename, targets)
-	}
-	err = os.Remove(failedTargetsFilename)
-	if err != nil && !errors.Is(err, fs.ErrNotExist) {
-		log.Warnf("failed to remove %s: %v", failedTargetsFilename, err)
-	}
-
 	j, err := json.Marshal(sisoMetadata)
 	if err != nil {
 		return stats, err
@@ -703,17 +667,13 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	}
 
 	return runNinja(ctx, c.fname, graph, bopts, targets, runNinjaOpts{
-		checkFailedTargets: lastFailedTargets,
-		cleandead:          c.cleandead,
-		subtool:            c.subtool,
-		enableStatusz:      true,
+		cleandead:     c.cleandead,
+		subtool:       c.subtool,
+		enableStatusz: true,
 	})
 }
 
 type runNinjaOpts struct {
-	// build the last failed targets first.
-	checkFailedTargets []string
-
 	// whether to perform cleandead or not.
 	cleandead bool
 
@@ -726,53 +686,10 @@ type runNinjaOpts struct {
 }
 
 func runNinja(ctx context.Context, fname string, graph *ninjabuild.Graph, bopts build.Options, targets []string, nopts runNinjaOpts) (build.Stats, error) {
-	var stats build.Stats
 	spin := ui.Default.NewSpinner()
 
 	for {
 		log.Infof("build starts")
-		if len(nopts.checkFailedTargets) > 0 {
-			failedTargets := nopts.checkFailedTargets
-			ui.Default.Infof("Building last failed targets: %s...", failedTargets)
-			var err error
-			stats, err = doBuild(ctx, graph, bopts, nopts, failedTargets...)
-			if errors.Is(err, build.ErrManifest) {
-				return stats, err
-			}
-			if errors.Is(err, build.ErrManifestModified) {
-				if bopts.DryRun {
-					return stats, nil
-				}
-				log.Infof("%s modified.", fname)
-				spin.Start("reloading")
-				err := graph.Reload(ctx)
-				if err != nil {
-					spin.Stop(err)
-					return stats, err
-				}
-				spin.Stop(nil)
-				log.Infof("reload done. build retry")
-				continue
-			}
-			var errBuild buildError
-			if errors.As(err, &errBuild) {
-				var stepError build.StepError
-				if errors.As(errBuild.err, &stepError) {
-					// last failed is not fixed yet.
-					return stats, err
-				}
-			}
-			nopts.checkFailedTargets = nil
-			if err != nil {
-				ui.Default.Infof(" %s: %s: %v", ui.SGR(ui.Yellow, "err in last failed targets, rebuild again"), failedTargets, err)
-			} else {
-				ui.Default.Infof(" %s: %s", ui.SGR(ui.Green, "last failed targets fixed"), failedTargets)
-			}
-			err = graph.Reset(ctx)
-			if err != nil {
-				return stats, err
-			}
-		}
 		stats, err := doBuild(ctx, graph, bopts, nopts, targets...)
 		if errors.Is(err, build.ErrManifestModified) {
 			if bopts.DryRun {
@@ -1091,7 +1008,6 @@ func (c *ninjaCmdRun) logWriter(fname string) (io.Writer, func(errp *error), err
 	if fname == "" {
 		return nil, func(*error) {}, nil
 	}
-	rotateFiles(fname)
 	f, err := os.Create(fname)
 	if err != nil {
 		return nil, func(*error) {}, err
@@ -1267,23 +1183,6 @@ func (s source) String() string {
 	return fmt.Sprintf("dataSource:%s", s.fname)
 }
 
-func rotateFiles(fname string) {
-	ext := filepath.Ext(fname)
-	fnameBase := strings.TrimSuffix(fname, ext)
-	for i := 8; i >= 0; i-- {
-		err := os.Rename(
-			fmt.Sprintf("%s.%d%s", fnameBase, i, ext),
-			fmt.Sprintf("%s.%d%s", fnameBase, i+1, ext))
-		if err != nil && !errors.Is(err, fs.ErrNotExist) {
-			log.Warnf("rotate %s %d->%d failed: %v", fname, i, i+1, err)
-		}
-	}
-	err := os.Rename(fname, fmt.Sprintf("%s.0%s", fnameBase, ext))
-	if err != nil && !errors.Is(err, fs.ErrNotExist) {
-		log.Warnf("rotate %s ->0 failed: %v", fname, err)
-	}
-}
-
 func (c *ninjaCmdRun) initOutputLocal() (func(context.Context, string) bool, error) {
 	switch c.outputLocalStrategy {
 	case "full":
@@ -1313,59 +1212,6 @@ func (c *ninjaCmdRun) initOutputLocal() (func(context.Context, string) bool, err
 	default:
 		return nil, fmt.Errorf("unknown output local strategy: %q. should be full/greedy/minimum", c.outputLocalStrategy)
 	}
-}
-
-type lastTargets struct {
-	Targets []string `json:"targets,omitempty"`
-	Failed  []string `json:"failed,omitempty"`
-}
-
-func loadTargets(targetsFile string) ([]string, []string, error) {
-	buf, err := os.ReadFile(targetsFile)
-	if err != nil {
-		return nil, nil, err
-	}
-	var last lastTargets
-	err = json.Unmarshal(buf, &last)
-	if err != nil {
-		return nil, nil, fmt.Errorf("parse error %s: %w", targetsFile, err)
-	}
-	return last.Targets, last.Failed, nil
-}
-
-func saveTargets(targetsFile string, targets, failed []string) error {
-	v := lastTargets{
-		Targets: targets,
-		Failed:  failed,
-	}
-	buf, err := json.Marshal(v)
-	if err != nil {
-		return fmt.Errorf("marshal last targets: %w", err)
-	}
-	err = os.WriteFile(targetsFile, buf, 0644)
-	if err != nil {
-		return fmt.Errorf("save last targets: %w", err)
-	}
-	return nil
-}
-
-func checkTargets(lastTargetsFilename string, targets []string) ([]string, bool) {
-	lastTargets, failed, err := loadTargets(lastTargetsFilename)
-	if err != nil {
-		log.Warnf("checkTargets: %v", err)
-		return nil, false
-	}
-	if len(targets) != len(lastTargets) {
-		return nil, false
-	}
-	sort.Strings(targets)
-	sort.Strings(lastTargets)
-	for i := range targets {
-		if targets[i] != lastTargets[i] {
-			return nil, false
-		}
-	}
-	return failed, true
 }
 
 func cpuinfo() string {
@@ -1403,7 +1249,6 @@ func gcinfo() string {
 
 func (c *ninjaCmdRun) setupCrashOutput() (func(), error) {
 	fname := c.logFilename("siso_crash", "")
-	rotateFiles(fname)
 	crashFile, err := os.Create(fname)
 	if err != nil {
 		return nil, err
