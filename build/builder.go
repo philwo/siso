@@ -63,7 +63,6 @@ type Options struct {
 	Cache                *Cache
 	FailureSummaryWriter io.Writer
 	OutputLogWriter      io.Writer
-	ExplainWriter        io.Writer
 	LocalexecLogWriter   io.Writer
 
 	// Clobber forces to rebuild ignoring existing generated files.
@@ -146,7 +145,6 @@ type Builder struct {
 
 	cache *Cache
 
-	explainWriter        io.Writer
 	failureSummaryWriter io.Writer
 	localexecLogWriter   io.Writer
 	outputLogWriter      io.Writer
@@ -173,10 +171,6 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 	start := opts.StartTime
 	if start.IsZero() {
 		start = time.Now()
-	}
-	ew := opts.ExplainWriter
-	if ew == nil {
-		ew = io.Discard
 	}
 	lelw := opts.LocalexecLogWriter
 	if lelw == nil {
@@ -235,7 +229,6 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 		cache:                opts.Cache,
 		failureSummaryWriter: opts.FailureSummaryWriter,
 		outputLogWriter:      opts.OutputLogWriter,
-		explainWriter:        ew,
 		localexecLogWriter:   lelw,
 		clobber:              opts.Clobber,
 		prepare:              opts.Prepare,
@@ -376,10 +369,6 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 	b.progress.report("build start: Ready %d Pending %d", pstat.nready, pstat.npendings)
 	b.progress.start(ctx, b)
 	defer b.progress.stop()
-
-	if b.clobber {
-		fmt.Fprintf(b.explainWriter, "--clobber is specified\n")
-	}
 
 	// prepare all output directories for local process,
 	// to minimize mkdir operations.

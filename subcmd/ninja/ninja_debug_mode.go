@@ -7,7 +7,6 @@ package ninja
 import (
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"strings"
 )
@@ -15,7 +14,6 @@ import (
 // ninja compatible debug mode.
 type debugMode struct {
 	Stats       bool // print operation counts/timing info
-	Explain     bool // explain what caused a command to execute
 	Keepdepfile bool // don't delete depfiles after they're read by ninja
 	Keeprsp     bool // don't delete @response files on success
 	List        bool // lists modes
@@ -25,7 +23,6 @@ func (m *debugMode) check() error {
 	if m.List {
 		return errors.New(`debugging modes
   stats        not implemented: print operation counts/timing info
-  explain      explain what caused a command to execute
   keepdepfile  not implemented: don't delete depfiles after they're read by ninja
   keeprsp      don't delete @response files on success
 multiple modes can be enabled via -d FOO -d BAR`)
@@ -45,9 +42,6 @@ func (m *debugMode) String() string {
 	if m.Stats {
 		modes = append(modes, "stats")
 	}
-	if m.Explain {
-		modes = append(modes, "explain")
-	}
 	if m.Keepdepfile {
 		modes = append(modes, "keepdepfile")
 	}
@@ -63,8 +57,6 @@ func (m *debugMode) Set(v string) error {
 		switch s {
 		case "stats":
 			m.Stats = true
-		case "explain":
-			m.Explain = true
 		case "keepdepfile":
 			m.Keepdepfile = true
 		case "keeprsp":
@@ -76,20 +68,4 @@ func (m *debugMode) Set(v string) error {
 		}
 	}
 	return nil
-}
-
-type explainDebugWriter struct {
-	w io.Writer
-}
-
-func (w explainDebugWriter) Write(buf []byte) (int, error) {
-	_, err := fmt.Fprintf(w.w, "ninja explain: %s", buf)
-	return len(buf), err
-}
-
-func newExplainWriter(w io.Writer, fname string) io.Writer {
-	if fname != "" {
-		fmt.Fprintf(w, "ninja explain: recorded in %s even without `-d explain`\n", fname)
-	}
-	return explainDebugWriter{w: w}
 }
