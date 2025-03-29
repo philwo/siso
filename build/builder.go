@@ -69,9 +69,6 @@ type Options struct {
 	// Verbose shows all command lines while building rather than step description.
 	Verbose bool
 
-	// VerboseFailures shows failed command lines.
-	VerboseFailures bool
-
 	// DryRun just prints the command to build, but does nothing.
 	DryRun bool
 
@@ -140,11 +137,10 @@ type Builder struct {
 	// envfiles: filename -> *envfile
 	envFiles sync.Map
 
-	clobber         bool
-	prepare         bool
-	verbose         bool
-	verboseFailures bool
-	dryRun          bool
+	clobber bool
+	prepare bool
+	verbose bool
+	dryRun  bool
 
 	failures failures
 
@@ -211,7 +207,6 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 		clobber:         opts.Clobber,
 		prepare:         opts.Prepare,
 		verbose:         opts.Verbose,
-		verboseFailures: opts.VerboseFailures,
 		dryRun:          opts.DryRun,
 		failures:        failures{allowed: opts.FailuresAllowed},
 		rebuildManifest: opts.RebuildManifest,
