@@ -109,7 +109,6 @@ type ninjaCmdRun struct {
 	logDir             string
 	failureSummaryFile string
 	outputLogFile      string
-	explainFile        string
 	localexecLogFile   string
 
 	fsopt             *hashfs.Option
@@ -636,7 +635,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	// .siso_last_targets, which won't match with .siso_fs_state.
 	// in this case, don't shortcut noop build, but better to check
 	// build graph again.
-	if !c.clobber && !c.batch && !c.dryRun && !c.debugMode.Explain && c.subtool != "cleandead" && isLogDirDefault && hashFSErr == nil && isClean && !lastFailed {
+	if !c.clobber && !c.batch && !c.dryRun && c.subtool != "cleandead" && isLogDirDefault && hashFSErr == nil && isClean && !lastFailed {
 		// TODO: better to check digest of .siso_fs_state?
 		return stats, errNothingToDo
 	}
@@ -815,7 +814,6 @@ func (c *ninjaCmdRun) init() {
 	c.Flags.StringVar(&c.logDir, "log_dir", ".", "log directory (relative to -C")
 	c.Flags.StringVar(&c.failureSummaryFile, "failure_summary", "", "filename for failure summary (relative to -log_dir)")
 	c.Flags.StringVar(&c.outputLogFile, "output_log", "siso_output", "output log filename (relative to -log_dir")
-	c.Flags.StringVar(&c.explainFile, "explain_log", "siso_explain", "explain log filename (relative to -log_dir")
 	c.Flags.StringVar(&c.localexecLogFile, "localexec_log", "siso_localexec", "localexec log filename (relative to -log_dir")
 
 	c.fsopt = new(hashfs.Option)
@@ -1016,18 +1014,6 @@ func (c *ninjaCmdRun) initBuildOpts(projectID string, buildPath *build.Path, con
 		return bopts, nil, err
 	}
 	dones = append(dones, done)
-	explainWriter, done, err := c.logWriter(c.explainFile)
-	if err != nil {
-		return bopts, nil, err
-	}
-	dones = append(dones, done)
-	if c.debugMode.Explain {
-		if explainWriter == nil {
-			explainWriter = newExplainWriter(os.Stderr, "")
-		} else {
-			explainWriter = io.MultiWriter(newExplainWriter(os.Stderr, filepath.Join(c.dir, c.explainFile)), explainWriter)
-		}
-	}
 
 	localexecLogWriter, done, err := c.logWriter(c.localexecLogFile)
 	if err != nil {
@@ -1059,7 +1045,6 @@ func (c *ninjaCmdRun) initBuildOpts(projectID string, buildPath *build.Path, con
 		Cache:                cache,
 		FailureSummaryWriter: failureSummaryWriter,
 		OutputLogWriter:      outputLogWriter,
-		ExplainWriter:        explainWriter,
 		LocalexecLogWriter:   localexecLogWriter,
 		Clobber:              c.clobber,
 		Prepare:              c.prepare,

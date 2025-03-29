@@ -54,44 +54,24 @@ func (b *Builder) checkUpToDate(ctx context.Context, stepDef StepDef, outputs []
 	rspfileContent := stepDef.Binding("rspfile_content")
 	stepCmdHash := calculateCmdHash(cmdline, rspfileContent)
 
-	out0, outmtime, cmdhash := outputMtime(ctx, b, outputs, stepDef.Binding("restat") != "")
-	lastIn, inmtime, err := inputMtime(ctx, b, stepDef)
+	_, outmtime, cmdhash := outputMtime(ctx, b, outputs, stepDef.Binding("restat") != "")
+	_, inmtime, err := inputMtime(ctx, b, stepDef)
 
 	// TODO(b/288419130): make sure it covers all cases as ninja does.
 
-	outname := b.path.MaybeToWD(out0)
-	lastInName := b.path.MaybeToWD(lastIn)
 	if err != nil {
-		reason := "missing-inputs"
-		switch {
-		case errors.Is(err, ErrMissingDeps):
-			reason = "missing-deps"
-		case errors.Is(err, ErrStaleDeps):
-			reason = "stale-deps"
-		case errors.Is(err, errDirty):
-			reason = "dirty"
-		}
-		fmt.Fprintf(b.explainWriter, "deps for %s %s: %v\n", outname, reason, err)
 		return false
 	}
 	if outmtime.IsZero() {
-		fmt.Fprintf(b.explainWriter, "output %s doesn't exist\n", outname)
 		return false
 	}
 	if inmtime.After(outmtime) {
-		fmt.Fprintf(b.explainWriter, "output %s older than most recent input %s: out:%s in:+%s\n", outname, lastInName, outmtime.Format(time.RFC3339), inmtime.Sub(outmtime))
 		return false
 	}
 	if !generator && !bytes.Equal(cmdhash, stepCmdHash) {
-		if len(cmdhash) == 0 {
-			fmt.Fprintf(b.explainWriter, "command line not found in log for %s\n", outname)
-		} else {
-			fmt.Fprintf(b.explainWriter, "command line changed for %s\n", outname)
-		}
 		return false
 	}
 	if b.clobber {
-		// explain once at the beginning of the build.
 		return false
 	}
 	if b.outputLocal != nil {
@@ -129,7 +109,6 @@ func (b *Builder) checkUpToDate(ctx context.Context, stepDef StepDef, outputs []
 		if len(localOutputs) > 0 {
 			err := b.hashFS.Flush(ctx, b.path.ExecRoot, localOutputs)
 			if err != nil {
-				fmt.Fprintf(b.explainWriter, "output %s flush error %s: %v", outname, localOutputs, err)
 				return false
 			}
 		}
