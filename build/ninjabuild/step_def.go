@@ -10,7 +10,6 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
 	"io/fs"
 	"path/filepath"
@@ -45,8 +44,6 @@ type StepDef struct {
 	// from depfile/depslog
 	deps   func(yield func(string) bool) // exec root relative
 	deperr error
-
-	envfile string // for ninja -t msvc -e <envfile> --
 
 	globals *globals
 }
@@ -191,24 +188,7 @@ func (s *StepDef) ActionName() string {
 
 // Args returns command line arguments of the step.
 func (s *StepDef) Args(ctx context.Context) []string {
-	args := stepArgs(s.edge)
-	if len(args) > 3 && args[0] == "ninja" && args[1] == "-t" && args[2] == "msvc" {
-		flagSet := flag.NewFlagSet("ninja-msvc", flag.ContinueOnError)
-		tool := "msvc"
-		flagSet.StringVar(&tool, "t", tool, "ninja tool name")
-		flagSet.StringVar(&s.envfile, "e", s.envfile, "load environment block from ENVFILE as environment")
-		// -o FILE and -p PREFIX is not used?
-		err := flagSet.Parse(args[1:])
-		if err != nil {
-			log.Warnf("%s failed to parse ninja flags %q: %v", s, args, err)
-			return args
-		}
-		if tool != "msvc" {
-			return args
-		}
-		return flagSet.Args()
-	}
-	return args
+	return stepArgs(s.edge)
 }
 
 func stepArgs(edge *ninjautil.Edge) []string {
@@ -259,8 +239,6 @@ func (s *StepDef) Binding(name string) string {
 			return "true"
 		}
 		return ""
-	case "envfile":
-		return s.envfile
 	case "gn_target":
 		return s.globals.gnTargets[s.edge].String()
 
@@ -421,7 +399,7 @@ func depInputs(ctx context.Context, s *StepDef) (func(yield func(string) bool), 
 	var deps []string
 	var err error
 	switch s.edge.Binding("deps") {
-	case "gcc", "msvc":
+	case "gcc":
 		// deps info is stored in deps log.
 		outputs := s.edge.Outputs()
 		if len(outputs) == 0 {

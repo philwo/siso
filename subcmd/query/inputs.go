@@ -165,7 +165,7 @@ func (g *inputsGraph) Traverse(ctx context.Context, target string) error {
 	var deps []string
 	var err error
 	switch edge.Binding("deps") {
-	case "gcc", "msvc":
+	case "gcc":
 		deps, _, err = g.depsLog.Get(target)
 		if err != nil {
 			return fmt.Errorf("deps log for target not found %q: %w", target, err)

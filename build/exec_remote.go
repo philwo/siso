@@ -65,8 +65,7 @@ func (b *Builder) execRemote(ctx context.Context, step *Step) error {
 	if err != nil {
 		return err
 	}
-	// need to update deps for remote exec for deps=gcc with depsfile,
-	// or deps=msvc with showIncludes
+	// need to update deps for remote exec for deps=gcc with depsfile
 	if err = b.updateDeps(ctx, step); err != nil {
 		return err
 	}
@@ -88,9 +87,8 @@ func (b *Builder) execRemoteCache(ctx context.Context, step *Step) error {
 		return errors.New("no output in action result")
 	}
 	b.progressStepCacheHit(step)
-	// need to update deps for cache hit for deps=gcc, msvc.
-	// even if cache hit, deps should be updated with gcc depsfile,
-	// or with msvc showIncludes outputs.
+	// need to update deps for cache hit for deps=gcc.
+	// even if cache hit, deps should be updated with gcc depsfile.
 	if err = b.updateDeps(ctx, step); err != nil {
 		return err
 	}

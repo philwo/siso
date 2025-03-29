@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"go.chromium.org/infra/build/siso/execute"
-	"go.chromium.org/infra/build/siso/toolsupport/msvcutil"
 	"go.chromium.org/infra/build/siso/ui"
 )
 
@@ -104,12 +103,6 @@ func cmdOutput(ctx context.Context, result cmdOutputResult, cmd *execute.Cmd, cm
 	}
 	stdout := cmd.Stdout()
 	stderr := cmd.Stderr()
-	if cmd.Deps == "msvc" {
-		// cl.exe, clang-cl shows included file to stderr
-		// but RBE merges stderr into stdout...
-		_, stdout = msvcutil.ParseShowIncludes(stdout)
-		_, stderr = msvcutil.ParseShowIncludes(stderr)
-	}
 	if err == nil && len(stdout) == 0 && len(stderr) == 0 {
 		return nil
 	}

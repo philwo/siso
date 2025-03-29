@@ -130,7 +130,7 @@ type Cmd struct {
 	// modify files/dirs, invisible to build graph.
 	ReconcileOutputdirs []string
 
-	// Deps specifies deps type of the cmd, "gcc", "msvc".
+	// Deps specifies deps type of the cmd, "gcc".
 	Deps string
 
 	// Depfile specifies a filename for dep info, relative to ExecRoot.

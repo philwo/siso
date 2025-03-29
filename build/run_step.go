@@ -14,7 +14,6 @@ import (
 
 	"github.com/charmbracelet/log"
 	"go.chromium.org/infra/build/siso/reapi"
-	"go.chromium.org/infra/build/siso/toolsupport/msvcutil"
 	"go.chromium.org/infra/build/siso/ui"
 )
 
@@ -35,7 +34,7 @@ func (e StepError) Unwrap() error {
 // runStep runs a step.
 //
 //   - check if up-to-date. do nothing if so.
-//   - expand inputs with step defs (except deps=gcc, msvc)
+//   - expand inputs with step defs (except deps=gcc)
 //   - run handler if set.
 //   - setup RSP file.
 //   - try cmd with deps log cache (fast deps)
@@ -117,7 +116,7 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 		b.teardownRSP(ctx, step)
 	}()
 
-	// expand inputs to get full action inputs unless deps=gcc,msvc
+	// expand inputs to get full action inputs unless deps=gcc
 	depsExpandInputs(ctx, b, step)
 
 	runCmd := b.runStrategy(step)
@@ -174,12 +173,6 @@ func (b *Builder) outputFailureSummary(step *Step, err error) {
 	fmt.Fprintf(&buf, "%s\n", strings.Join(step.cmd.Args, " "))
 	stderr := step.cmd.Stderr()
 	stdout := step.cmd.Stdout()
-	if step.cmd.Deps == "msvc" {
-		// cl.exe, clang-cl shows included file to stderr
-		// but RBE merges stderr into stdout...
-		_, stdout = msvcutil.ParseShowIncludes(stdout)
-		_, stderr = msvcutil.ParseShowIncludes(stderr)
-	}
 	if len(stderr) > 0 {
 		fmt.Fprint(&buf, ui.StripANSIEscapeCodes(string(stderr)))
 	}
