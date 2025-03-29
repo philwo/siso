@@ -122,7 +122,6 @@ type ninjaCmdRun struct {
 	outputLogFile      string
 	explainFile        string
 	localexecLogFile   string
-	metricsJSON        string
 
 	fsopt              *hashfs.Option
 	reopt              *reapi.Option
@@ -605,16 +604,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 			if strings.HasPrefix(base, "siso_") {
 				return true
 			}
-			if base == ".ninja_log" {
-				return true
-			}
 			return false
-		}
-	} else {
-		// expect logDir is out of exec root.
-		ninjaLogFname := filepath.Join(execRoot, c.dir, ".ninja_log")
-		c.fsopt.Ignore = func(ctx context.Context, fname string) bool {
-			return fname == ninjaLogFname
 		}
 	}
 	cogfs, err := cogutil.New(ctx, execRoot, c.reopt)
@@ -909,7 +899,6 @@ func (c *ninjaCmdRun) init() {
 	c.Flags.StringVar(&c.outputLogFile, "output_log", "siso_output", "output log filename (relative to -log_dir")
 	c.Flags.StringVar(&c.explainFile, "explain_log", "siso_explain", "explain log filename (relative to -log_dir")
 	c.Flags.StringVar(&c.localexecLogFile, "localexec_log", "siso_localexec", "localexec log filename (relative to -log_dir")
-	c.Flags.StringVar(&c.metricsJSON, "metrics_json", "siso_metrics.json", "metrics JSON filename (relative to -log_dir)")
 
 	c.fsopt = new(hashfs.Option)
 	c.fsopt.StateFile = ".siso_fs_state"
@@ -1146,12 +1135,6 @@ func (c *ninjaCmdRun) initBuildOpts(projectID string, buildPath *build.Path, con
 	}
 	dones = append(dones, done)
 
-	metricsJSONWriter, done, err := c.logWriter(c.metricsJSON)
-	if err != nil {
-		return bopts, nil, err
-	}
-	dones = append(dones, done)
-
 	var actionSaltBytes []byte
 	if c.actionSalt != "" {
 		actionSaltBytes = []byte(c.actionSalt)
@@ -1181,7 +1164,6 @@ func (c *ninjaCmdRun) initBuildOpts(projectID string, buildPath *build.Path, con
 		OutputLogWriter:      outputLogWriter,
 		ExplainWriter:        explainWriter,
 		LocalexecLogWriter:   localexecLogWriter,
-		MetricsJSONWriter:    metricsJSONWriter,
 		Clobber:              c.clobber,
 		Batch:                c.batch,
 		Prepare:              c.prepare,

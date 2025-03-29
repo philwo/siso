@@ -46,6 +46,13 @@ func (e StepError) Unwrap() error {
 // can control the flows with the experiment ids, defined in experiments.go.
 func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 	step.startTime = time.Now()
+
+	if !b.needToRun(ctx, step.def, step.outputs) {
+		b.plan.done(step)
+		b.stats.update(true)
+		return nil
+	}
+
 	defer func() {
 		if r := recover(); r != nil {
 			panic(r) // re-throw panic, handled in *Builder.Build.
@@ -53,33 +60,12 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 		if errors.Is(err, context.Canceled) {
 			return
 		}
-		if err != nil {
-			step.metrics.Err = true
-		}
-		if !step.metrics.skip {
-			step.endTime = time.Now()
-			duration := step.endTime.Sub(step.startTime)
-			step.metrics.Duration = IntervalMetric(duration)
-			step.metrics.ActionEndTime = IntervalMetric(step.endTime.Sub(b.start))
-			step.metrics.Err = err != nil
-			b.recordMetrics(step.metrics)
-			b.recordNinjaLogs(step)
-			b.stats.update(&step.metrics, step.cmd.Pure)
-			b.outputFailureSummary(step, err)
-			b.outputFailedCommands(step, err)
-		}
-		// unref for GC to reclaim memory.
-		step.cmd = nil
+		b.stats.update(false)
+		b.outputFailureSummary(step, err)
+		b.outputFailedCommands(step, err)
 	}()
 
 	stepManifest := newStepManifest(ctx, step.def)
-
-	if !b.needToRun(ctx, step.def, stepManifest) {
-		step.metrics.skip = true
-		b.plan.done(step)
-		b.stats.update(&step.metrics, true)
-		return nil
-	}
 	select {
 	case <-ctx.Done():
 		// interrupt during needToRun.
@@ -88,8 +74,6 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 	}
 
 	step.init(ctx, b, stepManifest)
-	prevStepOut := b.prevStepOut(ctx, step)
-	step.metrics.init(ctx, b, step, step.startTime, prevStepOut)
 
 	if b.dryRun {
 		select {
@@ -183,31 +167,13 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 	return nil
 }
 
-func (b *Builder) prevStepOut(ctx context.Context, step *Step) string {
-	if step.prevStepOut == 0 {
-		return ""
-	}
-	s, err := b.graph.TargetPath(ctx, step.prevStepOut)
-	if err != nil {
-		log.Warnf("failed to get target path: %v", err)
-		return ""
-	}
-	return s
-}
-
 func (b *Builder) handleStep(ctx context.Context, step *Step) (bool, error) {
-	started := time.Now()
 	err := step.def.Handle(ctx, step.cmd)
 	if err != nil {
 		return false, err
 	}
 	result, _ := step.cmd.ActionResult()
 	exited := result != nil
-	if exited {
-		step.metrics.ActionStartTime = IntervalMetric(started.Sub(b.start))
-		step.metrics.RunTime = IntervalMetric(time.Since(started))
-		step.metrics.NoExec = true
-	}
 	return exited, nil
 }
 

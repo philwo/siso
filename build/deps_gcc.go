@@ -7,12 +7,10 @@ package build
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"path/filepath"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/charmbracelet/log"
 	"go.chromium.org/infra/build/siso/execute"
@@ -143,23 +141,11 @@ func (gcc depsGCC) DepsCmd(ctx context.Context, b *Builder, step *Step) ([]strin
 }
 
 func (gcc depsGCC) depsInputs(ctx context.Context, b *Builder, step *Step) ([]string, error) {
-	ins, err := gcc.scandeps(ctx, b, step)
-	if err != nil {
-		if !errors.Is(err, context.Canceled) {
-			step.metrics.ScandepsErr = true
-		}
-		return nil, err
-	}
-	return ins, nil
+	return gcc.scandeps(ctx, b, step)
 }
 
 func (depsGCC) scandeps(ctx context.Context, b *Builder, step *Step) ([]string, error) {
 	var ins []string
-	// remote execution may have already run.
-	// In this case, do not change ActionStartTime set by the remote exec.
-	if step.metrics.ActionStartTime == 0 {
-		step.metrics.ActionStartTime = IntervalMetric(time.Since(b.start))
-	}
 	params := gccutil.ExtractScanDepsParams(step.cmd.Args, step.cmd.Env)
 	if len(params.Sources) == 0 {
 		// If ExtractScanDepsParams doesn't return Sources, such action uses inputs from ninja build file directly, as the action doesn't need include scanning.

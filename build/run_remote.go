@@ -31,7 +31,6 @@ func (b *Builder) runRemote(ctx context.Context, step *Step) error {
 		// will build modified code, and not expect cache hit (?)
 		log.Infof("start local %s", step.cmd.Desc)
 		err := b.execLocal(ctx, step)
-		step.metrics.StartLocal = true
 		return err
 	}
 	if preprocErr == errNeedPreproc {
