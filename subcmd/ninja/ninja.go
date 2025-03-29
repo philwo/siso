@@ -108,7 +108,6 @@ type ninjaCmdRun struct {
 
 	logDir             string
 	failureSummaryFile string
-	outputLogFile      string
 
 	fsopt             *hashfs.Option
 	reopt             *reapi.Option
@@ -193,14 +192,6 @@ func (c *ninjaCmdRun) Run(a subcommands.Application, args []string, env subcomma
 				msgPrefix = ui.SGR(ui.BackgroundRed, msgPrefix)
 			}
 			fmt.Fprintf(os.Stderr, "\n%6s %s: %d done %d remaining - %.02f/s\n %v\n", dur, msgPrefix, stats.Done-stats.Skipped, stats.Total-stats.Done, sps, errBuild.err)
-			suggest := fmt.Sprintf("see %s for full command line and output", c.logFilename(c.outputLogFile, c.startDir))
-			if c.sisoInfoLog != "" {
-				suggest += fmt.Sprintf("\n or %s", c.logFilename(c.sisoInfoLog, c.startDir))
-			}
-			if ui.IsTerminal() {
-				suggest = ui.SGR(ui.Bold, suggest)
-			}
-			fmt.Fprintf(os.Stderr, "%s\n", suggest)
 		default:
 			msgPrefix := "Error"
 			if ui.IsTerminal() {
@@ -812,7 +803,6 @@ func (c *ninjaCmdRun) init() {
 
 	c.Flags.StringVar(&c.logDir, "log_dir", ".", "log directory (relative to -C")
 	c.Flags.StringVar(&c.failureSummaryFile, "failure_summary", "", "filename for failure summary (relative to -log_dir)")
-	c.Flags.StringVar(&c.outputLogFile, "output_log", "siso_output", "output log filename (relative to -log_dir")
 
 	c.fsopt = new(hashfs.Option)
 	c.fsopt.StateFile = ".siso_fs_state"
@@ -1007,10 +997,6 @@ func (c *ninjaCmdRun) initBuildOpts(projectID string, buildPath *build.Path, con
 		}
 	})
 
-	outputLogWriter, done, err := c.logWriter(c.outputLogFile)
-	if err != nil {
-		return bopts, nil, err
-	}
 	dones = append(dones, done)
 
 	var actionSaltBytes []byte
@@ -1036,7 +1022,6 @@ func (c *ninjaCmdRun) initBuildOpts(projectID string, buildPath *build.Path, con
 		OutputLocal:          build.OutputLocalFunc(c.fsopt.OutputLocal),
 		Cache:                cache,
 		FailureSummaryWriter: failureSummaryWriter,
-		OutputLogWriter:      outputLogWriter,
 		Clobber:              c.clobber,
 		Prepare:              c.prepare,
 		Verbose:              c.verbose,
