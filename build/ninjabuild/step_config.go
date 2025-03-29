@@ -19,7 +19,6 @@ import (
 
 	"github.com/charmbracelet/log"
 	"go.chromium.org/infra/build/siso/build"
-	"go.chromium.org/infra/build/siso/execute"
 	"go.chromium.org/infra/build/siso/hashfs"
 	"go.chromium.org/infra/build/siso/toolsupport/ninjautil"
 )
@@ -191,9 +190,6 @@ type StepRule struct {
 
 	// UseSystemInput indicates to allow extra inputs outside exec root.
 	UseSystemInput bool `json:"use_system_input,omitempty"`
-
-	// REProxyConfig specifies configuration options for using reproxy.
-	REProxyConfig *execute.REProxyConfig `json:"reproxy_config,omitempty"`
 
 	// Timeout specifies time duration for the remote execution call of the step.
 	// Timeout*2 will be set to remote action's timeout to

@@ -77,9 +77,6 @@ type StepDef interface {
 	// path in remote action -> local path
 	RemoteInputs() map[string]string
 
-	// REProxyConfig returns configuration options for using reproxy.
-	REProxyConfig() *execute.REProxyConfig
-
 	// CheckInputDeps checks dep can be found in its direct/indirect inputs.
 	// Returns true if it is unknown bad deps, false otherwise.
 	CheckInputDeps(context.Context, []string) (bool, error)
@@ -371,12 +368,10 @@ func newCmd(ctx context.Context, b *Builder, stepDef StepDef, stepManifest *step
 
 		HashFS: b.hashFS,
 
-		Platform:      stepDef.Platform(),
-		RemoteWrapper: stepDef.Binding("remote_wrapper"),
-		RemoteCommand: stepDef.Binding("remote_command"),
-		RemoteInputs:  stepDef.RemoteInputs(),
-		// always copy REProxyConfig, allows safe mutation via cmd.action.fix.
-		REProxyConfig:   stepDef.REProxyConfig().Copy(),
+		Platform:        stepDef.Platform(),
+		RemoteWrapper:   stepDef.Binding("remote_wrapper"),
+		RemoteCommand:   stepDef.Binding("remote_command"),
+		RemoteInputs:    stepDef.RemoteInputs(),
 		CanonicalizeDir: stepDef.Binding("canonicalize_dir") != "",
 
 		SkipCacheLookup: !b.reCacheEnableRead,
@@ -390,7 +385,6 @@ func newCmd(ctx context.Context, b *Builder, stepDef StepDef, stepManifest *step
 		cmd.RemoteWrapper = ""
 		cmd.RemoteCommand = ""
 		cmd.RemoteInputs = nil
-		cmd.REProxyConfig = nil
 	}
 	cmd.InitOutputs()
 
