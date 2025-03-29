@@ -67,9 +67,6 @@ type Options struct {
 	// non-batch mode for low latency, interactive.
 	Batch bool
 
-	// Verbose shows all command lines while building rather than step description.
-	Verbose bool
-
 	// DryRun just prints the command to build, but does nothing.
 	DryRun bool
 
@@ -140,7 +137,6 @@ type Builder struct {
 
 	clobber bool
 	batch   bool
-	verbose bool
 	dryRun  bool
 
 	failures failures
@@ -213,7 +209,6 @@ func New(ctx context.Context, graph Graph, opts Options) (_ *Builder, err error)
 		cache:           opts.Cache,
 		clobber:         opts.Clobber,
 		batch:           opts.Batch,
-		verbose:         opts.Verbose,
 		dryRun:          opts.DryRun,
 		failures:        failures{allowed: 1},
 		rebuildManifest: opts.RebuildManifest,
@@ -479,12 +474,10 @@ loop:
 	wg.Wait()
 	close(errch)
 	err = <-errdone
-	if !b.verbose {
-		if err == nil {
-			ui.Default.Infof("%s finished", name)
-		} else {
-			ui.Default.Errorf("%s failed", name)
-		}
+	if err == nil {
+		ui.Default.Infof("%s finished", name)
+	} else {
+		ui.Default.Errorf("%s failed", name)
 	}
 	return err
 }

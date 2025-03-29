@@ -21,7 +21,6 @@ import (
 
 type progress struct {
 	started    time.Time
-	verbose    bool
 	numLocal   atomic.Int32
 	mu         sync.Mutex
 	consoleCmd *execute.Cmd
@@ -56,7 +55,6 @@ func (as *activeSteps) Pop() any {
 
 func (p *progress) start(ctx context.Context, b *Builder) {
 	p.started = time.Now()
-	p.verbose = b.verbose
 	p.done = make(chan struct{})
 	p.updateStopped = make(chan struct{})
 	go p.update(ctx, b)
@@ -102,7 +100,7 @@ func (p *progress) update(ctx context.Context, b *Builder) {
 			}
 			consoleOut := p.consoleCmd != nil && p.consoleCmd.ConsoleOut != nil && p.consoleCmd.ConsoleOut.Load()
 			p.mu.Unlock()
-			if !ui.IsTerminal() || b.verbose || consoleOut {
+			if !ui.IsTerminal() || consoleOut {
 				continue
 			}
 			if si == nil || si.step == nil {
@@ -166,11 +164,7 @@ func (p *progress) step(b *Builder, step *Step, s string) {
 		stat := b.stats.stats()
 		msg := fmt.Sprintf("[%d/%d] %s ",
 			stat.Done-stat.Skipped, stat.Total-stat.Skipped, dur)
-		if p.verbose {
-			msg += step.def.Binding("command")
-		} else {
-			msg += s[len(progressPrefixFinish):]
-		}
+		msg += s[len(progressPrefixFinish):]
 
 		ui.Default.Infof(msg)
 
