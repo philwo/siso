@@ -87,7 +87,6 @@ type ninjaCmdRun struct {
 	projectID  string
 
 	offline         bool
-	batch           bool
 	verbose         bool
 	dryRun          bool
 	clobber         bool
@@ -322,9 +321,6 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	if c.failuresAllowed <= 0 {
 		c.failuresAllowed = math.MaxInt
 	}
-	if c.failuresAllowed > 1 {
-		c.batch = true
-	}
 
 	if c.adjustWarn != "" {
 		ui.Default.Warningf("-w is specified. but not supported. b/288807840\n")
@@ -447,7 +443,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 
 	log.Infof("project id: %q", projectID)
 	log.Infof("commandline %q", os.Args)
-	log.Infof("is_terminal=%t batch=%t", ui.IsTerminal(), c.batch)
+	log.Infof("is_terminal=%t", ui.IsTerminal())
 
 	spin := ui.Default.NewSpinner()
 
@@ -523,27 +519,6 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	if err != nil {
 		return stats, err
 	}
-	defer func() {
-		if c.dryRun {
-			return
-		}
-		if err != nil {
-			// when batch mode, no need to record failed targets,
-			// as it will build full targets when rebuilding
-			// for throughput, rather than latency.
-			if c.batch {
-				return
-			}
-			var errBuild buildError
-			if !errors.As(err, &errBuild) {
-				return
-			}
-			var stepError build.StepError
-			if !errors.As(errBuild.err, &stepError) {
-				return
-			}
-		}
-	}()
 	defer func() {
 		hashFS.SetBuildTargets(targets, !c.dryRun && err == nil)
 		err := hashFS.Close(ctx)
@@ -656,7 +631,6 @@ func (c *ninjaCmdRun) init() {
 			}
 		}
 	}
-	c.Flags.BoolVar(&c.batch, "batch", !ui.IsTerminal(), "batch mode. prefer thoughput over low latency for build failures.")
 	c.Flags.BoolVar(&c.verbose, "verbose", false, "show all command lines while building")
 	c.Flags.BoolVar(&c.verbose, "v", false, "show all command lines while building (alias of --verbose)")
 	c.Flags.BoolVar(&c.dryRun, "n", false, "dry run")
