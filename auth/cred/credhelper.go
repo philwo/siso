@@ -55,7 +55,6 @@ func (h *credHelper) run(ctx context.Context, endpoint string) (credHelperResp, 
 	cmd.Stderr = &stderr
 	err = cmd.Run()
 	if err != nil {
-		err = credHelperErr(h.path, err)
 		if len(stderr.Bytes()) == 0 {
 			return resp, fmt.Errorf("failed to run helper: %w", err)
 		}

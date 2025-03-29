@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"io/fs"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"sort"
 	"strings"
@@ -272,16 +271,6 @@ func (c *Cmd) RemoteArgs() ([]string, error) {
 	args := c.Args
 	if len(args) == 0 {
 		return nil, errors.New("0 args")
-	}
-	// Cross-compile Windows builds on Linux workers.
-	if runtime.GOOS == "windows" && c.Platform["OSFamily"] != "Windows" {
-		args[0] = filepath.ToSlash(args[0])
-		args[0] = strings.TrimPrefix(args[0], filepath.VolumeName(args[0]))
-		if rootPath, ok := c.Platform["InputRootAbsolutePath"]; ok {
-			rootPath = filepath.ToSlash(rootPath)
-			rootPath = strings.TrimPrefix(rootPath, filepath.VolumeName(rootPath))
-			c.Platform["InputRootAbsolutePath"] = rootPath
-		}
 	}
 	if c.RemoteCommand != "" {
 		args = append([]string{c.RemoteCommand}, args[1:]...)
@@ -797,10 +786,6 @@ func (c *Cmd) entriesFromResult(ctx context.Context, ds hashfs.DataSource, updat
 }
 
 // RecordPreOutputs records output entries before running command.
-// hashfs would lazily compute digest of files, so it would
-// cause ERROR_SHARING_VIOLATION when running command on Windows.
-// to prevent the error, compute digest before running step.
-// TODO: use this to enable restat for remote execution.
 func (c *Cmd) RecordPreOutputs(ctx context.Context) {
 	c.preOutputEntries = c.HashFS.RetrieveUpdateEntries(ctx, c.ExecRoot, c.AllOutputs())
 }

@@ -30,7 +30,6 @@ import (
 	"go.chromium.org/infra/build/siso/subcmd/query"
 	"go.chromium.org/infra/build/siso/subcmd/scandeps"
 	"go.chromium.org/infra/build/siso/subcmd/version"
-	"go.chromium.org/infra/build/siso/ui"
 )
 
 var (
@@ -113,7 +112,7 @@ Use "siso help -advanced" to display all commands.
 	log.SetTimeFormat("2006-01-02 15:04:05")
 	log.SetReportCaller(true)
 
-	credHelper := cred.DefaultCredentialHelper()
+	credHelper := ""
 	if h, ok := os.LookupEnv("SISO_CREDENTIAL_HELPER"); ok {
 		credHelper = h
 	}
@@ -190,10 +189,6 @@ Use "siso help -advanced" to display all commands.
 			}
 		}()
 	}
-
-	// Initialize the UI and ensure we restore the state of the terminal upon exit.
-	ui.Init()
-	defer ui.Restore()
 
 	return subcommands.Run(getApplication(authOpts), nil)
 }

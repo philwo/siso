@@ -15,7 +15,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"sort"
 	"strings"
@@ -277,7 +276,6 @@ func (hfs *HashFS) DataSource() DataSource {
 
 func needPathClean(names ...string) bool {
 	for _, name := range names {
-		// even on windows, we use /-path in hashfs.
 		if strings.Contains(name, `\`) {
 			return true
 		}
@@ -1484,12 +1482,6 @@ func (e *entry) updateDir(ctx context.Context, hfs *HashFS, dname string) []stri
 		return nil
 	}
 	for _, name := range names {
-		// don't scan temporary file by readdir.
-		// it may cause race on windows.
-		// b/294318963 b/381947692
-		if strings.HasSuffix(name, ".tmp") || strings.HasPrefix(name, ".tempfile.") {
-			continue
-		}
 		if hfs.opt.Ignore(ctx, filepath.Join(dname, name)) {
 			continue
 		}
@@ -1931,10 +1923,6 @@ func resolveNextDir(ctx context.Context, d *directory, next func(context.Context
 					pe.elems = append(pe.elems, elem)
 					s = rest
 				}
-				if runtime.GOOS == "windows" && !strings.HasSuffix(pe.elems[0], `\`) {
-					// elems[0] is drive letter. e.g. "C:"
-					pe.elems[0] += `\`
-				}
 				pe.elems = append(pe.elems, elem)
 			}
 			if filepath.IsAbs(target) {
@@ -1996,10 +1984,6 @@ func nextDir(ctx context.Context, d *directory, pe pathElements, elem string) (*
 	}
 	// create intermediate dir of elem.
 	mtime := time.Now()
-	if runtime.GOOS == "windows" && !strings.HasSuffix(pe.elems[0], `\`) {
-		// elems[0] is drive letter. e.g "c:"
-		pe.elems[0] += `\`
-	}
 	fullname := filepath.Join(pe.elems...)
 	dfi, err := os.Lstat(fullname)
 	if err == nil {

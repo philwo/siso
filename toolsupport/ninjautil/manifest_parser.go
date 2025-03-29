@@ -8,10 +8,9 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"runtime"
 
 	"golang.org/x/sync/errgroup"
-
-	"go.chromium.org/infra/build/siso/runtimex"
 )
 
 // multipleRulesError is an error that multiple rules generates the same output.
@@ -43,7 +42,7 @@ func NewManifestParser(state *State) *ManifestParser {
 	}
 }
 
-var loaderConcurrency = runtimex.NumCPU()
+var loaderConcurrency = runtime.NumCPU()
 
 // Load loads the Ninja manifest given an fname.
 func (p *ManifestParser) Load(ctx context.Context, fname string) error {

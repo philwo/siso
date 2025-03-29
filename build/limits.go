@@ -12,7 +12,6 @@ import (
 	"sync"
 
 	"github.com/charmbracelet/log"
-	"go.chromium.org/infra/build/siso/runtimex"
 	"go.chromium.org/infra/build/siso/ui"
 )
 
@@ -49,7 +48,7 @@ var (
 //	SISO_LIMITS=step=1024,local=8,remote=80
 func DefaultLimits() Limits {
 	limitOnce.Do(func() {
-		numCPU := runtimex.NumCPU()
+		numCPU := runtime.NumCPU()
 		stepLimit := limitForStep(numCPU)
 		defaultLimits = Limits{
 			Step:   stepLimit,

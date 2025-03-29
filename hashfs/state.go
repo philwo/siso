@@ -19,7 +19,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -33,7 +32,6 @@ import (
 	"go.chromium.org/infra/build/siso/hashfs/osfs"
 	pb "go.chromium.org/infra/build/siso/hashfs/proto"
 	"go.chromium.org/infra/build/siso/reapi/digest"
-	"go.chromium.org/infra/build/siso/runtimex"
 )
 
 const defaultStateFile = ".siso_fs_state"
@@ -236,7 +234,7 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 	var neq, nnew, nnotexist, nfail, ninvalidate atomic.Int64
 	var dirty atomic.Bool
 	eg, gctx := errgroup.WithContext(ctx)
-	eg.SetLimit(runtimex.NumCPU())
+	eg.SetLimit(runtime.NumCPU())
 	dirs := make([]*entry, len(state.Entries))
 	entries := make([]*entry, len(state.Entries))
 	prevGenerated := make([]bool, len(state.Entries))
@@ -255,9 +253,6 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 			// In that case, we leave `h` empty, so we can skip this file in case it is missing
 			// on disk.
 			h := ent.CmdHash
-			if runtime.GOOS == "windows" {
-				ent.Name = strings.TrimPrefix(ent.Name, `\`)
-			}
 			ent.Name = filepath.ToSlash(ent.Name)
 			if hfs.opt.Ignore(ctx, ent.Name) {
 				if logw != nil {
@@ -717,12 +712,6 @@ func (hfs *HashFS) State(ctx context.Context) *pb.State {
 			e := v.(*entry)
 			if e.err != nil {
 				continue
-			}
-			if runtime.GOOS == "windows" {
-				name = strings.TrimPrefix(name, "/")
-				if len(name) == 2 && name[1] == ':' {
-					name += `/`
-				}
 			}
 			if e.directory != nil {
 				// TODO(b/253541407): record mtime for other directory?
