@@ -62,7 +62,6 @@ type Options struct {
 	OutputLocal          OutputLocalFunc
 	Cache                *Cache
 	FailureSummaryWriter io.Writer
-	FailedCommandsWriter io.Writer
 	OutputLogWriter      io.Writer
 	ExplainWriter        io.Writer
 	LocalexecLogWriter   io.Writer
@@ -149,7 +148,6 @@ type Builder struct {
 
 	explainWriter        io.Writer
 	failureSummaryWriter io.Writer
-	failedCommandsWriter io.Writer
 	localexecLogWriter   io.Writer
 	outputLogWriter      io.Writer
 
@@ -236,7 +234,6 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 		outputLocal:          opts.OutputLocal,
 		cache:                opts.Cache,
 		failureSummaryWriter: opts.FailureSummaryWriter,
-		failedCommandsWriter: opts.FailedCommandsWriter,
 		outputLogWriter:      opts.OutputLogWriter,
 		explainWriter:        ew,
 		localexecLogWriter:   lelw,
