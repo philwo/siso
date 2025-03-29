@@ -100,7 +100,7 @@ func (p *progress) update(ctx context.Context, b *Builder) {
 			}
 			consoleOut := p.consoleCmd != nil && p.consoleCmd.ConsoleOut != nil && p.consoleCmd.ConsoleOut.Load()
 			p.mu.Unlock()
-			if !ui.IsTerminal() || consoleOut {
+			if consoleOut {
 				continue
 			}
 			if si == nil || si.step == nil {
@@ -138,7 +138,7 @@ func (p *progress) report(format string, args ...any) {
 	if msg == "" {
 		msg = fmt.Sprintf(format, args...)
 	}
-	ui.Default.PrintLines(msg)
+	log.Info(msg)
 }
 
 const (
@@ -170,11 +170,11 @@ func (p *progress) step(b *Builder, step *Step, s string) {
 			stat.Done-stat.Skipped, stat.Total-stat.Skipped, dur)
 		msg += s[len(progressPrefixFinish):]
 
-		ui.Default.PrintLines(msg)
+		log.Info(msg)
 
 		outputResult := step.cmd.OutputResult()
 		if outputResult != "" {
-			ui.Default.PrintLines(outputResult)
+			log.Info(outputResult)
 		}
 	}
 }

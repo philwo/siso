@@ -121,9 +121,7 @@ func (c *ninjaCmdRun) Run(a subcommands.Application, args []string, env subcomma
 			fmt.Fprintf(os.Stderr, "need to login: run `siso login`\n")
 		case errors.Is(err, errNothingToDo):
 			msgPrefix := "Everything is up-to-date"
-			if ui.IsTerminal() {
-				msgPrefix = ui.SGR(ui.Green, msgPrefix)
-			}
+			msgPrefix = ui.SGR(ui.Green, msgPrefix)
 			fmt.Fprintf(os.Stderr, "%s Nothing to do.\n", msgPrefix)
 			return 0
 
@@ -134,10 +132,8 @@ func (c *ninjaCmdRun) Run(a subcommands.Application, args []string, env subcomma
 			var errTarget build.TargetError
 			if errors.As(errBuild.err, &errTarget) {
 				msgPrefix := "Schedule Failure"
-				if ui.IsTerminal() {
-					dur = ui.SGR(ui.Bold, dur)
-					msgPrefix = ui.SGR(ui.BackgroundRed, msgPrefix)
-				}
+				dur = ui.SGR(ui.Bold, dur)
+				msgPrefix = ui.SGR(ui.BackgroundRed, msgPrefix)
 				fmt.Fprintf(os.Stderr, "\n%6s %s: %v\n", dur, msgPrefix, errTarget)
 				if len(errTarget.Suggests) > 0 {
 					fmt.Fprintf(os.Stderr, "Did you mean:")
@@ -151,24 +147,18 @@ func (c *ninjaCmdRun) Run(a subcommands.Application, args []string, env subcomma
 			var errMissingSource build.MissingSourceError
 			if errors.As(errBuild.err, &errMissingSource) {
 				msgPrefix := "Schedule Failure"
-				if ui.IsTerminal() {
-					dur = ui.SGR(ui.Bold, dur)
-					msgPrefix = ui.SGR(ui.BackgroundRed, msgPrefix)
-				}
+				dur = ui.SGR(ui.Bold, dur)
+				msgPrefix = ui.SGR(ui.BackgroundRed, msgPrefix)
 				fmt.Fprintf(os.Stderr, "\n%6s %s: %v\n", dur, msgPrefix, errMissingSource)
 				return 1
 			}
 			msgPrefix := "Build Failure"
-			if ui.IsTerminal() {
-				dur = ui.SGR(ui.Bold, dur)
-				msgPrefix = ui.SGR(ui.BackgroundRed, msgPrefix)
-			}
+			dur = ui.SGR(ui.Bold, dur)
+			msgPrefix = ui.SGR(ui.BackgroundRed, msgPrefix)
 			fmt.Fprintf(os.Stderr, "\n%6s %s: %d done %d remaining - %.02f/s\n %v\n", dur, msgPrefix, stats.Done-stats.Skipped, stats.Total-stats.Done, sps, errBuild.err)
 		default:
 			msgPrefix := "Error"
-			if ui.IsTerminal() {
-				msgPrefix = ui.SGR(ui.BackgroundRed, msgPrefix)
-			}
+			msgPrefix = ui.SGR(ui.BackgroundRed, msgPrefix)
 			if status.Code(err) == codes.Unavailable {
 				fmt.Fprintf(os.Stderr, "\n%6s %s: could not connect to backend. If you want to build offline, pass `-o` or `--offline`\n %v\n", ui.FormatDuration(time.Since(c.started)), msgPrefix, err)
 			} else {
@@ -178,10 +168,8 @@ func (c *ninjaCmdRun) Run(a subcommands.Application, args []string, env subcomma
 		return 1
 	}
 	msgPrefix := "Build Succeeded"
-	if ui.IsTerminal() {
-		dur = ui.SGR(ui.Bold, dur)
-		msgPrefix = ui.SGR(ui.Green, msgPrefix)
-	}
+	dur = ui.SGR(ui.Bold, dur)
+	msgPrefix = ui.SGR(ui.Green, msgPrefix)
 	fmt.Fprintf(os.Stderr, "%6s %s: %d steps - %.02f/s\n", dur, msgPrefix, stats.Done-stats.Skipped, sps)
 	return 0
 }
@@ -268,20 +256,11 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 
 	var credential cred.Cred
 	if projectID != "" {
-		// TODO: can be async until cred is needed?
-		spin := ui.Default.NewSpinner()
-		spin.Start("init credentials")
+		log.Infof("init credentials")
 		credential, err = cred.New(ctx, c.authOpts)
 		if err != nil {
-			if !c.reopt.NeedCred() {
-				log.Warnf("failed to init credential: %v", err)
-				log.Warnf("but no remote apis require credential")
-			} else {
-				spin.Stop(errors.New(""))
-				return stats, err
-			}
+			return stats, err
 		}
-		spin.Stop(nil)
 	}
 	// logging is ready.
 	log.Infof("%s", cpuinfo())
@@ -308,8 +287,6 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	}
 	c.checkResourceLimits()
 
-	spin := ui.Default.NewSpinner()
-
 	targets := c.Flags.Args()
 	config, err := c.initConfig(ctx, execRoot, targets)
 	if err != nil {
@@ -328,7 +305,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	})
 
 	if c.reopt.IsValid() {
-		ui.Default.PrintLines(fmt.Sprintf("reapi instance: %s", c.reopt.Instance))
+		log.Infof("reapi instance: %s", c.reopt.Instance)
 	}
 	ds, err := c.initDataSource(ctx, credential)
 	if err != nil {
@@ -368,10 +345,9 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		return false
 	}
 
-	spin.Start("loading fs state")
+	log.Infof("loading fs state")
 
 	hashFS, err := hashfs.New(ctx, *c.fsopt)
-	spin.Stop(err)
 	if err != nil {
 		return stats, err
 	}
@@ -394,38 +370,33 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	if err != nil {
 		return stats, err
 	}
-	spin.Start("loading/recompacting deps log")
+	log.Infof("loading/recompacting deps log")
 	err = eg.Wait()
-	spin.Stop(err)
 	if localDepsLog != nil {
 		defer localDepsLog.Close()
 	}
 	// TODO(b/286501388): init concurrently for .siso_config/.siso_filegroups, build.ninja.
-	spin.Start("load siso config")
+	log.Infof("load siso config")
 	stepConfig, err := ninjabuild.NewStepConfig(ctx, config, buildPath, hashFS, c.fname)
 	if err != nil {
-		spin.Stop(err)
 		return stats, err
 	}
-	spin.Stop(nil)
 	if c.fsopt.KeepTainted {
 		tainted := hashFS.TaintedFiles()
 		if len(tainted) == 0 {
-			ui.Default.PrintLines(ui.SGR(ui.Yellow, "no tainted generated files"))
+			log.Info(ui.SGR(ui.Yellow, "no tainted generated files"))
 		} else if len(tainted) < 5 {
-			ui.Default.PrintLines(ui.SGR(ui.Yellow, fmt.Sprintf("keep %d tainted files: %s", len(tainted), strings.Join(tainted, ", "))))
+			log.Info(ui.SGR(ui.Yellow, fmt.Sprintf("keep %d tainted files: %s", len(tainted), strings.Join(tainted, ", "))))
 		} else {
-			ui.Default.PrintLines(ui.SGR(ui.Yellow, fmt.Sprintf("keep %d tainted files: %s ... more", len(tainted), strings.Join(tainted, ", "))))
+			log.Info(ui.SGR(ui.Yellow, fmt.Sprintf("keep %d tainted files: %s ... more", len(tainted), strings.Join(tainted, ", "))))
 		}
 	}
 
-	spin.Start(fmt.Sprintf("load %s", c.fname))
+	log.Infof("load %s", c.fname)
 	nstate, err := ninjabuild.Load(ctx, c.fname, buildPath)
 	if err != nil {
-		spin.Stop(errors.New(""))
 		return stats, err
 	}
-	spin.Stop(nil)
 
 	graph := ninjabuild.NewGraph(c.fname, nstate, config, buildPath, hashFS, stepConfig, localDepsLog)
 
@@ -433,8 +404,6 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 }
 
 func runNinja(ctx context.Context, fname string, graph *ninjabuild.Graph, bopts build.Options, targets []string) (build.Stats, error) {
-	spin := ui.Default.NewSpinner()
-
 	for {
 		log.Infof("build starts")
 		stats, err := doBuild(ctx, graph, bopts, targets...)
@@ -443,13 +412,11 @@ func runNinja(ctx context.Context, fname string, graph *ninjabuild.Graph, bopts 
 				return stats, nil
 			}
 			log.Infof("%s modified", fname)
-			spin.Start("reloading")
+			log.Infof("reloading")
 			err := graph.Reload(ctx)
 			if err != nil {
-				spin.Stop(err)
 				return stats, err
 			}
-			spin.Stop(nil)
 			log.Infof("reload done. build retry")
 			continue
 		}
@@ -518,7 +485,7 @@ func (c *ninjaCmdRun) initWorkdirs() (string, error) {
 	// Don't print this if a tool is being used, so that tool output
 	// can be piped into a file without this string showing up.
 	if c.dir != "." {
-		ui.Default.PrintLines(fmt.Sprintf("ninja: Entering directory `%s'", c.dir))
+		log.Infof("ninja: Entering directory `%s'", c.dir)
 	}
 	err = os.Chdir(c.dir)
 	if err != nil {
@@ -557,7 +524,7 @@ func (c *ninjaCmdRun) initWorkdirs() (string, error) {
 	c.dir = rdir
 	log.Infof("working_directory in exec_root: %s", c.dir)
 	if c.startDir != execRoot {
-		ui.Default.PrintLines(fmt.Sprintf("exec_root=%s dir=%s", execRoot, c.dir))
+		log.Infof("exec_root=%s dir=%s", execRoot, c.dir)
 	}
 	_, err = os.Stat(c.fname)
 	if errors.Is(err, fs.ErrNotExist) {
@@ -844,7 +811,7 @@ func gcinfo() string {
 
 	gcPercent := debug.SetGCPercent(100) // 100 is default
 	if gcPercent < 0 {
-		ui.Default.PrintLines(ui.SGR(ui.BackgroundRed, fmt.Sprintf("Garbage collection is disabled. GOGC=%s\n", os.Getenv("GOGC"))))
+		log.Warnf("Garbage collection is disabled. GOGC=%s\n", os.Getenv("GOGC"))
 		fmt.Fprintf(&sb, "gc=off")
 	} else {
 		fmt.Fprintf(&sb, "gc=%d", gcPercent)
