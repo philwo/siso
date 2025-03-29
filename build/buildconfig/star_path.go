@@ -88,7 +88,6 @@ func starPathIsAbs(thread *starlark.Thread, fn *starlark.Builtin, args starlark.
 	if err != nil {
 		return starlark.None, err
 	}
-	// Should return true for /path or \path on Windows?
 	r := filepath.IsAbs(fname)
 	return starlark.Bool(r), nil
 }

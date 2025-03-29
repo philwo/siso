@@ -8,10 +8,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"runtime"
 	"runtime/trace"
 	"strconv"
-
-	"go.chromium.org/infra/build/siso/runtimex"
 )
 
 // chunk is a chunk in a file.
@@ -49,7 +48,7 @@ type chunk struct {
 // splitIntoChunks splits buf into chunks.
 func splitIntoChunks(ctx context.Context, buf []byte) []chunk {
 	defer trace.StartRegion(ctx, "ninja.split").End()
-	chunkCount := runtimex.NumCPU()
+	chunkCount := runtime.NumCPU()
 	chunkSize := max(1024*1024, len(buf)/chunkCount+1)
 
 	chunks := make([]chunk, 0, chunkCount)

@@ -29,7 +29,6 @@ func (h credHelperTokenSource) Token() (*oauth2.Token, error) {
 	cmd.Stderr = &stderr
 	err := cmd.Run()
 	if err != nil {
-		err = credHelperErr(h.credHelper, err)
 		if len(stderr.Bytes()) == 0 {
 			return nil, fmt.Errorf("failed to run helper: %w", err)
 		}

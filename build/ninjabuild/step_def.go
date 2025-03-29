@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"io/fs"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -25,7 +24,6 @@ import (
 	"go.chromium.org/infra/build/siso/build"
 	"go.chromium.org/infra/build/siso/execute"
 	"go.chromium.org/infra/build/siso/hashfs"
-	"go.chromium.org/infra/build/siso/toolsupport/cmdutil"
 	"go.chromium.org/infra/build/siso/toolsupport/makeutil"
 	"go.chromium.org/infra/build/siso/toolsupport/ninjautil"
 	"go.chromium.org/infra/build/siso/toolsupport/shutil"
@@ -193,13 +191,6 @@ func (s *StepDef) Args(ctx context.Context) []string {
 
 func stepArgs(edge *ninjautil.Edge) []string {
 	cmdline := edge.Binding("command")
-	if runtime.GOOS == "windows" {
-		args, err := cmdutil.Split(cmdline)
-		if err != nil {
-			return []string{"cmd.exe", "/C", cmdline}
-		}
-		return args
-	}
 	args, err := shutil.Split(cmdline)
 	if err != nil {
 		return []string{"/bin/sh", "-c", cmdline}
@@ -543,10 +534,6 @@ func fixInputs(ctx context.Context, stepDef *StepDef, inputs, excludes []string)
 
 // ExpandedCaseSensitives returns expanded filenames if platform is case-sensitive.
 func (s StepDef) ExpandedCaseSensitives(ctx context.Context, inputs []string) []string {
-	if s.Platform()["OSFamily"] == "Windows" {
-		// Nothing to do on case-insensitive platform.
-		return inputs
-	}
 	if len(s.globals.caseSensitives) == 0 {
 		return inputs
 	}
@@ -976,16 +963,6 @@ func (s *StepDef) Handle(ctx context.Context, cmd *execute.Cmd) error {
 	// TODO(ukai): always need to expand labels here?
 	cmd.Inputs = s.expandLabels(cmd.Inputs)
 
-	// Add executables to REProxyConfig.ToolchainInputs to send Linux executables from Windows.
-	if runtime.GOOS == "windows" && cmd.REProxyConfig != nil {
-		var ok bool
-		for _, in := range cmd.Inputs {
-			_, ok = s.globals.executables[in]
-			if ok {
-				cmd.REProxyConfig.ToolchainInputs = append(cmd.REProxyConfig.ToolchainInputs, in)
-			}
-		}
-	}
 	return nil
 }
 

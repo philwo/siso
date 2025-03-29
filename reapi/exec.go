@@ -172,9 +172,6 @@ func erespErr(ctx context.Context, eresp *rpb.ExecuteResponse) error {
 
 	case codes.Internal:
 		log.Warnf("execute response: status=%s", st)
-		if strings.Contains(st.GetMessage(), "CreateProcess: failure in a Windows system call") {
-			return status.FromProto(st).Err()
-		}
 		// message:"docker: Error response from daemon: OCI runtime create failed: container_linux.go:380: starting container process caused: exec: \"./bin/clang++\": permission denied: unknown."
 		if strings.Contains(st.GetMessage(), "runtime create failed") && strings.Contains(st.GetMessage(), "starting container process") {
 			return status.FromProto(st).Err()

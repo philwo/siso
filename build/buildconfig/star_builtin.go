@@ -17,8 +17,6 @@ import (
 	startime "go.starlark.net/lib/time"
 	"go.starlark.net/starlark"
 	"go.starlark.net/starlarkstruct"
-
-	"go.chromium.org/infra/build/siso/runtimex"
 )
 
 // embeds these Starlark files for @builtin.
@@ -30,7 +28,7 @@ func builtinModule() map[string]starlark.Value {
 	runtimeModule := &starlarkstruct.Module{
 		Name: "runtime",
 		Members: map[string]starlark.Value{
-			"num_cpu": starlark.MakeInt(runtimex.NumCPU()),
+			"num_cpu": starlark.MakeInt(runtime.NumCPU()),
 			"os":      starlark.String(runtime.GOOS),
 			"arch":    starlark.String(runtime.GOARCH),
 			// need to include os version (to select platform container images)?

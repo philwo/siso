@@ -64,10 +64,6 @@ type globals struct {
 
 	// edge will be associated with the gn target.
 	gnTargets map[*ninjautil.Edge]gnTarget
-
-	// executables are files that need to set executable bit on Linux worker.
-	// This field is used to upload Linux executables from Windows host.
-	executables map[string]bool
 }
 
 type gnTarget struct {
@@ -217,7 +213,6 @@ func NewGraph(fname string, nstate *ninjautil.State, config *buildconfig.Config,
 			phony:          make(map[string]bool),
 			caseSensitives: make(map[string][]string),
 			gnTargets:      make(map[*ninjautil.Edge]gnTarget),
-			executables:    make(map[string]bool),
 		},
 	}
 	graph.initGlobals()
@@ -270,7 +265,6 @@ func (g *Graph) reset() {
 	g.globals.phony = make(map[string]bool)
 	g.globals.caseSensitives = make(map[string][]string)
 	g.globals.gnTargets = make(map[*ninjautil.Edge]gnTarget)
-	g.globals.executables = make(map[string]bool)
 	g.initGlobals()
 }
 
@@ -280,19 +274,6 @@ func (g *Graph) initGlobals() {
 		cif := strings.ToLower(f)
 		g.globals.caseSensitives[cif] = append(g.globals.caseSensitives[cif], f)
 	}
-	// initialize executables.
-	hfsExecutables := make(map[string]bool)
-	for _, f := range g.globals.stepConfig.Executables {
-		g.globals.executables[f] = true
-		absPath := f
-		if !filepath.IsAbs(absPath) {
-			absPath = filepath.Join(g.globals.path.ExecRoot, f)
-		}
-		absPath = filepath.ToSlash(absPath)
-		hfsExecutables[absPath] = true
-		log.Infof("set executable %q %q", f, absPath)
-	}
-	g.globals.hashFS.SetExecutables(hfsExecutables)
 
 	// infer gn target.
 	// gn target will be node that is phony target and contains ":"
