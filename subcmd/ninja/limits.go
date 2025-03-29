@@ -9,7 +9,6 @@ import (
 	"golang.org/x/sys/unix"
 
 	"go.chromium.org/infra/build/siso/build"
-	"go.chromium.org/infra/build/siso/ui"
 )
 
 func (c *ninjaCmdRun) checkResourceLimits(limits build.Limits) {
@@ -29,6 +28,6 @@ func (c *ninjaCmdRun) checkResourceLimits(limits build.Limits) {
 		nfile += uint64(limits.Remote) * 4
 	}
 	if lim.Cur < nfile {
-		ui.Default.Warningf("WARNING: too low file limit=%d. would fail with too many open files\n", lim.Cur)
+		log.Infof("WARNING: too low file limit=%d. would fail with too many open files", lim.Cur)
 	}
 }

@@ -12,7 +12,6 @@ import (
 	"sync"
 
 	"github.com/charmbracelet/log"
-	"go.chromium.org/infra/build/siso/ui"
 )
 
 const (
@@ -94,7 +93,7 @@ func DefaultLimits() Limits {
 				log.Warnf("unknown limits name %q", k)
 				continue
 			}
-			ui.Default.Warningf("use SISO_LIMITS=%s=%d", k, n)
+			log.Warnf("use SISO_LIMITS=%s=%d", k, n)
 		}
 	})
 	return defaultLimits
