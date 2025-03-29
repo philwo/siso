@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"io/fs"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"strings"
 
@@ -54,13 +53,7 @@ func depsExpandInputs(ctx context.Context, b *Builder, step *Step) {
 		// labels are expanded in expanded,
 		// so no need to preserve it in inputs.
 		if strings.Contains(in, ":") {
-			if runtime.GOOS == "windows" && filepath.IsAbs(in) {
-				if strings.Contains(in[2:], ":") {
-					continue
-				}
-			} else {
-				continue
-			}
+			continue
 		}
 		if _, err := b.hashFS.Stat(ctx, b.path.ExecRoot, in); err != nil {
 			log.Warnf("deps stat error %s: %v", in, err)

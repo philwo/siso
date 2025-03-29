@@ -280,10 +280,6 @@ type StepConfig struct {
 	// key is output target known to have bad deps.
 	// value is annotation (usually bug link).
 	BadDeps map[string]string `json:"bad_deps,omitempty"`
-
-	// Executables are files that need to have executable bit on Linux worker.
-	// This field is used to upload Linux executables from Windows host.
-	Executables []string `json:"executables,omitempty"`
 }
 
 // Init initializes StepConfig.
