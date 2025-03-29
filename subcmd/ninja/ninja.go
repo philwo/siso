@@ -8,7 +8,6 @@ package ninja
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -18,7 +17,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/debug"
-	"sort"
 	"strings"
 	"time"
 
@@ -1014,23 +1012,6 @@ func (s source) String() string {
 	return fmt.Sprintf("dataSource:%s", s.fname)
 }
 
-func rotateFiles(fname string) {
-	ext := filepath.Ext(fname)
-	fnameBase := strings.TrimSuffix(fname, ext)
-	for i := 8; i >= 0; i-- {
-		err := os.Rename(
-			fmt.Sprintf("%s.%d%s", fnameBase, i, ext),
-			fmt.Sprintf("%s.%d%s", fnameBase, i+1, ext))
-		if err != nil && !errors.Is(err, fs.ErrNotExist) {
-			log.Warnf("rotate %s %d->%d failed: %v", fname, i, i+1, err)
-		}
-	}
-	err := os.Rename(fname, fmt.Sprintf("%s.0%s", fnameBase, ext))
-	if err != nil && !errors.Is(err, fs.ErrNotExist) {
-		log.Warnf("rotate %s ->0 failed: %v", fname, err)
-	}
-}
-
 func (c *ninjaCmdRun) initOutputLocal() (func(context.Context, string) bool, error) {
 	switch c.outputLocalStrategy {
 	case "full":
@@ -1060,59 +1041,6 @@ func (c *ninjaCmdRun) initOutputLocal() (func(context.Context, string) bool, err
 	default:
 		return nil, fmt.Errorf("unknown output local strategy: %q. should be full/greedy/minimum", c.outputLocalStrategy)
 	}
-}
-
-type lastTargets struct {
-	Targets []string `json:"targets,omitempty"`
-	Failed  []string `json:"failed,omitempty"`
-}
-
-func loadTargets(targetsFile string) ([]string, []string, error) {
-	buf, err := os.ReadFile(targetsFile)
-	if err != nil {
-		return nil, nil, err
-	}
-	var last lastTargets
-	err = json.Unmarshal(buf, &last)
-	if err != nil {
-		return nil, nil, fmt.Errorf("parse error %s: %w", targetsFile, err)
-	}
-	return last.Targets, last.Failed, nil
-}
-
-func saveTargets(targetsFile string, targets, failed []string) error {
-	v := lastTargets{
-		Targets: targets,
-		Failed:  failed,
-	}
-	buf, err := json.Marshal(v)
-	if err != nil {
-		return fmt.Errorf("marshal last targets: %w", err)
-	}
-	err = os.WriteFile(targetsFile, buf, 0644)
-	if err != nil {
-		return fmt.Errorf("save last targets: %w", err)
-	}
-	return nil
-}
-
-func checkTargets(lastTargetsFilename string, targets []string) ([]string, bool) {
-	lastTargets, failed, err := loadTargets(lastTargetsFilename)
-	if err != nil {
-		log.Warnf("checkTargets: %v", err)
-		return nil, false
-	}
-	if len(targets) != len(lastTargets) {
-		return nil, false
-	}
-	sort.Strings(targets)
-	sort.Strings(lastTargets)
-	for i := range targets {
-		if targets[i] != lastTargets[i] {
-			return nil, false
-		}
-	}
-	return failed, true
 }
 
 func cpuinfo() string {
