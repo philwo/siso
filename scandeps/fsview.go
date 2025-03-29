@@ -89,7 +89,7 @@ func (fv *fsview) addDir(ctx context.Context, dir string, searchPath searchPathT
 	}
 	dents, err := fv.fs.ReadDir(ctx, fv.execRoot, dir)
 	if err != nil {
-		if !errors.Is(err, fs.ErrNotExist) {
+		if !errors.Is(err, fs.ErrNotExist) && !errors.Is(err, context.Canceled) {
 			log.Warnf("failed in readdir %s: %v", dir, err)
 		}
 		return
