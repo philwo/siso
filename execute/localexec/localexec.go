@@ -24,7 +24,6 @@ import (
 
 	"go.chromium.org/infra/build/siso/execute"
 	epb "go.chromium.org/infra/build/siso/execute/proto"
-	"go.chromium.org/infra/build/siso/toolsupport/straceutil"
 )
 
 // TODO(b/270886586): Compare local execution with/without local execution server.
@@ -129,34 +128,12 @@ func run(ctx context.Context, cmd *execute.Cmd) (*rpb.ActionResult, error) {
 	s := time.Now()
 
 	var ru *epb.Rusage
-	var err error
-	if cmd.FileTrace != nil {
-		if !straceutil.Available() {
-			return nil, fmt.Errorf("strace is not available")
-		}
-		st := straceutil.New(cmd.ID, c)
-		c = st.Cmd(ctx)
-		err = c.Start()
-		if err == nil {
-			err = c.Wait()
-		}
-		if err == nil {
-			ru = rusage(c)
-
-			cmd.FileTrace.Inputs, cmd.FileTrace.Outputs, err = st.PostProcess()
-			if err != nil {
-				err = fmt.Errorf("failed to postprocess: %w", err)
-			}
-		}
-		st.Close()
-	} else {
-		err = c.Start()
-		if err == nil {
-			err = c.Wait()
-		}
-		if err == nil {
-			ru = rusage(c)
-		}
+	err := c.Start()
+	if err == nil {
+		err = c.Wait()
+	}
+	if err == nil {
+		ru = rusage(c)
 	}
 	if cmd.Console {
 		consoleCancel()
@@ -202,9 +179,4 @@ func exitCode(err error) int32 {
 		return -1
 	}
 	return int32(eerr.ProcessState.ExitCode())
-}
-
-// TraceEnabled returns whether file trace is enabled or not.
-func TraceEnabled() bool {
-	return straceutil.Available()
 }

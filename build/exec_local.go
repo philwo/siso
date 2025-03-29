@@ -62,17 +62,7 @@ func (b *Builder) execLocal(ctx context.Context, step *Step) error {
 		return err
 	})
 	if !errors.Is(err, context.Canceled) {
-		if step.cmd.FileTrace != nil {
-			cerr := b.checkTrace(ctx, step, dur)
-			if cerr != nil {
-				log.Warnf("failed to check trace %v", cerr)
-				if err == nil {
-					err = cerr
-				}
-			}
-		} else {
-			b.logLocalExec(step, dur)
-		}
+		b.logLocalExec(step, dur)
 	}
 	if err != nil {
 		return err
