@@ -66,9 +66,6 @@ type Options struct {
 	// DryRun just prints the command to build, but does nothing.
 	DryRun bool
 
-	// allow failures at most FailuresAllowed.
-	FailuresAllowed int
-
 	// RebuildManifest is a build manifest filename (i.e. build.ninja)
 	// when rebuilding manifest.
 	// empty for normal build.
@@ -135,8 +132,6 @@ type Builder struct {
 	verbose bool
 	dryRun  bool
 
-	failuresAllowed int
-
 	rebuildManifest string
 }
 
@@ -200,7 +195,6 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 		clobber:         opts.Clobber,
 		verbose:         opts.Verbose,
 		dryRun:          opts.DryRun,
-		failuresAllowed: opts.FailuresAllowed,
 		rebuildManifest: opts.RebuildManifest,
 	}
 	return b, nil
@@ -370,7 +364,7 @@ loop:
 			if !stuck {
 				stuck = numServs == 0 && !hasReady
 			}
-			if nerrs >= b.failuresAllowed || stuck {
+			if stuck {
 				cancel()
 				break loop
 			}
@@ -424,7 +418,7 @@ loop:
 	go func() {
 		var canceled bool
 		for e := range errch {
-			if nerrs >= b.failuresAllowed {
+			if nerrs >= 1 {
 				continue
 			}
 			if e != nil && !errors.Is(e, context.Canceled) {
