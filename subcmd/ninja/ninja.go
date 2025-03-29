@@ -113,7 +113,6 @@ type ninjaCmdRun struct {
 	outputLogFile      string
 	explainFile        string
 	localexecLogFile   string
-	metricsJSON        string
 
 	fsopt             *hashfs.Option
 	reopt             *reapi.Option
@@ -197,7 +196,7 @@ func (c *ninjaCmdRun) Run(a subcommands.Application, args []string, env subcomma
 				dur = ui.SGR(ui.Bold, dur)
 				msgPrefix = ui.SGR(ui.BackgroundRed, msgPrefix)
 			}
-			fmt.Fprintf(os.Stderr, "\n%6s %s: %d done %d failed %d remaining - %.02f/s\n %v\n", dur, msgPrefix, stats.Done-stats.Skipped, stats.Fail, stats.Total-stats.Done, sps, errBuild.err)
+			fmt.Fprintf(os.Stderr, "\n%6s %s: %d done %d remaining - %.02f/s\n %v\n", dur, msgPrefix, stats.Done-stats.Skipped, stats.Total-stats.Done, sps, errBuild.err)
 			suggest := fmt.Sprintf("see %s for full command line and output", c.logFilename(c.outputLogFile, c.startDir))
 			if c.sisoInfoLog != "" {
 				suggest += fmt.Sprintf("\n or %s", c.logFilename(c.sisoInfoLog, c.startDir))
@@ -557,9 +556,6 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 			if strings.HasPrefix(base, "siso_") {
 				return true
 			}
-			if base == ".ninja_log" {
-				return true
-			}
 			return false
 		}
 	}
@@ -838,7 +834,6 @@ func (c *ninjaCmdRun) init() {
 	c.Flags.StringVar(&c.outputLogFile, "output_log", "siso_output", "output log filename (relative to -log_dir")
 	c.Flags.StringVar(&c.explainFile, "explain_log", "siso_explain", "explain log filename (relative to -log_dir")
 	c.Flags.StringVar(&c.localexecLogFile, "localexec_log", "siso_localexec", "localexec log filename (relative to -log_dir")
-	c.Flags.StringVar(&c.metricsJSON, "metrics_json", "siso_metrics.json", "metrics JSON filename (relative to -log_dir)")
 
 	c.fsopt = new(hashfs.Option)
 	c.fsopt.StateFile = ".siso_fs_state"
@@ -1075,12 +1070,6 @@ func (c *ninjaCmdRun) initBuildOpts(projectID string, buildPath *build.Path, con
 	}
 	dones = append(dones, done)
 
-	metricsJSONWriter, done, err := c.logWriter(c.metricsJSON)
-	if err != nil {
-		return bopts, nil, err
-	}
-	dones = append(dones, done)
-
 	var actionSaltBytes []byte
 	if c.actionSalt != "" {
 		actionSaltBytes = []byte(c.actionSalt)
@@ -1108,8 +1097,6 @@ func (c *ninjaCmdRun) initBuildOpts(projectID string, buildPath *build.Path, con
 		OutputLogWriter:      outputLogWriter,
 		ExplainWriter:        explainWriter,
 		LocalexecLogWriter:   localexecLogWriter,
-		MetricsJSONWriter:    metricsJSONWriter,
-		NinjaLogWriter:       ninjaLogWriter,
 		Clobber:              c.clobber,
 		Prepare:              c.prepare,
 		Verbose:              c.verbose,

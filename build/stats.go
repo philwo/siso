@@ -6,8 +6,6 @@ package build
 
 import (
 	"sync"
-
-	"github.com/charmbracelet/log"
 )
 
 type stats struct {
@@ -23,56 +21,20 @@ func newStats(total int) *stats {
 	}
 }
 
-func (s *stats) update(m *StepMetric, pure bool) {
+func (s *stats) update(skipped bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.s.Done++
-	// done step should be one of the followings.
-	// note: metrics may have Cached+IsRemote, if
-	// remote exec called and got cache, rather than
-	// just get cache by GetActionResult.
-	switch {
-	case m.skip:
+	if skipped {
 		s.s.Skipped++
-	case m.NoExec:
-		s.s.NoExec++
-	case m.Cached:
-		s.s.CacheHit++
-	case m.IsRemote:
-		s.s.Remote++
-	case m.IsLocal:
-		s.s.Local++
-	case m.Err: // maybe canceled?
-	default:
-		log.Warnf("unexpected metrics? %#v", m)
-	}
-
-	if m.Err {
-		s.s.Fail++
-	}
-	s.s.RemoteRetry += m.RemoteRetry
-
-	if m.ScandepsErr {
-		s.s.ScanDepsFailed++
-	}
-	if pure {
-		s.s.Pure++
 	}
 }
 
 // Stats keeps statistics about the build, such as the number of total, skipped or remote actions.
 type Stats struct {
-	Done           int // completed actions, including skipped, failed
-	Fail           int // failed actions
-	Pure           int // pure actions
-	Skipped        int // skipped actions, because they were still up-to-date
-	NoExec         int // actions that was completed by handler without execute cmds e.g. stamp, copy
-	ScanDepsFailed int // actions that scandeps failed
-	CacheHit       int // actions for which we got a cache hit
-	Local          int // locally executed actions
-	Remote         int // remote executed actions
-	RemoteRetry    int // accumulated remote retry counts
-	Total          int // total actions that ran during this build
+	Done    int // completed actions, including skipped, failed
+	Skipped int // skipped actions, because they were still up-to-date
+	Total   int // total actions that ran during this build
 }
 
 func (s *stats) stats() Stats {

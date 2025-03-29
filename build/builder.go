@@ -7,7 +7,6 @@ package build
 import (
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -67,7 +66,6 @@ type Options struct {
 	OutputLogWriter      io.Writer
 	ExplainWriter        io.Writer
 	LocalexecLogWriter   io.Writer
-	MetricsJSONWriter    io.Writer
 
 	// Clobber forces to rebuild ignoring existing generated files.
 	Clobber bool
@@ -153,7 +151,6 @@ type Builder struct {
 	failureSummaryWriter io.Writer
 	failedCommandsWriter io.Writer
 	localexecLogWriter   io.Writer
-	metricsJSONWriter    io.Writer
 	outputLogWriter      io.Writer
 
 	// envfiles: filename -> *envfile
@@ -186,10 +183,6 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 	lelw := opts.LocalexecLogWriter
 	if lelw == nil {
 		lelw = io.Discard
-	}
-	mw := opts.MetricsJSONWriter
-	if mw == nil {
-		mw = io.Discard
 	}
 
 	if err := opts.Path.Check(); err != nil {
@@ -248,7 +241,6 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 		outputLogWriter:      opts.OutputLogWriter,
 		explainWriter:        ew,
 		localexecLogWriter:   lelw,
-		metricsJSONWriter:    mw,
 		clobber:              opts.Clobber,
 		prepare:              opts.Prepare,
 		verbose:              opts.Verbose,
@@ -383,17 +375,6 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 			ui.Default.PrintLines(ninjaNoWorkToDo)
 			return
 		}
-		var depsStatLine string
-		if b.reapiclient != nil {
-			// scandeps is only used in siso native mode.
-			if stat.ScanDepsFailed != 0 {
-				depsStatLine = fmt.Sprintf("deps scanErr:%d\n", stat.ScanDepsFailed)
-			}
-		}
-		msg := fmt.Sprintf("local:%d remote:%d cache:%d retry:%d skip:%d",
-			stat.Local+stat.NoExec, stat.Remote, stat.CacheHit, stat.RemoteRetry, stat.Skipped) +
-			depsStatLine
-		ui.Default.PrintLines(msg)
 	}()
 	pstat := b.plan.stats()
 	b.progress.report("build start: Ready %d Pending %d", pstat.nready, pstat.npendings)
@@ -546,11 +527,6 @@ loop:
 			ui.Default.PrintLines(fmt.Sprintf("%s failed", name))
 		}
 	}
-	// metrics for full build session, without step_id etc.
-	var metrics StepMetric
-	metrics.Duration = IntervalMetric(time.Since(b.start))
-	metrics.Err = err != nil
-	b.recordMetrics(metrics)
 	if b.rebuildManifest == "" && !ui.IsTerminal() && b.failureSummaryWriter != nil {
 		// non batch mode (ui.IsTerminal) may build last failed command
 		// so should not trigger this check at the end of build.
@@ -605,15 +581,6 @@ func (b *Builder) uploadBuildNinja(ctx context.Context) {
 		log.Warnf("failed to upload build files tree %s: %v", d, err)
 		return
 	}
-}
-
-func (b *Builder) recordMetrics(m StepMetric) {
-	mb, err := json.Marshal(m)
-	if err != nil {
-		log.Warnf("metrics marshal err: %v", err)
-		return
-	}
-	fmt.Fprintf(b.metricsJSONWriter, "%s\n", mb)
 }
 
 // dedupInputs deduplicates inputs.

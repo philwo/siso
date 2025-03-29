@@ -7,13 +7,11 @@ package build
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"path/filepath"
 	"slices"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/charmbracelet/log"
 	"go.chromium.org/infra/build/siso/execute"
@@ -160,22 +158,10 @@ func (msvc depsMSVC) DepsCmd(ctx context.Context, b *Builder, step *Step) ([]str
 }
 
 func (msvc depsMSVC) depsInputs(ctx context.Context, b *Builder, step *Step) ([]string, error) {
-	ins, err := msvc.scandeps(ctx, b, step)
-	if err != nil {
-		if !errors.Is(err, context.Canceled) {
-			step.metrics.ScandepsErr = true
-		}
-		return nil, err
-	}
-	return ins, nil
+	return msvc.scandeps(ctx, b, step)
 }
 
 func (depsMSVC) scandeps(ctx context.Context, b *Builder, step *Step) ([]string, error) {
-	// remote execution may have already run.
-	// In this case, do not change ActionStartTime set by the remote exec.
-	if step.metrics.ActionStartTime == 0 {
-		step.metrics.ActionStartTime = IntervalMetric(time.Since(b.start))
-	}
 	params := msvcutil.ExtractScanDepsParams(step.cmd.Args, step.cmd.Env)
 	for i := range params.Sources {
 		params.Sources[i] = b.path.MaybeFromWD(params.Sources[i])
