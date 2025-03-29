@@ -424,16 +424,6 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	if err != nil {
 		return stats, err
 	}
-	if c.fsopt.KeepTainted {
-		tainted := hashFS.TaintedFiles()
-		if len(tainted) == 0 {
-			log.Info(ui.SGR(ui.Yellow, "no tainted generated files"))
-		} else if len(tainted) < 5 {
-			log.Info(ui.SGR(ui.Yellow, fmt.Sprintf("keep %d tainted files: %s", len(tainted), strings.Join(tainted, ", "))))
-		} else {
-			log.Info(ui.SGR(ui.Yellow, fmt.Sprintf("keep %d tainted files: %s ... more", len(tainted), strings.Join(tainted, ", "))))
-		}
-	}
 
 	log.Infof("load %s", c.fname)
 	nstate, err := ninjabuild.Load(ctx, c.fname, buildPath)
