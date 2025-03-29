@@ -149,7 +149,7 @@ func (c *depsRun) run(ctx context.Context, args []string) error {
 		if err != nil {
 			return err
 		}
-		targets, err = depsTargets(state, depsLog, args)
+		targets, err = depsTargets(state, args)
 		if err != nil {
 			return err
 		}
@@ -227,7 +227,7 @@ func lookupDeps(ctx context.Context, state *ninjautil.State, hashFS *hashfs.Hash
 	return fmt.Sprintf("depfile=%q", depfile), deps, fi.ModTime(), ninjabuild.DepsLogValid, nil
 }
 
-func depsTargets(state *ninjautil.State, depsLog *ninjautil.DepsLog, args []string) ([]string, error) {
+func depsTargets(state *ninjautil.State, args []string) ([]string, error) {
 	var nodes []*ninjautil.Node
 	if len(args) > 0 {
 		var err error
