@@ -73,9 +73,6 @@ type HashFS struct {
 	// holds generated files (full path) in previous builds.
 	previouslyGeneratedFiles []string
 
-	// holds tainted files
-	taintedFiles []string
-
 	executables map[string]bool
 
 	journalMu sync.Mutex
@@ -213,9 +210,8 @@ func (hfs *HashFS) Close(ctx context.Context) error {
 		hfs.journal = nil
 	}
 	hfs.journalMu.Unlock()
-	if hfs.clean.Load() || !hfs.loaded.Load() || len(hfs.taintedFiles) > 0 {
-		// don't update fs state when there are tainted files.
-		log.Warnf("not save state clean=%t loaded=%t tainted:%d", hfs.clean.Load(), hfs.loaded.Load(), len(hfs.taintedFiles))
+	if hfs.clean.Load() || !hfs.loaded.Load() {
+		log.Warnf("not save state clean=%t loaded=%t", hfs.clean.Load(), hfs.loaded.Load())
 		return nil
 	}
 	err := Save(hfs.State(ctx), hfs.opt)
@@ -249,11 +245,6 @@ func (hfs *HashFS) PreviouslyGeneratedFiles() []string {
 	p := hfs.previouslyGeneratedFiles
 	hfs.previouslyGeneratedFiles = nil
 	return p
-}
-
-// TaintedFiles returns a list of manually modified generated files.
-func (hfs *HashFS) TaintedFiles() []string {
-	return hfs.taintedFiles
 }
 
 // FileSystem returns FileSystem interface at dir.
