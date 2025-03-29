@@ -270,10 +270,6 @@ func (s *StepDef) Binding(name string) string {
 			return "true"
 		}
 		return ""
-	case "ignore_extra_input_pattern":
-		return s.rule.IgnoreExtraInputPattern
-	case "ignore_extra_output_pattern":
-		return s.rule.IgnoreExtraOutputPattern
 	case "restat":
 		if s.rule.Restat {
 			return "true"

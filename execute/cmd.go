@@ -33,13 +33,6 @@ type Executor interface {
 	Run(ctx context.Context, cmd *Cmd) error
 }
 
-// FileTrace is the results of file trace of the cmd.
-// The paths are relative to ExecRoot of the cmd.
-type FileTrace struct {
-	Inputs  []string
-	Outputs []string
-}
-
 // REProxyConfig specifies configuration options for using reproxy.
 type REProxyConfig struct {
 	CanonicalizeWorkingDir bool              `json:"canonicalize_working_dir,omitempty"`
@@ -202,9 +195,6 @@ type Cmd struct {
 
 	// ActionSalt is arbitrary bytes used for cache salt.
 	ActionSalt []byte
-
-	// FileTrace is a FileTrace info if enabled.
-	FileTrace *FileTrace
 
 	// Console indicates the command attaches stdin/stdout/stderr when
 	// running.  localexec only.
