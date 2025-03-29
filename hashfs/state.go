@@ -34,8 +34,6 @@ import (
 	pb "go.chromium.org/infra/build/siso/hashfs/proto"
 	"go.chromium.org/infra/build/siso/reapi/digest"
 	"go.chromium.org/infra/build/siso/runtimex"
-	"go.chromium.org/infra/build/siso/toolsupport/artfsutil"
-	"go.chromium.org/infra/build/siso/toolsupport/cogutil"
 )
 
 const defaultStateFile = ".siso_fs_state"
@@ -64,8 +62,6 @@ type Option struct {
 	DataSource  DataSource
 	OutputLocal OutputLocalFunc
 	Ignore      IgnoreFunc
-	CogFS       *cogutil.Client
-	ArtFS       *artfsutil.Client
 
 	SetStateLogger io.Writer // capture SetState log for test
 }

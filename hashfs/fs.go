@@ -275,11 +275,6 @@ func (hfs *HashFS) DataSource() DataSource {
 	return hfs.opt.DataSource
 }
 
-// OnCog returns whether it is on Cog or not.
-func (hfs *HashFS) OnCog() bool {
-	return hfs.opt.CogFS != nil
-}
-
 func needPathClean(names ...string) bool {
 	for _, name := range names {
 		// even on windows, we use /-path in hashfs.
@@ -1007,47 +1002,6 @@ func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []Update
 		return entries[i].Name < entries[j].Name
 	})
 
-	if hfs.opt.CogFS != nil || hfs.opt.ArtFS != nil {
-		// TODO: pass UpdateEntry so artfs can set mtime?
-		var updates []merkletree.Entry
-		var updateIdx []int
-		var nFromLocals, nNonFiles int
-		for i, ent := range entries {
-			if ent.Entry == nil {
-				// UpdateEntry was captured by RetrieveUpdateEntriesFromLocal
-				// so file already exist on local disk
-				nFromLocals++
-				continue
-			}
-			if ent.Entry.Data.IsZero() {
-				// symlink or dir. handled in usual way.
-				nNonFiles++
-				continue
-			}
-			updateIdx = append(updateIdx, i)
-			updates = append(updates, *ent.Entry)
-		}
-		if len(updates) > 0 {
-			var err error
-			if hfs.opt.CogFS != nil {
-				err = hfs.opt.CogFS.BuildfsInsert(ctx, execRoot, updates)
-			} else {
-				err = hfs.opt.ArtFS.ArtfsInsert(ctx, execRoot, updates)
-			}
-			if err != nil {
-				log.Warnf("cog buildfs insert %d under %s: %v", len(updates), execRoot, err)
-			} else {
-				// cogfs inserted the update, so we can assume
-				// these files exist locally.
-				for _, i := range updateIdx {
-					entries[i].IsLocal = true
-				}
-			}
-		} else {
-			log.Warnf("cog buildfs insert 0 from_local=%d not_file=%d", nFromLocals, nNonFiles)
-		}
-	}
-
 	for _, ent := range entries {
 		fname := filepath.Join(execRoot, ent.Name)
 		fname = filepath.ToSlash(fname)
@@ -1580,45 +1534,20 @@ func (e *entry) updateDir(ctx context.Context, hfs *HashFS, dname string) []stri
 		log.Warnf("updateDir %s: readdirnames %v", dname, err)
 		return nil
 	}
-	if hfs.OnCog() {
-		var wg sync.WaitGroup
-		for _, name := range names {
-			// don't scan temporary file by readdir.
-			// it may cause race on windows.
-			// b/294318963 b/381947692
-			if strings.HasSuffix(name, ".tmp") || strings.HasPrefix(name, ".tempfile.") {
-				continue
-			}
-			if hfs.opt.Ignore(ctx, filepath.Join(dname, name)) {
-				continue
-			}
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				// update entry in e.directory.
-				_, err := hfs.stat(ctx, dname, name, false)
-				if err != nil {
-					log.Warnf("updateDir stat %s: %v", name, err)
-				}
-			}()
+	for _, name := range names {
+		// don't scan temporary file by readdir.
+		// it may cause race on windows.
+		// b/294318963 b/381947692
+		if strings.HasSuffix(name, ".tmp") || strings.HasPrefix(name, ".tempfile.") {
+			continue
 		}
-		wg.Wait()
-	} else {
-		for _, name := range names {
-			// don't scan temporary file by readdir.
-			// it may cause race on windows.
-			// b/294318963 b/381947692
-			if strings.HasSuffix(name, ".tmp") || strings.HasPrefix(name, ".tempfile.") {
-				continue
-			}
-			if hfs.opt.Ignore(ctx, filepath.Join(dname, name)) {
-				continue
-			}
-			// update entry in e.directory.
-			_, err := hfs.stat(ctx, dname, name, false)
-			if err != nil {
-				log.Warnf("updateDir stat %s: %v", name, err)
-			}
+		if hfs.opt.Ignore(ctx, filepath.Join(dname, name)) {
+			continue
+		}
+		// update entry in e.directory.
+		_, err := hfs.stat(ctx, dname, name, false)
+		if err != nil {
+			log.Warnf("updateDir stat %s: %v", name, err)
 		}
 	}
 	e.directory.mtime = fi.ModTime()

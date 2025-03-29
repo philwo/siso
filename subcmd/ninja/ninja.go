@@ -44,8 +44,6 @@ import (
 	"go.chromium.org/infra/build/siso/reapi"
 	"go.chromium.org/infra/build/siso/reapi/digest"
 	"go.chromium.org/infra/build/siso/subcmd/ninja/ninjalog"
-	"go.chromium.org/infra/build/siso/toolsupport/artfsutil"
-	"go.chromium.org/infra/build/siso/toolsupport/cogutil"
 	"go.chromium.org/infra/build/siso/toolsupport/ninjautil"
 	"go.chromium.org/infra/build/siso/toolsupport/soongutil"
 	"go.chromium.org/infra/build/siso/ui"
@@ -123,9 +121,6 @@ type ninjaCmdRun struct {
 	reExecEnable       bool
 	reCacheEnableRead  bool
 	reCacheEnableWrite bool
-
-	artfsDir      string
-	artfsEndpoint string
 
 	// enableCPUProfiler bool
 
@@ -461,8 +456,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 
 	buildPath := build.NewPath(execRoot, c.dir)
 
-	// compute default limits based on fstype of work dir (e.g. artfs),
-	// not of exec root.
+	// compute default limits based on fstype of work dir, not of exec root.
 	limits := build.DefaultLimits()
 	if c.localJobs > 0 {
 		limits.Local = c.localJobs
@@ -586,22 +580,6 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 			}
 			return false
 		}
-	}
-	cogfs, err := cogutil.New(ctx, execRoot, c.reopt)
-	if err != nil && !errors.Is(err, errors.ErrUnsupported) {
-		log.Warnf("unable to use cog? %v", err)
-	}
-	if cogfs != nil {
-		ui.Default.Warningf("build in cog: %s", cogfs.Info())
-		c.fsopt.CogFS = cogfs
-	}
-	if c.artfsDir != "" && c.artfsEndpoint != "" {
-		artfs, err := artfsutil.New(c.artfsDir, c.artfsEndpoint)
-		if err != nil {
-			return stats, err
-		}
-		ui.Default.Warningf("build on artfs")
-		c.fsopt.ArtFS = artfs
 	}
 
 	spin.Start("loading fs state")
@@ -872,9 +850,6 @@ func (c *ninjaCmdRun) init() {
 	c.Flags.BoolVar(&c.reExecEnable, "re_exec_enable", true, "remote exec enable")
 	c.Flags.BoolVar(&c.reCacheEnableRead, "re_cache_enable_read", true, "remote exec cache enable read")
 	c.Flags.BoolVar(&c.reCacheEnableWrite, "re_cache_enable_write", false, "remote exec cache allow local trusted uploads")
-
-	c.Flags.StringVar(&c.artfsDir, "artfs_dir", "", "artfs mount point")
-	c.Flags.StringVar(&c.artfsEndpoint, "artfs_endpoint", "localhost:65001", "artfs server endpoint")
 
 	c.Flags.StringVar(&c.subtool, "t", "", "run a subtool (use '-t list' to list subtools)")
 	c.Flags.BoolVar(&c.cleandead, "cleandead", false, "clean built files that are no longer produced by the manifest")
