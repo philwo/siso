@@ -29,10 +29,8 @@ type ManifestParser struct {
 	state *State
 	scope *fileScope
 
-	eg    *errgroup.Group
-	sema  chan struct{}
-	fsema chan struct{}
-	wd    string
+	eg *errgroup.Group
+	wd string
 }
 
 // NewManifestParser creates a new manifest parser.
@@ -52,8 +50,6 @@ var loaderConcurrency = runtime.NumCPU()
 func (p *ManifestParser) Load(ctx context.Context, fname string) error {
 	if p.eg == nil {
 		p.eg, ctx = errgroup.WithContext(ctx)
-		p.sema = make(chan struct{}, loaderConcurrency)
-		p.fsema = make(chan struct{}, loaderConcurrency)
 	}
 	p.eg.Go(func() error {
 		return p.loadFile(ctx, fname)
@@ -78,7 +74,6 @@ func (p *ManifestParser) loadFile(ctx context.Context, fname string) error {
 	fp := &fileParser{
 		parent: p.scope,
 		state:  p.state,
-		sema:   p.fsema,
 	}
 	err := fp.parseFile(ctx, filepath.Join(p.wd, fname))
 	if err != nil {
@@ -87,14 +82,10 @@ func (p *ManifestParser) loadFile(ctx context.Context, fname string) error {
 	for _, fname := range fp.fileState.subninjas {
 		scope := &fp.scope
 		p.eg.Go(func() error {
-			p.sema <- struct{}{}
-			defer func() { <-p.sema }()
 			subparser := &ManifestParser{
 				state: p.state,
 				scope: scope,
 				eg:    p.eg,
-				sema:  p.sema,
-				fsema: p.fsema,
 				wd:    p.wd,
 			}
 			return subparser.loadFile(ctx, fname)
