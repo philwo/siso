@@ -230,7 +230,6 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 	var neq, nnew, nnotexist, nfail, ninvalidate atomic.Int64
 	var dirty atomic.Bool
 	eg, gctx := errgroup.WithContext(ctx)
-	eg.SetLimit(runtime.NumCPU())
 	dirs := make([]*entry, len(state.Entries))
 	entries := make([]*entry, len(state.Entries))
 	prevGenerated := make([]bool, len(state.Entries))
