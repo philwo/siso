@@ -336,7 +336,6 @@ func (ch *chunk) setupInChunk(ctx context.Context, state *State, scope *fileScop
 				state:  state,
 				parent: scope.parent,
 				scope:  *scope,
-				sema:   make(chan struct{}, 1),
 			}
 			state.filenames = append(state.filenames, include)
 			fp.buf, err = fp.readFile(ctx, include)
