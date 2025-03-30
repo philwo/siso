@@ -331,6 +331,14 @@ func (c *Cmd) Digest(ctx context.Context, ds *digest.Store) (actionDigest digest
 		ents, treeInputs = c.chrootDir(ents, treeInputs)
 	}
 
+	dir := c.Dir
+	if c.CanonicalizeDir {
+		dir = c.canonicalDir()
+	}
+	ents = append(ents, merkletree.Entry{
+		Name: filepath.ToSlash(dir),
+	})
+
 	inputRootDigest, err = treeDigest(ctx, treeInputs, ents, ds)
 	if err != nil {
 		return digest.Digest{}, fmt.Errorf("failed to get input root for %s: %w", c, err)
