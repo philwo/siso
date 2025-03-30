@@ -41,8 +41,6 @@ type fileParser struct {
 	state *State
 	scope *fileScope
 
-	sema chan struct{}
-
 	fname  string
 	buf    []byte
 	full   chunk // for accumulated numbers from chunks
@@ -111,9 +109,6 @@ func (p *fileParser) parseChunks() error {
 	var eg errgroup.Group
 	for i := range p.chunks {
 		eg.Go(func() error {
-			p.sema <- struct{}{}
-			defer func() { <-p.sema }()
-
 			return p.chunks[i].parseChunk()
 		})
 	}
@@ -178,9 +173,6 @@ func (p *fileParser) setup(ctx context.Context) error {
 	for i := range p.chunks {
 		ch := &p.chunks[i]
 		eg.Go(func() error {
-			p.sema <- struct{}{}
-			defer func() { <-p.sema }()
-
 			return ch.setupInChunk(ctx, p.state, p.scope)
 		})
 		// adjust statement positions if there is any include in any chunk.
@@ -204,9 +196,6 @@ func (p *fileParser) buildGraph() error {
 	for i := range p.chunks {
 		ch := &p.chunks[i]
 		eg.Go(func() error {
-			p.sema <- struct{}{}
-			defer func() { <-p.sema }()
-
 			return ch.buildGraphInChunk(p.state, &p.fileState, p.scope)
 		})
 		for j := range ch.includes {
@@ -214,9 +203,6 @@ func (p *fileParser) buildGraph() error {
 			for k := range inc {
 				ich := &inc[k]
 				eg.Go(func() error {
-					p.sema <- struct{}{}
-					defer func() { <-p.sema }()
-
 					return ich.buildGraphInChunk(p.state, &p.fileState, p.scope)
 				})
 			}

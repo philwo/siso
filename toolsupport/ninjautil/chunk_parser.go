@@ -333,7 +333,6 @@ func (ch *chunk) setupInChunk(ctx context.Context, state *State, scope *fileScop
 			fp := &fileParser{
 				state: state,
 				scope: scope,
-				sema:  make(chan struct{}, 1),
 			}
 			state.filenames = append(state.filenames, include)
 			fp.buf, err = fp.readFile(include)
