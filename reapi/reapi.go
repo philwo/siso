@@ -11,6 +11,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"os"
 	"path"
 	"strings"
 	"sync"
@@ -20,6 +21,7 @@ import (
 	"google.golang.org/api/option"
 	gtransport "google.golang.org/api/transport/grpc"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/proto"
@@ -37,6 +39,9 @@ type Option struct {
 	Prefix   string
 	Address  string
 	Instance string
+
+	// Insecure mode for RE API.
+	Insecure bool
 
 	// use compressed blobs if server supports compressed blobs and size is bigger than this.
 	// When 0 is set, blob compression is disabled.
@@ -63,6 +68,9 @@ func (o *Option) RegisterFlags(fs *flag.FlagSet, envs map[string]string) {
 		instance = "default_instance"
 	}
 	fs.StringVar(&o.Instance, o.Prefix+"_instance", instance, "reapi instance name"+purpose)
+
+	fs.BoolVar(&o.Insecure, o.Prefix+"_insecure", os.Getenv("RBE_service_no_security") == "true", "reapi insecure mode")
+
 	fs.Int64Var(&o.CompressedBlob, o.Prefix+"_compress_blob", 1024, "use compressed blobs if server supports compressed blobs and size is bigger than this. specify 0 to disable comporession."+purpose)
 
 	// https://grpc.io/docs/guides/keepalive/#keepalive-configuration-specification
@@ -185,8 +193,17 @@ func New(ctx context.Context, cred cred.Cred, opt Option) (*Client, error) {
 		option.WithEndpoint(opt.Address),
 		option.WithGRPCConnectionPool(25),
 	}
-	copts = append(copts, cred.ClientOptions()...)
 	dopts := dialOptions(opt.KeepAliveParams)
+	if opt.Insecure {
+		if strings.HasSuffix(opt.Address, ".googleapis.com:443") {
+			return nil, errors.New("insecure mode is not supported for RBE")
+		}
+		clog.Warningf(ctx, "insecure mode")
+		copts = append(copts, option.WithoutAuthentication())
+		dopts = append(dopts, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	} else {
+		copts = append(copts, cred.ClientOptions()...)
+	}
 	for _, dopt := range dopts {
 		copts = append(copts, option.WithGRPCDialOption(dopt))
 	}
