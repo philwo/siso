@@ -7,6 +7,7 @@ package reapi
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"flag"
 	"fmt"
@@ -43,6 +44,10 @@ type Option struct {
 	// Insecure mode for RE API.
 	Insecure bool
 
+	// mTLS
+	TLSClientAuthCert string
+	TLSClientAuthKey  string
+
 	// use compressed blobs if server supports compressed blobs and size is bigger than this.
 	// When 0 is set, blob compression is disabled.
 	CompressedBlob int64
@@ -69,7 +74,10 @@ func (o *Option) RegisterFlags(fs *flag.FlagSet, envs map[string]string) {
 	}
 	fs.StringVar(&o.Instance, o.Prefix+"_instance", instance, "reapi instance name"+purpose)
 
-	fs.BoolVar(&o.Insecure, o.Prefix+"_insecure", os.Getenv("RBE_service_no_security") == "true", "reapi insecure mode")
+	fs.BoolVar(&o.Insecure, o.Prefix+"_insecure", os.Getenv("RBE_service_no_security") == "true", "reapi insecure mode. default can be set by $RBE_service_no_security")
+
+	fs.StringVar(&o.TLSClientAuthCert, o.Prefix+"_tls_client_auth_cert", os.Getenv("RBE_tls_client_auth_cert"), "Certificate to use when using mTLS to connect to the RE api service. default can be set by $RBE_tls_client_auth_cert")
+	fs.StringVar(&o.TLSClientAuthKey, o.Prefix+"_tls_client_auth_key", os.Getenv("RBE_tls_client_auth_key"), "Key to use when using mTLS to connect to the RE api service. default can be set by $RBE_tls_client_auth_key")
 
 	fs.Int64Var(&o.CompressedBlob, o.Prefix+"_compress_blob", 1024, "use compressed blobs if server supports compressed blobs and size is bigger than this. specify 0 to disable comporession."+purpose)
 
@@ -98,6 +106,17 @@ func (o *Option) UpdateProjectID(projID string) string {
 // IsValid returns whether option is valid or not.
 func (o Option) IsValid() bool {
 	return o.Address != "" && o.Instance != ""
+}
+
+// NeedCred returns whether credential is needed or not.
+func (o Option) NeedCred() bool {
+	if o.Insecure {
+		return false
+	}
+	if o.TLSClientAuthCert != "" || o.TLSClientAuthKey != "" {
+		return false
+	}
+	return true
 }
 
 type grpcClientConn interface {
@@ -194,6 +213,8 @@ func New(ctx context.Context, cred cred.Cred, opt Option) (*Client, error) {
 		option.WithGRPCConnectionPool(25),
 	}
 	dopts := dialOptions(opt.KeepAliveParams)
+	var conn grpcClientConn
+	var err error
 	if opt.Insecure {
 		if strings.HasSuffix(opt.Address, ".googleapis.com:443") {
 			return nil, errors.New("insecure mode is not supported for RBE")
@@ -201,16 +222,44 @@ func New(ctx context.Context, cred cred.Cred, opt Option) (*Client, error) {
 		clog.Warningf(ctx, "insecure mode")
 		copts = append(copts, option.WithoutAuthentication())
 		dopts = append(dopts, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		for _, dopt := range dopts {
+			copts = append(copts, option.WithGRPCDialOption(dopt))
+		}
+		conn, err = gtransport.DialInsecure(ctx, copts...)
+		if err != nil {
+			return nil, fmt.Errorf("failed to dial %s: %w", opt.Address, err)
+		}
+	} else if opt.TLSClientAuthCert != "" && opt.TLSClientAuthKey != "" {
+		copts = append(copts, cred.ClientOptions()...)
+
+		clog.Infof(ctx, "using mTLS: cert=%q key=%q", opt.TLSClientAuthCert, opt.TLSClientAuthKey)
+		cert, err := tls.LoadX509KeyPair(opt.TLSClientAuthCert, opt.TLSClientAuthKey)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read mTLS cert pair (%q, %q): %w", opt.TLSClientAuthCert, opt.TLSClientAuthKey, err)
+		}
+		copts = append(copts, option.WithClientCertSource(func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
+			return &cert, nil
+		}))
+		for _, dopt := range dopts {
+			copts = append(copts, option.WithGRPCDialOption(dopt))
+		}
+		conn, err = gtransport.Dial(ctx, copts...)
+		if err != nil {
+			return nil, fmt.Errorf("failed to dial %s: %w", opt.Address, err)
+		}
+	} else if opt.TLSClientAuthCert != "" {
+		return nil, errors.New("tls_client_auth_cert is set, but tls_client_auth_key is not set")
+	} else if opt.TLSClientAuthKey != "" {
+		return nil, errors.New("tls_client_auth_key is set, but tls_client_auth_cert is not set")
 	} else {
 		copts = append(copts, cred.ClientOptions()...)
-	}
-	for _, dopt := range dopts {
-		copts = append(copts, option.WithGRPCDialOption(dopt))
-	}
-
-	conn, err := gtransport.DialPool(ctx, copts...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to dial %s: %w", opt.Address, err)
+		for _, dopt := range dopts {
+			copts = append(copts, option.WithGRPCDialOption(dopt))
+		}
+		conn, err = gtransport.DialPool(ctx, copts...)
+		if err != nil {
+			return nil, fmt.Errorf("failed to dial %s: %w", opt.Address, err)
+		}
 	}
 	return NewFromConn(ctx, opt, conn)
 }

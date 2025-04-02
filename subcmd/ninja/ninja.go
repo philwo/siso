@@ -520,7 +520,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		spin.Start("init credentials")
 		credential, err = cred.New(ctx, c.authOpts)
 		if err != nil {
-			if c.reopt.Insecure && !c.enableCloudLogging && !c.enableResultstore && !c.enableCloudProfiler && !c.enableCloudTrace && !c.enableCloudMonitoring {
+			if !c.reopt.NeedCred() && !c.enableCloudLogging && !c.enableResultstore && !c.enableCloudProfiler && !c.enableCloudTrace && !c.enableCloudMonitoring {
 				log.Warningf("failed to init credential: %v", err)
 				log.Warningf("but no remote apis require credential")
 			} else {
