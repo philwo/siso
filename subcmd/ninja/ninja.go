@@ -548,8 +548,12 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	// logging is ready.
 	var properties resultstore.Properties
 	properties.Add("dir", c.dir)
-	clog.Infof(ctx, "%s", cpuinfo())
-	properties.Add("cpu", cpuinfo())
+	info := cpuinfo()
+	clog.Infof(ctx, "%s", info)
+	properties.Add("cpu", info)
+	info = gcinfo()
+	clog.Infof(ctx, "%s", info)
+	properties.Add("memgc", info)
 
 	clog.Infof(ctx, "siso version %s", c.version)
 	if cmdver, err := version.GetStartupVersion(); err != nil {
@@ -2064,6 +2068,30 @@ func cpuinfo() string {
 	fmt.Fprintf(&sb, "brand=%q vendor=%q ", cpuid.CPU.BrandName, cpuid.CPU.VendorString)
 	fmt.Fprintf(&sb, "physicalCores=%d threadsPerCore=%d logicalCores=%d ", cpuid.CPU.PhysicalCores, cpuid.CPU.ThreadsPerCore, cpuid.CPU.LogicalCores)
 	fmt.Fprintf(&sb, "vm=%t features=%s", cpuid.CPU.VM(), cpuid.CPU.FeatureSet())
+	return sb.String()
+}
+
+func gcinfo() string {
+	var sb strings.Builder
+	memoryLimit := debug.SetMemoryLimit(-1) // not adjust the limit, but retrieve current limit
+	if memoryLimit == math.MaxInt64 {
+		// initial settings
+		fmt.Fprintf(&sb, "memory_limit=unlimited ")
+	} else {
+		fmt.Fprintf(&sb, "memory_limit=%d (GOMEMLIMIT=%s) ", memoryLimit, os.Getenv("GOMEMLIMIT"))
+	}
+
+	gcPercent := debug.SetGCPercent(100) // 100 is default
+	if gcPercent < 0 {
+		ui.Default.PrintLines(ui.SGR(ui.BackgroundRed, fmt.Sprintf("Garbage collection is disabled. GOGC=%s\n", os.Getenv("GOGC"))))
+		fmt.Fprintf(&sb, "gc=off")
+	} else {
+		fmt.Fprintf(&sb, "gc=%d", gcPercent)
+	}
+	debug.SetGCPercent(gcPercent) // restore original setting
+	if v := os.Getenv("GOGC"); v != "" {
+		fmt.Fprintf(&sb, " (GOGC=%s)", v)
+	}
 	return sb.String()
 }
 
