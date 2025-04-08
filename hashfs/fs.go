@@ -26,6 +26,8 @@ import (
 
 	log "github.com/golang/glog"
 	"golang.org/x/sync/errgroup"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"go.chromium.org/infra/build/siso/hashfs/osfs"
 	pb "go.chromium.org/infra/build/siso/hashfs/proto"
@@ -1456,7 +1458,15 @@ func (hfs *HashFS) Flush(ctx context.Context, execRoot string, files []string) e
 		}
 		eg.Go(func() (err error) {
 			defer func() { done(err) }()
-			return e.flush(ctx, fname, hfs.OS)
+			err = e.flush(ctx, fname, hfs.OS)
+			// flush should not fail with cas not found error.
+			// but if it failed, current recorded digest should
+			// be wrong, so should delete from the hashfs.
+			if code := status.Code(err); code == codes.NotFound {
+				clog.Warningf(ctx, "flush failed. delete %s from hashfs: %v", fname, err)
+				hfs.directory.delete(ctx, fname)
+			}
+			return err
 		})
 	}
 	return eg.Wait()
