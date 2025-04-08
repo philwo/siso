@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -110,6 +111,8 @@ func (b *Builder) runRemote(ctx context.Context, step *Step) error {
 				clog.Warningf(ctx, "Fallback due to potential SIGKILL by docker: remote exec %s failed: output=%q siso_config=%q, gn_target=%q: %v", step.cmd.ActionDigest(), output, step.def.RuleName(), step.def.Binding("gn_target"), err)
 			case experiments.Enabled("fallback-on-exec-error", "remote exec %s failed: %v", step.cmd.ActionDigest(), err):
 				clog.Warningf(ctx, "fallback-on-exec-error: remote exec %s failed: output=%q siso_config=%q, gn_target=%q: %v", step.cmd.ActionDigest(), output, step.def.RuleName(), step.def.Binding("gn_target"), err)
+			case os.Getenv("AUTONINJA_BUILD_ID") == "": // TODO(b/377426017): remove this chrome infra specific logic once we set SISO_EXPERIMENTS=fallback-on-exec-error on problematic builders.
+				clog.Warningf(ctx, "fallback-on-exec-error on builder (no AUTONINJA_BUILD_ID): remote exec %s failed: output=%q siso_config=%q gn_target=%q: %v", step.cmd.ActionDigest(), output, step.def.RuleName(), step.def.Binding("gn_target"), err)
 			default:
 				// report compile fail early to developers.
 				// If user runs on non-terminal or user sets a
