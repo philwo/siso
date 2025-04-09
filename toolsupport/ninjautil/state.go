@@ -180,7 +180,8 @@ func (s *State) Targets(args []string) ([]*Node, error) {
 	for _, t := range args {
 		t := filepath.ToSlash(filepath.Clean(t))
 		if strings.HasSuffix(t, "^") {
-			n, ok := s.hatTarget(t)
+			seen := make(map[string]bool)
+			n, ok := s.hatTarget(t, seen)
 			if !ok {
 				return nil, fmt.Errorf("unknown target %q", t)
 			}
@@ -217,8 +218,12 @@ func (s *State) Targets(args []string) ([]*Node, error) {
 // for header file, try to find one of the source file which has
 // a direct #include for the header.
 // i.e. "foo.h^" will be equivalent with "foo.cc^"
-func (s *State) hatTarget(t string) (*Node, bool) {
+func (s *State) hatTarget(t string, seen map[string]bool) (*Node, bool) {
 	ctx := context.Background() // TODO: take from caller.
+	if seen[t] {
+		return nil, false
+	}
+	seen[t] = true
 	t = strings.TrimSuffix(t, "^")
 	n, ok := s.LookupNodeByPath(t)
 	if ok {
@@ -270,6 +275,13 @@ func (s *State) hatTarget(t string) (*Node, bool) {
 				n, ok := s.LookupNodeByPath(fname)
 				if ok {
 					return n, true
+				}
+				switch filepath.Ext(fname) {
+				case ".h", ".hxx", ".hpp", ".inc":
+					n, ok := s.hatTarget(fname, seen)
+					if ok {
+						return n, true
+					}
 				}
 			}
 		}
