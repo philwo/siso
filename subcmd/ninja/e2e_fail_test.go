@@ -220,14 +220,6 @@ func TestBuild_Fail_Remote(t *testing.T) {
 	if err == nil {
 		t.Fatalf("ninja succeeded, but want err; stats=%#v", stats)
 	}
-	if _, ok := os.LookupEnv("AUTONINJA_BUILD_ID"); !ok {
-		// TODO(b/377426017): remove this
-		// fail fallback on chrome-bot builder
-		if stats.Done != 1 || stats.Fail != 1 || stats.Remote != 0 || stats.Local != 1 || stats.LocalFallback != 1 {
-			t.Fatalf("ninja stats done=%d Fail=%d Remote=%d Local=%d LocalFallback=%d; want done=1 Fail=1 Remote=0 Local=1 LocalFallback=1 %#v", stats.Done, stats.Fail, stats.Remote, stats.Local, stats.LocalFallback, stats)
-		}
-		return
-	}
 	// no fail fallback, so remote=1 local=0 fail=1, not remote=0 local=1 fail=1
 	if stats.Done != 1 || stats.Fail != 1 || stats.Remote != 1 || stats.Local != 0 {
 		t.Fatalf("ninja stats done=%d Fail=%d Remote=%d Local=%d; want done=1 Fail=1 Remote=1 Local=0 %#v", stats.Done, stats.Fail, stats.Remote, stats.Local, stats)
