@@ -101,7 +101,7 @@ func (b *Builder) runRemote(ctx context.Context, step *Step) error {
 			return err
 		}
 		var eerr execute.ExitError
-		if errors.As(err, &eerr) && len(step.cmd.Stdout())+len(step.cmd.Stderr()) > 0 && b.failuresAllowed == 1 {
+		if errors.As(err, &eerr) && len(step.cmd.Stdout())+len(step.cmd.Stderr()) > 0 && b.failures.allowed == 1 {
 			var output string
 			if len(step.cmd.Outputs) > 0 {
 				output = step.cmd.Outputs[0]

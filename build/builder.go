@@ -216,7 +216,7 @@ type Builder struct {
 	verboseFailures bool
 	dryRun          bool
 
-	failuresAllowed int
+	failures failures
 
 	// ninja debug modes
 	keepRSP bool
@@ -342,7 +342,7 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 		verbose:              opts.Verbose,
 		verboseFailures:      opts.VerboseFailures,
 		dryRun:               opts.DryRun,
-		failuresAllowed:      opts.FailuresAllowed,
+		failures:             failures{allowed: opts.FailuresAllowed},
 		keepRSP:              opts.KeepRSP,
 		rebuildManifest:      opts.RebuildManifest,
 	}
@@ -617,8 +617,6 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 	}
 
 	var wg sync.WaitGroup
-	var nerrs int
-	var firstErr error
 	var stuck bool
 	errch := make(chan error, 1000)
 
@@ -647,14 +645,10 @@ loop:
 			}
 		case err := <-errch:
 			done(err)
+			var shouldFail bool
 			if err != nil {
 				clog.Infof(ctx, "err from errch: %v", err)
-				if !errors.Is(err, context.Canceled) {
-					if firstErr == nil {
-						firstErr = err
-					}
-					nerrs++
-				}
+				shouldFail = b.failures.shouldFail(err)
 			}
 			numServs := b.stepSema.NumServs()
 			hasReady := b.plan.hasReady()
@@ -663,10 +657,10 @@ loop:
 				stuck = numServs == 0 && !hasReady
 			}
 			if log.V(1) {
-				clog.Infof(ctx, "errs=%d numServs=%d hasReady=%t stuck=%t", nerrs, numServs, hasReady, stuck)
+				clog.Infof(ctx, "errs=%d numServs=%d hasReady=%t stuck=%t", b.failures.n, numServs, hasReady, stuck)
 			}
-			if nerrs >= b.failuresAllowed || stuck {
-				clog.Infof(ctx, "unable to proceed nerrs=%d numServs=%d hasReady=%t stuck=%t", nerrs, numServs, hasReady, stuck)
+			if shouldFail || stuck {
+				clog.Infof(ctx, "unable to proceed nerrs=%d numServs=%d hasReady=%t stuck=%t", b.failures.n, numServs, hasReady, stuck)
 				cancel()
 				break loop
 			}
@@ -723,15 +717,7 @@ loop:
 	go func() {
 		var canceled bool
 		for e := range errch {
-			if nerrs >= b.failuresAllowed {
-				continue
-			}
-			if e != nil && !errors.Is(e, context.Canceled) {
-				if firstErr == nil {
-					firstErr = e
-				}
-				nerrs++
-			}
+			b.failures.shouldFail(e)
 			if errors.Is(e, context.Canceled) {
 				canceled = true
 			}
@@ -739,7 +725,7 @@ loop:
 		// step error is already reported in run_step.
 		// report errStuck if it coulddn't progress.
 		// otherwise, report just number of errors.
-		if nerrs == 0 {
+		if b.failures.n == 0 {
 			if canceled {
 				errdone <- context.Cause(ctx)
 				return
@@ -748,10 +734,10 @@ loop:
 			return
 		}
 		if stuck {
-			errdone <- fmt.Errorf("cannot make progress due to previous %d errors: %w", nerrs, firstErr)
+			errdone <- fmt.Errorf("cannot make progress due to previous %d errors: %w", b.failures.n, b.failures.firstErr)
 			return
 		}
-		errdone <- fmt.Errorf("%d steps failed: %w", nerrs, firstErr)
+		errdone <- fmt.Errorf("%d steps failed: %w", b.failures.n, b.failures.firstErr)
 	}()
 	wg.Wait()
 	close(errch)
