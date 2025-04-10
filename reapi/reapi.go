@@ -37,9 +37,10 @@ import (
 
 // Option contains options of remote exec API.
 type Option struct {
-	Prefix   string
-	Address  string
-	Instance string
+	Prefix     string
+	Address    string
+	CASAddress string
+	Instance   string
 
 	// Insecure mode for RE API.
 	Insecure bool
@@ -68,6 +69,7 @@ func (o *Option) RegisterFlags(fs *flag.FlagSet, envs map[string]string) {
 		addr = "remotebuildexecution.googleapis.com:443"
 	}
 	fs.StringVar(&o.Address, o.Prefix+"_address", addr, "reapi address"+purpose)
+	fs.StringVar(&o.CASAddress, o.Prefix+"_cas_address", "", "reapi cas address"+purpose+" (if empty, share conn with "+o.Prefix+"_address)")
 	instance := envs["SISO_REAPI_INSTANCE"]
 	if instance == "" {
 		instance = "default_instance"
@@ -126,8 +128,9 @@ type grpcClientConn interface {
 
 // Client is a remote exec API client.
 type Client struct {
-	opt  Option
-	conn grpcClientConn
+	opt     Option
+	conn    grpcClientConn
+	casConn grpcClientConn
 
 	capabilities *rpb.ServerCapabilities
 	knownDigests sync.Map // key:digest.Digest, value: *uploadOp or true
@@ -207,16 +210,32 @@ func New(ctx context.Context, cred cred.Cred, opt Option) (*Client, error) {
 		return nil, errors.New("no reapi instance")
 	}
 	clog.Infof(ctx, "address: %q instance: %q", opt.Address, opt.Instance)
+	conn, err := newConn(ctx, opt.Address, cred, opt)
+	if err != nil {
+		return nil, err
+	}
+	casConn := conn
+	if opt.CASAddress != "" {
+		clog.Infof(ctx, "cas address: %q", opt.CASAddress)
+		casConn, err = newConn(ctx, opt.CASAddress, cred, opt)
+		if err != nil {
+			conn.Close()
+			return nil, err
+		}
+	}
+	return NewFromConn(ctx, opt, conn, casConn)
+}
 
+func newConn(ctx context.Context, addr string, cred cred.Cred, opt Option) (grpcClientConn, error) {
 	copts := []option.ClientOption{
-		option.WithEndpoint(opt.Address),
+		option.WithEndpoint(addr),
 		option.WithGRPCConnectionPool(25),
 	}
 	dopts := dialOptions(opt.KeepAliveParams)
 	var conn grpcClientConn
 	var err error
 	if opt.Insecure {
-		if strings.HasSuffix(opt.Address, ".googleapis.com:443") {
+		if strings.HasSuffix(addr, ".googleapis.com:443") {
 			return nil, errors.New("insecure mode is not supported for RBE")
 		}
 		clog.Warningf(ctx, "insecure mode")
@@ -227,7 +246,7 @@ func New(ctx context.Context, cred cred.Cred, opt Option) (*Client, error) {
 		}
 		conn, err = gtransport.DialInsecure(ctx, copts...)
 		if err != nil {
-			return nil, fmt.Errorf("failed to dial %s: %w", opt.Address, err)
+			return nil, fmt.Errorf("failed to dial %s: %w", addr, err)
 		}
 	} else if opt.TLSClientAuthCert != "" && opt.TLSClientAuthKey != "" {
 		copts = append(copts, cred.ClientOptions()...)
@@ -245,7 +264,7 @@ func New(ctx context.Context, cred cred.Cred, opt Option) (*Client, error) {
 		}
 		conn, err = gtransport.Dial(ctx, copts...)
 		if err != nil {
-			return nil, fmt.Errorf("failed to dial %s: %w", opt.Address, err)
+			return nil, fmt.Errorf("failed to dial %s: %w", addr, err)
 		}
 	} else if opt.TLSClientAuthCert != "" {
 		return nil, errors.New("tls_client_auth_cert is set, but tls_client_auth_key is not set")
@@ -258,14 +277,14 @@ func New(ctx context.Context, cred cred.Cred, opt Option) (*Client, error) {
 		}
 		conn, err = gtransport.DialPool(ctx, copts...)
 		if err != nil {
-			return nil, fmt.Errorf("failed to dial %s: %w", opt.Address, err)
+			return nil, fmt.Errorf("failed to dial %s: %w", addr, err)
 		}
 	}
-	return NewFromConn(ctx, opt, conn)
+	return conn, err
 }
 
-// NewFromConn creates new remote exec API client from conn.
-func NewFromConn(ctx context.Context, opt Option, conn grpcClientConn) (*Client, error) {
+// NewFromConn creates new remote exec API client from conn and casConn.
+func NewFromConn(ctx context.Context, opt Option, conn, casConn grpcClientConn) (*Client, error) {
 	cc := rpb.NewCapabilitiesClient(conn)
 	capa, err := cc.GetCapabilities(ctx, &rpb.GetCapabilitiesRequest{
 		InstanceName: opt.Instance,
@@ -286,6 +305,7 @@ func NewFromConn(ctx context.Context, opt Option, conn grpcClientConn) (*Client,
 	c := &Client{
 		opt:          opt,
 		conn:         conn,
+		casConn:      casConn,
 		capabilities: capa,
 		m:            iometrics.New("reapi"),
 	}

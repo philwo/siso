@@ -166,7 +166,7 @@ func (c *Client) Get(ctx context.Context, d digest.Digest, name string) ([]byte,
 // getWithBatchReadBlobs fetches the content of blob using BatchReadBlobs rpc of CAS.
 func (c *Client) getWithBatchReadBlobs(ctx context.Context, d digest.Digest, name string) ([]byte, error) {
 	started := time.Now()
-	casClient := rpb.NewContentAddressableStorageClient(c.conn)
+	casClient := rpb.NewContentAddressableStorageClient(c.casConn)
 	var resp *rpb.BatchReadBlobsResponse
 	err := retry.Do(ctx, func() error {
 		var err error
@@ -202,7 +202,7 @@ func (c *Client) getWithByteStream(ctx context.Context, d digest.Digest, name st
 	err := retry.Do(ctx, func() error {
 		ctx, cancel := contextWithTimeoutForBytestream(ctx, d)
 		defer cancel()
-		r, err := bytestreamio.Open(ctx, bpb.NewByteStreamClient(c.conn), resourceName)
+		r, err := bytestreamio.Open(ctx, bpb.NewByteStreamClient(c.casConn), resourceName)
 		if err != nil {
 			c.m.ReadDone(0, err)
 			return err
@@ -233,7 +233,7 @@ func (c *Client) Missing(ctx context.Context, blobs []digest.Digest) ([]digest.D
 	for _, b := range blobs {
 		blobspb = append(blobspb, b.Proto())
 	}
-	cas := rpb.NewContentAddressableStorageClient(c.conn)
+	cas := rpb.NewContentAddressableStorageClient(c.casConn)
 
 	var resp *rpb.FindMissingBlobsResponse
 	// TODO(b/328332495): grpc should retry by service config?
@@ -259,7 +259,7 @@ func (c *Client) Missing(ctx context.Context, blobs []digest.Digest) ([]digest.D
 
 // UploadAll uploads all blobs specified in ds that are still missing in the CAS.
 func (c *Client) UploadAll(ctx context.Context, ds *digest.Store) (numUploaded int, err error) {
-	if c.conn == nil {
+	if c.casConn == nil {
 		return 0, status.Error(codes.FailedPrecondition, "conn is not configured")
 	}
 
@@ -477,7 +477,7 @@ func (c *Client) uploadWithBatchUpdateBlobs(ctx context.Context, digests []diges
 
 	// Bundle the blobs to multiple batch requests.
 	batchReqs := createBatchUpdateBlobsRequests(c.opt.Instance, blobReqs, byteLimit)
-	casClient := rpb.NewContentAddressableStorageClient(c.conn)
+	casClient := rpb.NewContentAddressableStorageClient(c.casConn)
 
 	// TODO(b/273884978): It may be worth trying to send the batch requests in parallel.
 	for _, batchReq := range batchReqs {
@@ -639,7 +639,7 @@ func (c *Client) uploadWithByteStream(ctx context.Context, digests []digest.Dige
 	clog.Infof(ctx, "upload by streaming %d", len(digests))
 
 	var missingBlobs []missingBlob
-	bsClient := bpb.NewByteStreamClient(c.conn)
+	bsClient := bpb.NewByteStreamClient(c.casConn)
 	for _, d := range digests {
 		data, ok := ds.Get(d)
 		if !ok {

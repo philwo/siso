@@ -131,7 +131,7 @@ func New(ctx context.Context, t *testing.T, fake *Fake) *reapi.Client {
 	if err != nil {
 		t.Fatal(err)
 	}
-	client, err := reapi.NewFromConn(ctx, opt, conn)
+	client, err := reapi.NewFromConn(ctx, opt, conn, conn)
 	if err != nil {
 		t.Fatal(err)
 	}
