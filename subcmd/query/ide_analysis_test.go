@@ -99,6 +99,10 @@ func TestIDEAnalysis(t *testing.T) {
 			mtime:     2 * time.Millisecond,
 			generated: true,
 		},
+		filepath.Join(topDir, "out/siso/obj/foo.inputdeps.stamp"): {
+			mtime:     1 * time.Millisecond,
+			generated: true,
+		},
 		filepath.Join(topDir, "out/siso/obj/protoc.o"): {
 			content:   "protoc obj",
 			mtime:     1 * time.Millisecond,
@@ -123,6 +127,7 @@ func TestIDEAnalysis(t *testing.T) {
 
 		c := &ideAnalysisRun{}
 		c.init()
+		c.execRoot = topDir
 		c.dir = "out/siso"
 
 		defer func() {
@@ -251,6 +256,7 @@ func TestIDEAnalysis(t *testing.T) {
 
 		c := &ideAnalysisRun{}
 		c.init()
+		c.execRoot = topDir
 		c.dir = "out/siso"
 
 		defer func() {
@@ -379,6 +385,7 @@ func TestIDEAnalysis(t *testing.T) {
 
 		c := &ideAnalysisRun{}
 		c.init()
+		c.execRoot = topDir
 		c.dir = "out/siso"
 
 		defer func() {
@@ -507,6 +514,7 @@ func TestIDEAnalysis(t *testing.T) {
 
 		c := &ideAnalysisRun{}
 		c.init()
+		c.execRoot = topDir
 		c.dir = "out/siso"
 
 		defer func() {
@@ -635,7 +643,7 @@ func setupFileState(t *testing.T, topdir, fname string, files map[string]fileSta
 			Id: &fspb.FileID{
 				ModTime: mtime.UnixNano(),
 			},
-			Name: dirname,
+			Name: filepath.ToSlash(filepath.Clean(dirname)),
 		})
 		mkdirAll(filepath.Dir(dirname), mtime)
 	}
@@ -646,7 +654,7 @@ func setupFileState(t *testing.T, topdir, fname string, files map[string]fileSta
 			Id: &fspb.FileID{
 				ModTime: mtime.UnixNano(),
 			},
-			Name: fname,
+			Name: filepath.ToSlash(filepath.Clean(fname)),
 			Digest: &fspb.Digest{
 				Hash:      d.Digest().Hash,
 				SizeBytes: d.Digest().SizeBytes,

@@ -41,6 +41,7 @@ import (
 type ideAnalysisRun struct {
 	subcommands.CommandRunBase
 
+	execRoot    string
 	dir         string
 	fname       string
 	fsopt       *hashfs.Option
@@ -99,6 +100,23 @@ func (c *ideAnalysisRun) run(ctx context.Context, args []string) error {
 	default:
 		return fmt.Errorf(`unknown format %q: "proto", "prototext" or "json": %w`, c.format, flag.ErrHelp)
 	}
+
+	// TODO: use ninja's initWorkdirs?
+
+	// don't use $PWD for current directory
+	// to avoid symlink issue. b/286779149
+	pwd := os.Getenv("PWD")
+	_ = os.Unsetenv("PWD") // no error for safe env key name.
+
+	var err error
+	c.execRoot, err = os.Getwd()
+	if pwd != "" {
+		_ = os.Setenv("PWD", pwd) // no error to reset env with valid value.
+	}
+	if err != nil {
+		return err
+	}
+
 	analysis, err := c.analyze(ctx, args)
 	if err != nil {
 		analysis.Error = &pb.AnalysisError{
@@ -133,27 +151,12 @@ func (c *ideAnalysisRun) analyze(ctx context.Context, args []string) (*pb.IdeAna
 	if len(args) == 0 {
 		return analysis, errors.New("no target given")
 	}
-	// TODO: use ninja's initWorkdirs?
-
-	// don't use $PWD for current directory
-	// to avoid symlink issue. b/286779149
-	pwd := os.Getenv("PWD")
-	_ = os.Unsetenv("PWD") // no error for safe env key name.
-
-	execRoot, err := os.Getwd()
-	if pwd != "" {
-		_ = os.Setenv("PWD", pwd) // no error to reset env with valid value.
-	}
-	if err != nil {
-		return analysis, err
-	}
-
-	err = os.Chdir(c.dir)
+	err := os.Chdir(c.dir)
 	if err != nil {
 		return analysis, err
 	}
 	analyzer := &ideAnalyzer{
-		path: build.NewPath(execRoot, c.dir),
+		path: build.NewPath(c.execRoot, c.dir),
 	}
 	defer analyzer.Close(ctx)
 	hashFS, err := hashfs.New(ctx, hashfs.Option{})
@@ -248,6 +251,16 @@ func (a *ideAnalyzer) analyzeTarget(ctx context.Context, target string) (*pb.Ana
 		return result, nil
 	}
 	node := nodes[0]
+
+	nodeEnt, ok := a.fsm[filepath.ToSlash(filepath.Join(a.path.ExecRoot, a.path.Dir, node.Path()))]
+	if !ok {
+		result.Status = &pb.AnalysisResult_Status{
+			Code:          pb.AnalysisResult_Status_CODE_BUILD_FAILED,
+			StatusMessage: proto.String(fmt.Sprintf("file not found: %q", node.Path())),
+		}
+		return result, nil
+	}
+
 	inEdge, ok := node.InEdge()
 	if !ok {
 		result.Status = &pb.AnalysisResult_Status{
@@ -262,6 +275,28 @@ func (a *ideAnalyzer) analyzeTarget(ctx context.Context, target string) (*pb.Ana
 			StatusMessage: proto.String(fmt.Sprintf("no inputs for %s", node.Path())),
 		}
 		return result, nil
+	}
+	for _, input := range inEdge.Inputs() {
+		e, ok := input.InEdge()
+		if ok && e.IsPhony() {
+			// TODO: check phony's inputs?
+			continue
+		}
+		ent, ok := a.fsm[filepath.ToSlash(filepath.Join(a.path.ExecRoot, a.path.Dir, input.Path()))]
+		if !ok {
+			result.Status = &pb.AnalysisResult_Status{
+				Code:          pb.AnalysisResult_Status_CODE_BUILD_FAILED,
+				StatusMessage: proto.String(fmt.Sprintf("input of %q not found: %q", node.Path(), input.Path())),
+			}
+			return result, nil
+		}
+		if nodeEnt.GetUpdatedTime() < ent.GetId().GetModTime() {
+			result.Status = &pb.AnalysisResult_Status{
+				Code:          pb.AnalysisResult_Status_CODE_BUILD_FAILED,
+				StatusMessage: proto.String(fmt.Sprintf("target is not up-to-date: %q(%d) is older than %q(%d)", node.Path(), nodeEnt.GetUpdatedTime(), input.Path(), ent.GetId().GetModTime())),
+			}
+			return result, nil
+		}
 	}
 	if result.SourceFilePath == "" {
 		result.SourceFilePath = inEdge.Inputs()[0].Path()
