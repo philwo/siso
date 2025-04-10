@@ -24,11 +24,6 @@ import (
 type Watchman struct {
 	watchmanPath string
 	dir          string
-
-	// list reported by `watchman since`.
-	since watchSince
-	// `watchman since` data keyed by filename.
-	m map[string]*watchSinceFile
 }
 
 // New creates watchman for dir by watchman binary at watchmanPath.

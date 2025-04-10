@@ -41,12 +41,11 @@ import (
 type ideAnalysisRun struct {
 	subcommands.CommandRunBase
 
-	execRoot    string
-	dir         string
-	fname       string
-	fsopt       *hashfs.Option
-	depsLogFile string
-	format      string
+	execRoot string
+	dir      string
+	fname    string
+	fsopt    *hashfs.Option
+	format   string
 }
 
 const ideAnalysisUsage = `query ninja build graph for Cider-G.

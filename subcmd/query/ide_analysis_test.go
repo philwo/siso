@@ -20,7 +20,6 @@ import (
 	fspb "go.chromium.org/infra/build/siso/hashfs/proto"
 	"go.chromium.org/infra/build/siso/reapi/digest"
 	pb "go.chromium.org/infra/build/siso/toolsupport/ciderutil/proto"
-	"go.chromium.org/infra/build/siso/toolsupport/ninjautil"
 )
 
 func TestIDEAnalysis(t *testing.T) {
@@ -581,24 +580,6 @@ build obj/foo.o: cxx ../../foo/foo.cc | obj/foo.inputdeps.stamp
 build foo: link obj/foo.o
 
 `), 0644)
-	if err != nil {
-		t.Fatal(err)
-	}
-}
-
-func setupDepsLog(t *testing.T, fname string) {
-	t.Helper()
-	ctx := context.Background()
-	depsLog, err := ninjautil.NewDepsLog(ctx, fname)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = depsLog.Record(ctx, "obj/foo.o", time.Now(), []string{"../../foo/foo.cc", "../../foo/foo.h", "gen/bar/bar.h", "gen/base/test/test.pb.h"})
-	if err != nil {
-		depsLog.Close()
-		t.Fatal(err)
-	}
-	err = depsLog.Close()
 	if err != nil {
 		t.Fatal(err)
 	}
