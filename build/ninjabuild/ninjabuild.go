@@ -396,19 +396,17 @@ func (g *Graph) NumTargets() int {
 
 // Targets returns targets for ninja args.
 // If args is not given, returns default build targets.
+// It may return known targets even if some target is unknown.
 func (g *Graph) Targets(ctx context.Context, args ...string) ([]build.Target, error) {
 	nodes, err := g.globals.nstate.Targets(args)
-	if err != nil {
-		return nil, err
-	}
 	targets := make([]build.Target, 0, len(nodes))
 	names := make([]string, 0, len(nodes))
 	for _, n := range nodes {
 		targets = append(targets, build.Target(n.ID()))
 		names = append(names, n.Path())
 	}
-	clog.Infof(ctx, "targets %q -> %q", args, names)
-	return targets, nil
+	clog.Infof(ctx, "targets %q -> %q: %v", args, names, err)
+	return targets, err
 }
 
 // SpellcheckTarget finds closest target name from t.

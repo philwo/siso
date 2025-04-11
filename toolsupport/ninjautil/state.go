@@ -6,6 +6,7 @@ package ninjautil
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -176,6 +177,7 @@ func (s *State) Targets(args []string) ([]*Node, error) {
 	if len(args) == 0 {
 		return s.DefaultNodes()
 	}
+	var errs []error
 	nodes := make([]*Node, 0, len(args))
 	for _, t := range args {
 		t := filepath.ToSlash(filepath.Clean(t))
@@ -183,12 +185,14 @@ func (s *State) Targets(args []string) ([]*Node, error) {
 			seen := make(map[string]bool)
 			n, ok := s.hatTarget(t, seen)
 			if !ok {
-				return nil, fmt.Errorf("unknown target %q", t)
+				errs = append(errs, fmt.Errorf("unknown target %q", t))
+				continue
 			}
 			outs := n.OutEdges()
 			if len(outs) == 0 {
 				// TODO(b/289309062): deps log first reverse deps node?
-				return nil, fmt.Errorf("no outs for %q", t)
+				errs = append(errs, fmt.Errorf("no outs for %q", t))
+				continue
 			}
 			// incompatible with ninja
 			// - https://ninja-build.org/manual.html#_running_ninja
@@ -207,11 +211,12 @@ func (s *State) Targets(args []string) ([]*Node, error) {
 		}
 		n, ok := s.LookupNodeByPath(t)
 		if !ok {
-			return nil, fmt.Errorf("unknown target %q", t)
+			errs = append(errs, fmt.Errorf("unknown target %q", t))
+			continue
 		}
 		nodes = append(nodes, n)
 	}
-	return nodes, nil
+	return nodes, errors.Join(errs...)
 }
 
 // Special syntax: "foo.cc^" means "the first output of foo.cc".

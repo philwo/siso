@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -49,6 +50,7 @@ type Graph interface {
 	NumTargets() int
 
 	// Targets returns target paths for given args.
+	// Targets may return known targets even if err != nil.
 	Targets(context.Context, ...string) ([]Target, error)
 
 	// SpellcheckTarget returns the most similar target from given target.
@@ -204,7 +206,22 @@ func schedule(ctx context.Context, sched *scheduler, graph Graph, args ...string
 	started := time.Now()
 	clog.Infof(ctx, "schedule targets: %v [%d]: %v", targets, graph.NumTargets(), err)
 	if err != nil {
-		return TargetError{err: err, Suggests: suggestTargets(ctx, sched, graph, args...)}
+		if !experiments.Enabled("ignore-missing-targets", "") {
+			return TargetError{err: err, Suggests: suggestTargets(ctx, sched, graph, args...)}
+		}
+		ui.Default.PrintLines(ui.SGR(ui.Yellow, fmt.Sprintf("WARNING: ignore missing targets: %v\n\n", err)))
+	}
+	if len(targets) == 0 {
+		return TargetError{err: errors.New("no targets")}
+	}
+	if len(args) > 0 {
+		var targetNames []string
+		for _, t := range targets {
+			targetNames = append(targetNames, sched.path.MaybeToWD(ctx, targetPath(ctx, graph, t)))
+		}
+		if !slices.Equal(args, targetNames) {
+			ui.Default.PrintLines(fmt.Sprintf("target: %q\n    ->  %q\n\n", args, targetNames))
+		}
 	}
 	for _, t := range targets {
 		switch sched.plan.targets[t].scan {

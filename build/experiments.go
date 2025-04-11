@@ -27,6 +27,7 @@ var knownExperiments = map[string]string{
 	"file-access-trace":           "",
 	"gvisor":                      "",
 	"ignore-missing-local-inputs": "",
+	"ignore-missing-targets":      "",
 	"keep-going-handle-error":     "",
 	"keep-going-impure":           "check siso_localexec",
 	"no-fallback":                 "",
