@@ -193,7 +193,19 @@ func (te *traceEvents) loop(ctx context.Context) {
 	for {
 		select {
 		case <-te.quit:
-			clog.Infof(ctx, "trace loop quit")
+			clog.Infof(ctx, "trace loop quit len=%d", len(te.q))
+			var timeout = time.After(1 * time.Second)
+		quit:
+			for len(te.q) > 0 {
+				select {
+				case obj := <-te.q:
+					te.write(ctx, w, obj)
+				case <-timeout:
+					clog.Warningf(ctx, "timed out")
+					break quit
+				}
+			}
+			clog.Infof(ctx, "trace loop quit done")
 			return
 
 		case t := <-ticker.C:
