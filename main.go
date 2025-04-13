@@ -19,8 +19,8 @@ import (
 
 	"github.com/charmbracelet/log"
 	"github.com/maruel/subcommands"
+	"golang.org/x/oauth2"
 
-	"go.chromium.org/luci/auth/client/authcli"
 	"go.chromium.org/luci/common/cli"
 
 	"go.chromium.org/infra/build/siso/auth/cred"
@@ -43,18 +43,15 @@ var (
 const versionID = "v1.1.26"
 const versionStr = "siso " + versionID
 
-func getApplication(authOpts cred.Options) *cli.Application {
+func getApplication(ts oauth2.TokenSource) *cli.Application {
 	return &cli.Application{
 		Name:  "siso",
 		Title: "Ninja-compatible build system optimized for remote execution",
 		Commands: []*subcommands.Command{
 			help.Cmd(),
-			ninja.Cmd(authOpts, versionID),
+			ninja.Cmd(ts, versionID),
 			query.Cmd(),
-			authcheck.Cmd(authOpts),
-
-			authcli.SubcommandLogin(authOpts.LUCIAuth, "login", true),
-			authcli.SubcommandLogout(authOpts.LUCIAuth, "logout", true),
+			authcheck.Cmd(ts),
 			version.Cmd(versionStr),
 		},
 		EnvVars: map[string]subcommands.EnvVarDefinition{

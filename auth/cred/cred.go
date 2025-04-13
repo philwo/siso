@@ -8,15 +8,13 @@ package cred
 import (
 	"context"
 	"fmt"
+	"os/exec"
 
 	"github.com/charmbracelet/log"
 	"golang.org/x/oauth2"
 	"google.golang.org/api/option"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/oauth"
-
-	"go.chromium.org/luci/auth"
-	"go.chromium.org/luci/hardcoded/chromeinfra"
 )
 
 // Cred holds credentials and derived values.
@@ -31,98 +29,61 @@ type Cred struct {
 	tokenSource    oauth2.TokenSource
 }
 
-type Options struct {
-	LUCIAuth         auth.Options
-	FallbackLUCIAuth auth.Options
-	TokenSource      oauth2.TokenSource
-}
-
 // AuthOpts returns the LUCI auth options that Siso uses.
-func AuthOpts(credHelper string) Options {
-	authOpts := chromeinfra.DefaultAuthOptions()
-	authOpts.Scopes = []string{
-		auth.OAuthScopeEmail,
-		"https://www.googleapis.com/auth/cloud-platform",
-	}
-	// If the user is already logged in via `luci-auth login --scopes-context`,
-	// we can use that token and avoid having to prompt for another login.
-	fallbackAuthOpts := chromeinfra.DefaultAuthOptions()
-	// same scope as `--scopes-context`
-	// https://crrev.com/bdbc1802265493619ac518d392776af6593fd1e0/auth/client/authcli/authcli.go#22
-	fallbackAuthOpts.Scopes = []string{
-		"https://www.googleapis.com/auth/cloud-platform",
-		"https://www.googleapis.com/auth/firebase",
-		"https://www.googleapis.com/auth/gerritcodereview",
-		"https://www.googleapis.com/auth/userinfo.email",
-	}
-	var tokenSource oauth2.TokenSource
+func AuthOpts(credHelper string) oauth2.TokenSource {
+	// If a credential helper is specified, use it.
 	if credHelper != "" {
-		tokenSource = credHelperTokenSource{credHelper}
+		return credHelperTokenSource{
+			credHelper: credHelper,
+			args:       []string{"get"},
+		}
 	}
-	return Options{
-		LUCIAuth:         authOpts,
-		FallbackLUCIAuth: fallbackAuthOpts,
-		TokenSource:      tokenSource,
+
+	// Use the default LUCI auth credential helper.
+	credHelper, err := exec.LookPath("luci-auth")
+	if err != nil {
+		log.Warnf("luci-auth not found in PATH: %v", err)
+		return nil
+	}
+
+	return credHelperTokenSource{
+		credHelper: credHelper,
+		args: []string{
+			"token",
+			"-scopes-context",
+			"-json-output=-",
+			"-json-format=bazel",
+			"-lifetime=5m",
+		},
 	}
 }
 
 // New creates a Cred using LUCI auth's default options.
 // It ensures that the user is logged in and returns an error otherwise.
-func New(ctx context.Context, opts Options) (Cred, error) {
-	t := "luci-auth"
-	authenticator := auth.NewAuthenticator(ctx, auth.SilentLogin, opts.LUCIAuth)
-	err := authenticator.CheckLoginRequired()
-	if err != nil && len(opts.FallbackLUCIAuth.Scopes) > 0 {
-		t = "luci-auth-context"
-		authenticator = auth.NewAuthenticator(ctx, auth.SilentLogin, opts.FallbackLUCIAuth)
-		err = authenticator.CheckLoginRequired()
-	}
+func New(ctx context.Context, ts oauth2.TokenSource) (Cred, error) {
+	tok, err := ts.Token()
 	if err != nil {
-		if opts.TokenSource == nil {
+		if ctx.Err() != nil {
 			return Cred{}, err
 		}
-		tok, err := opts.TokenSource.Token()
-		if err != nil {
-			if ctx.Err() != nil {
-				return Cred{}, err
-			}
-			return Cred{}, fmt.Errorf("need to run `siso login`: %w", err)
-		}
-		t, _ := tok.Extra("x-token-source").(string)
-		email, _ := tok.Extra("x-token-email").(string)
-		log.Infof("use auth %v email: %s", t, email)
-		ts := oauth2.ReuseTokenSource(tok, opts.TokenSource)
-		return Cred{
-			Type:  t,
-			Email: email,
-			rpcCredentials: oauth.TokenSource{
-				TokenSource: ts,
-			},
-			tokenSource: ts,
-		}, nil
+		return Cred{}, fmt.Errorf("need to run `siso login`: %w", err)
 	}
 
-	email, err := authenticator.GetEmail()
-	if err != nil {
-		return Cred{}, err
-	}
+	// Get the token type and email from the token.
+	t, _ := tok.Extra("x-token-source").(string)
+	email, _ := tok.Extra("x-token-email").(string)
+	log.Infof("Logged in as %q by %q", email, t)
 
-	tokenSource, err := authenticator.TokenSource()
-	if err != nil {
-		return Cred{}, err
-	}
+	// Reuse a valid token as long as it is not expired.
+	ts = oauth2.ReuseTokenSource(tok, ts)
 
-	rpcCredentials, err := authenticator.PerRPCCredentials()
-	if err != nil {
-		return Cred{}, err
-	}
-
-	log.Infof("use luci-auth email: %s", email)
 	return Cred{
-		Type:           t,
-		Email:          email,
-		rpcCredentials: rpcCredentials,
-		tokenSource:    tokenSource,
+		Type:  t,
+		Email: email,
+		rpcCredentials: oauth.TokenSource{
+			TokenSource: ts,
+		},
+		tokenSource: ts,
 	}, nil
 }
 
