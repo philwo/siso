@@ -16,10 +16,12 @@ import (
 	"io/fs"
 	"math"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"runtime/debug"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/charmbracelet/log"
@@ -32,7 +34,6 @@ import (
 	"go.chromium.org/luci/auth"
 	"go.chromium.org/luci/cipd/version"
 	"go.chromium.org/luci/common/cli"
-	"go.chromium.org/luci/common/system/signals"
 
 	"go.chromium.org/infra/build/siso/auth/cred"
 	"go.chromium.org/infra/build/siso/build"
@@ -261,9 +262,37 @@ type errInterrupted struct{}
 func (errInterrupted) Error() string        { return "interrupt by signal" }
 func (errInterrupted) Is(target error) bool { return target == context.Canceled }
 
+// HandleInterrupt calls 'fn' in a separate goroutine on SIGTERM or Ctrl+C.
+//
+// When SIGTERM or Ctrl+C comes for a second time, logs to stderr and kills
+// the process immediately via os.Exit(1).
+//
+// Returns a callback that can be used to remove the installed signal handlers.
+func HandleInterrupt(fn func()) (stopper func()) {
+	ch := make(chan os.Signal, 2)
+	signal.Notify(ch, os.Interrupt, syscall.SIGTERM)
+
+	go func() {
+		handled := false
+		for range ch {
+			if handled {
+				fmt.Fprintf(os.Stderr, "Got second interrupt signal. Aborting.\n")
+				os.Exit(1)
+			}
+			handled = true
+			go fn()
+		}
+	}()
+
+	return func() {
+		signal.Stop(ch)
+		close(ch)
+	}
+}
+
 func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	ctx, cancel := context.WithCancelCause(ctx)
-	defer signals.HandleInterrupt(func() {
+	defer HandleInterrupt(func() {
 		cancel(errInterrupted{})
 	})()
 
