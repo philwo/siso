@@ -11,6 +11,7 @@ import (
 
 	"github.com/charmbracelet/log"
 	"github.com/maruel/subcommands"
+	"golang.org/x/oauth2"
 
 	"go.chromium.org/luci/common/cli"
 
@@ -18,13 +19,13 @@ import (
 	"go.chromium.org/infra/build/siso/reapi"
 )
 
-func Cmd(authOpts cred.Options) *subcommands.Command {
+func Cmd(ts oauth2.TokenSource) *subcommands.Command {
 	return &subcommands.Command{
 		UsageLine: "auth-check",
 		ShortDesc: "prints current auth status.",
 		LongDesc:  "Prints current auth status.",
 		CommandRun: func() subcommands.CommandRun {
-			r := &authCheckRun{authOpts: authOpts}
+			r := &authCheckRun{ts: ts}
 			r.init()
 			return r
 		},
@@ -33,7 +34,7 @@ func Cmd(authOpts cred.Options) *subcommands.Command {
 
 type authCheckRun struct {
 	subcommands.CommandRunBase
-	authOpts  cred.Options
+	ts        oauth2.TokenSource
 	projectID string
 	reopt     *reapi.Option
 }
@@ -52,28 +53,33 @@ func (r *authCheckRun) init() {
 func (r *authCheckRun) Run(a subcommands.Application, args []string, env subcommands.Env) int {
 	ctx := cli.GetContext(a, r, env)
 	if len(args) != 0 {
-		fmt.Fprintf(a.GetErr(), "%s: position arguments not expected\n", a.GetName())
+		log.Errorf("%s: position arguments not expected", a.GetName())
 		return 1
 	}
-	credential, err := cred.New(ctx, r.authOpts)
+
+	credential, err := cred.New(ctx, r.ts)
 	if err != nil {
 		log.Errorf("auth error: %v", err)
 		return 1
 	}
-	msg := fmt.Sprintf("Logged in by %s\n", credential.Type)
+
+	msg := "Logged in"
 	if credential.Email != "" {
-		msg += fmt.Sprintf(" as %s", credential.Email)
+		msg += fmt.Sprintf(" as %q", credential.Email)
 	}
-	log.Info(msg)
+	msg += fmt.Sprintf(" by %q", credential.Type)
+	fmt.Println(msg)
+
 	r.reopt.UpdateProjectID(r.projectID)
 	if r.reopt.IsValid() {
 		client, err := reapi.New(ctx, credential, *r.reopt)
-		log.Infof("use reapi instance %s", r.reopt.Instance)
+		fmt.Printf("Using REAPI instance %q via %q\n", r.reopt.Instance, r.reopt.Address)
 		if err != nil {
-			log.Errorf("access error: %v", err)
+			log.Errorf("REAPI access error: %v", err)
 			return 1
 		}
 		defer client.Close()
 	}
+
 	return 0
 }
