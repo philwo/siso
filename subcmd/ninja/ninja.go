@@ -27,11 +27,11 @@ import (
 	"github.com/charmbracelet/log"
 	"github.com/klauspost/cpuid/v2"
 	"github.com/maruel/subcommands"
+	"golang.org/x/oauth2"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"go.chromium.org/luci/auth"
 	"go.chromium.org/luci/cipd/version"
 	"go.chromium.org/luci/common/cli"
 
@@ -60,15 +60,15 @@ const ninjaUsage = `build the requested targets as ninja.
 `
 
 // Cmd returns the Command for the `ninja` subcommand provided by this package.
-func Cmd(authOpts cred.Options, version string) *subcommands.Command {
+func Cmd(ts oauth2.TokenSource, version string) *subcommands.Command {
 	return &subcommands.Command{
 		UsageLine: "ninja <args>...",
 		ShortDesc: "build the requests targets as ninja",
 		LongDesc:  ninjaUsage,
 		CommandRun: func() subcommands.CommandRun {
 			r := ninjaCmdRun{
-				authOpts: authOpts,
-				version:  version,
+				ts:      ts,
+				version: version,
 			}
 			r.init()
 			return &r
@@ -78,9 +78,9 @@ func Cmd(authOpts cred.Options, version string) *subcommands.Command {
 
 type ninjaCmdRun struct {
 	subcommands.CommandRunBase
-	authOpts cred.Options
-	version  string
-	started  time.Time
+	ts      oauth2.TokenSource
+	version string
+	started time.Time
 
 	// flag values
 	dir        string
@@ -151,8 +151,6 @@ func (c *ninjaCmdRun) Run(a subcommands.Application, args []string, env subcomma
 		var errFlag flagError
 		var errBuild buildError
 		switch {
-		case errors.Is(err, auth.ErrLoginRequired):
-			ui.Default.Errorf("need to login: run `siso login`\n")
 		case errors.Is(err, errNothingToDo):
 			msgPrefix := "Everything is up-to-date"
 			msgPrefix = ui.SGR(ui.Green, msgPrefix)
@@ -327,7 +325,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	var credential cred.Cred
 	if !c.offline && (c.reopt.NeedCred()) {
 		log.Infof("init credentials")
-		credential, err = cred.New(ctx, c.authOpts)
+		credential, err = cred.New(ctx, c.ts)
 		if err != nil {
 			return stats, err
 		}
