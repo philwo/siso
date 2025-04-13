@@ -26,7 +26,7 @@ import (
 
 // Cred holds credentials and derived values.
 type Cred struct {
-	// Type is credential type. e.g. "luci-auth", "gcloud", etc.
+	// Type is credential type. e.g. "luci-auth", etc.
 	Type string
 
 	// Email is authenticated email.
@@ -79,8 +79,6 @@ func AuthOpts(credHelperPath string) Options {
 		h := &credHelper{path: credHelperPath}
 		perRPCCredentials = h
 		tokenSource = &credHelperGoogle{h: h}
-	} else {
-		tokenSource = gcloudTokenSource{}
 	}
 	return Options{
 		LUCIAuth:          authOpts,
