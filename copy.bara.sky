@@ -8,7 +8,7 @@ core.workflow(
         partial_fetch=True,
     ),
     destination=git.destination(
-        url=".",
+        url="file:///Users/philwo/src/siso",
         push="upstream",
     ),
     authoring=authoring.pass_thru("Googler <noreply@google.com>"),
