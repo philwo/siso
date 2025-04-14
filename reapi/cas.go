@@ -297,6 +297,9 @@ func (c *Client) UploadAll(ctx context.Context, ds *digest.Store) (numUploaded i
 			case nil:
 				c.knownDigests.CompareAndSwap(d, uop, true)
 			case errUploadNotFinished:
+				if err != nil {
+					uop.err = err
+				}
 				close(uop.ch)
 			default:
 				clog.Infof(ctx, "upload %s failed: %v", d, uop.err)
