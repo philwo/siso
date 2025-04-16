@@ -115,6 +115,9 @@ type Options struct {
 	// DryRun just prints the command to build, but does nothing.
 	DryRun bool
 
+	// don't use local for remote steps.
+	StrictRemote bool
+
 	// allow failures at most FailuresAllowed.
 	FailuresAllowed int
 
@@ -215,6 +218,7 @@ type Builder struct {
 	verbose         bool
 	verboseFailures bool
 	dryRun          bool
+	strictRemote    bool
 
 	failures failures
 
@@ -276,6 +280,10 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 	numCPU := runtimex.NumCPU()
 	if (opts.Limits == Limits{}) {
 		opts.Limits = DefaultLimits(ctx)
+	}
+	if opts.StrictRemote {
+		logger.Infof("strict remote.  no fastlocal, no local fallback")
+		opts.Limits.FastLocal = 0
 	}
 	// On many cores machine, it would hit default max thread limit = 10000.
 	// Usually, it would require 1/3 of stepLimit threads (cache miss case?).
@@ -342,6 +350,7 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 		verbose:              opts.Verbose,
 		verboseFailures:      opts.VerboseFailures,
 		dryRun:               opts.DryRun,
+		strictRemote:         opts.StrictRemote,
 		failures:             failures{allowed: opts.FailuresAllowed},
 		keepRSP:              opts.KeepRSP,
 		rebuildManifest:      opts.RebuildManifest,
@@ -1192,5 +1201,5 @@ func (b *Builder) ActiveSteps() []ActiveStepInfo {
 }
 
 func (b *Builder) localFallbackEnabled() bool {
-	return !experiments.Enabled("no-fallback", "") && !b.hashFS.OnCog()
+	return !b.strictRemote && !experiments.Enabled("no-fallback", "") && !b.hashFS.OnCog()
 }

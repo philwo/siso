@@ -111,6 +111,7 @@ type ninjaCmdRun struct {
 	dryRun          bool
 	clobber         bool
 	prepare         bool
+	strictRemote    bool
 	failuresAllowed int
 	actionSalt      string
 
@@ -1064,6 +1065,7 @@ func (c *ninjaCmdRun) init() {
 	c.Flags.BoolVar(&c.dryRun, "n", false, "dry run")
 	c.Flags.BoolVar(&c.clobber, "clobber", false, "clobber build")
 	c.Flags.BoolVar(&c.prepare, "prepare", false, "build inputs of targets, but not build target itself.")
+	c.Flags.BoolVar(&c.strictRemote, "strict_remote", false, "don't use local for remote step. i.e. no fastlocal, no local fallback")
 	c.Flags.IntVar(&c.failuresAllowed, "k", 1, "keep going until N jobs fail (0 means inifinity)")
 	c.Flags.StringVar(&c.actionSalt, "action_salt", "", "action salt")
 
@@ -1523,6 +1525,7 @@ func (c *ninjaCmdRun) initBuildOpts(ctx context.Context, projectID string, build
 		Verbose:              c.verbose,
 		VerboseFailures:      c.verboseFailures,
 		DryRun:               c.dryRun,
+		StrictRemote:         c.strictRemote,
 		FailuresAllowed:      c.failuresAllowed,
 		KeepRSP:              c.debugMode.Keeprsp,
 		Limits:               limits,
