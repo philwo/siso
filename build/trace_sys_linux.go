@@ -79,6 +79,15 @@ func (s *sysRecord) sample(ctx context.Context, t time.Time) []traceEventObject 
 		return nil
 	}
 	m := psiMemory - s.psiMemory
+	// https://docs.kernel.org/accounting/psi.html
+	// total line is the total absolute stall time (in us).
+	// note sample is called every second
+	switch {
+	case m > 500*1000: // 500ms stalled
+		clog.Warningf(ctx, "memory stall %s/s", time.Duration(m*1000))
+	case m > 100*1000: // 100ms stalled
+		clog.Infof(ctx, "memory stall %s/s", time.Duration(m*1000))
+	}
 	s.psiMemory = psiMemory
 	return []traceEventObject{
 		{
