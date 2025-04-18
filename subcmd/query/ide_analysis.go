@@ -251,13 +251,20 @@ func (a *ideAnalyzer) analyzeTarget(ctx context.Context, target string) (*pb.Ana
 	}
 	node := nodes[0]
 
-	nodeEnt, ok := a.fsm[filepath.ToSlash(filepath.Join(a.path.ExecRoot, a.path.Dir, node.Path()))]
-	if !ok {
-		result.Status = &pb.AnalysisResult_Status{
-			Code:          pb.AnalysisResult_Status_CODE_BUILD_FAILED,
-			StatusMessage: proto.String(fmt.Sprintf("file not found: %q", node.Path())),
+	var nodeEnt *fspb.Entry
+	// need to check build succeeded for .java
+	// for cxx, we don't compile *.o with
+	// `SISO_EXPERIMENTS=prepare-header-only`, so *.o may not exist.
+	if filepath.Ext(result.SourceFilePath) == ".java" {
+		var ok bool
+		nodeEnt, ok = a.fsm[filepath.ToSlash(filepath.Join(a.path.ExecRoot, a.path.Dir, node.Path()))]
+		if !ok {
+			result.Status = &pb.AnalysisResult_Status{
+				Code:          pb.AnalysisResult_Status_CODE_BUILD_FAILED,
+				StatusMessage: proto.String(fmt.Sprintf("file not found: %q", node.Path())),
+			}
+			return result, nil
 		}
-		return result, nil
 	}
 
 	inEdge, ok := node.InEdge()
@@ -289,7 +296,7 @@ func (a *ideAnalyzer) analyzeTarget(ctx context.Context, target string) (*pb.Ana
 			}
 			return result, nil
 		}
-		if nodeEnt.GetUpdatedTime() < ent.GetId().GetModTime() {
+		if nodeEnt != nil && nodeEnt.GetUpdatedTime() < ent.GetId().GetModTime() {
 			result.Status = &pb.AnalysisResult_Status{
 				Code:          pb.AnalysisResult_Status_CODE_BUILD_FAILED,
 				StatusMessage: proto.String(fmt.Sprintf("target is not up-to-date: %q(%d) is older than %q(%d)", node.Path(), nodeEnt.GetUpdatedTime(), input.Path(), ent.GetId().GetModTime())),
