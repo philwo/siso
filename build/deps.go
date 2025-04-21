@@ -12,6 +12,7 @@ import (
 	"io/fs"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"time"
 
@@ -302,10 +303,8 @@ func checkDeps(ctx context.Context, b *Builder, step *Step, deps []string) error
 			return fmt.Errorf("deps input %q not exist: %w", dep, err)
 		}
 		// input should not be output.
-		for _, out := range step.cmd.Outputs {
-			if out == input {
-				return fmt.Errorf("deps input %q is output", dep)
-			}
+		if slices.Contains(step.cmd.Outputs, input) {
+			return fmt.Errorf("deps input %q is output", dep)
 		}
 		if len(fi.CmdHash()) == 0 {
 			// source, not generated file

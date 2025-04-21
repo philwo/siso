@@ -11,6 +11,7 @@ import (
 	"io/fs"
 	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 
@@ -145,7 +146,7 @@ func (s *scanner) nextInputs(ctx context.Context) []string {
 }
 
 func (s *scanner) addInputs(ctx context.Context, ins ...string) {
-	s.inputs = append(append([]string(nil), ins...), s.inputs...)
+	s.inputs = slices.Concat(ins, s.inputs)
 }
 
 func (s *scanner) setMacros(ctx context.Context, macros map[string]string) {

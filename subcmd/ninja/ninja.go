@@ -20,6 +20,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
+	"slices"
 	"sort"
 	"strings"
 	"text/tabwriter"
@@ -34,7 +35,6 @@ import (
 	"github.com/klauspost/cpuid/v2"
 	"github.com/maruel/subcommands"
 	"golang.org/x/sync/errgroup"
-	"google.golang.org/api/option"
 	mrpb "google.golang.org/genproto/googleapis/api/monitoredres"
 	rspb "google.golang.org/genproto/googleapis/devtools/resultstore/v2"
 	"google.golang.org/grpc/codes"
@@ -1292,7 +1292,7 @@ func (c *ninjaCmdRun) initCloudTrace(ctx context.Context, projectID string, cred
 		ServiceName:   fmt.Sprintf("siso/%s/%s", c.version, runtime.GOOS),
 		StepThreshold: c.traceThreshold,
 		SpanThreshold: c.traceSpanThreshold,
-		ClientOptions: append([]option.ClientOption{}, credential.ClientOptions()...),
+		ClientOptions: slices.Clone(credential.ClientOptions()),
 	})
 	if err != nil {
 		clog.Errorf(ctx, "failed to start trace exporter: %v", err)

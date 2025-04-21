@@ -8,9 +8,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"path"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -341,9 +343,7 @@ func (sc StepConfig) Init(ctx context.Context) error {
 
 // UpdateFilegroups updates filegroups (input_deps) in the step config.
 func (sc StepConfig) UpdateFilegroups(ctx context.Context, filegroups map[string][]string) error {
-	for k, v := range filegroups {
-		sc.InputDeps[k] = v
-	}
+	maps.Copy(sc.InputDeps, filegroups)
 	return nil
 }
 
@@ -356,8 +356,8 @@ func fromConfigPath(ctx context.Context, p *build.Path, path string) string {
 
 func toConfigPath(p *build.Path, path string) string {
 	path = filepath.ToSlash(path)
-	if strings.HasPrefix(path, p.Dir+"/") {
-		return "./" + strings.TrimPrefix(path, p.Dir+"/")
+	if after, ok := strings.CutPrefix(path, p.Dir+"/"); ok {
+		return "./" + after
 	}
 	return path
 }
@@ -397,13 +397,7 @@ loop:
 			}
 		}
 		if len(c.ActionOuts) > 0 {
-			match := false
-			for _, actionOut := range c.ActionOuts {
-				if actionOut == outConfig {
-					match = true
-					break
-				}
-			}
+			match := slices.Contains(c.ActionOuts, outConfig)
 			if !match {
 				continue loop
 			}
@@ -478,9 +472,7 @@ loop:
 			if len(rule.Platform) == 0 {
 				rule.Platform = make(map[string]string)
 			}
-			for k, v := range opt.Platform {
-				rule.Platform[k] = v
-			}
+			maps.Copy(rule.Platform, opt.Platform)
 		}
 		return rule, !c.Impure
 	}

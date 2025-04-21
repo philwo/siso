@@ -20,6 +20,7 @@ import (
 	"runtime"
 	"runtime/debug"
 	"runtime/pprof"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -1041,13 +1042,7 @@ func (b *Builder) outputs(ctx context.Context, step *Step) error {
 		}
 		_, err := b.hashFS.Stat(ctx, step.cmd.ExecRoot, out)
 		if err != nil {
-			reqOut := false
-			for _, o := range defOutputs {
-				if out == o {
-					reqOut = true
-					break
-				}
-			}
+			reqOut := slices.Contains(defOutputs, out)
 			if reqOut {
 				return fmt.Errorf("missing outputs %s: %w", out, err)
 			}

@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -87,13 +88,7 @@ func (gcc depsGCC) fixCmdInputs(ctx context.Context, b *Builder, cmd *execute.Cm
 
 // TODO: use handler?
 func (depsGCC) fixForSplitDwarf(ctx context.Context, cmd *execute.Cmd) {
-	hasSplitDwarf := false
-	for _, arg := range cmd.Args {
-		if arg == "-gsplit-dwarf" {
-			hasSplitDwarf = true
-			break
-		}
-	}
+	hasSplitDwarf := slices.Contains(cmd.Args, "-gsplit-dwarf")
 	if !hasSplitDwarf {
 		return
 	}
@@ -116,10 +111,8 @@ func (depsGCC) DepsAfterRun(ctx context.Context, b *Builder, step *Step) ([]stri
 	}
 	defer func() {
 		// don't remove depfile if it is used as output.
-		for _, out := range step.cmd.Outputs {
-			if out == step.cmd.Depfile {
-				return
-			}
+		if slices.Contains(step.cmd.Outputs, step.cmd.Depfile) {
+			return
 		}
 		b.hashFS.Remove(ctx, step.cmd.ExecRoot, step.cmd.Depfile)
 		b.hashFS.Flush(ctx, step.cmd.ExecRoot, []string{step.cmd.Depfile})

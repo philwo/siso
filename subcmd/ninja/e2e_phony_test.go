@@ -325,7 +325,7 @@ func TestBuild_PhonyReplace(t *testing.T) {
 				t.Logf("missing cp.py: %v", err)
 				return &rpb.ActionResult{
 					ExitCode:  1,
-					StderrRaw: []byte(fmt.Sprintf("../../cp.py: File not found: %v", err)),
+					StderrRaw: fmt.Appendf(nil, "../../cp.py: File not found: %v", err),
 				}, nil
 			}
 			fn, err := tree.LookupFileNode(ctx, "foo.in")
@@ -333,7 +333,7 @@ func TestBuild_PhonyReplace(t *testing.T) {
 				t.Logf("missing foo.in: %v", err)
 				return &rpb.ActionResult{
 					ExitCode:  1,
-					StderrRaw: []byte(fmt.Sprintf("../../foo.in: File not found: %v", err)),
+					StderrRaw: fmt.Appendf(nil, "../../foo.in: File not found: %v", err),
 				}, nil
 			}
 			_, err = tree.LookupFileNode(ctx, "foo2.in")
@@ -341,7 +341,7 @@ func TestBuild_PhonyReplace(t *testing.T) {
 				t.Logf("missing foo2.in: %v", err)
 				return &rpb.ActionResult{
 					ExitCode:  1,
-					StderrRaw: []byte(fmt.Sprintf("../../foo2.in: File not found: %v", err)),
+					StderrRaw: fmt.Appendf(nil, "../../foo2.in: File not found: %v", err),
 				}, nil
 			}
 			return &rpb.ActionResult{
@@ -411,14 +411,14 @@ func TestBuild_PhonyIndirectInputs(t *testing.T) {
 				t.Logf("wrong arguments %q", cmd.Arguments)
 				return &rpb.ActionResult{
 					ExitCode:  1,
-					StderrRaw: []byte(fmt.Sprintf("wrong arguments %q", cmd.Arguments)),
+					StderrRaw: fmt.Appendf(nil, "wrong arguments %q", cmd.Arguments),
 				}, nil
 			}
 			if !slices.Equal(cmd.Arguments[:2], []string{"python3", "../../mojom_parser.py"}) {
 				t.Logf("wrong command %q", cmd.Arguments)
 				return &rpb.ActionResult{
 					ExitCode:  1,
-					StderrRaw: []byte(fmt.Sprintf("wrong command %q", cmd.Arguments)),
+					StderrRaw: fmt.Appendf(nil, "wrong command %q", cmd.Arguments),
 				}, nil
 			}
 			var outputFiles []*rpb.OutputFile
@@ -445,7 +445,7 @@ func TestBuild_PhonyIndirectInputs(t *testing.T) {
 				t.Logf("wrong command %q", cmd.Arguments)
 				return &rpb.ActionResult{
 					ExitCode:  1,
-					StderrRaw: []byte(fmt.Sprintf("wrong option %q", cmd.Arguments)),
+					StderrRaw: fmt.Appendf(nil, "wrong option %q", cmd.Arguments),
 				}, nil
 
 			}
@@ -456,7 +456,7 @@ func TestBuild_PhonyIndirectInputs(t *testing.T) {
 				t.Logf("missing mojom_parser.py: %v", err)
 				return &rpb.ActionResult{
 					ExitCode:  1,
-					StderrRaw: []byte(fmt.Sprintf("../../mojom_parser.py: File not found: %v", err)),
+					StderrRaw: fmt.Appendf(nil, "../../mojom_parser.py: File not found: %v", err),
 				}, nil
 			}
 			_, err = tree.LookupFileNode(ctx, "out/siso/gen/base.build_metadata")
@@ -464,7 +464,7 @@ func TestBuild_PhonyIndirectInputs(t *testing.T) {
 				t.Logf("missing out/siso/gen/build_metadata.py: %v", err)
 				return &rpb.ActionResult{
 					ExitCode:  1,
-					StderrRaw: []byte(fmt.Sprintf("gen/build_metadata.py: File not found: %v", err)),
+					StderrRaw: fmt.Appendf(nil, "gen/build_metadata.py: File not found: %v", err),
 				}, nil
 			}
 			return &rpb.ActionResult{

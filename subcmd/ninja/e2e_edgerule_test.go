@@ -53,7 +53,7 @@ func TestBuild_EdgeRule(t *testing.T) {
 					t.Logf("missing foo.cc: %v", err)
 					return &rpb.ActionResult{
 						ExitCode:  1,
-						StderrRaw: []byte(fmt.Sprintf("../../foo.cc: File not found: %v", err)),
+						StderrRaw: fmt.Appendf(nil, "../../foo.cc: File not found: %v", err),
 					}, nil
 				}
 				_, err = tree.LookupFileNode(ctx, "out/siso/gen/bar.h")
@@ -61,7 +61,7 @@ func TestBuild_EdgeRule(t *testing.T) {
 					t.Logf("gen/bar.h not found for foo.cc")
 					return &rpb.ActionResult{
 						ExitCode:  1,
-						StderrRaw: []byte(fmt.Sprintf("gen/bar.h: File not found: %v", err)),
+						StderrRaw: fmt.Appendf(nil, "gen/bar.h: File not found: %v", err),
 					}, nil
 				}
 				return &rpb.ActionResult{
@@ -81,7 +81,7 @@ func TestBuild_EdgeRule(t *testing.T) {
 					t.Logf("gen/bar.cc not found by gen/bar.cc: %v", err)
 					return &rpb.ActionResult{
 						ExitCode:  1,
-						StderrRaw: []byte(fmt.Sprintf("gen/bar.cc: File not found: %v", err)),
+						StderrRaw: fmt.Appendf(nil, "gen/bar.cc: File not found: %v", err),
 					}, nil
 				}
 				_, err = tree.LookupFileNode(ctx, "out/siso/gen/bar.h")
@@ -89,7 +89,7 @@ func TestBuild_EdgeRule(t *testing.T) {
 					t.Logf("gen/bar.h not found for gen/bar.cc")
 					return &rpb.ActionResult{
 						ExitCode:  1,
-						StderrRaw: []byte(fmt.Sprintf("gen/bar.h: File not found: %v", err)),
+						StderrRaw: fmt.Appendf(nil, "gen/bar.h: File not found: %v", err),
 					}, nil
 				}
 				return &rpb.ActionResult{
@@ -109,7 +109,7 @@ func TestBuild_EdgeRule(t *testing.T) {
 					t.Logf("missing obj/bar.o: %v", err)
 					return &rpb.ActionResult{
 						ExitCode:  1,
-						StderrRaw: []byte(fmt.Sprintf("obj/bar.o: File not found: %v", err)),
+						StderrRaw: fmt.Appendf(nil, "obj/bar.o: File not found: %v", err),
 					}, nil
 				}
 				d, err := fakere.Put(ctx, []byte("obj/bar.o\n"))
@@ -117,7 +117,7 @@ func TestBuild_EdgeRule(t *testing.T) {
 					t.Logf("failed to write obj/bar.a: %v", err)
 					return &rpb.ActionResult{
 						ExitCode:  1,
-						StderrRaw: []byte(fmt.Sprintf("obj/bar.a: failed to store %v", err)),
+						StderrRaw: fmt.Appendf(nil, "obj/bar.a: failed to store %v", err),
 					}, nil
 				}
 				t.Logf("obj/bar.a => %s", d)
@@ -140,7 +140,7 @@ func TestBuild_EdgeRule(t *testing.T) {
 						t.Logf("missing %s: %v", input, err)
 						return &rpb.ActionResult{
 							ExitCode:  1,
-							StderrRaw: []byte(fmt.Sprintf("%s: File not found: %v", input, err)),
+							StderrRaw: fmt.Appendf(nil, "%s: File not found: %v", input, err),
 						}, nil
 					}
 					fmt.Fprintln(&buf, input)
@@ -148,7 +148,7 @@ func TestBuild_EdgeRule(t *testing.T) {
 					if err != nil {
 						return &rpb.ActionResult{
 							ExitCode:  1,
-							StderrRaw: []byte(fmt.Sprintf("%s: File content not found: %v", input, err)),
+							StderrRaw: fmt.Appendf(nil, "%s: File content not found: %v", input, err),
 						}, nil
 					}
 					buf.Write(data)
@@ -159,7 +159,7 @@ func TestBuild_EdgeRule(t *testing.T) {
 					t.Logf("obj/bar.o not found for obj/bar.a")
 					return &rpb.ActionResult{
 						ExitCode:  1,
-						StderrRaw: []byte(fmt.Sprintf("obj/bar.o: File not found: %v", err)),
+						StderrRaw: fmt.Appendf(nil, "obj/bar.o: File not found: %v", err),
 					}, nil
 				}
 				d, err := fakere.Put(ctx, buf.Bytes())
@@ -167,7 +167,7 @@ func TestBuild_EdgeRule(t *testing.T) {
 					t.Logf("failed to write obj/foo.so: %v", err)
 					return &rpb.ActionResult{
 						ExitCode:  1,
-						StderrRaw: []byte(fmt.Sprintf("obj/foo.so: failed to store: %v", err)),
+						StderrRaw: fmt.Appendf(nil, "obj/foo.so: failed to store: %v", err),
 					}, nil
 				}
 				t.Logf("obj/foo.so => %s", d)
@@ -267,7 +267,7 @@ func TestBuild_EdgeRule_solibs(t *testing.T) {
 				if err != nil {
 					return &rpb.ActionResult{
 						ExitCode:  1,
-						StderrRaw: []byte(fmt.Sprintf("%s: File not found: %v", input, err)),
+						StderrRaw: fmt.Appendf(nil, "%s: File not found: %v", input, err),
 					}, nil
 				}
 			}
@@ -276,7 +276,7 @@ func TestBuild_EdgeRule_solibs(t *testing.T) {
 				"gen/foo.pb.h",
 				"gen/foo.pb.cc",
 			} {
-				d, err := fakere.Put(ctx, []byte(fmt.Sprintf("generate %s from ../../protobuf/foo.proto", output)))
+				d, err := fakere.Put(ctx, fmt.Appendf(nil, "generate %s from ../../protobuf/foo.proto", output))
 				if err != nil {
 					msg := fmt.Sprintf("failed to write %s: %v", output, err)
 					t.Log(msg)
@@ -375,7 +375,7 @@ func TestBuild_EdgeRule_solibs_recursive(t *testing.T) {
 				if err != nil {
 					return &rpb.ActionResult{
 						ExitCode:  1,
-						StderrRaw: []byte(fmt.Sprintf("%s: File not found: %v", input, err)),
+						StderrRaw: fmt.Appendf(nil, "%s: File not found: %v", input, err),
 					}, nil
 				}
 			}
@@ -481,7 +481,7 @@ func TestBuild_EdgeRule_stamp_solibs(t *testing.T) {
 					t.Logf("err for %s: %v", input, err)
 					return &rpb.ActionResult{
 						ExitCode:  1,
-						StderrRaw: []byte(fmt.Sprintf("%s: File not found: %v", input, err)),
+						StderrRaw: fmt.Appendf(nil, "%s: File not found: %v", input, err),
 					}, nil
 				}
 			}

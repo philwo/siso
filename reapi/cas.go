@@ -446,10 +446,7 @@ func separateBlobs(instance string, blobs []digest.Digest, byteLimit int64) (sma
 	sort.Slice(blobs, func(i, j int) bool {
 		return blobs[i].SizeBytes < blobs[j].SizeBytes
 	})
-	maxSizeBytes := blobs[len(blobs)-1].SizeBytes
-	if maxSizeBytes > byteLimit {
-		maxSizeBytes = byteLimit
-	}
+	maxSizeBytes := min(blobs[len(blobs)-1].SizeBytes, byteLimit)
 	// Prepare a dummy request message to calculate the size of the BatchUpdateBlobsRequest accurately.
 	dummyReq := &rpb.BatchUpdateBlobsRequest{
 		InstanceName: instance,

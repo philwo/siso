@@ -13,6 +13,7 @@ import (
 	"flag"
 	"fmt"
 	"io/fs"
+	"maps"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -557,8 +558,8 @@ func fixInputs(ctx context.Context, stepDef *StepDef, inputs, excludes []string)
 		if !strings.Contains(e, "/") {
 			// Most exclude_input_patterns are "*.stamp" or so.
 			// Just use strings.HasSuffix for such special case.
-			if strings.HasPrefix(e, "*") {
-				suffix := strings.TrimPrefix(e, "*")
+			if after, ok := strings.CutPrefix(e, "*"); ok {
+				suffix := after
 				if !strings.ContainsAny(suffix, `*?[\`) {
 					// special case just suffix match.
 					m = func(in string) bool {
@@ -760,9 +761,7 @@ func (s *StepDef) ExpandedInputs(ctx context.Context) []string {
 		// need to use different seen, so that replaces/accumulates
 		// works even if indirect inputs see/ignore the inputs.
 		iseen := make(map[string]bool)
-		for k, v := range seen {
-			iseen[k] = v
-		}
+		maps.Copy(iseen, seen)
 		filter := s.rule.IndirectInputs.filter(ctx)
 		for _, in := range s.edge.Inputs() {
 			edge, ok := in.InEdge()

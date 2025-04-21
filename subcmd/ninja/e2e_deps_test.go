@@ -115,13 +115,13 @@ func TestBuild_Deps_Incremental(t *testing.T) {
 				t.Logf("missing base/foo.cc: %v", err)
 				return &rpb.ActionResult{
 					ExitCode:  1,
-					StderrRaw: []byte(fmt.Sprintf("../../base/foo.cc: File not found: %v", err)),
+					StderrRaw: fmt.Appendf(nil, "../../base/foo.cc: File not found: %v", err),
 				}, nil
 			}
 			if len(cmd.Arguments) < 2 {
 				return &rpb.ActionResult{
 					ExitCode:  1,
-					StderrRaw: []byte(fmt.Sprintf("unknown command line: %q", cmd.Arguments)),
+					StderrRaw: fmt.Appendf(nil, "unknown command line: %q", cmd.Arguments),
 				}, nil
 			}
 			switch {
@@ -131,7 +131,7 @@ func TestBuild_Deps_Incremental(t *testing.T) {
 					t.Logf("faked to write foo.o.d: %v", err)
 					return &rpb.ActionResult{
 						ExitCode:  1,
-						StderrRaw: []byte(fmt.Sprintf("foo.o.d: failed to store %v", err)),
+						StderrRaw: fmt.Appendf(nil, "foo.o.d: failed to store %v", err),
 					}, nil
 				}
 				return &rpb.ActionResult{
@@ -165,7 +165,7 @@ func TestBuild_Deps_Incremental(t *testing.T) {
 					t.Logf("faked to write foo.out.d: %v", err)
 					return &rpb.ActionResult{
 						ExitCode:  1,
-						StderrRaw: []byte(fmt.Sprintf("foo.o.d: failed to store %v", err)),
+						StderrRaw: fmt.Appendf(nil, "foo.o.d: failed to store %v", err),
 					}, nil
 				}
 				return &rpb.ActionResult{
@@ -184,7 +184,7 @@ func TestBuild_Deps_Incremental(t *testing.T) {
 			default:
 				return &rpb.ActionResult{
 					ExitCode:  1,
-					StderrRaw: []byte(fmt.Sprintf("unknown command line: %q", cmd.Arguments)),
+					StderrRaw: fmt.Appendf(nil, "unknown command line: %q", cmd.Arguments),
 				}, nil
 			}
 		},

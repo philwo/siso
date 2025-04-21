@@ -54,7 +54,7 @@ func TestBuild_OutputLocal(t *testing.T) {
 				t.Logf("missing input: %v", err)
 				return &rpb.ActionResult{
 					ExitCode:  1,
-					StderrRaw: []byte(fmt.Sprintf("../../input: File not found: %v", err)),
+					StderrRaw: fmt.Appendf(nil, "../../input: File not found: %v", err),
 				}, nil
 			}
 			return &rpb.ActionResult{

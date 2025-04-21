@@ -286,7 +286,7 @@ func (c *LocalCache) garbageCollect(ctx context.Context, ttl time.Duration) {
 		clog.Infof(ctx, "Garbage collected local cache: Removed %d files totalling %d MB", nFiles, spaceReclaimed/1000000)
 	}
 
-	if err := os.WriteFile(filepath.Join(c.dir, "lastgc"), []byte(fmt.Sprint(c.timestamp.UnixNano())), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(c.dir, "lastgc"), fmt.Append(nil, c.timestamp.UnixNano()), 0644); err != nil {
 		clog.Warningf(ctx, "Failed to record last garbage collection event: %v", err)
 	}
 	spin.Stop(nil)

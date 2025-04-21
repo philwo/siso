@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
@@ -185,13 +186,7 @@ func (b *Builder) checkLocalOutputs(ctx context.Context, step *Step) error {
 	for _, out := range step.cmd.Outputs {
 		_, err := step.cmd.HashFS.Stat(ctx, step.cmd.ExecRoot, out)
 		if err != nil {
-			required := false
-			for _, o := range defOutputs {
-				if out == o {
-					required = true
-					break
-				}
-			}
+			required := slices.Contains(defOutputs, out)
 			if !required {
 				clog.Warningf(ctx, "ignore missing outputs %s: %v", out, err)
 				continue

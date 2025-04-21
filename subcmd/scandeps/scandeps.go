@@ -11,6 +11,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 
@@ -136,8 +137,6 @@ func loadInputDeps(ctx context.Context, dir string) (map[string][]string, error)
 	if err != nil {
 		return nil, fmt.Errorf("load %s/.filegroups: %w", dir, err)
 	}
-	for k, v := range filegroups.Filegroups {
-		inputDeps[k] = v
-	}
+	maps.Copy(inputDeps, filegroups.Filegroups)
 	return inputDeps, nil
 }

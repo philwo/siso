@@ -71,7 +71,7 @@ func TestBuild_MacOSXSDK(t *testing.T) {
 
 					return &rpb.ActionResult{
 						ExitCode:  1,
-						StderrRaw: []byte(fmt.Sprintf("%s: File not found: %v", fname, err)),
+						StderrRaw: fmt.Appendf(nil, "%s: File not found: %v", fname, err),
 					}, nil
 				}
 				t.Logf("input %s is ok", fname)
@@ -96,7 +96,7 @@ func TestBuild_MacOSXSDK(t *testing.T) {
 					t.Logf("input tree:\n%s", buf.String())
 					return &rpb.ActionResult{
 						ExitCode:  1,
-						StderrRaw: []byte(fmt.Sprintf("%s: Symlink not found: %v", sname, err)),
+						StderrRaw: fmt.Appendf(nil, "%s: Symlink not found: %v", sname, err),
 					}, nil
 				}
 				t.Logf("input %s is ok: target=%s", sname, sn.Target)

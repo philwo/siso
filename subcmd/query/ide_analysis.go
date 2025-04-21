@@ -10,6 +10,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"sort"
@@ -198,9 +199,7 @@ func (c *ideAnalysisRun) analyze(ctx context.Context, args []string) (*pb.IdeAna
 	for _, arg := range args {
 		result, bus := analyzer.analyzeTarget(ctx, arg)
 		analysis.Results = append(analysis.Results, result)
-		for k, v := range bus {
-			buildableUnits[k] = v
-		}
+		maps.Copy(buildableUnits, bus)
 	}
 	var buIDs []string
 	for k := range buildableUnits {

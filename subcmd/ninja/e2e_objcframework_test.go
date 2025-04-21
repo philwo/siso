@@ -59,7 +59,7 @@ func TestBuild_ObjcxxFrameworks(t *testing.T) {
 					t.Logf("missing %s in input", fname)
 					return &rpb.ActionResult{
 						ExitCode:  1,
-						StderrRaw: []byte(fmt.Sprintf("%s: File not found: %v", fname, err)),
+						StderrRaw: fmt.Appendf(nil, "%s: File not found: %v", fname, err),
 					}, nil
 				}
 				t.Logf("input %s is ok", fname)

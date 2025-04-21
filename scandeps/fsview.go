@@ -11,6 +11,7 @@ import (
 	"io/fs"
 	"path"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -83,13 +84,7 @@ func (fv *fsview) addDir(ctx context.Context, dir string, searchPath searchPathT
 	case noSearchPath:
 	case includeSearchPath:
 		// dir may be added to dir stack, but not in searchPaths yet?
-		seen := false
-		for _, p := range fv.searchPaths {
-			if dir == p {
-				seen = true
-				break
-			}
-		}
+		seen := slices.Contains(fv.searchPaths, dir)
 		if !seen {
 			fv.searchPaths = append(fv.searchPaths, dir)
 			if log.V(1) {
@@ -97,13 +92,7 @@ func (fv *fsview) addDir(ctx context.Context, dir string, searchPath searchPathT
 			}
 		}
 	case frameworkSearchPath:
-		seen := false
-		for _, p := range fv.frameworkPaths {
-			if dir == p {
-				seen = true
-				break
-			}
-		}
+		seen := slices.Contains(fv.frameworkPaths, dir)
 		if !seen {
 			fv.frameworkPaths = append(fv.frameworkPaths, dir)
 			if log.V(1) {

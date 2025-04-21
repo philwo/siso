@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
 	"sync"
@@ -282,9 +283,7 @@ readLoop:
 
 	clog.Infof(ctx, "ninja deps %s => paths=%d, deps=%d total=%d unique=%d recompact=%t (broken:%t)", depsLog.fname, len(depsLog.paths), len(depsLog.deps), totalRecords, uniqueRecords, depsLog.needsRecompact, broken)
 	depsLog.rPaths = depsLog.paths
-	for k, v := range depsLog.pathIdx {
-		depsLog.rPathIdx[k] = v
-	}
+	maps.Copy(depsLog.rPathIdx, depsLog.pathIdx)
 	depsLog.rDeps = depsLog.deps
 
 	return depsLog, nil
@@ -294,9 +293,7 @@ readLoop:
 func (d *DepsLog) Reset() {
 	d.mu.Lock()
 	d.rPaths = d.paths
-	for k, v := range d.pathIdx {
-		d.rPathIdx[k] = v
-	}
+	maps.Copy(d.rPathIdx, d.pathIdx)
 	d.rDeps = d.deps
 	d.mu.Unlock()
 }
@@ -361,9 +358,7 @@ func (d *DepsLog) Recompact(ctx context.Context) error {
 
 	d.mu.Lock()
 	d.rPaths = nd.paths
-	for k, v := range nd.pathIdx {
-		d.rPathIdx[k] = v
-	}
+	maps.Copy(d.rPathIdx, nd.pathIdx)
 	d.rDeps = nd.deps
 
 	d.paths = nd.paths

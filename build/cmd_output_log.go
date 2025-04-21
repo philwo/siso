@@ -192,8 +192,8 @@ func cmdOutput(ctx context.Context, result cmdOutputResult, phase string, cmd *e
 	}
 	if len(cmd.Outputs) > 0 {
 		output := cmd.Outputs[0]
-		if strings.HasPrefix(output, cmd.Dir+"/") {
-			output = "./" + strings.TrimPrefix(output, cmd.Dir+"/")
+		if after, ok := strings.CutPrefix(output, cmd.Dir+"/"); ok {
+			output = "./" + after
 		}
 		res.output = output
 	}

@@ -59,7 +59,7 @@ func TestBuild_Trace_remote(t *testing.T) {
 				t.Logf("missing file foo.in in input")
 				return &rpb.ActionResult{
 					ExitCode:  1,
-					StderrRaw: []byte(fmt.Sprintf("../../foo.in: File not found: %v", err)),
+					StderrRaw: fmt.Appendf(nil, "../../foo.in: File not found: %v", err),
 				}, nil
 			}
 			d := fn.Digest

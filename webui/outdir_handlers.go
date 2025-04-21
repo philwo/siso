@@ -712,10 +712,7 @@ func (s *WebuiServer) handleOutdirListSteps(w http.ResponseWriter, r *http.Reque
 	}
 
 	pageFirst := 0
-	pageLast := pageCount - 1
-	if pageLast < 0 {
-		pageLast = 0
-	}
+	pageLast := max(pageCount-1, 0)
 	pageIndex := max(0, min(requestedPage, pageLast))
 	pageNext := min(pageIndex+1, pageLast)
 	pagePrev := max(0, pageIndex-1)

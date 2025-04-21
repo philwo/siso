@@ -76,14 +76,14 @@ func TestBuild_MultiOut_Remote(t *testing.T) {
 			if err != nil {
 				return &rpb.ActionResult{
 					ExitCode:  1,
-					StderrRaw: []byte(fmt.Sprintf("failed to write out1: %v", err)),
+					StderrRaw: fmt.Appendf(nil, "failed to write out1: %v", err),
 				}, nil
 			}
 			out2, err = fakere.Put(ctx, []byte("out2"))
 			if err != nil {
 				return &rpb.ActionResult{
 					ExitCode:  1,
-					StderrRaw: []byte(fmt.Sprintf("failed to write out2: %v", err)),
+					StderrRaw: fmt.Appendf(nil, "failed to write out2: %v", err),
 				}, nil
 			}
 			return &rpb.ActionResult{
