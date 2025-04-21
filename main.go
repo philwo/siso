@@ -25,7 +25,6 @@ import (
 	"go.chromium.org/infra/build/siso/auth/cred"
 	"go.chromium.org/infra/build/siso/subcmd/ninja"
 	"go.chromium.org/infra/build/siso/subcmd/ninjafrontend"
-	"go.chromium.org/infra/build/siso/subcmd/version"
 )
 
 var (
@@ -47,7 +46,6 @@ func getApplication(ts oauth2.TokenSource) *cli.Application {
 		Commands: []*subcommands.Command{
 			ninja.Cmd(ts, versionID),
 			ninjafrontend.Cmd(),
-			version.Cmd(versionStr),
 		},
 		EnvVars: map[string]subcommands.EnvVarDefinition{
 			"SISO_PROJECT": {
@@ -123,10 +121,8 @@ Use "siso help -advanced" to display all commands.
 
 	authOpts := cred.AuthOpts(credHelper)
 	if printVersion {
-		a := getApplication(authOpts)
-		c := version.Cmd(versionStr)
-		r := c.CommandRun()
-		return r.Run(a, nil, nil)
+		fmt.Fprintf(os.Stderr, "%s\n", versionStr)
+		return 0
 	}
 
 	if blockprofRate > 0 {
