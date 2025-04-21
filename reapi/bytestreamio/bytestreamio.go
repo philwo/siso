@@ -20,19 +20,6 @@ import (
 	"go.chromium.org/infra/build/siso/o11y/clog"
 )
 
-// Exists checks for the existence of a resource by its resourceName.
-func Exists(ctx context.Context, c pb.ByteStreamClient, resourceName string) error {
-	rd, err := c.Read(ctx, &pb.ReadRequest{
-		ResourceName: resourceName,
-		ReadLimit:    1,
-	})
-	if err != nil {
-		return err
-	}
-	_, err = rd.Recv()
-	return err
-}
-
 // Open opens a reader on the bytestream for the resourceName.
 // ctx will be used until the reader is closed.
 func Open(ctx context.Context, c pb.ByteStreamClient, resourceName string) (*Reader, error) {

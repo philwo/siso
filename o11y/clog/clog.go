@@ -191,11 +191,6 @@ func (l *Logger) glogEntry(e logging.Entry) {
 	}
 }
 
-// Log logs an entry for the context.
-func Log(ctx context.Context, e logging.Entry) {
-	FromContext(ctx).log(e)
-}
-
 // LogSync logs an entry synchronously for the context.
 func (l *Logger) LogSync(ctx context.Context, e logging.Entry) error {
 	if e.HTTPRequest != nil {
@@ -210,11 +205,6 @@ func (l *Logger) LogSync(ctx context.Context, e logging.Entry) error {
 		return nil
 	}
 	return l.logger.LogSync(ctx, e)
-}
-
-// LogSync logs an entry syncrhonously for the context.
-func LogSync(ctx context.Context, e logging.Entry) error {
-	return FromContext(ctx).LogSync(ctx, e)
 }
 
 // Info logs at info log level in the manner of fmt.Print.
@@ -328,12 +318,6 @@ func (l *Logger) exitf(ctx context.Context, format string, args ...any) {
 		glog.ErrorDepth(1, fmt.Sprintf("logSync: %v", err))
 	}
 	glog.ExitDepth(2, fmt.Sprintf(format, args...))
-}
-
-// Exitf logs at fatal log level in the manner of fmt.Printf, and exit.
-func Exitf(ctx context.Context, format string, args ...any) {
-	logger := FromContext(ctx)
-	logger.exitf(ctx, format, args...)
 }
 
 // Entry creates a new log entry for the given severity.

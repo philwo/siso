@@ -37,11 +37,6 @@ const WorkerName = "local"
 // LocalExec implements execute.Executor interface that runs commands locally.
 type LocalExec struct{}
 
-// Run runs cmd with DefaultExec.
-func Run(ctx context.Context, cmd *execute.Cmd) error {
-	return LocalExec{}.Run(ctx, cmd)
-}
-
 // Run runs a cmd.
 func (LocalExec) Run(ctx context.Context, cmd *execute.Cmd) (err error) {
 	res, err := run(ctx, cmd)
