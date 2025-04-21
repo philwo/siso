@@ -558,8 +558,7 @@ func fixInputs(ctx context.Context, stepDef *StepDef, inputs, excludes []string)
 		if !strings.Contains(e, "/") {
 			// Most exclude_input_patterns are "*.stamp" or so.
 			// Just use strings.HasSuffix for such special case.
-			if after, ok := strings.CutPrefix(e, "*"); ok {
-				suffix := after
+			if suffix, ok := strings.CutPrefix(e, "*"); ok {
 				if !strings.ContainsAny(suffix, `*?[\`) {
 					// special case just suffix match.
 					m = func(in string) bool {
