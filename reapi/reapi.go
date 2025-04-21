@@ -9,14 +9,11 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
-	"os"
 	"path"
 	"strings"
 	"sync"
-	"time"
 
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
 	"github.com/charmbracelet/log"
@@ -53,40 +50,6 @@ type Option struct {
 	CompressedBlob int64
 
 	KeepAliveParams keepalive.ClientParameters
-}
-
-// RegisterFlags registers flags on the option.
-func (o *Option) RegisterFlags(fs *flag.FlagSet, envs map[string]string) {
-	var purpose string
-	if o.Prefix == "" {
-		o.Prefix = "reapi"
-	} else {
-		purpose = fmt.Sprintf(" (for %s)", o.Prefix)
-	}
-	addr := envs["SISO_REAPI_ADDRESS"]
-	if addr == "" {
-		addr = "remotebuildexecution.googleapis.com:443"
-	}
-	fs.StringVar(&o.Address, o.Prefix+"_address", addr, "reapi address"+purpose)
-	fs.StringVar(&o.CASAddress, o.Prefix+"_cas_address", "", "reapi cas address"+purpose+" (if empty, share conn with "+o.Prefix+"_address)")
-	instance := envs["SISO_REAPI_INSTANCE"]
-	if instance == "" {
-		instance = "default_instance"
-	}
-	fs.StringVar(&o.Instance, o.Prefix+"_instance", instance, "reapi instance name"+purpose)
-
-	fs.BoolVar(&o.Insecure, o.Prefix+"_insecure", os.Getenv("RBE_service_no_security") == "true", "reapi insecure mode. default can be set by $RBE_service_no_security")
-
-	fs.StringVar(&o.TLSClientAuthCert, o.Prefix+"_tls_client_auth_cert", os.Getenv("RBE_tls_client_auth_cert"), "Certificate to use when using mTLS to connect to the RE api service. default can be set by $RBE_tls_client_auth_cert")
-	fs.StringVar(&o.TLSClientAuthKey, o.Prefix+"_tls_client_auth_key", os.Getenv("RBE_tls_client_auth_key"), "Key to use when using mTLS to connect to the RE api service. default can be set by $RBE_tls_client_auth_key")
-
-	fs.Int64Var(&o.CompressedBlob, o.Prefix+"_compress_blob", 1024, "use compressed blobs if server supports compressed blobs and size is bigger than this. specify 0 to disable comporession."+purpose)
-
-	// https://grpc.io/docs/guides/keepalive/#keepalive-configuration-specification
-	// b/286237547 - RBE suggests 30s
-	fs.DurationVar(&o.KeepAliveParams.Time, o.Prefix+"_grpc_keepalive_time", 30*time.Second, "grpc keepalive time"+purpose)
-	fs.DurationVar(&o.KeepAliveParams.Timeout, o.Prefix+"_grpc_keepalive_timeout", 20*time.Second, "grpc keepalive timeout"+purpose)
-	fs.BoolVar(&o.KeepAliveParams.PermitWithoutStream, o.Prefix+"_grpc_keepalive_permit_without_stream", false, "grpc keepalive permit without stream"+purpose)
 }
 
 // UpdateProjectID updates the Option for projID and returns cloud project ID to use.

@@ -28,7 +28,7 @@ func TestSisoMain(t *testing.T) {
 		t.Fatalf("Failed to change directory: %v", err)
 	}
 
-	exitCode := sisoMain()
+	exitCode := sisoMain(t.Context())
 	if exitCode != 0 {
 		t.Fatalf("sisoMain() returned exit code %d", exitCode)
 	}

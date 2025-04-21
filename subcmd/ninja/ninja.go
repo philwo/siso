@@ -15,23 +15,19 @@ import (
 	"io/fs"
 	"math"
 	"os"
-	"os/signal"
 	"path/filepath"
 	"runtime/debug"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/charmbracelet/log"
 	"github.com/klauspost/cpuid/v2"
-	"github.com/maruel/subcommands"
 	"golang.org/x/oauth2"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	"go.chromium.org/luci/cipd/version"
-	"go.chromium.org/luci/common/cli"
 
 	"go.chromium.org/infra/build/siso/auth/cred"
 	"go.chromium.org/infra/build/siso/build"
@@ -51,65 +47,44 @@ const ninjaUsage = `build the requested targets as ninja.
 
 `
 
-// Cmd returns the Command for the `ninja` subcommand provided by this package.
-func Cmd(ts oauth2.TokenSource, version string) *subcommands.Command {
-	return &subcommands.Command{
-		UsageLine: "ninja <args>...",
-		ShortDesc: "build the requests targets as ninja",
-		LongDesc:  ninjaUsage,
-		CommandRun: func() subcommands.CommandRun {
-			r := ninjaCmdRun{
-				ts:      ts,
-				version: version,
-			}
-			r.init()
-			return &r
-		},
-	}
-}
-
-type ninjaCmdRun struct {
-	subcommands.CommandRunBase
-	ts      oauth2.TokenSource
+type NinjaOpts struct {
+	Ts      oauth2.TokenSource
 	version string
 	started time.Time
 
 	// flag values
-	dir        string
-	configName string
-	projectID  string
+	Dir        string
+	ConfigName string
+	ProjectID  string
 
-	offline    bool
-	dryRun     bool
-	clobber    bool
-	actionSalt string
+	Offline    bool
+	DryRun     bool
+	Clobber    bool
+	ActionSalt string
 
-	remoteJobs int
-	fname      string
+	RemoteJobs int
+	Fname      string
 
-	configRepoDir  string
-	configFilename string
+	ConfigRepoDir  string
+	ConfigFilename string
 
-	outputLocalStrategy string
+	OutputLocalStrategy string
 
-	depsLogFile string
+	DepsLogFile string
 
-	fsopt             *hashfs.Option
-	reopt             *reapi.Option
-	reCacheEnableRead bool
+	Fsopt             *hashfs.Option
+	Reopt             *reapi.Option
+	ReCacheEnableRead bool
 
-	startDir string
+	StartDir   string
+	CredHelper string
+
+	Targets []string
 }
 
 // Run runs the `ninja` subcommand.
-func (c *ninjaCmdRun) Run(a subcommands.Application, args []string, env subcommands.Env) int {
+func (c *NinjaOpts) Run(ctx context.Context) int {
 	c.started = time.Now()
-	ctx := cli.GetContext(a, c, env)
-	err := parseFlagsFully(&c.Flags)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return 2
-	}
 	stats, err := c.run(ctx)
 	d := time.Since(c.started)
 	sps := float64(stats.Done-stats.Skipped) / d.Seconds()
@@ -173,35 +148,6 @@ func (c *ninjaCmdRun) Run(a subcommands.Application, args []string, env subcomma
 	return 0
 }
 
-// parse flags without stopping at non flags.
-func parseFlagsFully(flagSet *flag.FlagSet) error {
-	var targets []string
-	for {
-		args := flagSet.Args()
-		if len(args) == 0 {
-			break
-		}
-		argsRemaining := len(args)
-		for i, arg := range args {
-			if !strings.HasPrefix(arg, "-") {
-				targets = append(targets, arg)
-				argsRemaining--
-				continue
-			}
-			err := flagSet.Parse(args[i:])
-			if err != nil {
-				return err
-			}
-			break
-		}
-		if argsRemaining == 0 {
-			break
-		}
-	}
-	// targets are non-flags. set it to Args.
-	return flagSet.Parse(targets)
-}
-
 type buildError struct {
 	err error
 }
@@ -220,50 +166,12 @@ func (f flagError) Error() string {
 
 var errNothingToDo = errors.New("nothing to do")
 
-type errInterrupted struct{}
-
-func (errInterrupted) Error() string        { return "interrupt by signal" }
-func (errInterrupted) Is(target error) bool { return target == context.Canceled }
-
-// HandleInterrupt calls 'fn' in a separate goroutine on SIGTERM or Ctrl+C.
-//
-// When SIGTERM or Ctrl+C comes for a second time, logs to stderr and kills
-// the process immediately via os.Exit(1).
-//
-// Returns a callback that can be used to remove the installed signal handlers.
-func HandleInterrupt(fn func()) (stopper func()) {
-	ch := make(chan os.Signal, 2)
-	signal.Notify(ch, os.Interrupt, syscall.SIGTERM)
-
-	go func() {
-		handled := false
-		for range ch {
-			if handled {
-				fmt.Fprintf(os.Stderr, "Got second interrupt signal. Aborting.\n")
-				os.Exit(1)
-			}
-			handled = true
-			go fn()
-		}
-	}()
-
-	return func() {
-		signal.Stop(ch)
-		close(ch)
-	}
-}
-
-func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
-	ctx, cancel := context.WithCancelCause(ctx)
-	defer HandleInterrupt(func() {
-		cancel(errInterrupted{})
-	})()
-
-	if c.offline {
+func (c *NinjaOpts) run(ctx context.Context) (stats build.Stats, err error) {
+	if c.Offline {
 		fmt.Fprintln(os.Stderr, ui.SGR(ui.Red, "offline mode"))
 		log.Warnf("offline mode")
-		c.reopt = new(reapi.Option)
-		c.projectID = ""
+		c.Reopt = new(reapi.Option)
+		c.ProjectID = ""
 	}
 
 	execRoot, err := c.initWorkdirs()
@@ -271,20 +179,20 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		return stats, err
 	}
 
-	buildPath := build.NewPath(execRoot, c.dir)
+	buildPath := build.NewPath(execRoot, c.Dir)
 
 	// compute default limits based on fstype of work dir, not of exec root.
 	limits := build.DefaultLimits()
-	if c.remoteJobs > 0 {
-		limits.Remote = c.remoteJobs
+	if c.RemoteJobs > 0 {
+		limits.Remote = c.RemoteJobs
 	}
 
-	projectID := c.reopt.UpdateProjectID(c.projectID)
+	projectID := c.Reopt.UpdateProjectID(c.ProjectID)
 
 	var credential cred.Cred
 	if projectID != "" {
 		log.Infof("init credentials")
-		credential, err = cred.New(ctx, c.ts)
+		credential, err = cred.New(ctx, c.Ts)
 		if err != nil {
 			return stats, err
 		}
@@ -314,7 +222,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	}
 	c.checkResourceLimits()
 
-	targets := c.Flags.Args()
+	targets := c.Targets
 	config, err := c.initConfig(ctx, execRoot, targets)
 	if err != nil {
 		return stats, err
@@ -331,8 +239,8 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		return nil
 	})
 
-	if c.reopt.IsValid() {
-		log.Infof("reapi instance: %s", c.reopt.Instance)
+	if c.Reopt.IsValid() {
+		log.Infof("reapi instance: %s", c.Reopt.Instance)
 	}
 	ds, err := c.initDataSource(ctx, credential)
 	if err != nil {
@@ -344,16 +252,16 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 			log.Errorf("close datasource: %v", err)
 		}
 	}()
-	c.fsopt.DataSource = ds
-	c.fsopt.OutputLocal, err = c.initOutputLocal()
+	c.Fsopt.DataSource = ds
+	c.Fsopt.OutputLocal, err = c.initOutputLocal()
 	if err != nil {
 		return stats, err
 	}
-	cwd := filepath.Join(execRoot, c.dir)
+	cwd := filepath.Join(execRoot, c.Dir)
 
 	// ignore siso files not to be captured by ReadDir
 	// (i.g. scandeps for -I.)
-	c.fsopt.Ignore = func(ctx context.Context, fname string) bool {
+	c.Fsopt.Ignore = func(ctx context.Context, fname string) bool {
 		dir, base := filepath.Split(fname)
 		// allow siso prefix in other dir.
 		// e.g. siso.gni exists in build/config/siso.
@@ -374,12 +282,12 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 
 	log.Infof("loading fs state")
 
-	hashFS, err := hashfs.New(ctx, *c.fsopt)
+	hashFS, err := hashfs.New(ctx, *c.Fsopt)
 	if err != nil {
 		return stats, err
 	}
 	defer func() {
-		hashFS.SetBuildTargets(targets, !c.dryRun && err == nil)
+		hashFS.SetBuildTargets(targets, !c.DryRun && err == nil)
 		err := hashFS.Close(ctx)
 		if err != nil {
 			log.Errorf("close hashfs: %v", err)
@@ -404,20 +312,20 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	}
 	// TODO(b/286501388): init concurrently for .siso_config/.siso_filegroups, build.ninja.
 	log.Infof("load siso config")
-	stepConfig, err := ninjabuild.NewStepConfig(ctx, config, buildPath, hashFS, c.fname)
+	stepConfig, err := ninjabuild.NewStepConfig(ctx, config, buildPath, hashFS, c.Fname)
 	if err != nil {
 		return stats, err
 	}
 
-	log.Infof("load %s", c.fname)
-	nstate, err := ninjabuild.Load(ctx, c.fname, buildPath)
+	log.Infof("load %s", c.Fname)
+	nstate, err := ninjabuild.Load(ctx, c.Fname, buildPath)
 	if err != nil {
 		return stats, err
 	}
 
-	graph := ninjabuild.NewGraph(c.fname, nstate, config, buildPath, hashFS, stepConfig, localDepsLog)
+	graph := ninjabuild.NewGraph(c.Fname, nstate, config, buildPath, hashFS, stepConfig, localDepsLog)
 
-	return runNinja(ctx, c.fname, graph, bopts, targets)
+	return runNinja(ctx, c.Fname, graph, bopts, targets)
 }
 
 func runNinja(ctx context.Context, fname string, graph *ninjabuild.Graph, bopts build.Options, targets []string) (build.Stats, error) {
@@ -441,47 +349,7 @@ func runNinja(ctx context.Context, fname string, graph *ninjabuild.Graph, bopts 
 	}
 }
 
-func (c *ninjaCmdRun) init() {
-	c.Flags.StringVar(&c.dir, "C", ".", "ninja running directory")
-	c.Flags.StringVar(&c.configName, "config", "", "config name passed to starlark")
-	c.Flags.StringVar(&c.projectID, "project", os.Getenv("SISO_PROJECT"), "cloud project ID. can set by $SISO_PROJECT")
-
-	c.Flags.BoolVar(&c.offline, "offline", false, "offline mode.")
-	c.Flags.BoolVar(&c.offline, "o", false, "alias of `-offline`")
-	if f := c.Flags.Lookup("offline"); f != nil {
-		if s := os.Getenv("RBE_remote_disabled"); s != "" {
-			err := f.Value.Set(s)
-			if err != nil {
-				log.Errorf("invalid RBE_remote_disabled=%q: %v", s, err)
-			}
-		}
-	}
-	c.Flags.BoolVar(&c.dryRun, "n", false, "dry run")
-	c.Flags.BoolVar(&c.clobber, "clobber", false, "clobber build")
-	c.Flags.StringVar(&c.actionSalt, "action_salt", "", "action salt")
-
-	c.Flags.IntVar(&c.remoteJobs, "remote_jobs", 0, "run N remote jobs in parallel. when the value is <= 0, it will be computed based on # of CPUs.")
-	c.Flags.StringVar(&c.fname, "f", "build.ninja", "input build manifest filename (relative to -C)")
-
-	c.Flags.StringVar(&c.configRepoDir, "config_repo_dir", "build/config/siso", "config repo directory (relative to exec root)")
-	c.Flags.StringVar(&c.configFilename, "load", "@config//main.star", "config filename (@config// is --config_repo_dir)")
-	c.Flags.StringVar(&c.outputLocalStrategy, "output_local_strategy", "full", `strategy for output_local. "full": download all outputs. "greedy": downloads most outputs except intermediate objs. "minimum": downloads as few as possible`)
-	c.Flags.StringVar(&c.depsLogFile, "deps_log", ".siso_deps", "deps log filename (relative to -C)")
-
-	c.fsopt = new(hashfs.Option)
-	c.fsopt.StateFile = ".siso_fs_state"
-	c.fsopt.RegisterFlags(&c.Flags)
-
-	c.reopt = new(reapi.Option)
-	envs := map[string]string{
-		"SISO_REAPI_INSTANCE": os.Getenv("SISO_REAPI_INSTANCE"),
-		"SISO_REAPI_ADDRESS":  os.Getenv("SISO_REAPI_ADDRESS"),
-	}
-	c.reopt.RegisterFlags(&c.Flags, envs)
-	c.Flags.BoolVar(&c.reCacheEnableRead, "re_cache_enable_read", true, "remote exec cache enable read")
-}
-
-func (c *ninjaCmdRun) initWorkdirs() (string, error) {
+func (c *NinjaOpts) initWorkdirs() (string, error) {
 	// don't use $PWD for current directory
 	// to avoid symlink issue. b/286779149
 	pwd := os.Getenv("PWD")
@@ -494,21 +362,21 @@ func (c *ninjaCmdRun) initWorkdirs() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	c.startDir = execRoot
+	c.StartDir = execRoot
 	log.Infof("wd: %s", execRoot)
 	// The formatting of this string, complete with funny quotes, is
 	// so Emacs can properly identify that the cwd has changed for
 	// subsequent commands.
 	// Don't print this if a tool is being used, so that tool output
 	// can be piped into a file without this string showing up.
-	if c.dir != "." {
-		log.Infof("ninja: Entering directory `%s'", c.dir)
+	if c.Dir != "." {
+		log.Infof("ninja: Entering directory `%s'", c.Dir)
 	}
-	err = os.Chdir(c.dir)
+	err = os.Chdir(c.Dir)
 	if err != nil {
 		return "", err
 	}
-	log.Infof("change dir to %s", c.dir)
+	log.Infof("change dir to %s", c.Dir)
 	cwd, err := os.Getwd()
 	if err != nil {
 		return "", err
@@ -520,12 +388,12 @@ func (c *ninjaCmdRun) initWorkdirs() (string, error) {
 		log.Infof("cwd %s -> %s", cwd, realCWD)
 		cwd = realCWD
 	}
-	if !filepath.IsAbs(c.configRepoDir) {
-		execRoot, err = build.DetectExecRoot(cwd, c.configRepoDir)
+	if !filepath.IsAbs(c.ConfigRepoDir) {
+		execRoot, err = build.DetectExecRoot(cwd, c.ConfigRepoDir)
 		if err != nil {
 			return "", err
 		}
-		c.configRepoDir = filepath.Join(execRoot, c.configRepoDir)
+		c.ConfigRepoDir = filepath.Join(execRoot, c.ConfigRepoDir)
 	}
 	log.Infof("exec_root: %s", execRoot)
 
@@ -538,21 +406,21 @@ func (c *ninjaCmdRun) initWorkdirs() (string, error) {
 	if !filepath.IsLocal(rdir) {
 		return "", fmt.Errorf("dir %q is out of exec root %q", cwd, execRoot)
 	}
-	c.dir = rdir
-	log.Infof("working_directory in exec_root: %s", c.dir)
-	if c.startDir != execRoot {
-		log.Infof("exec_root=%s dir=%s", execRoot, c.dir)
+	c.Dir = rdir
+	log.Infof("working_directory in exec_root: %s", c.Dir)
+	if c.StartDir != execRoot {
+		log.Infof("exec_root=%s dir=%s", execRoot, c.Dir)
 	}
-	_, err = os.Stat(c.fname)
+	_, err = os.Stat(c.Fname)
 	if errors.Is(err, fs.ErrNotExist) {
-		return "", fmt.Errorf("%s not found in %s. need `-C <dir>`?", c.fname, cwd)
+		return "", fmt.Errorf("%s not found in %s. need `-C <dir>`?", c.Fname, cwd)
 	}
 	return execRoot, err
 }
 
-func (c *ninjaCmdRun) initFlags(targets []string) map[string]string {
+func (c *NinjaOpts) initFlags(targets []string) map[string]string {
 	flags := make(map[string]string)
-	c.Flags.Visit(func(f *flag.Flag) {
+	flag.Visit(func(f *flag.Flag) {
 		name := f.Name
 		if name == "C" {
 			name = "dir"
@@ -563,16 +431,16 @@ func (c *ninjaCmdRun) initFlags(targets []string) map[string]string {
 	return flags
 }
 
-func (c *ninjaCmdRun) initConfig(ctx context.Context, execRoot string, targets []string) (*buildconfig.Config, error) {
-	if c.configFilename == "" {
+func (c *NinjaOpts) initConfig(ctx context.Context, execRoot string, targets []string) (*buildconfig.Config, error) {
+	if c.ConfigFilename == "" {
 		return nil, errors.New("no config filename")
 	}
 	cfgrepos := map[string]fs.FS{
-		"config":           os.DirFS(c.configRepoDir),
+		"config":           os.DirFS(c.ConfigRepoDir),
 		"config_overrides": os.DirFS(filepath.Join(execRoot, ".siso_remote")),
 	}
 	flags := c.initFlags(targets)
-	config, err := buildconfig.New(ctx, c.configFilename, flags, cfgrepos)
+	config, err := buildconfig.New(ctx, c.ConfigFilename, flags, cfgrepos)
 	if err != nil {
 		return nil, err
 	}
@@ -589,13 +457,13 @@ func (c *ninjaCmdRun) initConfig(ctx context.Context, execRoot string, targets [
 	return config, nil
 }
 
-func (c *ninjaCmdRun) initDepsLog() (*ninjautil.DepsLog, error) {
-	err := os.MkdirAll(filepath.Dir(c.depsLogFile), 0755)
+func (c *NinjaOpts) initDepsLog() (*ninjautil.DepsLog, error) {
+	err := os.MkdirAll(filepath.Dir(c.DepsLogFile), 0755)
 	if err != nil {
 		log.Warnf("failed to mkdir for deps log: %v", err)
 		return nil, err
 	}
-	depsLog, err := ninjautil.NewDepsLog(c.depsLogFile)
+	depsLog, err := ninjautil.NewDepsLog(c.DepsLogFile)
 	if err != nil {
 		log.Warnf("failed to load deps log: %v", err)
 		return nil, err
@@ -611,10 +479,10 @@ func (c *ninjaCmdRun) initDepsLog() (*ninjautil.DepsLog, error) {
 	return depsLog, nil
 }
 
-func (c *ninjaCmdRun) initBuildOpts(projectID string, buildPath *build.Path, config *buildconfig.Config, ds dataSource, hashFS *hashfs.HashFS, limits build.Limits) (bopts build.Options, err error) {
+func (c *NinjaOpts) initBuildOpts(projectID string, buildPath *build.Path, config *buildconfig.Config, ds dataSource, hashFS *hashfs.HashFS, limits build.Limits) (bopts build.Options, err error) {
 	var actionSaltBytes []byte
-	if c.actionSalt != "" {
-		actionSaltBytes = []byte(c.actionSalt)
+	if c.ActionSalt != "" {
+		actionSaltBytes = []byte(c.ActionSalt)
 	}
 
 	cache, err := build.NewCache(build.CacheOptions{
@@ -630,12 +498,12 @@ func (c *ninjaCmdRun) initBuildOpts(projectID string, buildPath *build.Path, con
 		Path:              buildPath,
 		HashFS:            hashFS,
 		REAPIClient:       ds.client,
-		RECacheEnableRead: c.reCacheEnableRead,
+		RECacheEnableRead: c.ReCacheEnableRead,
 		ActionSalt:        actionSaltBytes,
-		OutputLocal:       build.OutputLocalFunc(c.fsopt.OutputLocal),
+		OutputLocal:       build.OutputLocalFunc(c.Fsopt.OutputLocal),
 		Cache:             cache,
-		Clobber:           c.clobber,
-		DryRun:            c.dryRun,
+		Clobber:           c.Clobber,
+		DryRun:            c.DryRun,
 		Limits:            limits,
 	}
 	return bopts, nil
@@ -709,12 +577,12 @@ type dataSource struct {
 	client *reapi.Client
 }
 
-func (c *ninjaCmdRun) initDataSource(ctx context.Context, credential cred.Cred) (dataSource, error) {
+func (c *NinjaOpts) initDataSource(ctx context.Context, credential cred.Cred) (dataSource, error) {
 	layeredCache := build.NewLayeredCache()
 	var ds dataSource
 	var err error
-	if c.reopt.IsValid() {
-		ds.client, err = reapi.New(ctx, credential, *c.reopt)
+	if c.Reopt.IsValid() {
+		ds.client, err = reapi.New(ctx, credential, *c.Reopt)
 		if err != nil {
 			return ds, err
 		}
@@ -776,8 +644,8 @@ func (s source) String() string {
 	return fmt.Sprintf("dataSource:%s", s.fname)
 }
 
-func (c *ninjaCmdRun) initOutputLocal() (func(context.Context, string) bool, error) {
-	switch c.outputLocalStrategy {
+func (c *NinjaOpts) initOutputLocal() (func(context.Context, string) bool, error) {
+	switch c.OutputLocalStrategy {
 	case "full":
 		return func(context.Context, string) bool { return true }, nil
 	case "greedy":
@@ -803,7 +671,7 @@ func (c *ninjaCmdRun) initOutputLocal() (func(context.Context, string) bool, err
 			return false
 		}, nil
 	default:
-		return nil, fmt.Errorf("unknown output local strategy: %q. should be full/greedy/minimum", c.outputLocalStrategy)
+		return nil, fmt.Errorf("unknown output local strategy: %q. should be full/greedy/minimum", c.OutputLocalStrategy)
 	}
 }
 
