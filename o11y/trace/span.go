@@ -139,24 +139,6 @@ func NewSpan(ctx context.Context, name string) (context.Context, *Span) {
 	return context.WithValue(ctx, spanKey, span), span
 }
 
-// ID returns the trace id.
-func ID(ctx context.Context) string {
-	t, ok := ctx.Value(contextKey).(*Context)
-	if !ok {
-		return ""
-	}
-	return uuid.UUID(t.traceID).String()
-}
-
-// CurSpan returns current span in the context.
-func CurSpan(ctx context.Context) *Span {
-	span, ok := ctx.Value(spanKey).(*Span)
-	if !ok {
-		return nil
-	}
-	return span
-}
-
 // Span is a trace span.
 type Span struct {
 	t      *Context

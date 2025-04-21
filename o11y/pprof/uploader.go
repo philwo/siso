@@ -33,17 +33,6 @@ type Uploader struct {
 	labels map[string]string
 }
 
-// NewUploader creates new profile uploader.
-func NewUploader(ctx context.Context, opts Options) (*Uploader, error) {
-	p := &Uploader{
-		projectID:   opts.ProjectID,
-		dialOptions: opts.DialOptions,
-		target:      "siso-build",
-		labels:      map[string]string{},
-	}
-	return p, nil
-}
-
 var validLabelRE = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 
 // SetMetadata sets metadata to the uploader.

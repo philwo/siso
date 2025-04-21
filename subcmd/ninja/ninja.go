@@ -2041,30 +2041,6 @@ func checkTargets(ctx context.Context, lastTargetsFilename string, targets []str
 	return failed, true
 }
 
-func argsGN(args, key string) string {
-	for _, line := range strings.Split(args, "\n") {
-		i := strings.Index(line, "#")
-		if i >= 0 {
-			line = line[:i]
-		}
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		if !strings.HasPrefix(line, key) {
-			continue
-		}
-		value := strings.TrimPrefix(line, key)
-		value = strings.TrimSpace(value)
-		if !strings.HasPrefix(value, "=") {
-			continue
-		}
-		value = strings.TrimPrefix(value, "=")
-		return strings.TrimSpace(value)
-	}
-	return ""
-}
-
 func cpuinfo() string {
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "cpu family=%d model=%d stepping=%d ", cpuid.CPU.Family, cpuid.CPU.Model, cpuid.CPU.Stepping)
