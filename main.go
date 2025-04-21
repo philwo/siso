@@ -27,7 +27,6 @@ import (
 	"go.chromium.org/infra/build/siso/subcmd/authcheck"
 	"go.chromium.org/infra/build/siso/subcmd/help"
 	"go.chromium.org/infra/build/siso/subcmd/ninja"
-	"go.chromium.org/infra/build/siso/subcmd/query"
 	"go.chromium.org/infra/build/siso/subcmd/version"
 )
 
@@ -50,7 +49,6 @@ func getApplication(ts oauth2.TokenSource) *cli.Application {
 		Commands: []*subcommands.Command{
 			help.Cmd(),
 			ninja.Cmd(ts, versionID),
-			query.Cmd(),
 			authcheck.Cmd(ts),
 			version.Cmd(versionStr),
 		},
