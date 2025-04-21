@@ -12,10 +12,6 @@ import (
 	"github.com/charmbracelet/log"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-
-	"go.chromium.org/luci/common/errors"
-	"go.chromium.org/luci/common/retry"
-	"go.chromium.org/luci/common/retry/transient"
 )
 
 func retriableError(err error, authRetry *int) bool {
@@ -61,15 +57,36 @@ func retriableError(err error, authRetry *int) bool {
 }
 
 // Do calls function `f` and retries with exponential backoff for errors that are known to be retriable.
-func Do(ctx context.Context, f func() error) error {
+func Do(ctx context.Context, fn func() error) (err error) {
 	authRetry := 0
-	return retry.Retry(ctx, transient.Only(retry.Default), func() error {
-		err := f()
-		if retriableError(err, &authRetry) {
-			return errors.Annotate(err, "retriable error").Tag(transient.Tag).Err()
+	delay := 200 * time.Millisecond
+	for retryCount := 0; retryCount < 10; retryCount++ {
+		// If we've been cancelled, don't call fn.
+		if ctx.Err() != nil {
+			return ctx.Err()
 		}
-		return err
-	}, func(err error, backoff time.Duration) {
-		log.Warnf("retry backoff:%s: %v", backoff, err)
-	})
+
+		// Execute the function.
+		if err = fn(); err == nil {
+			return nil
+		}
+
+		// If we've been cancelled, don't call Next or callback.
+		if ctx.Err() != nil {
+			return err
+		}
+
+		// If the error is not retriable, return it.
+		if !retriableError(err, &authRetry) {
+			return err
+		}
+
+		// If the error is retriable, calculate the delay.
+		delay = min(delay*2, 10*time.Second)
+		log.Warnf("retry backoff:%s: %v", delay, err)
+		time.Sleep(delay)
+	}
+
+	// We've exhausted our retries, return the last error.
+	return err
 }

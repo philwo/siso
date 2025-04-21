@@ -25,8 +25,6 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/proto"
 
-	"go.chromium.org/luci/cipd/version"
-
 	"go.chromium.org/infra/build/siso/auth/cred"
 	"go.chromium.org/infra/build/siso/reapi/digest"
 )
@@ -298,13 +296,6 @@ func (c *Client) GetActionResult(ctx context.Context, d digest.Digest) (*rpb.Act
 
 // NewContext returns new context with request metadata.
 func NewContext(ctx context.Context, rmd *rpb.RequestMetadata) context.Context {
-	ver, err := version.GetStartupVersion()
-	if err == nil {
-		rmd.ToolDetails = &rpb.ToolDetails{
-			ToolName:    ver.PackageName,
-			ToolVersion: ver.InstanceID,
-		}
-	}
 	// Append metadata to the context.
 	// See the document for the specification.
 	// https://github.com/bazelbuild/remote-apis/blob/8f539af4b407a4f649707f9632fc2b715c9aa065/build/bazel/remote/execution/v2/remote_execution.proto#L2034-L2045

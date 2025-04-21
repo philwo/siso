@@ -27,8 +27,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"go.chromium.org/luci/cipd/version"
-
 	"go.chromium.org/infra/build/siso/auth/cred"
 	"go.chromium.org/infra/build/siso/build"
 	"go.chromium.org/infra/build/siso/build/buildconfig"
@@ -202,21 +200,14 @@ func (c *NinjaOpts) run(ctx context.Context) (stats build.Stats, err error) {
 	log.Infof("%s", gcinfo())
 
 	log.Infof("siso version %s", c.version)
-	if cmdver, err := version.GetStartupVersion(); err != nil {
-		log.Warnf("cannot determine CIPD package version: %s", err)
-	} else if cmdver.PackageName != "" {
-		log.Infof("CIPD package name: %s", cmdver.PackageName)
-		log.Infof("CIPD instance ID: %s", cmdver.InstanceID)
-	} else {
-		buildInfo, ok := debug.ReadBuildInfo()
-		if ok {
-			if buildInfo.GoVersion != "" {
-				log.Infof("Go version: %s", buildInfo.GoVersion)
-			}
-			for _, s := range buildInfo.Settings {
-				if strings.HasPrefix(s.Key, "vcs.") || strings.HasPrefix(s.Key, "-") {
-					log.Infof("build_%s=%s", s.Key, s.Value)
-				}
+	buildInfo, ok := debug.ReadBuildInfo()
+	if ok {
+		if buildInfo.GoVersion != "" {
+			log.Infof("Go version: %s", buildInfo.GoVersion)
+		}
+		for _, s := range buildInfo.Settings {
+			if strings.HasPrefix(s.Key, "vcs.") || strings.HasPrefix(s.Key, "-") {
+				log.Infof("build_%s=%s", s.Key, s.Value)
 			}
 		}
 	}
