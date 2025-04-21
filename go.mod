@@ -10,7 +10,6 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/klauspost/compress v1.18.0
 	github.com/klauspost/cpuid/v2 v2.2.10
-	go.chromium.org/luci v0.0.0-20250421191518-241162aaea79
 	go.starlark.net v0.0.0-20250417143717-f57e51f710eb
 	golang.org/x/oauth2 v0.29.0
 	golang.org/x/sync v0.13.0
