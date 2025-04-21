@@ -23,7 +23,6 @@ import (
 	"go.chromium.org/luci/common/cli"
 
 	"go.chromium.org/infra/build/siso/auth/cred"
-	"go.chromium.org/infra/build/siso/subcmd/authcheck"
 	"go.chromium.org/infra/build/siso/subcmd/help"
 	"go.chromium.org/infra/build/siso/subcmd/ninja"
 	"go.chromium.org/infra/build/siso/subcmd/ninjafrontend"
@@ -50,7 +49,6 @@ func getApplication(ts oauth2.TokenSource) *cli.Application {
 			help.Cmd(),
 			ninja.Cmd(ts, versionID),
 			ninjafrontend.Cmd(),
-			authcheck.Cmd(ts),
 			version.Cmd(versionStr),
 		},
 		EnvVars: map[string]subcommands.EnvVarDefinition{
