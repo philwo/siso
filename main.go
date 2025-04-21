@@ -24,7 +24,6 @@ import (
 	"go.chromium.org/luci/common/cli"
 
 	"go.chromium.org/infra/build/siso/auth/cred"
-	"go.chromium.org/infra/build/siso/subcmd/help"
 	"go.chromium.org/infra/build/siso/subcmd/ninja"
 	"go.chromium.org/infra/build/siso/subcmd/version"
 )
@@ -46,7 +45,6 @@ func getApplication(ts oauth2.TokenSource) *cli.Application {
 		Name:  "siso",
 		Title: "Ninja-compatible build system optimized for remote execution",
 		Commands: []*subcommands.Command{
-			help.Cmd(),
 			ninja.Cmd(ts, versionID),
 			version.Cmd(versionStr),
 		},
