@@ -6,6 +6,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"net/http"
@@ -15,16 +16,14 @@ import (
 	"runtime"
 	"runtime/pprof"
 	"syscall"
+	"time"
 
 	"github.com/charmbracelet/log"
-	"github.com/maruel/subcommands"
-	"golang.org/x/oauth2"
-
-	"go.chromium.org/luci/common/cli"
 
 	"go.chromium.org/infra/build/siso/auth/cred"
+	"go.chromium.org/infra/build/siso/hashfs"
+	"go.chromium.org/infra/build/siso/reapi"
 	"go.chromium.org/infra/build/siso/subcmd/ninja"
-	"go.chromium.org/infra/build/siso/subcmd/ninjafrontend"
 )
 
 var (
@@ -39,43 +38,52 @@ var (
 const versionID = "v1.3.7"
 const versionStr = "siso " + versionID
 
-func getApplication(ts oauth2.TokenSource) *cli.Application {
-	return &cli.Application{
-		Name:  "siso",
-		Title: "Ninja-compatible build system optimized for remote execution",
-		Commands: []*subcommands.Command{
-			ninja.Cmd(ts, versionID),
-			ninjafrontend.Cmd(),
-		},
-		EnvVars: map[string]subcommands.EnvVarDefinition{
-			"SISO_PROJECT": {
-				ShortDesc: "cloud project ID",
-			},
-			"SISO_REAPI_INSTANCE": {
-				Advanced:  true,
-				ShortDesc: "RE API instance name",
-				Default:   "default_instance",
-			},
-			"SISO_REAPI_ADDRESS": {
-				Advanced:  true,
-				ShortDesc: "RE API address",
-				Default:   "remotebuildexecution.googleapis.com:443",
-			},
-			"SISO_CREDENTIAL_HELPER": {
-				Advanced:  true,
-				ShortDesc: "credential helper",
-				Default:   "",
-			},
-		},
+type errInterrupted struct{}
+
+func (errInterrupted) Error() string        { return "interrupt by signal" }
+func (errInterrupted) Is(target error) bool { return target == context.Canceled }
+
+// HandleInterrupt calls 'fn' in a separate goroutine on SIGTERM or Ctrl+C.
+//
+// When SIGTERM or Ctrl+C comes for a second time, logs to stderr and kills
+// the process immediately via os.Exit(1).
+//
+// Returns a callback that can be used to remove the installed signal handlers.
+func HandleInterrupt(fn func()) (stopper func()) {
+	ch := make(chan os.Signal, 2)
+	signal.Notify(ch, os.Interrupt, syscall.SIGTERM)
+
+	go func() {
+		handled := false
+		for range ch {
+			if handled {
+				fmt.Fprintf(os.Stderr, "Got second interrupt signal. Aborting.\n")
+				os.Exit(1)
+			}
+			handled = true
+			go fn()
+		}
+	}()
+
+	return func() {
+		signal.Stop(ch)
+		close(ch)
 	}
 }
 
 func main() {
 	// Wraps sisoMain() because os.Exit() doesn't wait defers.
-	os.Exit(sisoMain())
+	os.Exit(sisoMain(context.Background()))
 }
 
-func sisoMain() int {
+func sisoMain(ctx context.Context) int {
+	ctx, cancel := context.WithCancelCause(context.Background())
+	defer HandleInterrupt(func() {
+		cancel(errInterrupted{})
+	})()
+
+	c := &ninja.NinjaOpts{}
+
 	flag.Usage = func() {
 		fmt.Fprint(flag.CommandLine.Output(), `
 Usage: siso [command] [arguments]
@@ -96,18 +104,74 @@ Use "siso help -advanced" to display all commands.
 	flag.IntVar(&mutexprofFrac, "mutexprof_frac", 0, "mutex profile fraction")
 	flag.StringVar(&traceFile, "trace", "", `go trace output for "go tool trace"`)
 
+	flag.StringVar(&c.Dir, "C", ".", "ninja running directory")
+	flag.StringVar(&c.ConfigName, "config", "", "config name passed to starlark")
+	flag.StringVar(&c.ProjectID, "project", os.Getenv("SISO_PROJECT"), "cloud project ID. can set by $SISO_PROJECT")
+
+	flag.BoolVar(&c.Offline, "offline", false, "offline mode.")
+	flag.BoolVar(&c.Offline, "o", false, "alias of `-offline`")
+	if f := flag.Lookup("offline"); f != nil {
+		if s := os.Getenv("RBE_remote_disabled"); s != "" {
+			err := f.Value.Set(s)
+			if err != nil {
+				log.Errorf("invalid RBE_remote_disabled=%q: %v", s, err)
+			}
+		}
+	}
+	flag.BoolVar(&c.DryRun, "n", false, "dry run")
+	flag.BoolVar(&c.Clobber, "clobber", false, "clobber build")
+	flag.StringVar(&c.ActionSalt, "action_salt", "", "action salt")
+
+	flag.IntVar(&c.RemoteJobs, "remote_jobs", 0, "run N remote jobs in parallel. when the value is <= 0, it will be computed based on # of CPUs.")
+	flag.StringVar(&c.Fname, "f", "build.ninja", "input build manifest filename (relative to -C)")
+
+	flag.StringVar(&c.ConfigRepoDir, "config_repo_dir", "build/config/siso", "config repo directory (relative to exec root)")
+	flag.StringVar(&c.ConfigFilename, "load", "@config//main.star", "config filename (@config// is --config_repo_dir)")
+	flag.StringVar(&c.OutputLocalStrategy, "output_local_strategy", "full", `strategy for output_local. "full": download all outputs. "greedy": downloads most outputs except intermediate objs. "minimum": downloads as few as possible`)
+	flag.StringVar(&c.DepsLogFile, "deps_log", ".siso_deps", "deps log filename (relative to -C)")
+
+	c.Fsopt = new(hashfs.Option)
+	c.Fsopt.StateFile = ".siso_fs_state"
+
+	c.Reopt = new(reapi.Option)
+
+	addr := os.Getenv("SISO_REAPI_ADDRESS")
+	if addr == "" {
+		addr = "remotebuildexecution.googleapis.com:443"
+	}
+	flag.StringVar(&c.Reopt.Address, "reapi_address", addr, "reapi address")
+	flag.StringVar(&c.Reopt.CASAddress, "reapi_cas_address", "", "reapi cas address (if empty, share conn with "+"reapi_address)")
+	instance := os.Getenv("SISO_REAPI_INSTANCE")
+	if instance == "" {
+		instance = "default_instance"
+	}
+	flag.StringVar(&c.Reopt.Instance, "reapi_instance", instance, "reapi instance name")
+
+	flag.BoolVar(&c.Reopt.Insecure, "reapi_insecure", os.Getenv("RBE_service_no_security") == "true", "reapi insecure mode. default can be set by $RBE_service_no_security")
+
+	flag.StringVar(&c.Reopt.TLSClientAuthCert, "reapi_tls_client_auth_cert", os.Getenv("RBE_tls_client_auth_cert"), "Certificate to use when using mTLS to connect to the RE api service. default can be set by $RBE_tls_client_auth_cert")
+	flag.StringVar(&c.Reopt.TLSClientAuthKey, "reapi_tls_client_auth_key", os.Getenv("RBE_tls_client_auth_key"), "Key to use when using mTLS to connect to the RE api service. default can be set by $RBE_tls_client_auth_key")
+
+	flag.Int64Var(&c.Reopt.CompressedBlob, "reapi_compress_blob", 1024, "use compressed blobs if server supports compressed blobs and size is bigger than this. specify 0 to disable comporession.")
+
+	// https://grpc.io/docs/guides/keepalive/#keepalive-configuration-specification
+	// b/286237547 - RBE suggests 30s
+	flag.DurationVar(&c.Reopt.KeepAliveParams.Time, "reapi_grpc_keepalive_time", 30*time.Second, "grpc keepalive time")
+	flag.DurationVar(&c.Reopt.KeepAliveParams.Timeout, "reapi_grpc_keepalive_timeout", 20*time.Second, "grpc keepalive timeout")
+	flag.BoolVar(&c.Reopt.KeepAliveParams.PermitWithoutStream, "reapi_grpc_keepalive_permit_without_stream", false, "grpc keepalive permit without stream")
+
+	flag.BoolVar(&c.ReCacheEnableRead, "re_cache_enable_read", true, "remote exec cache enable read")
+
 	log.SetTimeFormat("2006-01-02 15:04:05")
 	log.SetReportCaller(true)
 
-	credHelper := ""
-	if h, ok := os.LookupEnv("SISO_CREDENTIAL_HELPER"); ok {
-		credHelper = h
-	}
-	flag.StringVar(&credHelper, "credential_helper", credHelper, "path to a credential helper. see https://github.com/EngFlow/credential-helper-spec/blob/main/spec.md")
+	flag.StringVar(&c.CredHelper, "credential_helper", os.Getenv("SISO_CREDENTIAL_HELPER"), "path to a credential helper. see https://github.com/EngFlow/credential-helper-spec/blob/main/spec.md")
 
 	var printVersion bool
 	flag.BoolVar(&printVersion, "version", false, "print version")
 	flag.Parse()
+
+	c.Targets = flag.Args()
 
 	// Print a stack trace when a panic occurs.
 	defer func() {
@@ -119,7 +183,7 @@ Use "siso help -advanced" to display all commands.
 		}
 	}()
 
-	authOpts := cred.AuthOpts(credHelper)
+	c.Ts = cred.AuthOpts(c.CredHelper)
 	if printVersion {
 		fmt.Fprintf(os.Stderr, "%s\n", versionStr)
 		return 0
@@ -175,5 +239,5 @@ Use "siso help -advanced" to display all commands.
 		}()
 	}
 
-	return subcommands.Run(getApplication(authOpts), nil)
+	return c.Run(ctx)
 }

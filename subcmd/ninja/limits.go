@@ -7,11 +7,9 @@ package ninja
 import (
 	"github.com/charmbracelet/log"
 	"golang.org/x/sys/unix"
-
-	"go.chromium.org/infra/build/siso/build"
 )
 
-func (c *ninjaCmdRun) checkResourceLimits(limits build.Limits) {
+func (c *NinjaOpts) checkResourceLimits() {
 	var lim unix.Rlimit
 	err := unix.Getrlimit(unix.RLIMIT_NOFILE, &lim)
 	if err != nil {
@@ -20,10 +18,10 @@ func (c *ninjaCmdRun) checkResourceLimits(limits build.Limits) {
 	}
 	nfile := uint64(limits.Local) * 8 // 8 fds per proc?
 	switch {
-	case c.offline:
-	case c.remoteJobs > 0:
+	case c.Offline:
+	case c.RemoteJobs > 0:
 		// scandeps server client+server
-		nfile += uint64(c.remoteJobs) * 4
+		nfile += uint64(c.RemoteJobs) * 4
 	default:
 		nfile += uint64(limits.Remote) * 4
 	}

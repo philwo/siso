@@ -9,14 +9,11 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
-	"os"
 	"path"
 	"strings"
 	"sync"
-	"time"
 
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
 	"github.com/charmbracelet/log"
@@ -54,72 +51,6 @@ type Option struct {
 
 	ConnPool        int
 	KeepAliveParams keepalive.ClientParameters
-}
-
-// Envs returns environment flags for reapi.
-func Envs(t string) map[string]string {
-	envs := map[string]string{}
-	if v, ok := os.LookupEnv(fmt.Sprintf("SISO_%s_INSTANCE", t)); ok {
-		envs["SISO_REAPI_INSTANCE"] = v
-	}
-	if v, ok := os.LookupEnv(fmt.Sprintf("SISO_%s_ADDRESS", t)); ok {
-		envs["SISO_REAPI_ADDRESS"] = v
-	}
-	return envs
-}
-
-// RegisterFlags registers flags on the option.
-func (o *Option) RegisterFlags(fs *flag.FlagSet, envs map[string]string) {
-	var purpose string
-	if o.Prefix == "" {
-		o.Prefix = "reapi"
-	} else {
-		purpose = fmt.Sprintf(" (for %s)", o.Prefix)
-	}
-	addr := envs["SISO_REAPI_ADDRESS"]
-	if addr == "" {
-		addr = "remotebuildexecution.googleapis.com:443"
-	}
-	fs.StringVar(&o.Address, o.Prefix+"_address", addr, "reapi address"+purpose)
-	fs.StringVar(&o.CASAddress, o.Prefix+"_cas_address", "", "reapi cas address"+purpose+" (if empty, share conn with "+o.Prefix+"_address)")
-	instance, ok := envs["SISO_REAPI_INSTANCE"]
-	if !ok {
-		instance = "default_instance"
-	}
-	fs.StringVar(&o.Instance, o.Prefix+"_instance", instance, "reapi instance name"+purpose)
-
-	fs.BoolVar(&o.Insecure, o.Prefix+"_insecure", os.Getenv("RBE_service_no_security") == "true", "reapi insecure mode. default can be set by $RBE_service_no_security")
-
-	fs.StringVar(&o.TLSClientAuthCert, o.Prefix+"_tls_client_auth_cert", os.Getenv("RBE_tls_client_auth_cert"), "Certificate to use when using mTLS to connect to the RE api service. default can be set by $RBE_tls_client_auth_cert")
-	fs.StringVar(&o.TLSClientAuthKey, o.Prefix+"_tls_client_auth_key", os.Getenv("RBE_tls_client_auth_key"), "Key to use when using mTLS to connect to the RE api service. default can be set by $RBE_tls_client_auth_key")
-
-	fs.Int64Var(&o.CompressedBlob, o.Prefix+"_compress_blob", 1024, "use compressed blobs if server supports compressed blobs and size is bigger than this. specify 0 to disable comporession."+purpose)
-
-	fs.IntVar(&o.ConnPool, o.Prefix+"_grpc_conn_pool", 25, "grpc connection pool")
-
-	// https://grpc.io/docs/guides/keepalive/#keepalive-configuration-specification
-	// b/286237547 - RBE suggests 30s
-	fs.DurationVar(&o.KeepAliveParams.Time, o.Prefix+"_grpc_keepalive_time", 30*time.Second, "grpc keepalive time"+purpose)
-	fs.DurationVar(&o.KeepAliveParams.Timeout, o.Prefix+"_grpc_keepalive_timeout", 20*time.Second, "grpc keepalive timeout"+purpose)
-	fs.BoolVar(&o.KeepAliveParams.PermitWithoutStream, o.Prefix+"_grpc_keepalive_permit_without_stream", false, "grpc keepalive permit without stream"+purpose)
-}
-
-func isRBE(address string) bool {
-	return strings.HasSuffix(address, "remotebuildexecution.googleapis.com:443")
-}
-
-func (o *Option) String() string {
-	if o == nil || o.Address == "" {
-		return "no reapi backend"
-	}
-	addr := fmt.Sprintf("reapi %q", o.Address)
-	if isRBE(o.Address) {
-		addr = "RBE"
-		if strings.HasSuffix(o.Address, "-remotebuildexecution.googleapis.com:443") {
-			addr = fmt.Sprintf("RBE(%s)", strings.TrimSuffix(o.Address, "-remotebuildexecution.googleapis.com:443"))
-		}
-	}
-	return fmt.Sprintf("%s instance %q", addr, o.Instance)
 }
 
 // UpdateProjectID updates the Option for projID and returns cloud project ID to use.
