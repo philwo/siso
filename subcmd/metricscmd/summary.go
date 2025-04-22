@@ -214,7 +214,7 @@ func (c *summaryRun) run(ctx context.Context) error {
 		tm := topMetrics[i]
 		fmt.Printf("      %8s weighted to build %s (%s elapsed time)\n",
 			formatDuration(time.Duration(tm.WeightedDuration())),
-			relPath(c.dir, tm.Output),
+			tm.Output,
 			formatDuration(tm.Duration()))
 	}
 
@@ -314,14 +314,6 @@ func (c *summaryRun) aggregate(metrics []*targetMetric) ([]aggregatedMetric, err
 		ret = append(ret, v)
 	}
 	return ret, nil
-}
-
-func relPath(base, fname string) string {
-	r, err := filepath.Rel(base, fname)
-	if err != nil {
-		return fname
-	}
-	return r
 }
 
 func stepType(metric *targetMetric, pats []string) (string, error) {
