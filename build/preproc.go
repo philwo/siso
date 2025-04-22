@@ -6,6 +6,7 @@ package build
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"strings"
 
@@ -26,6 +27,26 @@ func fastDepsCmd(ctx context.Context, b *Builder, step *Step) (*Step, bool) {
 		return nil, false
 	}
 	return fastStep, true
+}
+
+func preprocCmd(ctx context.Context, b *Builder, step *Step) error {
+	step.setPhase(stepPreproc)
+	err := b.preprocSema.Do(ctx, func(ctx context.Context) error {
+		ctx, span := trace.NewSpan(ctx, "preproc")
+		defer span.Close(nil)
+		err := depsCmd(ctx, b, step)
+		if err != nil {
+			// disable remote execution. b/289143861
+			step.cmd.Platform = nil
+			return fmt.Errorf("disable remote: failed to get %s deps: %w", step.cmd.Deps, err)
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	dedupInputs(ctx, step.cmd)
+	return nil
 }
 
 func uniqueFiles(inputsList ...[]string) []string {

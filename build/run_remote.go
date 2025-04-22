@@ -19,6 +19,7 @@ import (
 )
 
 var errDepsLog = errors.New("failed to exec with deps log")
+var errNeedPreproc = errors.New("need to preproc")
 
 // runRemote runs step with using remote apis.
 //
@@ -33,11 +34,14 @@ var errDepsLog = errors.New("failed to exec with deps log")
 func (b *Builder) runRemote(ctx context.Context, step *Step) error {
 	var fastStep *Step
 	var fastOK, fastChecked bool
+	preprocErr := errNeedPreproc
 	fastNeedCheckCache := true
+	needCheckCache := true
 	cacheCheck := b.cache != nil && b.reCacheEnableRead
 	if b.fastLocalSema != nil && int(b.progress.numLocal.Load()) < b.fastLocalSema.Capacity() {
-		// TODO: skip fast when step is too new and can't expect cache hit?
+		// TODO: skip check cache when step is too new and can't expect cache hit?
 		if cacheCheck {
+			clog.Infof(ctx, "check cache before fast local")
 			fastStep, fastOK = fastDepsCmd(ctx, b, step)
 			if fastOK {
 				err := b.execRemoteCache(ctx, fastStep)
@@ -48,12 +52,21 @@ func (b *Builder) runRemote(ctx context.Context, step *Step) error {
 				clog.Infof(ctx, "cmd fast cache miss: %v", err)
 			}
 			fastChecked = true
+
+			preprocErr = preprocCmd(ctx, b, step)
+			if len(step.cmd.Platform) > 0 && step.cmd.Platform["container-image"] != "" && preprocErr == nil {
+				err := b.execRemoteCache(ctx, step)
+				if err == nil {
+					return nil
+				}
+				needCheckCache = false
+				clog.Infof(ctx, "cmd cache miss: %v", err)
+			}
 		}
 		if ctx, done, err := b.fastLocalSema.TryAcquire(ctx); err == nil {
 			var err error
 			defer func() { done(err) }()
 			clog.Infof(ctx, "fast local %s", step.cmd.Desc)
-			// TODO: check cache if input age is old enough.
 			// TODO: detach remote for future cache hit.
 			err = b.execLocal(ctx, step)
 			step.metrics.FastLocal = true
@@ -69,21 +82,12 @@ func (b *Builder) runRemote(ctx context.Context, step *Step) error {
 			return err
 		}
 	}
-	step.setPhase(stepPreproc)
-	err := b.preprocSema.Do(ctx, func(ctx context.Context) error {
-		ctx, span := trace.NewSpan(ctx, "preproc")
-		defer span.Close(nil)
-		err := depsCmd(ctx, b, step)
-		if err != nil {
-			// disable remote execution. b/289143861
-			step.cmd.Platform = nil
-			return fmt.Errorf("disable remote: failed to get %s deps: %w", step.cmd.Deps, err)
-		}
-		return nil
-	})
+	if preprocErr == errNeedPreproc {
+		preprocErr = preprocCmd(ctx, b, step)
+	}
+	err := preprocErr
 	if err == nil {
-		dedupInputs(ctx, step.cmd)
-		err = b.runRemoteStep(ctx, step, cacheCheck)
+		err = b.runRemoteStep(ctx, step, needCheckCache && cacheCheck)
 	}
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
