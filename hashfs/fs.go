@@ -535,14 +535,41 @@ func (hfs *HashFS) ReadFile(ctx context.Context, root, fname string) ([]byte, er
 	if len(e.buf) > 0 {
 		return e.buf, nil
 	}
-	hfs.digester.compute(ctx, fname, e)
-	if e.d.IsZero() {
-		return nil, fmt.Errorf("read file %s: no data", fname)
+	e.mu.Lock()
+	ed := e.d
+	e.mu.Unlock()
+	// check digest is already known.
+	if !ed.IsZero() {
+		// digest is known.
+		lfi, err := hfs.OS.Lstat(ctx, fname)
+		// check it is already flushed to disk or not.
+		if err != nil || !e.getMtime().Equal(lfi.ModTime()) || ed.SizeBytes != lfi.Size() {
+			// not yet flushed, read from CAS
+			buf, err := digest.DataToBytes(ctx, digest.NewData(e.src, ed))
+			if log.V(1) {
+				clog.Infof(ctx, "readfile(%s) %s: %v", ed, fname, err)
+			}
+			return buf, err
+		}
+		// already flushed. reading from local disk is faster.
+	} else {
+		// digest is not computed yet.
 	}
-	buf, err := digest.DataToBytes(ctx, digest.NewData(e.src, e.d))
+	if e.src == nil {
+		return nil, fmt.Errorf("readfile %s: no src", fname)
+	}
+	src := hfs.OS.FileSource(fname, -1)
+	rd, err := src.Open(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("readfile %s: %w", fname, err)
+	}
+	defer rd.Close()
+	buf, err := io.ReadAll(rd)
 	if log.V(1) {
-		clog.Infof(ctx, "readfile %s: %v", fname, err)
+		clog.Infof(ctx, "readfile(disk) %s: %v", fname, err)
 	}
+	// async compute digest.
+	hfs.digester.lazyCompute(ctx, fname, e)
 	return buf, err
 }
 
@@ -1526,6 +1553,7 @@ type entry struct {
 	updatedTime time.Time
 
 	d         digest.Digest
+	dch       chan struct{} // wait for digest computation
 	directory *directory
 }
 
@@ -1597,22 +1625,47 @@ func (e *entry) init(ctx context.Context, fname string, executables map[string]b
 }
 
 func (e *entry) compute(ctx context.Context, fname string) error {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	if e.err != nil {
-		return e.err
-	}
-	if !e.d.IsZero() {
-		return nil
-	}
-	if e.src == nil {
-		return nil
-	}
-	data, err := localDigest(ctx, e.src, fname)
-	if err != nil {
+	needCompute, doCompute, err := func() (bool, bool, error) {
+		e.mu.Lock()
+		defer e.mu.Unlock()
+		if e.err != nil {
+			return false, false, e.err
+		}
+		if !e.d.IsZero() {
+			return false, false, nil
+		}
+		if e.src == nil {
+			return false, false, nil
+		}
+		doCompute := e.dch == nil
+		if doCompute {
+			e.dch = make(chan struct{})
+		}
+		return true, doCompute, nil
+	}()
+	if !needCompute {
 		return err
 	}
-	e.d = data.Digest()
+	if doCompute {
+		data, err := localDigest(ctx, e.src, fname)
+		if err != nil {
+			e.mu.Lock()
+			close(e.dch)
+			e.err = err
+			e.mu.Unlock()
+			return err
+		}
+		e.mu.Lock()
+		e.d = data.Digest()
+		close(e.dch)
+		e.mu.Unlock()
+	} else {
+		select {
+		case <-ctx.Done():
+			return context.Cause(ctx)
+		case <-e.dch:
+		}
+	}
 	return nil
 }
 
@@ -1660,6 +1713,7 @@ func (e *entry) updateDir(ctx context.Context, hfs *HashFS, dname string) []stri
 		}
 		return nil
 	}
+	started := time.Now()
 	names, err := d.Readdirnames(-1)
 	if err != nil {
 		clog.Warningf(ctx, "updateDir %s: readdirnames %v", dname, err)
@@ -1706,7 +1760,7 @@ func (e *entry) updateDir(ctx context.Context, hfs *HashFS, dname string) []stri
 			}
 		}
 	}
-	clog.Infof(ctx, "updateDir mtime %s %d %s -> %s", dname, len(names), e.mtime, fi.ModTime())
+	clog.Infof(ctx, "updateDir mtime %s %d %s -> %s: %s", dname, len(names), e.directory.mtime, fi.ModTime(), time.Since(started))
 	e.directory.mtime = fi.ModTime()
 	// if local dir is updated after hashfs update, update hashfs mtime.
 	if e.mtime.Before(e.directory.mtime) {
