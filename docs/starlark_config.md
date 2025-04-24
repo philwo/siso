@@ -288,8 +288,11 @@ provide [`json`](https://pkg.go.dev/go.starlark.net/lib/json)
 ### [@builtin//lib/gn.star](../build/buildconfig/lib/gn.star)
 provide `gn`.
 
- * `parse_args: parse gnargs to dict.
-   `gnargs`: a content of args.gn.
+ * `args`: returns a dict for content of args.gn.
+   value is not interpreted, but just as string.
+   e.g.
+   * `foo=true` -> `gn.args(ctx)["foo"]=="true"`
+   * `foo="data"` -> `gn.args(ctx)["foo"]=="\"data\""`
 
 ### [@builtin//path.star](../build/buildconfig/path.star)
 provide `path`.
@@ -319,7 +322,8 @@ and [`module`](https://pkg.go.dev/go.starlark.net/starlarkstruct#Module)
 
 ### @config
 
-`@config` provides [samples](../build/samples).
+`@config` points `//build/config/siso` by default (changed by `--config`).
+In chromium, `@config` is [//build/config/siso](https://chromium.googlesource.com/chromium/src/+/refs/heads/main/build/config/siso/)
 
 ### @config_overrides
 
