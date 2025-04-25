@@ -13,8 +13,6 @@ import (
 	"os"
 	"strings"
 	"time"
-
-	"go.chromium.org/infra/build/siso/o11y/clog"
 )
 
 // File name of ninja log.
@@ -23,23 +21,14 @@ const ninjaLogName = ".ninja_log"
 // Ninja log format version.
 const ninjaLogVersion = 5
 
-// OpenNinjaLog opens ninja log file or creates a new file with a version header.
-func OpenNinjaLog(ctx context.Context) (*os.File, error) {
-	f, err := os.OpenFile(ninjaLogName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+// InitializeNinjaLog creates or truncates the ninja log file (.ninja_log) for writing
+// and writes the version header.
+func InitializeNinjaLog() (*os.File, error) {
+	f, err := os.OpenFile(ninjaLogName, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
 	if err != nil {
 		return nil, err
 	}
-	fi, err := f.Stat()
-	if err != nil {
-		e := f.Close()
-		if e != nil {
-			clog.Errorf(ctx, "%v", e)
-		}
-		return nil, err
-	}
-	if fi.Size() == 0 {
-		fmt.Fprintf(f, "# ninja log v%d\n", ninjaLogVersion)
-	}
+	fmt.Fprintf(f, "# ninja log v%d\n", ninjaLogVersion)
 	return f, nil
 }
 

@@ -1469,7 +1469,7 @@ func (c *ninjaCmdRun) initBuildOpts(ctx context.Context, projectID string, build
 		c.buildPprof = filepath.Join(c.logDir, c.buildPprof)
 	}
 
-	ninjaLogWriter, err := ninjautil.OpenNinjaLog(ctx)
+	ninjaLogWriter, err := ninjautil.InitializeNinjaLog()
 	if err != nil {
 		return bopts, nil, err
 	}
