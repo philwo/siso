@@ -77,6 +77,8 @@ Chrome developers. Chromium and Chrome are only supported projects.
 The projects that import //build/config from Chromium might be able to use Siso.
 However, they are not tested or supported, yet.
 
+As of Apr 2025, Siso built-in remote exec client is used for Chromium and Chrome builders.
+
 As of Nov 2024, Siso is used by default for Chromium build on gLinux machine.
 
 As of July 2024, Siso is used in all Chromium and Chrome builders, including official
