@@ -337,7 +337,7 @@ func (c *Client) Proto(ctx context.Context, d digest.Digest, p proto.Message) er
 
 // GetActionResult gets the action result by the digest.
 func (c *Client) GetActionResult(ctx context.Context, d digest.Digest) (*rpb.ActionResult, error) {
-	client := rpb.NewActionCacheClient(c.conn)
+	client := rpb.NewActionCacheClient(c.casConn)
 	result, err := client.GetActionResult(ctx, &rpb.GetActionResultRequest{
 		InstanceName: c.opt.Instance,
 		ActionDigest: d.Proto(),

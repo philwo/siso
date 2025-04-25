@@ -111,7 +111,7 @@ type digestSource struct {
 }
 
 func (s digestSource) Open(ctx context.Context) (io.ReadCloser, error) {
-	r, err := bytestreamio.Open(ctx, bpb.NewByteStreamClient(s.c.conn), s.c.resourceName(s.d))
+	r, err := bytestreamio.Open(ctx, bpb.NewByteStreamClient(s.c.casConn), s.c.resourceName(s.d))
 	if err != nil {
 		s.c.m.ReadDone(0, err)
 		return nil, err
