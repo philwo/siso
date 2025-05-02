@@ -181,6 +181,160 @@ func TestBuild_Restat(t *testing.T) {
 	}()
 }
 
+// Test restat=1 behavior when restat_content=true is set
+func TestBuild_Restat_RestatContent(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+
+	exists := func(fname string) error {
+		_, err := os.Stat(filepath.Join(dir, "out/siso", fname))
+		return err
+	}
+
+	hashfsOpts := hashfs.Option{
+		StateFile: ".siso_fs_state",
+	}
+
+	func() {
+		t.Logf("first build")
+		setupFiles(t, dir, t.Name(), nil)
+		opt, graph, cleanup := setupBuild(ctx, t, dir, hashfsOpts)
+		defer cleanup()
+
+		b, err := build.New(ctx, graph, opt)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() {
+			err := b.Close()
+			if err != nil {
+				t.Errorf("b.Close()=%v", err)
+			}
+		}()
+		err = b.Build(ctx, "build", "all")
+		if err != nil {
+			t.Fatalf(`b.Build(ctx, "build", "all")=%v; want nil err`, err)
+		}
+		if err := exists("foo.out"); err != nil {
+			t.Errorf("foo.out doesn't exist: %v", err)
+		}
+		if err := exists("bar.out"); err != nil {
+			t.Errorf("bar.out doesn't exist: %v", err)
+		}
+	}()
+
+	func() {
+		t.Logf("second build. touch base/foo.in, expect only foo.out is built")
+		touchFile(t, dir, "base/foo.in")
+		opt, graph, cleanup := setupBuild(ctx, t, dir, hashfsOpts)
+		defer cleanup()
+		var metricsBuffer syncBuffer
+		opt.MetricsJSONWriter = &metricsBuffer
+
+		b, err := build.New(ctx, graph, opt)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() {
+			err := b.Close()
+			if err != nil {
+				t.Errorf("b.Close()=%v", err)
+			}
+		}()
+
+		err = b.Build(ctx, "build", "all")
+		if err != nil {
+			t.Fatalf(`b.Build(ctx, "build", "all")=%v; want nil err`, err)
+		}
+		stat := b.Stats()
+		if stat.Skipped != 2 { // all(phony) and bar.out
+			t.Errorf("Skipped=%d; want 2", stat.Skipped)
+		}
+		dec := json.NewDecoder(bytes.NewReader(metricsBuffer.buf.Bytes()))
+		for dec.More() {
+			var m build.StepMetric
+			err := dec.Decode(&m)
+			if err != nil {
+				t.Errorf("decode %v", err)
+			}
+			if m.StepID == "" {
+				continue
+			}
+			switch filepath.Base(m.Output) {
+			case "foo.out":
+				if m.Err {
+					t.Errorf("%s err=%t; want false", m.Output, m.Err)
+				}
+			default:
+				t.Errorf("unexpected output %q: %#v", m.Output, m)
+			}
+		}
+	}()
+
+	func() {
+		t.Logf("third build, update base/foo.in")
+		modifyFile(t, dir, "base/foo.in", func(buf []byte) []byte {
+			return append(buf, []byte(" modified")...)
+		})
+		opt, graph, cleanup := setupBuild(ctx, t, dir, hashfsOpts)
+		defer cleanup()
+		var metricsBuffer syncBuffer
+		opt.MetricsJSONWriter = &metricsBuffer
+
+		b, err := build.New(ctx, graph, opt)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() {
+			err := b.Close()
+			if err != nil {
+				t.Errorf("b.Close()=%v", err)
+			}
+		}()
+		err = b.Build(ctx, "build", "all")
+		if err != nil {
+			t.Fatalf(`b.Build(ctx, "build", "all")=%v; want nil err`, err)
+		}
+		stat := b.Stats()
+		if stat.Skipped != 1 { // all(phony)
+			t.Errorf("Skipped=%d; want 1", stat.Skipped)
+			for _, fname := range []string{
+				"base/foo.in",
+				"base/bar.in",
+				"out/siso/foo.out",
+				"out/siso/bar.out",
+			} {
+				fi, err := opt.HashFS.Stat(ctx, dir, fname)
+				if err != nil {
+					t.Logf("%s: err=%v", fname, err)
+				} else {
+					t.Logf("%s: %s", fname, fi.ModTime())
+				}
+			}
+		}
+		dec := json.NewDecoder(bytes.NewReader(metricsBuffer.buf.Bytes()))
+		for dec.More() {
+			var m build.StepMetric
+			err := dec.Decode(&m)
+			if err != nil {
+				t.Errorf("decode %v", err)
+			}
+			if m.StepID == "" {
+				continue
+			}
+			switch filepath.Base(m.Output) {
+			case "foo.out", "bar.out":
+				if m.Err {
+					t.Errorf("%s err=%t; want false", m.Output, m.Err)
+				}
+			default:
+				t.Errorf("unexpected output %q", m.Output)
+			}
+		}
+
+	}()
+}
+
 // Test restat=1 behavior for multiple output.
 // some output may keep mtime, but some output was updated.
 func TestBuild_RestatMultiout(t *testing.T) {

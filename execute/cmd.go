@@ -879,6 +879,9 @@ func (c *Cmd) computeOutputEntries(ctx context.Context, entries []hashfs.UpdateE
 		ent.UpdatedTime = updatedTime
 		pent := pre[ent.Name]
 		switch {
+		case c.Restat && ent.IsLocal:
+			ent.IsChanged = !pent.ModTime.Equal(ent.ModTime)
+
 		case c.RestatContent:
 			ent.IsChanged = true
 			if pent.Entry != nil && !pent.Entry.Data.IsZero() && ent.Entry != nil && !ent.Entry.Data.IsZero() {
@@ -891,8 +894,6 @@ func (c *Cmd) computeOutputEntries(ctx context.Context, entries []hashfs.UpdateE
 			} else {
 				ent.ModTime = pent.ModTime
 			}
-		case c.Restat:
-			ent.IsChanged = !pent.ModTime.Equal(ent.ModTime)
 		default:
 			ent.ModTime = updatedTime
 			ent.IsChanged = true
