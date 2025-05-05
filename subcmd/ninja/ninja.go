@@ -27,7 +27,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"go.chromium.org/infra/build/siso/auth/cred"
+	"go.chromium.org/infra/build/siso/auth"
 	"go.chromium.org/infra/build/siso/build"
 	"go.chromium.org/infra/build/siso/build/buildconfig"
 	"go.chromium.org/infra/build/siso/build/cachestore"
@@ -187,10 +187,10 @@ func (c *NinjaOpts) run(ctx context.Context) (stats build.Stats, err error) {
 
 	projectID := c.Reopt.UpdateProjectID(c.ProjectID)
 
-	var credential cred.Cred
+	var credential auth.Cred
 	if projectID != "" {
 		log.Infof("init credentials")
-		credential, err = cred.New(ctx, c.Ts)
+		credential, err = auth.NewCred(ctx, c.Ts)
 		if err != nil {
 			return stats, err
 		}
@@ -568,7 +568,7 @@ type dataSource struct {
 	client *reapi.Client
 }
 
-func (c *NinjaOpts) initDataSource(ctx context.Context, credential cred.Cred) (dataSource, error) {
+func (c *NinjaOpts) initDataSource(ctx context.Context, credential auth.Cred) (dataSource, error) {
 	layeredCache := build.NewLayeredCache()
 	var ds dataSource
 	var err error
