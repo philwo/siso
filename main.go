@@ -9,7 +9,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"net/http"
 	_ "net/http/pprof" // import to let pprof register its HTTP handlers
 	"os"
 	"os/signal"
@@ -92,10 +91,6 @@ Use "siso help -advanced" to display all commands.
 		fmt.Fprintf(flag.CommandLine.Output(), "flags of %s:\n", os.Args[0])
 		flag.PrintDefaults()
 	}
-
-	flag.StringVar(&pprofAddr, "pprof_addr", "", `listen address for "go tool pprof". e.g. "localhost:6060"`)
-	flag.IntVar(&blockprofRate, "blockprof_rate", 0, "block profile rate")
-	flag.IntVar(&mutexprofFrac, "mutexprof_frac", 0, "mutex profile fraction")
 
 	flag.StringVar(&c.Dir, "C", ".", "ninja running directory")
 	flag.StringVar(&c.ConfigName, "config", "", "config name passed to starlark")
@@ -180,29 +175,6 @@ Use "siso help -advanced" to display all commands.
 	if printVersion {
 		fmt.Fprintf(os.Stderr, "%s\n", versionStr)
 		return 0
-	}
-
-	if blockprofRate > 0 {
-		runtime.SetBlockProfileRate(blockprofRate)
-	}
-	if mutexprofFrac > 0 {
-		runtime.SetMutexProfileFraction(mutexprofFrac)
-	}
-
-	// Start an HTTP server that can be used to profile Siso during runtime.
-	if pprofAddr != "" {
-		// https://pkg.go.dev/net/http/pprof
-		fmt.Fprintf(os.Stderr, "pprof is enabled, listening at http://%s/debug/pprof/\n", pprofAddr)
-		go func() {
-			log.Infof("pprof http listener: %v", http.ListenAndServe(pprofAddr, nil))
-		}()
-		defer func() {
-			fmt.Fprintf(os.Stderr, "pprof is still listening at http://%s/debug/pprof/\n", pprofAddr)
-			fmt.Fprintln(os.Stderr, "Press Ctrl-C to terminate the process")
-			sigch := make(chan os.Signal, 1)
-			signal.Notify(sigch, os.Interrupt, syscall.SIGTERM)
-			<-sigch
-		}()
 	}
 
 	return c.Run(ctx)
