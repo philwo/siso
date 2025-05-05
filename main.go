@@ -29,7 +29,6 @@ import (
 var (
 	pprofAddr     string
 	cpuprofile    string
-	memprofile    string
 	blockprofRate int
 	mutexprofFrac int
 )
@@ -98,7 +97,6 @@ Use "siso help -advanced" to display all commands.
 
 	flag.StringVar(&pprofAddr, "pprof_addr", "", `listen address for "go tool pprof". e.g. "localhost:6060"`)
 	flag.StringVar(&cpuprofile, "cpuprofile", "", "write cpu profile to this file")
-	flag.StringVar(&memprofile, "memprofile", "", "write memory profile to this file")
 	flag.IntVar(&blockprofRate, "blockprof_rate", 0, "block profile rate")
 	flag.IntVar(&mutexprofFrac, "mutexprof_frac", 0, "mutex profile fraction")
 
@@ -221,20 +219,6 @@ Use "siso help -advanced" to display all commands.
 			log.Errorf("failed to start CPU profiler: %v", err)
 		}
 		defer pprof.StopCPUProfile()
-	}
-
-	// Save a heap profile to disk on exit.
-	if memprofile != "" {
-		f, err := os.Create(memprofile)
-		if err != nil {
-			log.Fatalf("failed to create memprofile file: %v", err)
-		}
-		defer func() {
-			err := pprof.WriteHeapProfile(f)
-			if err != nil {
-				log.Errorf("failed to write heap profile: %v", err)
-			}
-		}()
 	}
 
 	return c.Run(ctx)
