@@ -32,7 +32,6 @@ var (
 	memprofile    string
 	blockprofRate int
 	mutexprofFrac int
-	traceFile     string
 )
 
 const versionID = "v1.3.7"
@@ -102,7 +101,6 @@ Use "siso help -advanced" to display all commands.
 	flag.StringVar(&memprofile, "memprofile", "", "write memory profile to this file")
 	flag.IntVar(&blockprofRate, "blockprof_rate", 0, "block profile rate")
 	flag.IntVar(&mutexprofFrac, "mutexprof_frac", 0, "mutex profile fraction")
-	flag.StringVar(&traceFile, "trace", "", `go trace output for "go tool trace"`)
 
 	flag.StringVar(&c.Dir, "C", ".", "ninja running directory")
 	flag.StringVar(&c.ConfigName, "config", "", "config name passed to starlark")
