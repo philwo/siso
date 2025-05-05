@@ -98,14 +98,6 @@ Use "siso help -advanced" to display all commands.
 
 	flag.BoolVar(&c.Offline, "offline", false, "offline mode.")
 	flag.BoolVar(&c.Offline, "o", false, "alias of `-offline`")
-	if f := flag.Lookup("offline"); f != nil {
-		if s := os.Getenv("RBE_remote_disabled"); s != "" {
-			err := f.Value.Set(s)
-			if err != nil {
-				log.Errorf("invalid RBE_remote_disabled=%q: %v", s, err)
-			}
-		}
-	}
 	flag.BoolVar(&c.DryRun, "n", false, "dry run")
 	flag.BoolVar(&c.Clobber, "clobber", false, "clobber build")
 	flag.StringVar(&c.ActionSalt, "action_salt", "", "action salt")
