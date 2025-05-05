@@ -21,7 +21,6 @@ import (
 	gtransport "google.golang.org/api/transport/grpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/proto"
 
@@ -46,8 +45,6 @@ type Option struct {
 	// use compressed blobs if server supports compressed blobs and size is bigger than this.
 	// When 0 is set, blob compression is disabled.
 	CompressedBlob int64
-
-	KeepAliveParams keepalive.ClientParameters
 }
 
 // UpdateProjectID updates the Option for projID and returns cloud project ID to use.
@@ -144,14 +141,13 @@ var serviceConfig = `
 	]
 }`
 
-func dialOptions(keepAliveParams keepalive.ClientParameters) []grpc.DialOption {
+func dialOptions() []grpc.DialOption {
 	// TODO(b/273639326): handle auth failures gracefully.
 
 	// https://github.com/grpc/grpc/blob/c16338581dba2b054bf52484266b79e6934bbc1c/doc/service_config.md
 	// https://github.com/grpc/proposal/blob/9f993b522267ed297fe54c9ee32cfc13699166c7/A6-client-retries.md
 	// timeout=300s may cause deadline exceeded to fetch large *.so file?
 	dopts := append([]grpc.DialOption(nil),
-		grpc.WithKeepaliveParams(keepAliveParams),
 		grpc.WithDisableServiceConfig(),
 		// no retry for ActionCache
 		grpc.WithDefaultServiceConfig(serviceConfig),
@@ -189,7 +185,7 @@ func newConn(ctx context.Context, addr string, cred cred.Cred, opt Option) (grpc
 		option.WithEndpoint(addr),
 		option.WithGRPCConnectionPool(25),
 	}
-	dopts := dialOptions(opt.KeepAliveParams)
+	dopts := dialOptions()
 	var conn grpcClientConn
 	var err error
 	if opt.Insecure {

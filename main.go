@@ -14,7 +14,6 @@ import (
 	"os/signal"
 	"runtime"
 	"syscall"
-	"time"
 
 	"github.com/charmbracelet/log"
 
@@ -133,12 +132,6 @@ Use "siso help -advanced" to display all commands.
 	flag.StringVar(&c.Reopt.TLSClientAuthKey, "reapi_tls_client_auth_key", os.Getenv("RBE_tls_client_auth_key"), "Key to use when using mTLS to connect to the RE api service. default can be set by $RBE_tls_client_auth_key")
 
 	flag.Int64Var(&c.Reopt.CompressedBlob, "reapi_compress_blob", 1024, "use compressed blobs if server supports compressed blobs and size is bigger than this. specify 0 to disable comporession.")
-
-	// https://grpc.io/docs/guides/keepalive/#keepalive-configuration-specification
-	// b/286237547 - RBE suggests 30s
-	flag.DurationVar(&c.Reopt.KeepAliveParams.Time, "reapi_grpc_keepalive_time", 30*time.Second, "grpc keepalive time")
-	flag.DurationVar(&c.Reopt.KeepAliveParams.Timeout, "reapi_grpc_keepalive_timeout", 20*time.Second, "grpc keepalive timeout")
-	flag.BoolVar(&c.Reopt.KeepAliveParams.PermitWithoutStream, "reapi_grpc_keepalive_permit_without_stream", false, "grpc keepalive permit without stream")
 
 	flag.BoolVar(&c.ReCacheEnableRead, "re_cache_enable_read", true, "remote exec cache enable read")
 
