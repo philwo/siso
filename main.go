@@ -14,7 +14,6 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
-	"runtime/pprof"
 	"syscall"
 	"time"
 
@@ -28,7 +27,6 @@ import (
 
 var (
 	pprofAddr     string
-	cpuprofile    string
 	blockprofRate int
 	mutexprofFrac int
 )
@@ -96,7 +94,6 @@ Use "siso help -advanced" to display all commands.
 	}
 
 	flag.StringVar(&pprofAddr, "pprof_addr", "", `listen address for "go tool pprof". e.g. "localhost:6060"`)
-	flag.StringVar(&cpuprofile, "cpuprofile", "", "write cpu profile to this file")
 	flag.IntVar(&blockprofRate, "blockprof_rate", 0, "block profile rate")
 	flag.IntVar(&mutexprofFrac, "mutexprof_frac", 0, "mutex profile fraction")
 
@@ -206,19 +203,6 @@ Use "siso help -advanced" to display all commands.
 			signal.Notify(sigch, os.Interrupt, syscall.SIGTERM)
 			<-sigch
 		}()
-	}
-
-	// Save a CPU profile to disk on exit.
-	if cpuprofile != "" {
-		f, err := os.Create(cpuprofile)
-		if err != nil {
-			log.Fatalf("failed to create cpuprofile file: %v", err)
-		}
-		err = pprof.StartCPUProfile(f)
-		if err != nil {
-			log.Errorf("failed to start CPU profiler: %v", err)
-		}
-		defer pprof.StopCPUProfile()
 	}
 
 	return c.Run(ctx)
