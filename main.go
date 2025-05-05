@@ -15,7 +15,6 @@ import (
 	"os/signal"
 	"runtime"
 	"runtime/pprof"
-	"runtime/trace"
 	"syscall"
 	"time"
 
@@ -33,7 +32,6 @@ var (
 	memprofile    string
 	blockprofRate int
 	mutexprofFrac int
-	traceFile     string
 )
 
 const versionID = "v1.1.29"
@@ -103,7 +101,6 @@ Use "siso help -advanced" to display all commands.
 	flag.StringVar(&memprofile, "memprofile", "", "write memory profile to this file")
 	flag.IntVar(&blockprofRate, "blockprof_rate", 0, "block profile rate")
 	flag.IntVar(&mutexprofFrac, "mutexprof_frac", 0, "mutex profile fraction")
-	flag.StringVar(&traceFile, "trace", "", `go trace output for "go tool trace"`)
 
 	flag.StringVar(&c.Dir, "C", ".", "ninja running directory")
 	flag.StringVar(&c.ConfigName, "config", "", "config name passed to starlark")
@@ -238,26 +235,6 @@ Use "siso help -advanced" to display all commands.
 				log.Errorf("failed to write heap profile: %v", err)
 			}
 		}()
-	}
-
-	// Save a go trace to disk during execution.
-	if traceFile != "" {
-		fmt.Fprintf(os.Stderr, "enable go trace in %q\n", traceFile)
-		f, err := os.Create(traceFile)
-		if err != nil {
-			log.Fatalf("Failed to create go trace output file: %v", err)
-		}
-		defer func() {
-			fmt.Fprintf(os.Stderr, "go trace: go tool trace %s\n", traceFile)
-			cerr := f.Close()
-			if cerr != nil {
-				log.Fatalf("Failed to close go trace output file: %v", cerr)
-			}
-		}()
-		if err := trace.Start(f); err != nil {
-			log.Fatalf("Failed to start go trace: %v", err)
-		}
-		defer trace.Stop()
 	}
 
 	return c.Run(ctx)
