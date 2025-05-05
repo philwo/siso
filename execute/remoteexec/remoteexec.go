@@ -18,7 +18,6 @@ import (
 	"go.chromium.org/infra/build/siso/reapi"
 	"go.chromium.org/infra/build/siso/reapi/digest"
 	"go.chromium.org/infra/build/siso/reapi/merkletree"
-	_ "go.chromium.org/infra/build/siso/reapi/proto" // for auxiliary metadata
 )
 
 // RemoteExec is executor with remote exec API.
