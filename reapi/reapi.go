@@ -24,7 +24,7 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/proto"
 
-	"go.chromium.org/infra/build/siso/auth/cred"
+	"go.chromium.org/infra/build/siso/auth"
 	"go.chromium.org/infra/build/siso/reapi/digest"
 )
 
@@ -174,7 +174,7 @@ func dialOptions() []grpc.DialOption {
 }
 
 // New creates new remote exec API client.
-func New(ctx context.Context, cred cred.Cred, opt Option) (*Client, error) {
+func New(ctx context.Context, cred auth.Cred, opt Option) (*Client, error) {
 	if opt.Address == "" {
 		return nil, errors.New("no reapi address")
 	}
@@ -198,7 +198,7 @@ func New(ctx context.Context, cred cred.Cred, opt Option) (*Client, error) {
 	return NewFromConn(ctx, opt, conn, casConn)
 }
 
-func newConn(ctx context.Context, addr string, cred cred.Cred, opt Option) (grpcClientConn, error) {
+func newConn(ctx context.Context, addr string, cred auth.Cred, opt Option) (grpcClientConn, error) {
 	copts := []option.ClientOption{
 		option.WithEndpoint(addr),
 		option.WithGRPCConnectionPool(opt.ConnPool),

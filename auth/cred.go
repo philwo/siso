@@ -2,14 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// Package cred provides gRPC / API credentials to authenticate to network services.
-package cred
+// Package auth provides gRPC / API credentials to authenticate to network services.
+package auth
 
 import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	"os/exec"
 
 	"github.com/charmbracelet/log"
 	"golang.org/x/oauth2"
@@ -31,44 +30,15 @@ type Cred struct {
 	tokenSource       oauth2.TokenSource
 }
 
-// AuthOpts returns the LUCI auth options that Siso uses.
-func AuthOpts(credHelper string) oauth2.TokenSource {
-	// If a credential helper is specified, use it.
-	if credHelper != "" {
-		return credHelperTokenSource{
-			credHelper: credHelper,
-			args:       []string{"get"},
-		}
-	}
-
-	// Use the default LUCI auth credential helper.
-	credHelper, err := exec.LookPath("luci-auth")
-	if err != nil {
-		log.Warnf("luci-auth not found in PATH: %v", err)
-		return nil
-	}
-
-	return credHelperTokenSource{
-		credHelper: credHelper,
-		args: []string{
-			"token",
-			"-scopes-context",
-			"-json-output=-",
-			"-json-format=bazel",
-			"-lifetime=5m",
-		},
-	}
-}
-
-// New creates a Cred using LUCI auth's default options.
+// NewCred creates a Cred using LUCI auth's default options.
 // It ensures that the user is logged in and returns an error otherwise.
-func New(ctx context.Context, ts oauth2.TokenSource) (Cred, error) {
+func NewCred(ctx context.Context, ts oauth2.TokenSource) (Cred, error) {
 	tok, err := ts.Token()
 	if err != nil {
 		if ctx.Err() != nil {
 			return Cred{}, err
 		}
-		return Cred{}, fmt.Errorf("need to run `siso login`: %w", err)
+		return Cred{}, fmt.Errorf("need to run `luci-auth login -scopes-context`: %w", err)
 	}
 
 	// Get the token type and email from the token.

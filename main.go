@@ -17,7 +17,7 @@ import (
 
 	"github.com/charmbracelet/log"
 
-	"go.chromium.org/infra/build/siso/auth/cred"
+	"go.chromium.org/infra/build/siso/auth"
 	"go.chromium.org/infra/build/siso/hashfs"
 	"go.chromium.org/infra/build/siso/reapi"
 	"go.chromium.org/infra/build/siso/subcmd/ninja"
@@ -156,7 +156,7 @@ Use "siso help -advanced" to display all commands.
 		}
 	}()
 
-	c.Ts = cred.AuthOpts(c.CredHelper)
+	c.Ts = auth.NewTokenSource()
 	if printVersion {
 		fmt.Fprintf(os.Stderr, "%s\n", versionStr)
 		return 0
