@@ -641,6 +641,7 @@ func (c *Client) uploadWithByteStream(ctx context.Context, digests []digest.Dige
 	var missingBlobs []missingBlob
 	bsClient := bpb.NewByteStreamClient(c.casConn)
 	for _, d := range digests {
+		started := time.Now()
 		data, ok := ds.Get(d)
 		if !ok {
 			clog.Warningf(ctx, "Not found %s in store", d)
@@ -687,14 +688,14 @@ func (c *Client) uploadWithByteStream(ctx context.Context, digests []digest.Dige
 		c.m.WriteDone(int(d.SizeBytes), err)
 		uploads[d].done(err)
 		if err != nil {
-			clog.Warningf(ctx, "Failed to stream %s: %v", data, err)
+			clog.Warningf(ctx, "Failed to stream %s in %s: %v", data, time.Since(started), err)
 			missingBlobs = append(missingBlobs, missingBlob{
 				Digest: d,
 				Err:    err,
 			})
 			continue
 		}
-		clog.Infof(ctx, "uploaded streaming %s err=%v", data, err)
+		clog.Infof(ctx, "uploaded streaming %s in %s err=%v", data, time.Since(started), err)
 	}
 	clog.Infof(ctx, "uploaded by streaming %d blobs (missing:%d)", len(digests), len(missingBlobs))
 

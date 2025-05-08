@@ -410,11 +410,12 @@ func upload(ctx context.Context, execRoot, buildDir string, hashFS *hashfs.HashF
 		return digest.Digest{}, err
 	}
 	clog.Infof(ctx, "upload %s for %s", d, target)
+	started := time.Now()
 	n, err := casClient.UploadAll(ctx, ds)
 	if err != nil {
 		return digest.Digest{}, err
 	}
-	clog.Infof(ctx, "uploaded %d for %s", n, target)
+	clog.Infof(ctx, "uploaded %d for %s in %s", n, target, time.Since(started))
 	return d, nil
 }
 
