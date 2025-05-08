@@ -18,8 +18,13 @@ import (
 	"sync"
 	"time"
 
+	"cloud.google.com/go/logging"
+	log "github.com/golang/glog"
+	"github.com/google/uuid"
 	"github.com/maruel/subcommands"
 	"golang.org/x/sync/errgroup"
+	mrpb "google.golang.org/genproto/googleapis/api/monitoredres"
+	"google.golang.org/grpc/grpclog"
 
 	"go.chromium.org/luci/auth"
 	"go.chromium.org/luci/common/cli"
@@ -75,6 +80,9 @@ type run struct {
 	fsopt *hashfs.Option
 
 	dumpJSON string
+
+	jobID              string
+	enableCloudLogging bool
 }
 
 func (c *run) init() {
@@ -100,6 +108,9 @@ func (c *run) init() {
 	c.fsopt.RegisterFlags(&c.Flags)
 
 	c.Flags.StringVar(&c.dumpJSON, "dump_json", "", "dump in json file")
+
+	c.Flags.StringVar(&c.jobID, "job_id", uuid.New().String(), "ID for a grouping of related builds such as a Buildbucket job. ")
+	c.Flags.BoolVar(&c.enableCloudLogging, "enable_cloud_logging", true, "enable cloud logging")
 }
 
 func (c *run) Run(a subcommands.Application, args []string, env subcommands.Env) int {
@@ -134,6 +145,9 @@ func (c *run) run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	if len(c.jobID) > 1024 {
+		return fmt.Errorf("-job_id length %d must be less than 1024", len(c.jobID))
+	}
 	projectID := c.reopt.UpdateProjectID(c.projectID)
 	if projectID == "" {
 		return fmt.Errorf("no project id")
@@ -146,7 +160,20 @@ func (c *run) run(ctx context.Context) error {
 		return err
 	}
 	spin.Stop(nil)
-	// init cloud logging?
+	if c.enableCloudLogging {
+		logCtx, loggerURL, done, err := c.initCloudLogging(ctx, projectID, execRoot, credential)
+		if err != nil {
+			// b/335295396 Compile step hitting write requests quota
+			// rather than build fails, fallback to glog.
+			fmt.Fprintf(os.Stderr, "cloud logging: %v\n", err)
+			fmt.Fprintln(os.Stderr, "fallback to glog")
+			c.enableCloudLogging = false
+		} else {
+			fmt.Fprintln(os.Stderr, loggerURL)
+			defer done()
+			ctx = logCtx
+		}
+	}
 
 	ui.Default.PrintLines(fmt.Sprintf("reapi instance: %s\n", c.reopt.Instance))
 	client, err := reapi.New(ctx, credential, *c.reopt)
@@ -208,13 +235,15 @@ func (c *run) run(ctx context.Context) error {
 		eg.Go(func() error {
 			targetStarted := time.Now()
 			d, err := upload(ectx, execRoot, c.dir, hashFS, casClient, target)
+			duration := time.Since(targetStarted)
 			if err != nil {
-				return fmt.Errorf("failed for %s: %w", target, err)
+				return fmt.Errorf("failed for %s in %s: %w", target, duration, err)
 			}
 			mu.Lock()
 			result[target] = d.String()
 			mu.Unlock()
-			ui.Default.PrintLines(fmt.Sprintf("uploaded digest for %s: %s in %s\n", target, d, time.Since(targetStarted)))
+			clog.Infof(ectx, "uploaded digest for %s: %s in %s", target, d, duration)
+			ui.Default.PrintLines(fmt.Sprintf("uploaded digest for %s: %s in %s\n", target, d, duration))
 			return nil
 		})
 	}
@@ -387,4 +416,56 @@ func upload(ctx context.Context, execRoot, buildDir string, hashFS *hashfs.HashF
 	}
 	clog.Infof(ctx, "uploaded %d for %s", n, target)
 	return d, nil
+}
+
+func (c *run) initCloudLogging(ctx context.Context, projectID, execRoot string, credential cred.Cred) (context.Context, string, func(), error) {
+	taskID := uuid.New().String()
+	log.Infof("enable cloud logging project=%s id=%s", projectID, taskID)
+
+	// log_id: "siso.log" and "siso.step"
+	// use generic_task resource
+	// https://cloud.google.com/logging/docs/api/v2/resource-list
+	// https://cloud.google.com/monitoring/api/resources#tag_generic_task
+	client, err := logging.NewClient(ctx, projectID, credential.ClientOptions()...)
+	if err != nil {
+		return ctx, "", func() {}, err
+	}
+	hostname, err := os.Hostname()
+	if err != nil {
+		return ctx, "", func() {}, err
+	}
+	logger, err := clog.New(ctx, client, "siso.log", "siso.step", &mrpb.MonitoredResource{
+		Type: "generic_task",
+		// should set labels for generic_task.
+		// see https://cloud.google.com/logging/docs/api/v2/resource-list
+		Labels: map[string]string{
+			"project_id": projectID,
+			"job":        c.jobID,
+			"task_id":    taskID,
+			"location":   hostname,
+			"namespace":  execRoot,
+		},
+	})
+	if err != nil {
+		return ctx, "", func() {}, err
+	}
+	ctx = clog.NewContext(ctx, logger)
+	grpclog.SetLoggerV2(logger)
+	return ctx, logger.URL(), func() {
+		errch := make(chan error, 1)
+		go func() {
+			errch <- logger.Close()
+		}()
+		timeout := 10 * time.Second
+		// Don't use clog as it's closing Cloud logging client.
+		select {
+
+		case <-time.After(timeout):
+			log.Warningf("close not finished in %s", timeout)
+		case err := <-errch:
+			if err != nil {
+				log.Warningf("falied to close Cloud logger: %v", err)
+			}
+		}
+	}, nil
 }
