@@ -8,9 +8,16 @@ package bytestreamio
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
+	"path"
+	"strconv"
 
 	pb "google.golang.org/genproto/googleapis/bytestream"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
+	"go.chromium.org/infra/build/siso/o11y/clog"
 )
 
 // Exists checks for the existence of a resource by its resourceName.
@@ -80,12 +87,18 @@ func (r *Reader) Size() int64 {
 // Create creates a writer on the bytestream for resourceName.
 // ctx will be used until the rriter is closed.
 func Create(ctx context.Context, c pb.ByteStreamClient, resourceName string) (*Writer, error) {
+	sizeStr := path.Base(resourceName)
+	size, err := strconv.ParseInt(sizeStr, 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("bad size in resource name %q: %v", resourceName, err)
+	}
 	wr, err := c.Write(ctx)
 	if err != nil {
 		return nil, err
 	}
 	return &Writer{
 		resname: resourceName,
+		size:    size,
 		wr:      wr,
 	}, nil
 }
@@ -93,6 +106,7 @@ func Create(ctx context.Context, c pb.ByteStreamClient, resourceName string) (*W
 // Writer is a writer on bytestream, and implemnets io.Writer.
 type Writer struct {
 	resname string
+	size    int64
 	wr      pb.ByteStream_WriteClient
 	offset  int64
 
@@ -119,9 +133,10 @@ func (w *Writer) Write(buf []byte) (int, error) {
 		WriteOffset:  w.offset,
 		Data:         buf,
 	})
-	if errors.Is(err, io.EOF) {
+	if err == io.EOF {
 		// the blob already stored in CAS.
 		w.ok = true
+		clog.Infof(w.wr.Context(), "bytestream write %s got EOF at %d: %v", w.resname, w.offset, err)
 		return len(buf), nil
 	}
 	if err != nil {
@@ -136,26 +151,30 @@ func (w *Writer) Close() error {
 	if w.wr == nil {
 		return errors.New("bad Writer")
 	}
-	if w.ok {
-		w.wr.CloseAndRecv()
-		return nil
+	if !w.ok {
+		// The service will not view the resource as 'complete'
+		// until the client has sent a 'WriteRequest' with 'FinishWrite'
+		// set to 'true'.
+		err := w.wr.Send(&pb.WriteRequest{
+			ResourceName: w.resname,
+			WriteOffset:  w.offset,
+			FinishWrite:  true,
+			// The client may leave 'data' empty.
+		})
+		if err != nil {
+			return err
+		}
 	}
-	// The service will not view the resource as 'complete'
-	// until the client has sent a 'WriteRequest' with 'FinishWrite'
-	// set to 'true'.
-	err := w.wr.Send(&pb.WriteRequest{
-		ResourceName: w.resname,
-		WriteOffset:  w.offset,
-		FinishWrite:  true,
-		// The client may leave 'data' empty.
-	})
+	res, err := w.wr.CloseAndRecv()
 	if err != nil {
 		return err
 	}
-	_, err = w.wr.CloseAndRecv()
-	if err != nil {
-		return err
+	// in case compressed-blobs, res.CommittedSize != w.offset.
+	// since w.offset is compressed size.
+	// res.CommittedSize is original data size, so it must match with
+	// size in resource name (i.e. size_bytes in digest).
+	if res.CommittedSize != w.size {
+		return status.Errorf(codes.Internal, "unexpected committedSize: %d != %d", res.CommittedSize, w.size)
 	}
-	// in case compressed-blobs, resp.CommittedSize != w.offset.
 	return nil
 }

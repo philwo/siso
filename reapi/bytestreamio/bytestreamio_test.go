@@ -11,6 +11,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"path"
+	"strconv"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -70,7 +72,7 @@ func TestReader(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	const resourceName = "resource-name"
+	resourceName := fmt.Sprintf("resource-name/%d", len(data))
 	c := &stubByteStreamReadClient{
 		resourceName: resourceName,
 		data:         data,
@@ -117,6 +119,10 @@ type stubWriteClient struct {
 	c *stubByteStreamWriteClient
 }
 
+func (*stubWriteClient) Context() context.Context {
+	return context.Background()
+}
+
 func (w *stubWriteClient) Send(req *pb.WriteRequest) error {
 	if req.ResourceName != w.c.resourceName {
 		return fmt.Errorf("bad resource name: %q; want %q", req.ResourceName, w.c.resourceName)
@@ -141,8 +147,13 @@ func (w *stubWriteClient) Send(req *pb.WriteRequest) error {
 }
 
 func (w *stubWriteClient) CloseAndRecv() (*pb.WriteResponse, error) {
+	sizeStr := path.Base(w.c.resourceName)
+	size, err := strconv.ParseInt(sizeStr, 10, 64)
+	if err != nil {
+		return nil, err
+	}
 	return &pb.WriteResponse{
-		CommittedSize: int64(w.c.buf.Len()),
+		CommittedSize: size,
 	}, nil
 }
 
@@ -166,7 +177,7 @@ func TestWriter(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	const resourceName = "resource-name"
+	resourceName := fmt.Sprintf("resource-name/%d", len(data))
 	c := &stubByteStreamWriteClient{
 		resourceName: resourceName,
 		chunksize:    chunksize,
@@ -213,7 +224,7 @@ func TestWriterAlreadyExists(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	const resourceName = "resource-name"
+	resourceName := fmt.Sprintf("resource-name/%d", len(data))
 	c := &stubByteStreamWriteClient{
 		resourceName:  resourceName,
 		chunksize:     chunksize,
