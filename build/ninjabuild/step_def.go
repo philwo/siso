@@ -960,7 +960,23 @@ func (s *StepDef) CheckInputDeps(ctx context.Context, depInputs []string) (bool,
 		deps[dep] = true
 	}
 	seen := make(map[string]bool)
-	checkInputDep(ctx, s.globals, s.edge, false, deps, seen)
+	// check input deps from s.edge's inputs.
+	// it doesn't check output of s.edge.
+	edges := checkInputDep(ctx, s.globals, s.edge, false, deps, seen)
+	// avoid recursion for memory efficiency (e.g. avoid deep stack)
+	for len(edges) > 0 {
+		edge := edges[0]
+		// reuse edege[0] space to minimize allocations.
+		remain := edges[1:]
+		copy(edges, remain)
+		edges[len(edges)-1] = nil
+		edges = edges[:len(edges)-1]
+		// check input deps for edge's inputs and outputs.
+		edges = append(edges, checkInputDep(ctx, s.globals, edge, true, deps, seen)...)
+		if len(deps) == 0 {
+			return false, nil
+		}
+	}
 	if len(deps) == 0 {
 		return false, nil
 	}
@@ -982,18 +998,17 @@ func (s *StepDef) CheckInputDeps(ctx context.Context, depInputs []string) (bool,
 	return true, fmt.Errorf("deps inputs have no dependencies from %q to %q - unknown", outputPath, depInputs)
 }
 
-func checkInputDep(ctx context.Context, globals *globals, edge *ninjautil.Edge, checkOutputs bool, deps, seen map[string]bool) {
+func checkInputDep(ctx context.Context, globals *globals, edge *ninjautil.Edge, checkOutputs bool, deps, seen map[string]bool) []*ninjautil.Edge {
 	if len(deps) == 0 {
-		return
+		return nil
 	}
-	inputs := edge.Inputs()
 	var edges []*ninjautil.Edge
-	for _, in := range inputs {
+	for _, in := range edge.Inputs() {
 		p := globals.targetPath(ctx, in)
 		if deps[p] {
 			delete(deps, p)
 			if len(deps) == 0 {
-				return
+				return nil
 			}
 		}
 		if seen[p] {
@@ -1012,7 +1027,7 @@ func checkInputDep(ctx context.Context, globals *globals, edge *ninjautil.Edge, 
 			if deps[p] {
 				delete(deps, p)
 				if len(deps) == 0 {
-					return
+					return nil
 				}
 				continue
 			}
@@ -1022,9 +1037,7 @@ func checkInputDep(ctx context.Context, globals *globals, edge *ninjautil.Edge, 
 			seen[p] = true
 		}
 	}
-	for _, inEdge := range edges {
-		checkInputDep(ctx, globals, inEdge, true, deps, seen)
-	}
+	return edges
 }
 
 // Handle runs a handler for the cmd.
