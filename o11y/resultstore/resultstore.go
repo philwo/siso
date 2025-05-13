@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"google.golang.org/api/option"
+	"google.golang.org/api/transport"
 	rspb "google.golang.org/genproto/googleapis/devtools/resultstore/v2"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/proto"
@@ -30,9 +32,9 @@ import (
 
 // Options is options for resultstore uploader.
 type Options struct {
-	InvocationID string
-	Invocation   *rspb.Invocation
-	DialOptions  []grpc.DialOption
+	InvocationID  string
+	Invocation    *rspb.Invocation
+	ClientOptions []option.ClientOption
 }
 
 // Uploader is resultstore uploader.
@@ -56,7 +58,10 @@ type Uploader struct {
 
 // New creates new resultstore uploader.
 func New(ctx context.Context, opts Options) (*Uploader, error) {
-	conn, err := grpc.NewClient("resultstore.googleapis.com:443", opts.DialOptions...)
+	copts := slices.Concat([]option.ClientOption{
+		option.WithEndpoint("resultstore.googleapis.com:443"),
+	}, opts.ClientOptions)
+	conn, err := transport.DialGRPC(ctx, copts...)
 	if err != nil {
 		return nil, err
 	}

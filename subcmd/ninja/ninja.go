@@ -592,9 +592,9 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 
 	if c.enableResultstore {
 		c.resultstoreUploader, err = resultstore.New(ctx, resultstore.Options{
-			InvocationID: c.buildID,
-			Invocation:   c.invocation(ctx, c.buildID, projectID, execRoot, properties),
-			DialOptions:  credential.GRPCDialOptions(),
+			InvocationID:  c.buildID,
+			Invocation:    c.invocation(ctx, c.buildID, projectID, execRoot, properties),
+			ClientOptions: credential.ClientOptions(),
 		})
 		if err != nil {
 			return stats, err

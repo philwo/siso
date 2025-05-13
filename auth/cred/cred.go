@@ -30,18 +30,22 @@ type Cred struct {
 	// Email is authenticated email.
 	Email string
 
-	rpcCredentials credentials.PerRPCCredentials
-	tokenSource    oauth2.TokenSource
+	perRPCCredentials credentials.PerRPCCredentials
+	tokenSource       oauth2.TokenSource
 }
 
+// Options is an options for credentials.
 type Options struct {
 	LUCIAuth         auth.Options
 	FallbackLUCIAuth auth.Options
-	TokenSource      oauth2.TokenSource
+
+	PerRPCCredentials credentials.PerRPCCredentials
+	// TokenSource is used when PerRPCCredentials is not set.
+	TokenSource oauth2.TokenSource
 }
 
 // AuthOpts returns the LUCI auth options that Siso uses.
-func AuthOpts(credHelper string) Options {
+func AuthOpts(credHelperPath string) Options {
 	authOpts := chromeinfra.DefaultAuthOptions()
 	authOpts.Scopes = []string{
 		auth.OAuthScopeEmail,
@@ -58,16 +62,20 @@ func AuthOpts(credHelper string) Options {
 		"https://www.googleapis.com/auth/gerritcodereview",
 		"https://www.googleapis.com/auth/userinfo.email",
 	}
+	var perRPCCredentials credentials.PerRPCCredentials
 	var tokenSource oauth2.TokenSource
-	if credHelper != "" {
-		tokenSource = credHelperTokenSource{credHelper}
+	if credHelperPath != "" {
+		h := &credHelper{path: credHelperPath}
+		perRPCCredentials = h
+		tokenSource = &credHelperGoogle{h: h}
 	} else {
 		tokenSource = gcloudTokenSource{}
 	}
 	return Options{
-		LUCIAuth:         authOpts,
-		FallbackLUCIAuth: fallbackAuthOpts,
-		TokenSource:      tokenSource,
+		LUCIAuth:          authOpts,
+		FallbackLUCIAuth:  fallbackAuthOpts,
+		PerRPCCredentials: perRPCCredentials,
+		TokenSource:       tokenSource,
 	}
 }
 
@@ -97,13 +105,17 @@ func New(ctx context.Context, opts Options) (Cred, error) {
 		email, _ := tok.Extra("x-token-email").(string)
 		clog.Infof(ctx, "use auth %v email: %s", t, email)
 		ts := oauth2.ReuseTokenSource(tok, opts.TokenSource)
-		return Cred{
-			Type:  t,
-			Email: email,
-			rpcCredentials: oauth.TokenSource{
+		perRPCCredentials := opts.PerRPCCredentials
+		if perRPCCredentials == nil {
+			perRPCCredentials = oauth.TokenSource{
 				TokenSource: ts,
-			},
-			tokenSource: ts,
+			}
+		}
+		return Cred{
+			Type:              t,
+			Email:             email,
+			perRPCCredentials: perRPCCredentials,
+			tokenSource:       ts,
 		}, nil
 	}
 
@@ -124,26 +136,35 @@ func New(ctx context.Context, opts Options) (Cred, error) {
 
 	clog.Infof(ctx, "use luci-auth email: %s", email)
 	return Cred{
-		Type:           t,
-		Email:          email,
-		rpcCredentials: rpcCredentials,
-		tokenSource:    tokenSource,
+		Type:              t,
+		Email:             email,
+		perRPCCredentials: rpcCredentials,
+		tokenSource:       tokenSource,
 	}, nil
 }
 
-// GRPCDialOptions returns grpc's dial options to use the credential.
-func (c Cred) GRPCDialOptions() []grpc.DialOption {
-	if c.rpcCredentials == nil {
+// grpcDialOptions returns grpc's dial options to use the credential.
+func (c Cred) grpcDialOptions() []grpc.DialOption {
+	perRPCCredentials := c.perRPCCredentials
+	if perRPCCredentials == nil {
 		return nil
 	}
 	return []grpc.DialOption{
-		grpc.WithPerRPCCredentials(c.rpcCredentials),
+		grpc.WithPerRPCCredentials(perRPCCredentials),
 		grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{})),
 	}
 }
 
-// ClientOptions returns googleapi's client options to use the credential.
+// ClientOptions returns client options to use the credential.
 func (c Cred) ClientOptions() []option.ClientOption {
+	dopts := c.grpcDialOptions()
+	if len(dopts) > 0 {
+		var copts []option.ClientOption
+		for _, opt := range dopts {
+			copts = append(copts, option.WithGRPCDialOption(opt))
+		}
+		return copts
+	}
 	if c.tokenSource == nil {
 		return nil
 	}
