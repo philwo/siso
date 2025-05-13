@@ -368,6 +368,10 @@ func (hfs *HashFS) dirStoreAndNotify(ctx context.Context, fullname string, e *en
 
 // Stat returns a FileInfo at root/fname.
 func (hfs *HashFS) Stat(ctx context.Context, root, fname string) (FileInfo, error) {
+	return hfs.stat(ctx, root, fname, true)
+}
+
+func (hfs *HashFS) stat(ctx context.Context, root, fname string, needCompute bool) (FileInfo, error) {
 	if log.V(1) {
 		clog.Infof(ctx, "stat @%s %s", root, fname)
 	}
@@ -410,35 +414,38 @@ func (hfs *HashFS) Stat(ctx context.Context, root, fname string) (FileInfo, erro
 		}
 		return FileInfo{root: root, fname: fname, e: e}, nil
 	}
-	if !filepath.IsAbs(fname) {
-		fname = filepath.Join(root, fname)
+	fullname := fname
+	if !filepath.IsAbs(fullname) {
+		fullname = filepath.Join(root, fname)
 	}
-	fname = filepath.ToSlash(fname)
+	fullname = filepath.ToSlash(fullname)
 	e = newLocalEntry()
-	e.init(ctx, fname, hfs.executables, hfs.OS)
+	e.init(ctx, fullname, hfs.executables, hfs.OS)
 	if log.V(1) {
-		clog.Infof(ctx, "stat new entry %s %s", fname, e)
+		clog.Infof(ctx, "stat new entry %s %s", fullname, e)
 	}
 	if errors.Is(e.err, context.Canceled) {
 		return FileInfo{}, e.err
 	}
 	var err error
 	if dir != nil {
-		e, err = dir.store(ctx, filepath.Base(fname), e)
+		e, err = dir.store(ctx, filepath.Base(fullname), e)
 		if errors.Is(err, errRootSymlink) {
-			e, err = hfs.directory.store(ctx, fname, e)
+			e, err = hfs.directory.store(ctx, fullname, e)
 		}
 	} else {
-		e, err = hfs.directory.store(ctx, fname, e)
+		e, err = hfs.directory.store(ctx, fullname, e)
 	}
 	if err != nil {
-		clog.Warningf(ctx, "failed to store %s %s in %s: %v", fname, e, dir, err)
+		clog.Warningf(ctx, "failed to store %s %s in %s: %v", fullname, e, dir, err)
 		return FileInfo{}, err
 	}
 	if e.err != nil {
 		return FileInfo{}, e.err
 	}
-	hfs.digester.lazyCompute(ctx, fname, e)
+	if needCompute {
+		hfs.digester.lazyCompute(ctx, fullname, e)
+	}
 	return FileInfo{root: root, fname: fname, e: e}, nil
 }
 
@@ -1724,8 +1731,8 @@ func (e *entry) updateDir(ctx context.Context, hfs *HashFS, dname string) []stri
 		for _, name := range names {
 			// don't scan temporary file by readdir.
 			// it may cause race on windows.
-			// b/294318963
-			if strings.HasSuffix(name, ".tmp") {
+			// b/294318963 b/381947692
+			if strings.HasSuffix(name, ".tmp") || strings.HasPrefix(name, ".tempfile.") {
 				continue
 			}
 			if hfs.opt.Ignore(ctx, filepath.Join(dname, name)) {
@@ -1735,7 +1742,7 @@ func (e *entry) updateDir(ctx context.Context, hfs *HashFS, dname string) []stri
 			go func() {
 				defer wg.Done()
 				// update entry in e.directory.
-				_, err := hfs.Stat(ctx, dname, name)
+				_, err := hfs.stat(ctx, dname, name, false)
 				if err != nil {
 					clog.Warningf(ctx, "updateDir stat %s: %v", name, err)
 				}
@@ -1746,15 +1753,15 @@ func (e *entry) updateDir(ctx context.Context, hfs *HashFS, dname string) []stri
 		for _, name := range names {
 			// don't scan temporary file by readdir.
 			// it may cause race on windows.
-			// b/294318963
-			if strings.HasSuffix(name, ".tmp") {
+			// b/294318963 b/381947692
+			if strings.HasSuffix(name, ".tmp") || strings.HasPrefix(name, ".tempfile.") {
 				continue
 			}
 			if hfs.opt.Ignore(ctx, filepath.Join(dname, name)) {
 				continue
 			}
 			// update entry in e.directory.
-			_, err := hfs.Stat(ctx, dname, name)
+			_, err := hfs.stat(ctx, dname, name, false)
 			if err != nil {
 				clog.Warningf(ctx, "updateDir stat %s: %v", name, err)
 			}
@@ -2450,6 +2457,9 @@ type FileInfo struct {
 }
 
 func (fi *FileInfo) Path() string {
+	if filepath.IsAbs(fi.fname) {
+		return filepath.ToSlash(fi.fname)
+	}
 	return filepath.ToSlash(filepath.Join(fi.root, fi.fname))
 }
 
