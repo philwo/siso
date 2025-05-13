@@ -143,32 +143,24 @@ func New(ctx context.Context, opts Options) (Cred, error) {
 	}, nil
 }
 
-// grpcDialOptions returns grpc's dial options to use the credential.
-func (c Cred) grpcDialOptions() []grpc.DialOption {
+// GoogleClientOptions returns client options to use the credential for google services.
+func (c Cred) GoogleClientOptions() []option.ClientOption {
+	if c.tokenSource == nil {
+		return nil
+	}
+	return []option.ClientOption{
+		option.WithTokenSource(c.tokenSource),
+	}
+}
+
+// NonGOogleGRPCDialOptions returns grpc's dial options to use the credential for non-google services.
+func (c Cred) NonGoogleGRPCDialOptions(tlsConfig *tls.Config) []grpc.DialOption {
 	perRPCCredentials := c.perRPCCredentials
 	if perRPCCredentials == nil {
 		return nil
 	}
 	return []grpc.DialOption{
 		grpc.WithPerRPCCredentials(perRPCCredentials),
-		grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{})),
-	}
-}
-
-// ClientOptions returns client options to use the credential.
-func (c Cred) ClientOptions() []option.ClientOption {
-	dopts := c.grpcDialOptions()
-	if len(dopts) > 0 {
-		var copts []option.ClientOption
-		for _, opt := range dopts {
-			copts = append(copts, option.WithGRPCDialOption(opt))
-		}
-		return copts
-	}
-	if c.tokenSource == nil {
-		return nil
-	}
-	return []option.ClientOption{
-		option.WithTokenSource(c.tokenSource),
+		grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)),
 	}
 }

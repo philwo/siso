@@ -594,7 +594,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		c.resultstoreUploader, err = resultstore.New(ctx, resultstore.Options{
 			InvocationID:  c.buildID,
 			Invocation:    c.invocation(ctx, c.buildID, projectID, execRoot, properties),
-			ClientOptions: credential.ClientOptions(),
+			ClientOptions: credential.GoogleClientOptions(),
 		})
 		if err != nil {
 			return stats, err
@@ -1209,7 +1209,7 @@ func (c *ninjaCmdRun) initCloudLogging(ctx context.Context, projectID, execRoot 
 	// use generic_task resource
 	// https://cloud.google.com/logging/docs/api/v2/resource-list
 	// https://cloud.google.com/monitoring/api/resources#tag_generic_task
-	client, err := logging.NewClient(ctx, projectID, credential.ClientOptions()...)
+	client, err := logging.NewClient(ctx, projectID, credential.GoogleClientOptions()...)
 	if err != nil {
 		return ctx, "", func() {}, err
 	}
@@ -1279,7 +1279,7 @@ func (c *ninjaCmdRun) initCloudProfiler(ctx context.Context, projectID string, c
 			config.Instance = "non-gce-instance"
 		}
 	}
-	err := profiler.Start(config, credential.ClientOptions()...)
+	err := profiler.Start(config, credential.GoogleClientOptions()...)
 	if err != nil {
 		clog.Errorf(ctx, "failed to start cloud profiler: %v", err)
 	}
@@ -1292,7 +1292,7 @@ func (c *ninjaCmdRun) initCloudTrace(ctx context.Context, projectID string, cred
 		ServiceName:   fmt.Sprintf("siso/%s/%s", c.version, runtime.GOOS),
 		StepThreshold: c.traceThreshold,
 		SpanThreshold: c.traceSpanThreshold,
-		ClientOptions: slices.Clone(credential.ClientOptions()),
+		ClientOptions: slices.Clone(credential.GoogleClientOptions()),
 	})
 	if err != nil {
 		clog.Errorf(ctx, "failed to start trace exporter: %v", err)
@@ -1310,7 +1310,7 @@ func (c *ninjaCmdRun) initCloudMonitoring(ctx context.Context, credential cred.C
 		projectID,
 		prefix,
 		rbeProjectID,
-		credential.ClientOptions(),
+		credential.GoogleClientOptions(),
 	)
 }
 

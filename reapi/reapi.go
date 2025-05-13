@@ -227,42 +227,33 @@ func New(ctx context.Context, cred cred.Cred, opt Option) (*Client, error) {
 }
 
 func newConn(ctx context.Context, addr string, cred cred.Cred, opt Option) (grpcClientConn, error) {
-	copts := []option.ClientOption{
-		option.WithEndpoint(addr),
-		option.WithGRPCConnectionPool(25),
-	}
 	dopts := dialOptions(opt.KeepAliveParams)
 	var conn grpcClientConn
 	var err error
 	if opt.Insecure {
+		// Insecure mode for non-RBE remote execution API.
 		if strings.HasSuffix(addr, ".googleapis.com:443") {
 			return nil, errors.New("insecure mode is not supported for RBE")
 		}
 		clog.Warningf(ctx, "insecure mode")
-		copts = append(copts, option.WithoutAuthentication())
 		dopts = append(dopts, grpc.WithTransportCredentials(insecure.NewCredentials()))
-		for _, dopt := range dopts {
-			copts = append(copts, option.WithGRPCDialOption(dopt))
-		}
-		conn, err = gtransport.DialInsecure(ctx, copts...)
+		conn, err = grpc.DialContext(ctx, addr, dopts...)
 		if err != nil {
 			return nil, fmt.Errorf("failed to dial %s: %w", addr, err)
 		}
 	} else if opt.TLSClientAuthCert != "" && opt.TLSClientAuthKey != "" {
-		copts = append(copts, cred.ClientOptions()...)
-
+		// use mTLS certificates for authentication.
 		clog.Infof(ctx, "using mTLS: cert=%q key=%q", opt.TLSClientAuthCert, opt.TLSClientAuthKey)
 		cert, err := tls.LoadX509KeyPair(opt.TLSClientAuthCert, opt.TLSClientAuthKey)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read mTLS cert pair (%q, %q): %w", opt.TLSClientAuthCert, opt.TLSClientAuthKey, err)
 		}
-		copts = append(copts, option.WithClientCertSource(func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
-			return &cert, nil
-		}))
-		for _, dopt := range dopts {
-			copts = append(copts, option.WithGRPCDialOption(dopt))
-		}
-		conn, err = gtransport.Dial(ctx, copts...)
+		dopts = append(dopts, cred.NonGoogleGRPCDialOptions(&tls.Config{
+			GetClientCertificate: func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
+				return &cert, nil
+			},
+		})...)
+		conn, err = grpc.DialContext(ctx, addr, dopts...)
 		if err != nil {
 			return nil, fmt.Errorf("failed to dial %s: %w", addr, err)
 		}
@@ -270,8 +261,20 @@ func newConn(ctx context.Context, addr string, cred cred.Cred, opt Option) (grpc
 		return nil, errors.New("tls_client_auth_cert is set, but tls_client_auth_key is not set")
 	} else if opt.TLSClientAuthKey != "" {
 		return nil, errors.New("tls_client_auth_key is set, but tls_client_auth_cert is not set")
+	} else if !strings.HasSuffix(addr, ".googleapis.com:443") {
+		// non-RBE case, may want to use auth with request header via credential helper etc.
+		dopts = append(dopts, cred.NonGoogleGRPCDialOptions(&tls.Config{})...)
+		conn, err = grpc.DialContext(ctx, addr, dopts...)
+		if err != nil {
+			return nil, fmt.Errorf("failed to dial %s: %w", addr, err)
+		}
 	} else {
-		copts = append(copts, cred.ClientOptions()...)
+		// regular RBE case.
+		copts := []option.ClientOption{
+			option.WithEndpoint(addr),
+			option.WithGRPCConnectionPool(25),
+		}
+		copts = append(copts, cred.GoogleClientOptions()...)
 		for _, dopt := range dopts {
 			copts = append(copts, option.WithGRPCDialOption(dopt))
 		}

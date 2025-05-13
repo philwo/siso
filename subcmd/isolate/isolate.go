@@ -427,7 +427,7 @@ func (c *run) initCloudLogging(ctx context.Context, projectID, execRoot string, 
 	// use generic_task resource
 	// https://cloud.google.com/logging/docs/api/v2/resource-list
 	// https://cloud.google.com/monitoring/api/resources#tag_generic_task
-	client, err := logging.NewClient(ctx, projectID, credential.ClientOptions()...)
+	client, err := logging.NewClient(ctx, projectID, credential.GoogleClientOptions()...)
 	if err != nil {
 		return ctx, "", func() {}, err
 	}
