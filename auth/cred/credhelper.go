@@ -19,6 +19,8 @@ import (
 	"golang.org/x/oauth2"
 )
 
+var errNoAuthorization = errors.New("no authrozation header")
+
 // credHelper handles bazel credential helper.
 // https://github.com/EngFlow/credential-helper-spec/blob/main/spec.md
 type credHelper struct {
@@ -158,7 +160,7 @@ func (h *credHelper) token(endpoint string) (*oauth2.Token, error) {
 	}
 	auth := prc.headers["authorization"]
 	if auth == "" {
-		return nil, fmt.Errorf("no Authorization in resp from helper %s: %w\nstdout: %s", h.path, err, string(prc.stdout))
+		return nil, fmt.Errorf("%w in resp from helper %s\nstdout: %s", errNoAuthorization, h.path, string(prc.stdout))
 	}
 	token := strings.TrimSpace(strings.TrimPrefix(auth, "Bearer "))
 	t := &oauth2.Token{

@@ -8,6 +8,7 @@ package cred
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 
 	"golang.org/x/oauth2"
@@ -94,17 +95,29 @@ func New(ctx context.Context, opts Options) (Cred, error) {
 		if opts.TokenSource == nil {
 			return Cred{}, err
 		}
-		tok, err := opts.TokenSource.Token()
+		var email string
+		ts := opts.TokenSource
+		tok, err := ts.Token()
 		if err != nil {
 			if ctx.Err() != nil {
 				return Cred{}, err
 			}
-			return Cred{}, fmt.Errorf("need to run `siso login`: %w", err)
+			if errors.Is(err, errNoAuthorization) {
+				if ch, ok := ts.(*credHelperGoogle); ok {
+					clog.Warningf(ctx, "use auth %s, no token source %v", ch.h.path, err)
+				} else {
+					clog.Warningf(ctx, "use auth %T, no token source: %v", ts, err)
+				}
+				ts = nil
+			} else {
+				return Cred{}, fmt.Errorf("need to run `siso login`: %w", err)
+			}
+		} else {
+			t, _ := tok.Extra("x-token-source").(string)
+			email, _ = tok.Extra("x-token-email").(string)
+			clog.Infof(ctx, "use auth %v email: %s", t, email)
+			ts = oauth2.ReuseTokenSource(tok, ts)
 		}
-		t, _ := tok.Extra("x-token-source").(string)
-		email, _ := tok.Extra("x-token-email").(string)
-		clog.Infof(ctx, "use auth %v email: %s", t, email)
-		ts := oauth2.ReuseTokenSource(tok, opts.TokenSource)
 		perRPCCredentials := opts.PerRPCCredentials
 		if perRPCCredentials == nil {
 			perRPCCredentials = oauth.TokenSource{
