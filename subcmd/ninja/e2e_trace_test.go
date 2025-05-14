@@ -107,6 +107,18 @@ func TestBuild_Trace_remote(t *testing.T) {
 			t.Errorf("traceEvents[%d] not map: %v", i, v)
 			continue
 		}
+		ph, ok := ev["ph"].(string)
+		if !ok {
+			t.Errorf("no ph in traceEvents[%d] %v", i, v)
+			continue
+		}
+		switch ph {
+		case "M": // process_name
+		case "X": // step
+		default:
+			// ignore counters etc
+			continue
+		}
 		name, ok := ev["name"].(string)
 		if !ok {
 			t.Errorf("no name in traceEvents[%d] %v", i, v)
@@ -252,6 +264,18 @@ func TestBuild_Trace_reproxy(t *testing.T) {
 		ev, ok := v.(map[string]any)
 		if !ok {
 			t.Errorf("traceEvents[%d] not map: %v", i, v)
+			continue
+		}
+		ph, ok := ev["ph"].(string)
+		if !ok {
+			t.Errorf("no ph in traceEvents[%d] %v", i, v)
+			continue
+		}
+		switch ph {
+		case "M": // process_name
+		case "X": // step
+		default:
+			// ignore counters etc
 			continue
 		}
 		name, ok := ev["name"].(string)
