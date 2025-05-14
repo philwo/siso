@@ -84,7 +84,7 @@ retryLoop:
 					if err != nil {
 						clog.Warningf(ctx, "failed to unmarshal metadata: %v", err)
 					} else {
-						clog.Infof(ctx, "operation stage: %v", metadata.GetStage())
+						clog.Infof(ctx, "operation stage: %v %s", metadata.GetStage(), ongoingDetails(metadata.GetPartialExecutionMetadata()))
 						if log.V(1) {
 							clog.Infof(ctx, "operation metadata: %v", metadata)
 						}
@@ -236,4 +236,46 @@ func erespErr(ctx context.Context, eresp *rpb.ExecuteResponse) error {
 		return status.FromProto(st).Err()
 	}
 	return nil
+}
+
+func ongoingDetails(md *rpb.ExecutedActionMetadata) string {
+	var sb strings.Builder
+	if w := md.GetWorker(); w != "" {
+		fmt.Fprintf(&sb, "worker=%s ", w)
+	}
+	if md.QueuedTimestamp == nil {
+		fmt.Fprintf(&sb, "queued=unknown")
+		return sb.String()
+	}
+	if md.WorkerStartTimestamp == nil {
+		fmt.Fprintf(&sb, "queued=%s", md.GetQueuedTimestamp().AsTime())
+		return sb.String()
+	}
+	fmt.Fprintf(&sb, "queue=%s %s ", md.GetQueuedTimestamp().AsTime(),
+		md.GetWorkerStartTimestamp().AsTime().Sub(md.GetQueuedTimestamp().AsTime()))
+	if md.WorkerCompletedTimestamp != nil {
+		fmt.Fprintf(&sb, "worker=%s %s ", md.GetWorkerStartTimestamp().AsTime(),
+			md.GetWorkerCompletedTimestamp().AsTime().Sub(md.GetWorkerStartTimestamp().AsTime()))
+	}
+	if md.InputFetchStartTimestamp != nil && md.InputFetchCompletedTimestamp == nil {
+		fmt.Fprintf(&sb, "input=%s", md.GetInputFetchStartTimestamp().AsTime())
+		return sb.String()
+	}
+	if md.InputFetchCompletedTimestamp != nil {
+		fmt.Fprintf(&sb, "input=%s ", md.GetInputFetchCompletedTimestamp().AsTime().Sub(md.GetInputFetchStartTimestamp().AsTime()))
+	}
+	if md.ExecutionStartTimestamp != nil && md.ExecutionCompletedTimestamp == nil {
+		fmt.Fprintf(&sb, "exec=%s", md.GetExecutionStartTimestamp().AsTime())
+		return sb.String()
+	}
+	if md.ExecutionCompletedTimestamp != nil {
+		fmt.Fprintf(&sb, "exec=%s ", md.GetExecutionCompletedTimestamp().AsTime().Sub(md.GetExecutionStartTimestamp().AsTime()))
+	}
+	if md.OutputUploadStartTimestamp != nil && md.OutputUploadCompletedTimestamp == nil {
+		fmt.Fprintf(&sb, "output=%s", md.GetOutputUploadStartTimestamp().AsTime())
+	}
+	if md.OutputUploadCompletedTimestamp != nil {
+		fmt.Fprintf(&sb, "output=%s ", md.GetOutputUploadCompletedTimestamp().AsTime().Sub(md.GetOutputUploadStartTimestamp().AsTime()))
+	}
+	return sb.String()
 }
