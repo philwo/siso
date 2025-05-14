@@ -60,12 +60,17 @@ import (
 	"go.chromium.org/infra/build/siso/reapi"
 	"go.chromium.org/infra/build/siso/reapi/digest"
 	"go.chromium.org/infra/build/siso/reapi/merkletree"
+	"go.chromium.org/infra/build/siso/subcmd/ninja/ninjalog"
 	"go.chromium.org/infra/build/siso/toolsupport/artfsutil"
 	"go.chromium.org/infra/build/siso/toolsupport/cogutil"
 	"go.chromium.org/infra/build/siso/toolsupport/ninjautil"
 	"go.chromium.org/infra/build/siso/toolsupport/watchmanutil"
 	"go.chromium.org/infra/build/siso/ui"
 )
+
+// File name of siso metadata file.
+// This file is read by ninjalog_uploader.py, in order to populate metadata.
+const sisoMetadataFilename = ".siso_metadata.json"
 
 const ninjaUsage = `build the requested targets as ninja.
 
@@ -514,6 +519,8 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 
 	projectID := c.reopt.UpdateProjectID(c.projectID)
 
+	var sisoMetadata ninjalog.SisoMetadata
+
 	var credential cred.Cred
 	if projectID != "" {
 		// TODO: can be async until cred is needed?
@@ -557,6 +564,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	properties.Add("memgc", info)
 
 	clog.Infof(ctx, "siso version %s", c.version)
+	sisoMetadata.SisoVersion = c.version
 	if cmdver, err := version.GetStartupVersion(); err != nil {
 		clog.Warningf(ctx, "cannot determine CIPD package version: %s", err)
 	} else if cmdver.PackageName != "" {
@@ -939,6 +947,15 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		clog.Warningf(ctx, "failed to remove %s: %v", failedTargetsFilename, err)
 	}
+
+	j, err := json.Marshal(sisoMetadata)
+	if err != nil {
+		return stats, err
+	}
+	if err := os.WriteFile(sisoMetadataFilename, j, 0644); err != nil {
+		return stats, err
+	}
+
 	return runNinja(ctx, c.fname, graph, bopts, targets, runNinjaOpts{
 		checkFailedTargets: lastFailedTargets,
 		cleandead:          c.cleandead,
