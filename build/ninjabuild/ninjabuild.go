@@ -29,16 +29,15 @@ type Graph struct {
 
 	visited map[*ninjautil.Edge]*edgeStepDef
 
-	validations []build.Target
-
 	globals *globals
 }
 
 type edgeStepDef struct {
-	def       *StepDef
-	inputs    []build.Target
-	orderOnly []build.Target
-	outputs   []build.Target
+	def         *StepDef
+	inputs      []build.Target
+	orderOnly   []build.Target
+	outputs     []build.Target
+	validations []build.Target
 }
 
 type globals struct {
@@ -263,7 +262,6 @@ func (g *Graph) Reset(ctx context.Context) error {
 
 func (g *Graph) reset(ctx context.Context) {
 	g.visited = make(map[*ninjautil.Edge]*edgeStepDef)
-	g.validations = nil
 	g.globals.depsLog.Reset()
 	g.globals.targetPaths = make([]string, g.globals.nstate.NumNodes())
 	g.globals.edgeRules = make([]edgeRuleHolder, g.globals.nstate.NumNodes())
@@ -414,11 +412,6 @@ func (g *Graph) SpellcheckTarget(t string) (string, error) {
 	return g.globals.nstate.SpellcheckTarget(t)
 }
 
-// Validations returns validation targets detected by past StepDef calls.
-func (g *Graph) Validations() []build.Target {
-	return g.validations
-}
-
 // TargetPath returns exec-root relative path of the target.
 func (g *Graph) TargetPath(ctx context.Context, target build.Target) (string, error) {
 	node, ok := g.globals.nstate.LookupNode(int(target))
@@ -444,18 +437,18 @@ func (g *globals) targetPath(ctx context.Context, node *ninjautil.Node) string {
 // StepDef creates new StepDef to build target (exec-root relative), needed for next.
 // top-level target will use nil for next.
 // It returns a StepDef for the target and inputs/orderOnly/outputs targets.
-func (g *Graph) StepDef(ctx context.Context, target build.Target, next build.StepDef) (build.StepDef, []build.Target, []build.Target, []build.Target, error) {
+func (g *Graph) StepDef(ctx context.Context, target build.Target, next build.StepDef) (build.StepDef, []build.Target, []build.Target, []build.Target, []build.Target, error) {
 	n, ok := g.globals.nstate.LookupNode(int(target))
 	if !ok {
-		return nil, nil, nil, nil, build.ErrNoTarget
+		return nil, nil, nil, nil, nil, build.ErrNoTarget
 	}
 	edge, ok := n.InEdge()
 	if !ok {
-		return nil, nil, nil, nil, build.ErrTargetIsSource
+		return nil, nil, nil, nil, nil, build.ErrTargetIsSource
 	}
 	v := g.visited[edge]
 	if v != nil {
-		return v.def, v.inputs, v.orderOnly, v.outputs, build.ErrDuplicateStep
+		return v.def, v.inputs, v.orderOnly, v.outputs, v.validations, build.ErrDuplicateStep
 	}
 	if edge.IsPhony() {
 		g.globals.phony[g.globals.targetPath(ctx, n)] = true
@@ -476,16 +469,19 @@ func (g *Graph) StepDef(ctx context.Context, target build.Target, next build.Ste
 	for _, out := range edgeOutputs {
 		outputs = append(outputs, build.Target(out.ID()))
 	}
-	for _, v := range edge.Validations() {
-		g.validations = append(g.validations, build.Target(v.ID()))
+	edgeValidations := edge.Validations()
+	validations := make([]build.Target, 0, len(edgeValidations))
+	for _, v := range edgeValidations {
+		validations = append(validations, build.Target(v.ID()))
 	}
 	g.visited[edge] = &edgeStepDef{
-		def:       stepDef,
-		inputs:    inputs,
-		orderOnly: orderOnly,
-		outputs:   outputs,
+		def:         stepDef,
+		inputs:      inputs,
+		orderOnly:   orderOnly,
+		outputs:     outputs,
+		validations: validations,
 	}
-	return stepDef, inputs, orderOnly, outputs, nil
+	return stepDef, inputs, orderOnly, outputs, validations, nil
 }
 
 // InputDeps returns input deps.

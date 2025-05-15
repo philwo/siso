@@ -31,14 +31,12 @@ func (fakeGraph) Targets(ctx context.Context, args ...string) ([]Target, error) 
 
 func (fakeGraph) SpellcheckTarget(string) (string, error) { return "", errors.New("spellcheck error") }
 
-func (fakeGraph) Validations() []Target { return nil }
-
 func (fakeGraph) TargetPath(ctx context.Context, target Target) (string, error) {
 	return "", errors.New("not implemented")
 }
 
-func (fakeGraph) StepDef(ctx context.Context, target Target, next StepDef) (StepDef, []Target, []Target, []Target, error) {
-	return nil, nil, nil, nil, errors.New("not implemented")
+func (fakeGraph) StepDef(ctx context.Context, target Target, next StepDef) (StepDef, []Target, []Target, []Target, []Target, error) {
+	return nil, nil, nil, nil, nil, errors.New("not implemented")
 }
 
 func (g fakeGraph) InputDeps(ctx context.Context) map[string][]string {

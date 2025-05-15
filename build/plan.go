@@ -56,18 +56,15 @@ type Graph interface {
 	// SpellcheckTarget returns the most similar target from given target.
 	SpellcheckTarget(string) (string, error)
 
-	// Validations returns validation targets detected by past StepDef calls.
-	Validations() []Target
-
 	// TargetPath returns exec-root relative path of target.
 	TargetPath(context.Context, Target) (string, error)
 
-	// StepDef creates new StepDef for the target and its inputs/orderOnly/outputs targets.
+	// StepDef creates new StepDef for the target and its inputs/orderOnly/outputs/validations targets.
 	// if err is ErrTargetIsSource, target is source and no step to
 	// generate the target.
 	// if err is ErrDuplicateStep, a step that geneartes the target
 	// is already processed.
-	StepDef(context.Context, Target, StepDef) (StepDef, []Target, []Target, []Target, error)
+	StepDef(context.Context, Target, StepDef) (StepDef, []Target, []Target, []Target, []Target, error)
 
 	// InputDeps returns input dependencies.
 	// input dependencies is a map from input path or label to
@@ -223,6 +220,8 @@ func schedule(ctx context.Context, sched *scheduler, graph Graph, args ...string
 			ui.Default.PrintLines(fmt.Sprintf("target: %q\n    ->  %q\n\n", args, targetNames))
 		}
 	}
+	// validationQueue collects validation targets found during scheduling.
+	var validationQueue []Target
 	for _, t := range targets {
 		switch sched.plan.targets[t].scan {
 		case scanStateNotVisited:
@@ -232,13 +231,15 @@ func schedule(ctx context.Context, sched *scheduler, graph Graph, args ...string
 			continue
 		}
 
-		err := scheduleTarget(ctx, sched, graph, t, nil, sched.prepare)
+		validationQueue, err = scheduleTarget(ctx, sched, graph, t, nil, sched.prepare, validationQueue)
 		if err != nil {
 			return fmt.Errorf("failed in schedule %s: %w", targetPath(ctx, graph, t), err)
 		}
 	}
 	if !sched.prepare {
-		for _, t := range graph.Validations() {
+		for len(validationQueue) > 0 {
+			t := validationQueue[0]
+			validationQueue = validationQueue[1:]
 			switch sched.plan.targets[t].scan {
 			case scanStateNotVisited:
 			case scanStateVisiting:
@@ -246,7 +247,7 @@ func schedule(ctx context.Context, sched *scheduler, graph Graph, args ...string
 			case scanStateDone, scanStateIgnored:
 				continue
 			}
-			err := scheduleTarget(ctx, sched, graph, t, nil, false)
+			validationQueue, err = scheduleTarget(ctx, sched, graph, t, nil, false, validationQueue)
 			if err != nil {
 				return fmt.Errorf("failed in schedule %s: %w", targetPath(ctx, graph, t), err)
 			}
@@ -266,7 +267,8 @@ func (d DependencyCycleError) Error() string {
 }
 
 // scheduleTarget schedules a build plan for target, which is required to next StepDef, from graph into sched.
-func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target Target, next StepDef, ignore bool) error {
+// It also returns validationQueue updated while scheduling.
+func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target Target, next StepDef, ignore bool, validationQueue []Target) ([]Target, error) {
 	targets := sched.plan.targets
 	scanState := targets[target].scan
 	switch scanState {
@@ -284,12 +286,12 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 			targets[target].scan = scanStateDone
 		}()
 	case scanStateVisiting:
-		return DependencyCycleError{
+		return validationQueue, DependencyCycleError{
 			Targets: []string{targetPath(ctx, graph, target)},
 		}
 	case scanStateIgnored:
 		if ignore {
-			return nil
+			return validationQueue, nil
 		}
 		clog.Infof(ctx, "need to scan ignored target %s", targetPath(ctx, graph, target))
 		targets[target].scan = scanStateVisiting
@@ -298,18 +300,20 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 		}()
 
 	case scanStateDone:
-		return nil
+		return validationQueue, nil
 	}
 	if targets[target].source {
 		if log.V(1) {
 			clog.Infof(ctx, "sched target already marked: %v", targetPath(ctx, graph, target))
 		}
-		return nil
+		return validationQueue, nil
 	}
 	if log.V(1) {
 		clog.Infof(ctx, "schedule target %v state=%v ignore:%t", targetPath(ctx, graph, target), scanState, ignore)
 	}
-	newStep, inputs, orderOnly, outputs, err := graph.StepDef(ctx, target, next)
+	newStep, inputs, orderOnly, outputs, validations, err := graph.StepDef(ctx, target, next)
+	// Add found validations to the validations queue to be scheduled later.
+	validationQueue = append(validationQueue, validations...)
 	switch {
 	case err == nil:
 		// need to schedule.
@@ -317,12 +321,12 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 		if log.V(1) {
 			clog.Infof(ctx, "sched target not found? %v", targetPath(ctx, graph, target))
 		}
-		return err
+		return validationQueue, err
 	case errors.Is(err, ErrTargetIsSource):
 		if log.V(1) {
 			clog.Infof(ctx, "sched target is source? %v", targetPath(ctx, graph, target))
 		}
-		return sched.mark(ctx, graph, target, next)
+		return validationQueue, sched.mark(ctx, graph, target, next)
 	case errors.Is(err, ErrDuplicateStep):
 		if scanState == scanStateIgnored {
 			// need to check again.
@@ -334,12 +338,12 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 		if log.V(1) {
 			clog.Infof(ctx, "sched duplicate step for %v", targetPath(ctx, graph, target))
 		}
-		return nil
+		return validationQueue, nil
 	default:
 		if log.V(1) {
 			clog.Warningf(ctx, "sched error for %v: %v", target, err)
 		}
-		return err
+		return validationQueue, err
 	}
 	// mark all other outputs are done, or ignored.
 	defer func() {
@@ -366,7 +370,7 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 	next = newStep
 	select {
 	case <-ctx.Done():
-		return fmt.Errorf("interrupted in schedule: %w", context.Cause(ctx))
+		return validationQueue, fmt.Errorf("interrupted in schedule: %w", context.Cause(ctx))
 	default:
 	}
 
@@ -379,7 +383,7 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 		for _, out := range outputs {
 			fname, err := graph.TargetPath(ctx, out)
 			if err != nil {
-				return fmt.Errorf("schedule bad target %s: %w", targetPath(ctx, graph, out), err)
+				return validationQueue, fmt.Errorf("schedule bad target %s: %w", targetPath(ctx, graph, out), err)
 			}
 			switch filepath.Ext(fname) {
 			case ".h", ".hxx", ".hpp", ".inc":
@@ -424,7 +428,7 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 			if ignore && sched.prepareHeaderOnly {
 				fname, err := graph.TargetPath(ctx, in)
 				if err != nil {
-					return fmt.Errorf("schedule bad target %s: %w", targetPath(ctx, graph, in), err)
+					return validationQueue, fmt.Errorf("schedule bad target %s: %w", targetPath(ctx, graph, in), err)
 				}
 				switch filepath.Ext(fname) {
 				case ".h", ".hxx", ".hpp", ".inc":
@@ -433,7 +437,7 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 					inIgnore = true
 				}
 			}
-			err := scheduleTarget(ctx, sched, graph, in, next, inIgnore)
+			validationQueue, err = scheduleTarget(ctx, sched, graph, in, next, inIgnore, validationQueue)
 			if err != nil {
 				var cycleErr DependencyCycleError
 				if errors.As(err, &cycleErr) {
@@ -441,9 +445,9 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 						cur := targetPath(ctx, graph, in)
 						cycleErr.Targets = append(cycleErr.Targets, cur)
 					}
-					return cycleErr
+					return validationQueue, cycleErr
 				}
-				return fmt.Errorf("schedule %s: %w", targetPath(ctx, graph, in), err)
+				return validationQueue, fmt.Errorf("schedule %s: %w", targetPath(ctx, graph, in), err)
 			}
 		}
 		if !targets[in].source && !ignore {
@@ -465,19 +469,19 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 			// i.e. step's outputs should be phony outputs
 			// phony_output is always dirty,
 			// so such non-phony output rule always rebuild.
-			return fmt.Errorf("schedule: non phony_output %q depends on phony_output %q", targetPath(ctx, graph, target), targetPath(ctx, graph, in))
+			return validationQueue, fmt.Errorf("schedule: non phony_output %q depends on phony_output %q", targetPath(ctx, graph, target), targetPath(ctx, graph, in))
 		}
 	}
 	if ignore {
 		clog.Infof(ctx, "sched: ignore target %s", targetPath(ctx, graph, target))
-		return nil
+		return validationQueue, nil
 	}
 	if log.V(1) {
 		clog.Infof(ctx, "sched: add target %s: %s", targetPath(ctx, graph, target), newStep)
 	}
 	step.outputs = outputs
 	sched.add(ctx, graph, step)
-	return nil
+	return validationQueue, nil
 }
 
 // newScheduler creates new scheduler.
