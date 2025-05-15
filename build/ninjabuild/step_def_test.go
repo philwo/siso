@@ -97,7 +97,7 @@ build target1: __rule target2 | ../../source1 || target3
 	setupFile("source0")
 
 	graph := &Graph{
-		visited: make(map[*ninjautil.Edge]*edgeStepDef),
+		visited: make(map[*ninjautil.Edge]*build.Edge),
 		globals: &globals{
 			nstate: state,
 			path:   build.NewPath(dir, "out/Default"),
@@ -206,7 +206,7 @@ build target1: __rule ../../source1 foo.stamp foo.a
 	setupFile("source0")
 
 	graph := &Graph{
-		visited: make(map[*ninjautil.Edge]*edgeStepDef),
+		visited: make(map[*ninjautil.Edge]*build.Edge),
 		globals: &globals{
 			nstate: state,
 			path:   build.NewPath(dir, "out/Default"),
@@ -314,7 +314,7 @@ build foo.h: __rule | ./protoc
 	}
 
 	graph := &Graph{
-		visited: make(map[*ninjautil.Edge]*edgeStepDef),
+		visited: make(map[*ninjautil.Edge]*build.Edge),
 		globals: &globals{
 			nstate:      state,
 			path:        build.NewPath(dir, "out/Default"),
@@ -415,7 +415,7 @@ build target1: __rule ../../source1.cc target2.h target3.h
 	setupFile("source1.cc")
 
 	graph := &Graph{
-		visited: make(map[*ninjautil.Edge]*edgeStepDef),
+		visited: make(map[*ninjautil.Edge]*build.Edge),
 		globals: &globals{
 			nstate: state,
 			path:   build.NewPath(dir, "out/Default"),

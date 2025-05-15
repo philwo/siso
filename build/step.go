@@ -113,6 +113,15 @@ type StepDef interface {
 	RuleFix(ctx context.Context, inadds, outadds []string) []byte
 }
 
+// Edge contains StepDef and the dependency targets of the edge.
+type Edge struct {
+	StepDef     StepDef
+	Inputs      []Target
+	OrderOnly   []Target
+	Outputs     []Target
+	Validations []Target
+}
+
 // Step is a build step.
 type Step struct {
 	def     StepDef

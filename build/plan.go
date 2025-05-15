@@ -59,12 +59,12 @@ type Graph interface {
 	// TargetPath returns exec-root relative path of target.
 	TargetPath(context.Context, Target) (string, error)
 
-	// StepDef creates new StepDef for the target and its inputs/orderOnly/outputs/validations targets.
+	// Edge creates new Edge for the target.
 	// if err is ErrTargetIsSource, target is source and no step to
 	// generate the target.
 	// if err is ErrDuplicateStep, a step that geneartes the target
 	// is already processed.
-	StepDef(context.Context, Target, StepDef) (StepDef, []Target, []Target, []Target, []Target, error)
+	Edge(context.Context, Target, StepDef) (*Edge, error)
 
 	// InputDeps returns input dependencies.
 	// input dependencies is a map from input path or label to
@@ -311,9 +311,7 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 	if log.V(1) {
 		clog.Infof(ctx, "schedule target %v state=%v ignore:%t", targetPath(ctx, graph, target), scanState, ignore)
 	}
-	newStep, inputs, orderOnly, outputs, validations, err := graph.StepDef(ctx, target, next)
-	// Add found validations to the validations queue to be scheduled later.
-	validationQueue = append(validationQueue, validations...)
+	newEdge, err := graph.Edge(ctx, target, next)
 	switch {
 	case err == nil:
 		// need to schedule.
@@ -351,7 +349,7 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 		if ignore {
 			nextState = scanStateIgnored
 		}
-		for _, out := range outputs {
+		for _, out := range newEdge.Outputs {
 			switch targets[out].scan {
 			case scanStateNotVisited:
 				targets[out].scan = nextState
@@ -361,10 +359,13 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 			}
 		}
 	}()
+	// Add found validations to the validations queue to be scheduled later.
+	validationQueue = append(validationQueue, newEdge.Validations...)
+	newStep := newEdge.StepDef
 	isPhonyOutput := newStep.Binding("phony_output") != ""
 	targets[target].phonyOutput = isPhonyOutput
 	if log.V(1) {
-		clog.Infof(ctx, "schedule %v inputs:%d outputs:%d", newStep, len(inputs), len(outputs))
+		clog.Infof(ctx, "schedule %v inputs:%d outputs:%d", newStep, len(newEdge.Inputs), len(newEdge.Outputs))
 	}
 	sched.visited++
 	next = newStep
@@ -375,12 +376,12 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 	}
 
 	if ignore && sched.prepareHeaderOnly {
-		clog.Infof(ctx, "check outputs=%d for %s", len(outputs), targetPath(ctx, graph, target))
+		clog.Infof(ctx, "check outputs=%d for %s", len(newEdge.Outputs), targetPath(ctx, graph, target))
 		// If this step generates header (even if build dependency
 		// doesn't explicitly depend on the header), don't ignore this.
 		// b/358693473
 	outCheck:
-		for _, out := range outputs {
+		for _, out := range newEdge.Outputs {
 			fname, err := graph.TargetPath(ctx, out)
 			if err != nil {
 				return validationQueue, fmt.Errorf("schedule bad target %s: %w", targetPath(ctx, graph, out), err)
@@ -418,8 +419,8 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 		def:   newStep,
 		state: &stepState{},
 	}
-	orderOnlyIndex := len(inputs)
-	for i, in := range append(inputs, orderOnly...) {
+	orderOnlyIndex := len(newEdge.Inputs)
+	for i, in := range append(newEdge.Inputs, newEdge.OrderOnly...) {
 		if targets[in].scan != scanStateDone {
 			// if this target is ignored, but "in" is header,
 			// then it will not ignore steps to generate "in"
@@ -479,7 +480,7 @@ func scheduleTarget(ctx context.Context, sched *scheduler, graph Graph, target T
 	if log.V(1) {
 		clog.Infof(ctx, "sched: add target %s: %s", targetPath(ctx, graph, target), newStep)
 	}
-	step.outputs = outputs
+	step.outputs = newEdge.Outputs
 	sched.add(ctx, graph, step)
 	return validationQueue, nil
 }
