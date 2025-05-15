@@ -104,8 +104,10 @@ func New(ctx context.Context, opts Options) (Cred, error) {
 			}
 			if errors.Is(err, errNoAuthorization) {
 				if ch, ok := ts.(*credHelperGoogle); ok {
+					t = ch.h.path
 					clog.Warningf(ctx, "use auth %s, no token source %v", ch.h.path, err)
 				} else {
+					t = fmt.Sprintf("%T", ts)
 					clog.Warningf(ctx, "use auth %T, no token source: %v", ts, err)
 				}
 				ts = nil
@@ -113,7 +115,7 @@ func New(ctx context.Context, opts Options) (Cred, error) {
 				return Cred{}, fmt.Errorf("need to run `siso login`: %w", err)
 			}
 		} else {
-			t, _ := tok.Extra("x-token-source").(string)
+			t, _ = tok.Extra("x-token-source").(string)
 			email, _ = tok.Extra("x-token-email").(string)
 			clog.Infof(ctx, "use auth %v email: %s", t, email)
 			ts = oauth2.ReuseTokenSource(tok, ts)
@@ -156,24 +158,36 @@ func New(ctx context.Context, opts Options) (Cred, error) {
 	}, nil
 }
 
-// GoogleClientOptions returns client options to use the credential for google services.
-func (c Cred) GoogleClientOptions() []option.ClientOption {
-	if c.tokenSource == nil {
-		return nil
-	}
-	return []option.ClientOption{
-		option.WithTokenSource(c.tokenSource),
-	}
-}
-
-// NonGOogleGRPCDialOptions returns grpc's dial options to use the credential for non-google services.
-func (c Cred) NonGoogleGRPCDialOptions(tlsConfig *tls.Config) []grpc.DialOption {
+// grpcDialOptions returns grpc's dial options to use the credential.
+func (c Cred) grpcDialOptions() []grpc.DialOption {
 	perRPCCredentials := c.perRPCCredentials
 	if perRPCCredentials == nil {
 		return nil
 	}
 	return []grpc.DialOption{
 		grpc.WithPerRPCCredentials(perRPCCredentials),
-		grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)),
+		grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{})),
+	}
+}
+
+// ClientOptions returns client options to use the credential.
+func (c Cred) ClientOptions() []option.ClientOption {
+	dopts := c.grpcDialOptions()
+	if len(dopts) > 0 {
+		copts := []option.ClientOption{
+			// disable Google Application Default, and use PerRPCCredentials in dial option.
+			// https://github.com/googleapis/google-api-go-client/issues/3149
+			option.WithoutAuthentication(),
+		}
+		for _, opt := range dopts {
+			copts = append(copts, option.WithGRPCDialOption(opt))
+		}
+		return copts
+	}
+	if c.tokenSource == nil {
+		return nil
+	}
+	return []option.ClientOption{
+		option.WithTokenSource(c.tokenSource),
 	}
 }
