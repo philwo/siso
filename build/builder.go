@@ -424,10 +424,16 @@ func (b numBytes) String() string {
 // Build builds args with the name.
 func (b *Builder) Build(ctx context.Context, name string, args ...string) (err error) {
 	started := time.Now()
+	// pctx is parent context, that is used to check
+	// original context is canceled or not.
+	pctx := ctx
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	defer func() {
+		if cerr := context.Cause(pctx); err == nil && cerr != nil {
+			err = cerr
+		}
 		if r := recover(); r != nil {
 			const size = 64 << 10
 			buf := make([]byte, size)
