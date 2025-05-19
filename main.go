@@ -51,7 +51,7 @@ var (
 	traceFile     string
 )
 
-const versionID = "v1.2.4"
+const versionID = "v1.2.5"
 const versionStr = "siso " + versionID
 
 func getApplication(authOpts cred.Options) *cli.Application {
