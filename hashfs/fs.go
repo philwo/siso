@@ -95,9 +95,8 @@ type HashFS struct {
 
 	executables map[string]bool
 
-	journalMu sync.Mutex
 	// writer for updated entries journal.
-	journal io.WriteCloser
+	journal journalWriter
 
 	// trigger for SetState background goroutine finish.
 	setStateCh chan error
@@ -168,7 +167,7 @@ func New(ctx context.Context, opt Option) (*HashFS, error) {
 		if err != nil {
 			clog.Warningf(ctx, "Failed to create fs state journal: %v", err)
 		} else {
-			fsys.journal = f
+			fsys.journal.w = f
 		}
 	}
 	go fsys.digester.start()
@@ -233,22 +232,17 @@ func (hfs *HashFS) Close(ctx context.Context) error {
 	if hfs.opt.StateFile == "" {
 		return nil
 	}
-	hfs.journalMu.Lock()
-	if hfs.journal != nil {
-		err := hfs.journal.Close()
-		if err != nil {
-			clog.Warningf(ctx, "Failed to close journal %v", err)
-		}
-		hfs.journal = nil
+	err := hfs.journal.Close()
+	if err != nil {
+		clog.Warningf(ctx, "Failed to close journal %v", err)
 	}
-	hfs.journalMu.Unlock()
 	clog.Infof(ctx, "close journal")
 	if hfs.clean.Load() || !hfs.loaded.Load() || len(hfs.taintedFiles) > 0 {
 		// don't update fs state when there are tainted files.
 		clog.Warningf(ctx, "not save state clean=%t loaded=%t tainted:%d", hfs.clean.Load(), hfs.loaded.Load(), len(hfs.taintedFiles))
 		return nil
 	}
-	err := Save(ctx, hfs.State(ctx), hfs.opt)
+	err = Save(ctx, hfs.State(ctx), hfs.opt)
 	if err != nil {
 		clog.Errorf(ctx, "Failed to save fs state in %s: %v", hfs.opt.StateFile, err)
 		if rerr := os.Remove(hfs.opt.StateFile); rerr != nil && !errors.Is(rerr, fs.ErrNotExist) {

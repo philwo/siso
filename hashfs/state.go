@@ -20,6 +20,7 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -451,10 +452,30 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 					}
 					return nil
 				}
-				clog.Infof(gctx, "old local %s %q: state:%s disk:%s cmdhash:%s", ftype, ent.Name, e.mtime, fi.ModTime(), base64.StdEncoding.EncodeToString(e.cmdhash))
+				isOutputLocal := outputLocal(ctx, ent.Name)
+				clog.Infof(gctx, "old local %s %q: state:%s disk:%s cmdhash:%s outputLocal:%t", ftype, ent.Name, e.mtime, fi.ModTime(), base64.StdEncoding.EncodeToString(e.cmdhash), isOutputLocal)
 				if logw != nil {
-					fmt.Fprintf(logw, "old local %s %q: state:%s disk:%s cmdhash:%s\n", ftype, ent.Name, e.mtime, fi.ModTime(), base64.StdEncoding.EncodeToString(e.cmdhash))
+					fmt.Fprintf(logw, "old local %s %q: state:%s disk:%s cmdhash:%s outputLocal:%t\n", ftype, ent.Name, e.mtime, fi.ModTime(), base64.StdEncoding.EncodeToString(e.cmdhash), isOutputLocal)
 				}
+				if isOutputLocal {
+					// command output file that is needed on the disk is stale.
+					// need to forget to trigger steps for the output. b/418221857
+					ninvalidate.Add(1)
+					return nil
+				}
+				// local file would be stale.
+				// TODO: flush instead of removing local?
+				err = os.Remove(ent.Name)
+				if err != nil {
+					clog.Warningf(gctx, "failed to remove stale old local file %q: %v", ent.Name, err)
+					if logw != nil {
+						fmt.Fprintf(logw, "failed to remove stale old local file %q: %v\n", ent.Name, err)
+					}
+					ninvalidate.Add(1)
+					// invalidate entry
+					return nil
+				}
+				// keep remote entry.
 			}
 			if log.V(1) {
 				clog.Infof(gctx, "set state %q: d:%s %s s:%s m:%s cmdhash:%s action:%s", ent.Name, e.d, e.mode, e.target, e.mtime, base64.StdEncoding.EncodeToString(e.cmdhash), e.action)
@@ -907,20 +928,45 @@ func (hfs *HashFS) journalEntry(ctx context.Context, fname string, e *entry) {
 		UpdatedTime:  e.updatedTime.UnixNano(),
 	}
 	e.mu.Unlock()
+	err := JournalEntry(&hfs.journal, ent)
+	if err != nil {
+		clog.Warningf(ctx, "Failed to write journal entry %s: %v", fname, err)
+	}
+}
+
+type journalWriter struct {
+	mu sync.Mutex
+	w  io.WriteCloser
+}
+
+func (w *journalWriter) Write(buf []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.w == nil {
+		return len(buf), nil
+	}
+	return w.w.Write(buf)
+}
+
+func (w *journalWriter) Close() error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.w == nil {
+		return nil
+	}
+	err := w.w.Close()
+	w.w = nil
+	return err
+}
+
+// JournalEntry writes ent in to journal writer w.
+func JournalEntry(w io.Writer, ent *pb.Entry) error {
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
 	err := enc.Encode(ent)
 	if err != nil {
-		clog.Warningf(ctx, "Failed to marshal journal entry %s: %v", fname, err)
-		return
+		return err
 	}
-	hfs.journalMu.Lock()
-	defer hfs.journalMu.Unlock()
-	if hfs.journal == nil {
-		return
-	}
-	_, err = hfs.journal.Write(buf.Bytes())
-	if err != nil {
-		clog.Warningf(ctx, "Failed to write journal entry %s: %v", fname, err)
-	}
+	_, err = w.Write(buf.Bytes())
+	return err
 }
