@@ -239,6 +239,9 @@ func erespErr(ctx context.Context, eresp *rpb.ExecuteResponse) error {
 }
 
 func ongoingDetails(md *rpb.ExecutedActionMetadata) string {
+	if md == nil {
+		return ""
+	}
 	var sb strings.Builder
 	if w := md.GetWorker(); w != "" {
 		fmt.Fprintf(&sb, "worker=%s ", w)
