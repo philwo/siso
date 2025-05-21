@@ -22,6 +22,7 @@ import (
 	"runtime/debug"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -1355,6 +1356,8 @@ func (c *ninjaCmdRun) initFlags(targets []string) map[string]string {
 		}
 		flags[name] = f.Value.String()
 	})
+	flags["project"] = c.projectID
+	flags["batch"] = strconv.FormatBool(c.batch)
 	flags["targets"] = strings.Join(targets, " ")
 	return flags
 }
