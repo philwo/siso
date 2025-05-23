@@ -887,7 +887,7 @@ func (c *Cmd) computeOutputEntries(ctx context.Context, entries []hashfs.UpdateE
 			if pent.Entry != nil && !pent.Entry.Data.IsZero() && ent.Entry != nil && !ent.Entry.Data.IsZero() {
 				// empty file (e.g. stamp file) always
 				// considered as changed
-				ent.IsChanged = !(pent.Entry.Data.Digest() == ent.Entry.Data.Digest() && ent.Entry.Data.Digest().SizeBytes > 0)
+				ent.IsChanged = pent.Entry.Data.Digest() != ent.Entry.Data.Digest() || ent.Entry.Data.Digest().SizeBytes == 0
 			}
 			if ent.IsChanged {
 				ent.ModTime = updatedTime
