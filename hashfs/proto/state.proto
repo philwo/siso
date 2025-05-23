@@ -26,8 +26,9 @@ message Entry {
   // target is symlink target.
   string target = 5;
 
-  // action, cmd that generated this file.
+  // action, cmd, edge (inputs/outputs paths) that generated this file.
   bytes cmd_hash = 6;
+  bytes edge_hash = 9;
   Digest action = 7;
 
   int64 updated_time = 8; // unix nano sec.

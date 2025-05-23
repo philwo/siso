@@ -29,7 +29,7 @@ func TestFilesystemUpdate(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		err := hashFS.Mkdir(ctx, dir, "out/siso/gen", nil)
+		err := hashFS.Mkdir(ctx, dir, "out/siso/gen", nil, nil)
 		if err != nil {
 			t.Errorf("hashFS.Mkdir(ctx, %q, %q)=%v; want nil err", dir, "out/siso/gen", err)
 		}

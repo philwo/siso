@@ -97,7 +97,9 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 		step.cmd = nil
 	}(span)
 
-	if !b.needToRun(ctx, step.def, step.outputs) {
+	stepManifest := newStepManifest(ctx, step.def)
+
+	if !b.needToRun(ctx, step.def, stepManifest) {
 		step.metrics.skip = true
 		b.plan.done(ctx, step)
 		b.stats.update(ctx, &step.metrics, true)
@@ -110,7 +112,7 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 	default:
 	}
 
-	step.init(ctx, b)
+	step.init(ctx, b, stepManifest)
 	description := stepDescription(step.def)
 	prevStepOut := b.prevStepOut(ctx, step)
 	stepStartLog(ctx, logger, step, description, spanName)

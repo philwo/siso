@@ -106,6 +106,9 @@ type Cmd struct {
 	// CmdHash is a hash of the command line, which is used to check for changes in the command line since it was last executed.
 	CmdHash []byte
 
+	// EdgeHash is a hash of the inputs/outputs paths, which is used to check for changes in the inputs/outputs since it was last executed.
+	EdgeHash []byte
+
 	// ExecRoot is an exec root directory of the cmd.
 	ExecRoot string
 
@@ -703,8 +706,8 @@ func (c *Cmd) RemoteFallbackResult() (*rpb.ActionResult, error) {
 // entriesFromResult returns output file entries and additional entries for the cmd and result.
 // output file entries will be recorded with cmdhash.
 // additional output file entries will be recorded without cmdhash.
-func (c *Cmd) entriesFromResult(ctx context.Context, ds hashfs.DataSource, result *rpb.ActionResult, cmdhash []byte, action digest.Digest, updatedTime time.Time) (entries, additionalEntries []hashfs.UpdateEntry) {
-	for _, f := range result.GetOutputFiles() {
+func (c *Cmd) entriesFromResult(ctx context.Context, ds hashfs.DataSource, updatedTime time.Time) (entries, additionalEntries []hashfs.UpdateEntry) {
+	for _, f := range c.actionResult.GetOutputFiles() {
 		if f.Digest == nil {
 			continue
 		}
@@ -723,7 +726,7 @@ func (c *Cmd) entriesFromResult(ctx context.Context, ds hashfs.DataSource, resul
 			},
 			Mode:        mode,
 			ModTime:     updatedTime,
-			Action:      action,
+			Action:      c.actionDigest,
 			UpdatedTime: updatedTime,
 			IsChanged:   true,
 		}
@@ -732,10 +735,10 @@ func (c *Cmd) entriesFromResult(ctx context.Context, ds hashfs.DataSource, resul
 			additionalEntries = append(additionalEntries, ent)
 			continue
 		}
-		ent.CmdHash = cmdhash
+		ent.CmdHash = c.CmdHash
 		entries = append(entries, ent)
 	}
-	for _, s := range result.GetOutputSymlinks() {
+	for _, s := range c.actionResult.GetOutputSymlinks() {
 		if s.Target == "" {
 			continue
 		}
@@ -749,13 +752,13 @@ func (c *Cmd) entriesFromResult(ctx context.Context, ds hashfs.DataSource, resul
 			},
 			Mode:        mode,
 			ModTime:     updatedTime,
-			CmdHash:     cmdhash,
-			Action:      action,
+			CmdHash:     c.CmdHash,
+			Action:      c.actionDigest,
 			UpdatedTime: updatedTime,
 			IsChanged:   true,
 		})
 	}
-	for _, d := range result.GetOutputDirectories() {
+	for _, d := range c.actionResult.GetOutputDirectories() {
 		// It just needs to add the directories here because it assumes that they have already been expanded by ninja State.
 		dname := filepath.ToSlash(filepath.Join(c.Dir, d.Path))
 		mode := fs.FileMode(0755) | fs.ModeDir
@@ -766,8 +769,8 @@ func (c *Cmd) entriesFromResult(ctx context.Context, ds hashfs.DataSource, resul
 			},
 			Mode:        mode,
 			ModTime:     updatedTime,
-			CmdHash:     cmdhash,
-			Action:      action,
+			CmdHash:     c.CmdHash,
+			Action:      c.actionDigest,
 			UpdatedTime: updatedTime,
 			IsChanged:   true,
 		})
@@ -786,7 +789,7 @@ func (c *Cmd) RecordPreOutputs(ctx context.Context) {
 
 // RecordOutputs records cmd's outputs from action result in hashfs.
 func (c *Cmd) RecordOutputs(ctx context.Context, ds hashfs.DataSource, now time.Time) error {
-	entries, additionalEntries := c.entriesFromResult(ctx, ds, c.actionResult, c.CmdHash, c.actionDigest, now)
+	entries, additionalEntries := c.entriesFromResult(ctx, ds, now)
 	clog.Infof(ctx, "output entries %d+%d", len(entries), len(additionalEntries))
 	entries = c.computeOutputEntries(ctx, entries, now, c.CmdHash)
 	err := c.HashFS.Update(ctx, c.ExecRoot, entries)
@@ -874,8 +877,11 @@ func (c *Cmd) computeOutputEntries(ctx context.Context, entries []hashfs.UpdateE
 	ret := make([]hashfs.UpdateEntry, 0, len(entries))
 	// Set cmdhash, updatedTime.
 	// also isChanged=true if entry has been changed.
-	for _, ent := range entries {
+	for i, ent := range entries {
 		ent.CmdHash = cmdhash
+		if i == 0 || ent.Name == c.Outputs[0] {
+			ent.EdgeHash = c.EdgeHash
+		}
 		ent.UpdatedTime = updatedTime
 		pent := pre[ent.Name]
 		switch {

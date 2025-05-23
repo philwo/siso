@@ -177,7 +177,7 @@ func starActionsWrite(thread *starlark.Thread, fn *starlark.Builtin, args starla
 	if err != nil {
 		return starlark.None, err
 	}
-	err = c.cmd.HashFS.WriteFile(c.ctx, c.cmd.ExecRoot, fname, []byte(string(content)), isExecutable, time.Now(), c.cmd.CmdHash)
+	err = c.cmd.HashFS.WriteFile(c.ctx, c.cmd.ExecRoot, fname, []byte(string(content)), isExecutable, time.Now(), c.cmd.CmdHash, c.cmd.EdgeHash)
 	return starlark.None, err
 }
 
@@ -207,12 +207,12 @@ func starActionsCopy(thread *starlark.Thread, fn *starlark.Builtin, args starlar
 			return starlark.None, err
 		}
 		var files []string
-		files, err = actionsCopyRecursively(c.ctx, c.cmd, src, dst, time.Now(), c.cmd.CmdHash)
+		files, err = actionsCopyRecursively(c.ctx, c.cmd, src, dst, time.Now(), c.cmd.CmdHash, c.cmd.EdgeHash)
 		if err == nil && len(files) > 0 {
 			err = c.cmd.HashFS.Flush(c.ctx, c.cmd.ExecRoot, files)
 		}
 	} else {
-		err = c.cmd.HashFS.Copy(c.ctx, c.cmd.ExecRoot, src, dst, time.Now(), c.cmd.CmdHash)
+		err = c.cmd.HashFS.Copy(c.ctx, c.cmd.ExecRoot, src, dst, time.Now(), c.cmd.CmdHash, c.cmd.EdgeHash)
 	}
 	return starlark.None, err
 }
@@ -221,13 +221,13 @@ func starActionsCopy(thread *starlark.Thread, fn *starlark.Builtin, args starlar
 // and returns a list of files that needs to be written to the disk.
 // if src is a directory, it recurrsively calls itself without cmdhash.
 // if src is a file, it just copies the file.
-func actionsCopyRecursively(ctx context.Context, cmd *execute.Cmd, src, dst string, t time.Time, cmdhash []byte) ([]string, error) {
+func actionsCopyRecursively(ctx context.Context, cmd *execute.Cmd, src, dst string, t time.Time, cmdhash, edgehash []byte) ([]string, error) {
 	fi, err := cmd.HashFS.Stat(ctx, cmd.ExecRoot, src)
 	if err != nil {
 		return nil, err
 	}
 	if fi.IsDir() {
-		err := cmd.HashFS.Mkdir(ctx, cmd.ExecRoot, dst, cmdhash)
+		err := cmd.HashFS.Mkdir(ctx, cmd.ExecRoot, dst, cmdhash, edgehash)
 		if err != nil {
 			return nil, err
 		}
@@ -242,7 +242,7 @@ func actionsCopyRecursively(ctx context.Context, cmd *execute.Cmd, src, dst stri
 			// don't record cmdhash for recursive copy
 			// since these are not appeared in build graph
 			// but cleandead will try to delete these dirs/files.
-			f, err := actionsCopyRecursively(ctx, cmd, s, d, t, nil)
+			f, err := actionsCopyRecursively(ctx, cmd, s, d, t, nil, nil)
 			if err != nil {
 				return files, err
 			}
@@ -250,7 +250,7 @@ func actionsCopyRecursively(ctx context.Context, cmd *execute.Cmd, src, dst stri
 		}
 		return files, nil
 	}
-	err = cmd.HashFS.Copy(ctx, cmd.ExecRoot, src, dst, t, cmdhash)
+	err = cmd.HashFS.Copy(ctx, cmd.ExecRoot, src, dst, t, cmdhash, edgehash)
 	if err != nil {
 		return nil, err
 	}
@@ -272,7 +272,7 @@ func starActionsSymlink(thread *starlark.Thread, fn *starlark.Builtin, args star
 	if err != nil {
 		return starlark.None, err
 	}
-	err = c.cmd.HashFS.Symlink(c.ctx, c.cmd.ExecRoot, target, linkpath, time.Now(), c.cmd.CmdHash)
+	err = c.cmd.HashFS.Symlink(c.ctx, c.cmd.ExecRoot, target, linkpath, time.Now(), c.cmd.CmdHash, c.cmd.EdgeHash)
 	return starlark.None, err
 }
 

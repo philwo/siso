@@ -275,7 +275,7 @@ func TestState(t *testing.T) {
 		t.Fatalf("WaitReady=%v; want nil", err)
 	}
 
-	err = hashFS.WriteFile(ctx, dir, "stamp", nil, false, time.Now(), []byte("dummy-cmdhash"))
+	err = hashFS.WriteFile(ctx, dir, "stamp", nil, false, time.Now(), []byte("dummy-cmdhash"), nil)
 	if err != nil {
 		t.Errorf("WriteFile(...)=%v; want nil error", err)
 	}
@@ -406,7 +406,7 @@ func TestState_Symlink(t *testing.T) {
 			t.Errorf("target=%q; want=%q", fi.Target(), "target.0")
 		}
 		// make dirty to write state file
-		err = hashFS.WriteFile(ctx, dir, "stamp", nil, false, time.Now(), []byte("dummy-cmdhash"))
+		err = hashFS.WriteFile(ctx, dir, "stamp", nil, false, time.Now(), []byte("dummy-cmdhash"), nil)
 		if err != nil {
 			t.Errorf("WriteFile(...)=%v; want nil error", err)
 		}

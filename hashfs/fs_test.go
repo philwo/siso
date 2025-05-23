@@ -71,7 +71,7 @@ func TestStamp(t *testing.T) {
 				t.Fatalf("Stat(%s)=_, %v; want nil error", fname, err)
 			}
 			t.Logf("Write(%q, %v)", fname, now)
-			err = hfs.WriteFile(ctx, execRoot, fname, nil, false, now, cmdhash)
+			err = hfs.WriteFile(ctx, execRoot, fname, nil, false, now, cmdhash, nil)
 			if err != nil {
 				t.Errorf("Write(%s)=%v; want nil error", fname, err)
 			}
@@ -249,7 +249,7 @@ func TestMkdir(t *testing.T) {
 		t.Fatalf("hashfs.Stat(ctx, %q, %q)=_, nil; want err", dir, "out/siso/gen/v8/include")
 	}
 
-	err = hashFS.Mkdir(ctx, dir, "out/siso/gen/v8/include/inspector", nil)
+	err = hashFS.Mkdir(ctx, dir, "out/siso/gen/v8/include/inspector", nil, nil)
 	if err != nil {
 		t.Errorf("hashfs.Mkdir(ctx, %q, %q)=%v; want nil err", dir, "out/siso/gen/v8/include/inspector", err)
 	}
@@ -280,7 +280,7 @@ func TestMkdir(t *testing.T) {
 		t.Errorf("mtime inspector=%v; now=%v", mtimeInspector, now)
 	}
 	t.Logf("mkdir again. mtime should be updated %s", now)
-	err = hashFS.Mkdir(ctx, dir, "out/siso/gen/v8/include/inspector", nil)
+	err = hashFS.Mkdir(ctx, dir, "out/siso/gen/v8/include/inspector", nil, nil)
 	if err != nil {
 		t.Errorf("hashfs.Mkdir(ctx, %q, %q)=%v; want nil err", dir, "out/siso/gen/v8/include/inspector", err)
 	}
@@ -513,7 +513,7 @@ func TestStat_Dir(t *testing.T) {
 	}()
 	dirname := "out/siso/ios_cwt_chromedriver_tests_module.xctest"
 	cmdhash := sha256.Sum256([]byte("command line"))
-	err = hfs.Mkdir(ctx, dir, dirname, cmdhash[:])
+	err = hfs.Mkdir(ctx, dir, dirname, cmdhash[:], nil)
 	if err != nil {
 		t.Errorf("Mkdir(ctx, %q, %q, %q)=%v; want nil err", dir, dirname, cmdhash, err)
 	}
@@ -1550,7 +1550,7 @@ func TestFlusTohHardlink(t *testing.T) {
 	now := time.Now()
 	cmdhash := []byte("cmdhash")
 	t.Logf("copy chrome/VERSION to out/siso/cronet/VERSION at %s", now)
-	err = hashFS.Copy(ctx, dir, "chrome/VERSION", "out/siso/cronet/VERSION", now, cmdhash)
+	err = hashFS.Copy(ctx, dir, "chrome/VERSION", "out/siso/cronet/VERSION", now, cmdhash, nil)
 	if err != nil {
 		t.Fatalf("hashFS.Copy(ctx, dir, %q, %q, now, cmdhash)=%v; want nil err", "chrome/VERSION", "out/siso/chronet/VERSION", err)
 	}
@@ -1781,7 +1781,7 @@ func TestMkdirFlush(t *testing.T) {
 	for _, name := range flushTestNames {
 		t.Run(name, func(t *testing.T) {
 			hashFS, dir := setupForFlush(t)
-			err := hashFS.Mkdir(ctx, dir, name, nil)
+			err := hashFS.Mkdir(ctx, dir, name, nil, nil)
 			switch name {
 			case "empty-dir", "subdir", "new-entry":
 				if err != nil {
@@ -1839,7 +1839,7 @@ func TestMkdirFlush_mtime(t *testing.T) {
 	h.Write([]byte("command line"))
 	cmdhash := h.Sum(nil)
 	dirname := "out/siso/ios/build/bots/scripts"
-	err = hfs.Mkdir(ctx, dir, dirname, cmdhash)
+	err = hfs.Mkdir(ctx, dir, dirname, cmdhash, nil)
 	if err != nil {
 		t.Fatalf("mkdir(ctx, %q, %q, %q)=%v; want nil err", dir, dirname, cmdhash, err)
 	}
@@ -1884,7 +1884,7 @@ func TestWriteEmptyFlush(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			hashFS, dir := setupForFlush(t)
 			now := time.Now()
-			err := hashFS.WriteFile(ctx, dir, name, nil, false, now, []byte("cmdhash"))
+			err := hashFS.WriteFile(ctx, dir, name, nil, false, now, []byte("cmdhash"), nil)
 			if err != nil {
 				t.Fatalf("WriteFile(ctx, dir, %q, nil, false, now, cmdhash)=%v; want nil err", name, err)
 			}
@@ -1941,7 +1941,7 @@ func TestWriteDataFlush(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			hashFS, dir := setupForFlush(t)
 			now := time.Now()
-			err := hashFS.WriteFile(ctx, dir, name, []byte("new data"), false, now, []byte("new-cmd-hash"))
+			err := hashFS.WriteFile(ctx, dir, name, []byte("new data"), false, now, []byte("new-cmd-hash"), nil)
 			if err != nil {
 				t.Fatalf("WriteFile(ctx, dir, %q, data, false, now, cmdhash)=%v; want nil err", name, err)
 			}
@@ -2093,7 +2093,7 @@ func TestSymlinkFlush(t *testing.T) {
 			hashFS, dir := setupForFlush(t)
 			target := filepath.Join(dir, "subdir/some-file")
 			now := time.Now()
-			err := hashFS.Symlink(ctx, dir, target, name, now, []byte("cmdhash"))
+			err := hashFS.Symlink(ctx, dir, target, name, now, []byte("cmdhash"), nil)
 			if err != nil {
 				t.Fatalf("Symlink(ctx, dir, %q, %q, now, cmdhash)=%v; want nil err", target, name, err)
 			}
@@ -2187,7 +2187,7 @@ func TestEntries_EscapedSymlink(t *testing.T) {
 	}()
 
 	createFile := func(root, name, data string) merkletree.Entry {
-		err := hashFS.WriteFile(ctx, root, name, []byte(data), false, time.Now(), nil)
+		err := hashFS.WriteFile(ctx, root, name, []byte(data), false, time.Now(), nil, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -2199,7 +2199,7 @@ func TestEntries_EscapedSymlink(t *testing.T) {
 		return ents[0]
 	}
 	createSymlink := func(root, name, target string) {
-		err := hashFS.Symlink(ctx, root, target, name, time.Now(), nil)
+		err := hashFS.Symlink(ctx, root, target, name, time.Now(), nil, nil)
 		if err != nil {
 			t.Fatal(err)
 		}

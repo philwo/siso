@@ -7,7 +7,6 @@ package build
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
 	"path/filepath"
@@ -379,19 +378,15 @@ func (s *Step) useReclient() bool {
 	return s.def.Binding("use_remote_exec_wrapper") != "" || s.cmd.REProxyConfig != nil
 }
 
-func (s *Step) init(ctx context.Context, b *Builder) {
+func (s *Step) init(ctx context.Context, b *Builder, stepManifest *stepManifest) {
 	ctx, span := trace.NewSpan(ctx, "step-init")
 	defer span.Close(nil)
 	s.def.EnsureRule(ctx)
-	s.cmd = newCmd(ctx, b, s.def)
+	s.cmd = newCmd(ctx, b, s.def, stepManifest)
 	clog.Infof(ctx, "cmdhash:%s", base64.StdEncoding.EncodeToString(s.cmd.CmdHash))
 }
 
-func newCmd(ctx context.Context, b *Builder, stepDef StepDef) *execute.Cmd {
-	cmdline := stepDef.Binding("command")
-	rspfileContent := stepDef.Binding("rspfile_content")
-
-	outputs := stepDef.Outputs(ctx)
+func newCmd(ctx context.Context, b *Builder, stepDef StepDef, stepManifest *stepManifest) *execute.Cmd {
 	// add build.ninja as outputs of gn step.
 	// gn uses
 	//
@@ -406,8 +401,8 @@ func newCmd(ctx context.Context, b *Builder, stepDef StepDef) *execute.Cmd {
 	// so add it as output to make timestamp of build.ninja
 	// correctly managed by Siso.
 	// This workaround is needed to make second build as null build.
-	if stepDef.ActionName() == "gn" && len(outputs) == 1 && filepath.Base(outputs[0]) == "build.ninja.stamp" {
-		outputs = append(outputs, b.path.MaybeFromWD(ctx, "build.ninja"))
+	if stepDef.ActionName() == "gn" && len(stepManifest.outputs) == 1 && filepath.Base(stepManifest.outputs[0]) == "build.ninja.stamp" {
+		stepManifest.outputs = append(stepManifest.outputs, b.path.MaybeFromWD(ctx, "build.ninja"))
 	}
 
 	cmd := &execute.Cmd{
@@ -416,13 +411,14 @@ func newCmd(ctx context.Context, b *Builder, stepDef StepDef) *execute.Cmd {
 		ActionName:     stepDef.ActionName(),
 		Args:           b.argTab.InternSlice(stepDef.Args(ctx)),
 		RSPFile:        stepDef.Rspfile(ctx),
-		RSPFileContent: []byte(rspfileContent),
-		CmdHash:        calculateCmdHash(cmdline, rspfileContent),
+		RSPFileContent: []byte(stepManifest.rspfileContent),
+		CmdHash:        stepManifest.cmdHash,
 		ExecRoot:       b.path.ExecRoot, // use step binding?
 		Dir:            b.path.Dir,
 		Inputs:         stepInputs(ctx, b, stepDef),
 		ToolInputs:     stepDef.ToolInputs(ctx),
-		Outputs:        outputs,
+		Outputs:        stepManifest.outputs,
+		EdgeHash:       stepManifest.edgeHash,
 		// TODO(b/266518906): enable UseSystemInput
 		// UseSystemInput: stepDef.Binding("use_system_input") != "",
 		Deps:    stepDef.Binding("deps"),
@@ -514,15 +510,6 @@ func stepDescription(stepDef StepDef) string {
 		return s
 	}
 	return stepDef.Binding("command")
-}
-
-func calculateCmdHash(cmdline, rspfileContent string) []byte {
-	h := sha256.New()
-	fmt.Fprint(h, cmdline)
-	if rspfileContent != "" {
-		fmt.Fprint(h, rspfileContent)
-	}
-	return h.Sum(nil)
 }
 
 func validateRemoteActionResult(result *rpb.ActionResult) bool {

@@ -315,6 +315,7 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 				}
 				e, _ := newStateEntry(ctx, ent, time.Time{}, hfs.opt.DataSource, hfs.OS)
 				e.cmdhash = h
+				e.edgehash = ent.EdgeHash
 				e.action = toDigest(ent.Action)
 				entries[i] = e
 				if logw != nil {
@@ -337,6 +338,7 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 			}
 			e, et := newStateEntry(ctx, ent, fi.ModTime(), hfs.opt.DataSource, hfs.OS)
 			e.cmdhash = h
+			e.edgehash = ent.EdgeHash
 			e.action = toDigest(ent.Action)
 			ftype := "file"
 			if e.d.IsZero() && e.target == "" {
@@ -433,6 +435,7 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 				le := newLocalEntry()
 				le.init(ctx, ent.Name, hfs.executables, hfs.OS)
 				le.cmdhash = e.cmdhash
+				le.edgehash = e.edgehash
 				le.action = e.action
 				e = le
 			case entryEqLocal:
@@ -809,6 +812,7 @@ func (hfs *HashFS) State(ctx context.Context) *pb.State {
 					IsExecutable: e.mode&0111 != 0,
 					Target:       e.target,
 					CmdHash:      e.cmdhash,
+					EdgeHash:     e.edgehash,
 					Action:       fromDigest(e.action),
 					UpdatedTime:  e.updatedTime.UnixNano(),
 				})
@@ -822,6 +826,7 @@ func (hfs *HashFS) State(ctx context.Context) *pb.State {
 					},
 					Name:        name,
 					CmdHash:     e.cmdhash,
+					EdgeHash:    e.edgehash,
 					Action:      fromDigest(e.action),
 					UpdatedTime: e.updatedTime.UnixNano(),
 				})
@@ -924,6 +929,7 @@ func (hfs *HashFS) journalEntry(ctx context.Context, fname string, e *entry) {
 		IsExecutable: e.mode&0111 != 0,
 		Target:       e.target,
 		CmdHash:      e.cmdhash,
+		EdgeHash:     e.edgehash,
 		Action:       fromDigest(e.action),
 		UpdatedTime:  e.updatedTime.UnixNano(),
 	}

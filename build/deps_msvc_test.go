@@ -30,7 +30,7 @@ func TestDescMSVCDepsAfterRun(t *testing.T) {
 		"base/bar.h",
 		"v1/foo.h",
 	} {
-		err = hfs.WriteFile(ctx, dir, in, nil, false, time.Now(), nil)
+		err = hfs.WriteFile(ctx, dir, in, nil, false, time.Now(), nil, nil)
 		if err != nil {
 			t.Fatal(err)
 		}

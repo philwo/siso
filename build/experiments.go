@@ -26,6 +26,7 @@ var knownExperiments = map[string]string{
 	"fast-deps":                   "",
 	"file-access-trace":           "",
 	"gvisor":                      "",
+	"ignore-edge-change":          "",
 	"ignore-missing-local-inputs": "",
 	"ignore-missing-targets":      "",
 	"keep-going-handle-error":     "",

@@ -574,8 +574,8 @@ func (hfs *HashFS) ReadFile(ctx context.Context, root, fname string) ([]byte, er
 	return buf, err
 }
 
-// WriteFile writes a contents in root/fname with mtime and cmdhash.
-func (hfs *HashFS) WriteFile(ctx context.Context, root, fname string, b []byte, isExecutable bool, mtime time.Time, cmdhash []byte) error {
+// WriteFile writes a contents in root/fname with mtime and cmdhash, edgehash.
+func (hfs *HashFS) WriteFile(ctx context.Context, root, fname string, b []byte, isExecutable bool, mtime time.Time, cmdhash, edgehash []byte) error {
 	ctx, span := trace.NewSpan(ctx, "write-file")
 	defer span.Close(nil)
 	if log.V(1) {
@@ -601,6 +601,7 @@ func (hfs *HashFS) WriteFile(ctx context.Context, root, fname string, b []byte, 
 		d:           data.Digest(),
 		buf:         b,
 		cmdhash:     cmdhash,
+		edgehash:    edgehash,
 		updatedTime: time.Now(),
 		isChanged:   true,
 	}
@@ -613,8 +614,8 @@ func (hfs *HashFS) WriteFile(ctx context.Context, root, fname string, b []byte, 
 	return nil
 }
 
-// Symlink creates a symlink to target at root/linkpath with mtime and cmdhash.
-func (hfs *HashFS) Symlink(ctx context.Context, root, target, linkpath string, mtime time.Time, cmdhash []byte) error {
+// Symlink creates a symlink to target at root/linkpath with mtime and cmdhash, edgehash.
+func (hfs *HashFS) Symlink(ctx context.Context, root, target, linkpath string, mtime time.Time, cmdhash, edgehash []byte) error {
 	if log.V(1) {
 		clog.Infof(ctx, "symlink @%s %s -> %s", root, linkpath, target)
 	}
@@ -628,6 +629,7 @@ func (hfs *HashFS) Symlink(ctx context.Context, root, target, linkpath string, m
 		mtime:       mtime,
 		mode:        0644 | fs.ModeSymlink,
 		cmdhash:     cmdhash,
+		edgehash:    edgehash,
 		target:      target,
 		updatedTime: time.Now(),
 		isChanged:   true,
@@ -641,9 +643,9 @@ func (hfs *HashFS) Symlink(ctx context.Context, root, target, linkpath string, m
 	return nil
 }
 
-// Copy copies a file from root/src to root/dst with mtime and cmdhash.
+// Copy copies a file from root/src to root/dst with mtime and cmdhash, edgehash.
 // if src is dir, returns error.
-func (hfs *HashFS) Copy(ctx context.Context, root, src, dst string, mtime time.Time, cmdhash []byte) error {
+func (hfs *HashFS) Copy(ctx context.Context, root, src, dst string, mtime time.Time, cmdhash, edgehash []byte) error {
 	if log.V(1) {
 		clog.Infof(ctx, "copy @%s %s to %s", root, src, dst)
 	}
@@ -686,12 +688,13 @@ func (hfs *HashFS) Copy(ctx context.Context, root, src, dst string, mtime time.T
 	lready := make(chan bool, 1)
 	lready <- true
 	newEnt := &entry{
-		lready:  lready,
-		size:    e.size,
-		mtime:   mtime,
-		mode:    e.mode,
-		cmdhash: cmdhash,
-		target:  e.target,
+		lready:   lready,
+		size:     e.size,
+		mtime:    mtime,
+		mode:     e.mode,
+		cmdhash:  cmdhash,
+		edgehash: edgehash,
+		target:   e.target,
 		// use the same data source as src if any.
 		src:         e.src,
 		d:           e.d,
@@ -709,7 +712,7 @@ func (hfs *HashFS) Copy(ctx context.Context, root, src, dst string, mtime time.T
 }
 
 // Mkdir makes a directory at root/dirname.
-func (hfs *HashFS) Mkdir(ctx context.Context, root, dirname string, cmdhash []byte) error {
+func (hfs *HashFS) Mkdir(ctx context.Context, root, dirname string, cmdhash, edgehash []byte) error {
 	if log.V(1) {
 		clog.Infof(ctx, "mkdir @%s %s", root, dirname)
 	}
@@ -744,6 +747,7 @@ func (hfs *HashFS) Mkdir(ctx context.Context, root, dirname string, cmdhash []by
 		mtime:       mtime,
 		mode:        0644 | fs.ModeDir,
 		cmdhash:     cmdhash,
+		edgehash:    edgehash,
 		directory:   &directory{},
 		updatedTime: time.Now(),
 		isChanged:   true,
@@ -1082,6 +1086,7 @@ type UpdateEntry struct {
 	Mode        fs.FileMode
 	ModTime     time.Time
 	CmdHash     []byte
+	EdgeHash    []byte
 	Action      digest.Digest
 	UpdatedTime time.Time
 	IsChanged   bool
@@ -1109,6 +1114,7 @@ func (e UpdateEntry) String() string {
 	fmt.Fprintf(&buf, "mode=%s ", e.Mode)
 	fmt.Fprintf(&buf, "mtime=%s ", e.ModTime.Format(time.RFC3339Nano))
 	fmt.Fprintf(&buf, "cmdhash=%s ", base64.StdEncoding.EncodeToString(e.CmdHash))
+	fmt.Fprintf(&buf, "edgehash=%s ", base64.StdEncoding.EncodeToString(e.EdgeHash))
 	fmt.Fprintf(&buf, "action=%s ", e.Action)
 	if !e.ModTime.Equal(e.UpdatedTime) {
 		fmt.Fprintf(&buf, "updated_time=%s ", e.UpdatedTime.Format(time.RFC3339Nano))
@@ -1192,6 +1198,7 @@ func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []Update
 				e.mtime = ent.ModTime
 				e.mode = ent.Mode
 				e.cmdhash = ent.CmdHash
+				e.edgehash = ent.EdgeHash
 				e.action = ent.Action
 				e.updatedTime = ent.UpdatedTime
 				e.isChanged = ent.IsChanged
@@ -1201,6 +1208,7 @@ func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []Update
 				e.init(ctx, fname, hfs.executables, hfs.OS)
 				e.mtime = ent.ModTime
 				e.cmdhash = ent.CmdHash
+				e.edgehash = ent.EdgeHash
 				e.action = ent.Action
 				e.updatedTime = ent.UpdatedTime
 				e.isChanged = ent.IsChanged
@@ -1249,6 +1257,7 @@ func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []Update
 				mtime:       ent.ModTime,
 				mode:        mode,
 				cmdhash:     ent.CmdHash,
+				edgehash:    ent.EdgeHash,
 				action:      ent.Action,
 				src:         ent.Entry.Data,
 				d:           ent.Entry.Data.Digest(),
@@ -1280,12 +1289,13 @@ func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []Update
 			mode := ent.Mode
 			mode |= fs.ModeSymlink
 			e := &entry{
-				lready:  lready,
-				mtime:   ent.ModTime,
-				mode:    mode,
-				cmdhash: ent.CmdHash,
-				action:  ent.Action,
-				target:  ent.Entry.Target,
+				lready:   lready,
+				mtime:    ent.ModTime,
+				mode:     mode,
+				cmdhash:  ent.CmdHash,
+				edgehash: ent.EdgeHash,
+				action:   ent.Action,
+				target:   ent.Entry.Target,
 
 				updatedTime: ent.UpdatedTime,
 				isChanged:   ent.IsChanged,
@@ -1309,6 +1319,7 @@ func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []Update
 				mtime:     ent.ModTime,
 				mode:      mode,
 				cmdhash:   ent.CmdHash,
+				edgehash:  ent.EdgeHash,
 				action:    ent.Action,
 				directory: &directory{},
 
@@ -1350,6 +1361,7 @@ func (hfs *HashFS) RetrieveUpdateEntries(ctx context.Context, root string, fname
 			Mode:        fi.Mode(),
 			ModTime:     fi.ModTime(),
 			CmdHash:     fi.CmdHash(),
+			EdgeHash:    fi.EdgeHash(),
 			Action:      fi.Action(),
 			UpdatedTime: fi.UpdatedTime(),
 			IsChanged:   fi.IsChanged(),
@@ -1397,6 +1409,7 @@ func (hfs *HashFS) RetrieveUpdateEntriesFromLocal(ctx context.Context, root stri
 			clog.Warningf(ctx, "failed to stat after invalidate %s: %v", fname, err)
 		} else {
 			ent.CmdHash = fi.CmdHash()
+			ent.EdgeHash = fi.EdgeHash()
 			ent.Action = fi.Action()
 			ent.UpdatedTime = fi.UpdatedTime()
 			ent.IsChanged = fi.IsChanged()
@@ -1529,6 +1542,9 @@ type entry struct {
 	// cmdhash is hash of command lines that generated this file.
 	// e.g. hash('touch output.stamp')
 	cmdhash []byte
+
+	// edgehash is hash of inputs/outputs paths that generated this file.
+	edgehash []byte
 
 	// digest of action that generated this file.
 	action digest.Digest
@@ -2134,37 +2150,42 @@ func (d *directory) storeEntry(ctx context.Context, fname string, e *entry) (*en
 			if len(ee.cmdhash) > 0 && len(e.cmdhash) == 0 && e.action.IsZero() {
 				// keep cmdhash and action
 				e.cmdhash = ee.cmdhash
+				e.edgehash = ee.edgehash
 				e.action = ee.action
 			}
 			cmdchanged := !bytes.Equal(ee.cmdhash, e.cmdhash)
+			edgechanged := !bytes.Equal(ee.edgehash, e.edgehash)
 			actionchanged := ee.action != e.action
 			if e.target != "" && ee.target != e.target {
 				if log.V(1) {
 					lv := struct {
 						origFname         string
 						cmdchanged        bool
+						edgechanged       bool
 						eetarget, etarget string
-					}{pe.origFname, cmdchanged, ee.target, e.target}
-					clog.Infof(ctx, "store %s: cmdchange:%t s:%q to %q", lv.origFname, lv.cmdchanged, lv.eetarget, lv.etarget)
+					}{pe.origFname, cmdchanged, edgechanged, ee.target, e.target}
+					clog.Infof(ctx, "store %s: cmdchange:%t edgechanged:%t s:%q to %q", lv.origFname, lv.cmdchanged, lv.edgechanged, lv.eetarget, lv.etarget)
 				}
 			} else if !e.d.IsZero() && eed != e.d && eed.SizeBytes != 0 && e.d.SizeBytes != 0 {
 				if log.V(1) {
 					// don't log nil to digest of empty file (size=0)
 					lv := struct {
-						origFname  string
-						cmdchanged bool
-						eed, ed    digest.Digest
-					}{pe.origFname, cmdchanged, eed, e.d}
-					clog.Infof(ctx, "store %s: cmdchange:%t d:%v to %v", lv.origFname, lv.cmdchanged, lv.eed, lv.ed)
+						origFname   string
+						cmdchanged  bool
+						edgechanged bool
+						eed, ed     digest.Digest
+					}{pe.origFname, cmdchanged, edgechanged, eed, e.d}
+					clog.Infof(ctx, "store %s: cmdchange:%t edgechanged:%t d:%v to %v", lv.origFname, lv.cmdchanged, lv.edgechanged, lv.eed, lv.ed)
 				}
-			} else if cmdchanged || actionchanged {
+			} else if cmdchanged || edgechanged || actionchanged {
 				if log.V(1) {
 					lv := struct {
 						origFname     string
 						cmdchanged    bool
+						edgechanged   bool
 						actionchanged bool
-					}{pe.origFname, cmdchanged, actionchanged}
-					clog.Infof(ctx, "store %s: cmdchange:%t actionchange:%t", lv.origFname, lv.cmdchanged, lv.actionchanged)
+					}{pe.origFname, cmdchanged, edgechanged, actionchanged}
+					clog.Infof(ctx, "store %s: cmdchange:%t edgechanged:%t actionchange:%t", lv.origFname, lv.cmdchanged, lv.edgechanged, lv.actionchanged)
 				}
 			} else if ee.target == e.target && ee.size == e.size && ee.mode == e.mode && (e.d.IsZero() || eed == e.d) {
 				// no change?
@@ -2519,6 +2540,11 @@ func (fi FileInfo) Sys() any {
 // CmdHash returns a cmdhash that created the file.
 func (fi FileInfo) CmdHash() []byte {
 	return fi.e.cmdhash
+}
+
+// EdgeHash returns a edgehash that created the file.
+func (fi FileInfo) EdgeHash() []byte {
+	return fi.e.edgehash
 }
 
 // Action returns a digest of action that created the file.

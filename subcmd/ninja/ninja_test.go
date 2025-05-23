@@ -229,12 +229,19 @@ func setupBuild(ctx context.Context, t *testing.T, dir string, fsopt hashfs.Opti
 	if err != nil {
 		t.Fatal(err)
 	}
+	var explain syncBuffer
+	cleanups = append(cleanups, func() {
+		if s := explain.buf.String(); s != "" {
+			t.Log(s)
+		}
+	})
 	opt := build.Options{
 		Path:            path,
 		HashFS:          hashFS,
 		Cache:           cache,
 		FailuresAllowed: 1,
 		Limits:          build.UnitTestLimits(ctx),
+		ExplainWriter:   &explain,
 	}
 	return opt, graph, func() {
 		for i := len(cleanups) - 1; i >= 0; i-- {

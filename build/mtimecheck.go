@@ -24,7 +24,7 @@ type phonyState struct {
 }
 
 // needToRun checks whether step needs to run or not.
-func (b *Builder) needToRun(ctx context.Context, stepDef StepDef, outputs []Target) bool {
+func (b *Builder) needToRun(ctx context.Context, stepDef StepDef, stepManifest *stepManifest) bool {
 	if stepDef.IsPhony() {
 		var dirtyErr error
 		_, mtime, err := inputMtime(ctx, b, stepDef)
@@ -33,12 +33,7 @@ func (b *Builder) needToRun(ctx context.Context, stepDef StepDef, outputs []Targ
 			// if phony's inputs are dirty, mark this phony's output as dirty.
 			dirtyErr = err
 		}
-		for _, out := range outputs {
-			outpath, err := b.graph.TargetPath(ctx, out)
-			if err != nil {
-				clog.Warningf(ctx, "failed to get targetpath for %v: %v", out, err)
-				continue
-			}
+		for _, outpath := range stepManifest.outputs {
 			b.phony.Store(outpath, phonyState{
 				dirtyErr: dirtyErr,
 				mtime:    mtime,
@@ -48,21 +43,18 @@ func (b *Builder) needToRun(ctx context.Context, stepDef StepDef, outputs []Targ
 		// nothing to run for phony target.
 		return false
 	}
-	return !b.checkUpToDate(ctx, stepDef, outputs)
+	return !b.checkUpToDate(ctx, stepDef, stepManifest)
 }
 
 // checkUpToDate returns true if outputs are already up-to-date and
 // no need to run command.
-func (b *Builder) checkUpToDate(ctx context.Context, stepDef StepDef, outputs []Target) bool {
+func (b *Builder) checkUpToDate(ctx context.Context, stepDef StepDef, stepManifest *stepManifest) bool {
 	ctx, span := trace.NewSpan(ctx, "mtime-check")
 	defer span.Close(nil)
 
 	generator := stepDef.Binding("generator") != ""
-	cmdline := stepDef.Binding("command")
-	rspfileContent := stepDef.Binding("rspfile_content")
-	stepCmdHash := calculateCmdHash(cmdline, rspfileContent)
 
-	out0, outmtime, cmdhash := outputMtime(ctx, b, outputs, stepDef.Binding("restat") != "")
+	out0, outmtime, cmdhash, edgehash := outputMtime(ctx, b, stepManifest.outputs, stepDef.Binding("restat") != "")
 	lastIn, inmtime, err := inputMtime(ctx, b, stepDef)
 
 	// TODO(b/288419130): make sure it covers all cases as ninja does.
@@ -96,15 +88,32 @@ func (b *Builder) checkUpToDate(ctx context.Context, stepDef StepDef, outputs []
 		fmt.Fprintf(b.explainWriter, "output %s older than most recent input %s: out:%s in:+%s\n", outname, lastInName, outmtime.Format(time.RFC3339), inmtime.Sub(outmtime))
 		return false
 	}
-	if !generator && !bytes.Equal(cmdhash, stepCmdHash) {
-		clog.Infof(ctx, "need: cmdhash differ %q -> %q", base64.StdEncoding.EncodeToString(cmdhash), base64.StdEncoding.EncodeToString(stepCmdHash))
-		span.SetAttr("run-reason", "cmdhash-update")
-		if len(cmdhash) == 0 {
-			fmt.Fprintf(b.explainWriter, "command line not found in log for %s\n", outname)
-		} else {
-			fmt.Fprintf(b.explainWriter, "command line changed for %s\n", outname)
+	if !generator && !bytes.Equal(cmdhash, stepManifest.cmdHash) {
+		// TODO: remove old cmdhash support
+		oldCmdHash := calculateOldCmdHash(stepManifest.cmdline, stepManifest.rspfileContent)
+		if !bytes.Equal(cmdhash, oldCmdHash) {
+			clog.Infof(ctx, "need: cmdhash differ %q -> %q", base64.StdEncoding.EncodeToString(cmdhash), base64.StdEncoding.EncodeToString(stepManifest.cmdHash))
+			span.SetAttr("run-reason", "cmdhash-update")
+			if len(cmdhash) == 0 {
+				fmt.Fprintf(b.explainWriter, "command line not found in log for %s\n", outname)
+			} else {
+				fmt.Fprintf(b.explainWriter, "command line changed for %s\n", outname)
+			}
+			return false
 		}
-		return false
+		// match with old cmd hash.
+	}
+	if len(edgehash) == 0 {
+		// old version of siso didn't record edgehash...
+		// TODO: remove this condition?
+		clog.Warningf(ctx, "missing edgehash in output")
+	} else if !bytes.Equal(edgehash, stepManifest.edgeHash) {
+		if !experiments.Enabled("ignore-edge-change", "") {
+			clog.Infof(ctx, "need: edgehash differ %q -> %q", base64.StdEncoding.EncodeToString(edgehash), base64.StdEncoding.EncodeToString(stepManifest.edgeHash))
+			fmt.Fprintf(b.explainWriter, "edge changed for %s\n", outname)
+			return false
+		}
+		clog.Warningf(ctx, "ignore: edgehash differ %q -> %q", base64.StdEncoding.EncodeToString(edgehash), base64.StdEncoding.EncodeToString(stepManifest.edgeHash))
 	}
 	if b.clobber {
 		clog.Infof(ctx, "need: clobber")
@@ -113,19 +122,14 @@ func (b *Builder) checkUpToDate(ctx context.Context, stepDef StepDef, outputs []
 		return false
 	}
 	if b.outputLocal != nil {
-		numOuts := len(outputs)
+		numOuts := len(stepManifest.outputs)
 		depFile := stepDef.Depfile(ctx)
 		if depFile != "" {
 			numOuts++
 		}
 		localOutputs := make([]string, 0, numOuts)
 		seen := make(map[string]bool)
-		for _, out := range outputs {
-			outPath, err := b.graph.TargetPath(ctx, out)
-			if err != nil {
-				clog.Warningf(ctx, "bad target %v", err)
-				continue
-			}
+		for _, outPath := range stepManifest.outputs {
 			if seen[outPath] {
 				continue
 			}
@@ -166,20 +170,14 @@ func (b *Builder) checkUpToDate(ctx context.Context, stepDef StepDef, outputs []
 }
 
 // outputMtime returns the oldest modified output, its timestamp and
-// command hash that produced the outputs of the step.
-func outputMtime(ctx context.Context, b *Builder, outputs []Target, restat bool) (string, time.Time, []byte) {
+// command hash / edge hash that produced the outputs of the step.
+func outputMtime(ctx context.Context, b *Builder, outputs []string, restat bool) (string, time.Time, []byte, []byte) {
 	var oerr error
 	var outmtime time.Time
 	var outcmdhash []byte
+	var edgehash []byte
 	out0 := ""
-	for i, out := range outputs {
-		outPath, err := b.graph.TargetPath(ctx, out)
-		if err != nil {
-			if oerr == nil {
-				oerr = err
-			}
-			continue
-		}
+	for i, outPath := range outputs {
 		fi, err := b.hashFS.Stat(ctx, b.path.ExecRoot, outPath)
 		if err != nil {
 			if oerr == nil {
@@ -193,6 +191,7 @@ func outputMtime(ctx context.Context, b *Builder, outputs []Target, restat bool)
 		}
 		if i == 0 {
 			outcmdhash = fi.CmdHash()
+			edgehash = fi.EdgeHash()
 		}
 		if !bytes.Equal(outcmdhash, fi.CmdHash()) {
 			if log.V(1) {
@@ -219,7 +218,7 @@ func outputMtime(ctx context.Context, b *Builder, outputs []Target, restat bool)
 	if oerr != nil {
 		outmtime = time.Time{}
 	}
-	return out0, outmtime, outcmdhash
+	return out0, outmtime, outcmdhash, edgehash
 }
 
 var errDirty = errors.New("dirty")

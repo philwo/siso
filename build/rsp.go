@@ -30,7 +30,7 @@ func (b *Builder) setupRSP(ctx context.Context, step *Step) error {
 	if log.V(1) {
 		clog.Infof(ctx, "create rsp %q=%q", rsp, content)
 	}
-	err := b.hashFS.WriteFile(ctx, step.cmd.ExecRoot, rsp, content, false, time.Now(), nil)
+	err := b.hashFS.WriteFile(ctx, step.cmd.ExecRoot, rsp, content, false, time.Now(), nil, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create rsp %s: %w", rsp, err)
 	}

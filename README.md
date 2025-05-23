@@ -61,6 +61,14 @@ Siso is a build tool that aims to significantly speed up Chromium's build.
     * **Ninja:** Ignores a depfile parse error.
     * **Siso:** Fails for a depfile parse error.
 
+1. **Re-run when inputs/outputs list has changed***
+
+   * **Ninja:** re-run when command line changed or inputs is newer than
+     outputs.
+   * **Siso:** similar with [n2](https://neugierig.org/software/blog/2022/03/n2.html),
+     re-run when inputs/outputs list has changed too.
+     disabled by `SISO_EXPERIMENTS=ignore-edge-change`.
+
 1. **Unsupported features**
 
    Siso may not support Ninja features if they are not used for Chromium
