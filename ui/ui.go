@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"unicode"
 
 	"golang.org/x/term"
 )
@@ -205,8 +206,8 @@ func StripANSIEscapeCodes(s string) string {
 		}
 		i += 2
 
-		// Skip everything up to and including the next [a-zA-Z].
-		for i < len(s) && !((s[i] >= 'a' && s[i] <= 'z') || s[i] >= 'A' && s[i] <= 'Z') {
+		// Loop while current char is NOT an ASCII letter.
+		for i < len(s) && !unicode.IsLetter(rune(s[i])) {
 			i++
 		}
 	}
