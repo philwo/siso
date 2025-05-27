@@ -55,6 +55,11 @@ func (msvc depsMSVC) fixCmdInputs(ctx context.Context, b *Builder, cmd *execute.
 		params.Sysroots[i] = b.path.MaybeFromWD(ctx, params.Sysroots[i])
 	}
 	var inputs []string
+	if len(params.Sources) == 0 {
+		// If ExtractScanDepsParams doesn't return Sources, such action uses inputs from ninja build file directly, as the action doesn't need include scanning.
+		// e.g. clang modules, rust and etc.
+		inputs = slices.Clone(cmd.Inputs)
+	}
 	// Include files detected by command line. i.e. sanitizer ignore lists.
 	// These would not be in depsfile, different from Sources.
 	inputs = append(inputs, params.Files...)
@@ -203,6 +208,12 @@ func (depsMSVC) scandeps(ctx context.Context, b *Builder, step *Step) ([]string,
 			step.metrics.ActionStartTime = IntervalMetric(time.Since(b.start))
 		}
 		params := msvcutil.ExtractScanDepsParams(ctx, step.cmd.Args, step.cmd.Env)
+		if len(params.Sources) == 0 {
+			// If ExtractScanDepsParams doesn't return Sources, such action uses inputs from ninja build file directly, as the action doesn't need include scanning.
+			// e.g. clang modules, rust and etc.
+			return nil
+		}
+
 		for i := range params.Sources {
 			params.Sources[i] = b.path.MaybeFromWD(ctx, params.Sources[i])
 		}
