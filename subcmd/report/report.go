@@ -219,6 +219,6 @@ func (c *run) archive(ctx context.Context) (err error) {
 			return fmt.Errorf("failed to write data of %s: %w", fname, err)
 		}
 	}
-	ui.Default.PrintLines(fmt.Sprintf("report file: %s\n", f.Name()))
+	ui.Default.PrintLines(fmt.Sprintf("report file: %s\n\n", f.Name()))
 	return tw.Flush()
 }
