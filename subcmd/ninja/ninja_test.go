@@ -111,8 +111,9 @@ func modifyFile(t *testing.T, dir, name string, gen func([]byte) []byte) {
 func touchFile(t *testing.T, dir, name string) {
 	t.Helper()
 	t.Logf("-- touch %s", name)
+	oldTime := time.Now()
 	fullname := filepath.Join(dir, name)
-	fi, err := os.Stat(fullname)
+	_, err := os.Stat(fullname)
 	if errors.Is(err, fs.ErrNotExist) {
 		err = os.WriteFile(fullname, nil, 0644)
 		if err != nil {
@@ -130,7 +131,12 @@ func touchFile(t *testing.T, dir, name string) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if fi != nil && fi.ModTime().Equal(nfi.ModTime()) {
+		// chtimes might not make the file is newer than previous
+		// build's artifact.
+		// make sure it's newer than any of previous build's
+		// artifact, so touch would trigger the step that
+		// use the file as input.
+		if oldTime.Equal(nfi.ModTime()) {
 			time.Sleep(1 * time.Millisecond)
 			continue
 		}
