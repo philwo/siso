@@ -108,12 +108,9 @@ func (b *Builder) checkUpToDate(ctx context.Context, stepDef StepDef, stepManife
 		// TODO: remove this condition?
 		clog.Warningf(ctx, "missing edgehash in output")
 	} else if !bytes.Equal(edgehash, stepManifest.edgeHash) {
-		if !experiments.Enabled("ignore-edge-change", "") {
-			clog.Infof(ctx, "need: edgehash differ %q -> %q", base64.StdEncoding.EncodeToString(edgehash), base64.StdEncoding.EncodeToString(stepManifest.edgeHash))
-			fmt.Fprintf(b.explainWriter, "edge changed for %s\n", outname)
-			return false
-		}
-		clog.Warningf(ctx, "ignore: edgehash differ %q -> %q", base64.StdEncoding.EncodeToString(edgehash), base64.StdEncoding.EncodeToString(stepManifest.edgeHash))
+		clog.Infof(ctx, "need: edgehash differ %q -> %q", base64.StdEncoding.EncodeToString(edgehash), base64.StdEncoding.EncodeToString(stepManifest.edgeHash))
+		fmt.Fprintf(b.explainWriter, "edge changed for %s\n", outname)
+		return false
 	}
 	if b.clobber {
 		clog.Infof(ctx, "need: clobber")

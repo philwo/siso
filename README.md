@@ -67,7 +67,6 @@ Siso is a build tool that aims to significantly speed up Chromium's build.
      outputs.
    * **Siso:** similar with [n2](https://neugierig.org/software/blog/2022/03/n2.html),
      re-run when inputs/outputs list has changed too.
-     disabled by `SISO_EXPERIMENTS=ignore-edge-change`.
 
 1. **Unsupported features**
 
