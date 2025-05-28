@@ -6,7 +6,11 @@
 
 package ninja
 
-import "context"
+import (
+	"context"
 
-func (c *ninjaCmdRun) checkResourceLimits(ctx context.Context) {
+	"go.chromium.org/infra/build/siso/build"
+)
+
+func (c *ninjaCmdRun) checkResourceLimits(ctx context.Context, limits build.Limits) {
 }

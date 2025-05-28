@@ -588,7 +588,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 			}
 		}
 	}
-	c.checkResourceLimits(ctx)
+	c.checkResourceLimits(ctx, limits)
 
 	properties.Add("job_id", c.jobID)
 	clog.Infof(ctx, "job id: %q", c.jobID)
@@ -1541,6 +1541,7 @@ func (c *ninjaCmdRun) initBuildOpts(ctx context.Context, projectID string, build
 		Pprof:                c.buildPprof,
 		ResultstoreUploader:  c.resultstoreUploader,
 		Clobber:              c.clobber,
+		Batch:                c.batch,
 		Prepare:              c.prepare,
 		Verbose:              c.verbose,
 		VerboseFailures:      c.verboseFailures,

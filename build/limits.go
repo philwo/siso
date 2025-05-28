@@ -179,11 +179,16 @@ func limitForRemote(ctx context.Context, numCPU int) int {
 func limitForFastLocal(numCPU int) int {
 	// We want to use local resources on powerful machine (but not so
 	// many, as it needs to run local only steps too),
-	// but not want to use on cheap machine (*-standard-8 etc).
-	// So don't use fast local if cpus < 32.
+	// but not want to use on cheap machine (*-standard-8 etc) on builder.
+	// we'll set 0 in batch mode in ninja.go
+	// <32 cpus -> 1
 	// 64 cpus -> 2
 	// 128 cpus -> 6
-	return max(0, numCPU-32) / 16
+	n := max(0, numCPU-32) / 16
+	if n == 0 {
+		n = 1
+	}
+	return n
 }
 
 func limitForREWrapper(ctx context.Context, numCPU int) int {

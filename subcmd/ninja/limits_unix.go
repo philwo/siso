@@ -17,14 +17,13 @@ import (
 	"go.chromium.org/infra/build/siso/ui"
 )
 
-func (c *ninjaCmdRun) checkResourceLimits(ctx context.Context) {
+func (c *ninjaCmdRun) checkResourceLimits(ctx context.Context, limits build.Limits) {
 	var lim unix.Rlimit
 	err := unix.Getrlimit(unix.RLIMIT_NOFILE, &lim)
 	if err != nil {
 		clog.Warningf(ctx, "failed to get rlimit: %v", err)
 		return
 	}
-	limits := build.DefaultLimits(ctx)
 	nfile := uint64(limits.Local) * 8 // 8 fds per proc?
 	switch {
 	case c.offline:
