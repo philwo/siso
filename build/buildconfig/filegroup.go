@@ -77,11 +77,14 @@ func (g globSpec) Update(ctx context.Context, fsys fs.FS, fg filegroup) (filegro
 	m := g.matcher()
 	var files []string
 	err = fs.WalkDir(fsys, ".", func(pathname string, d fs.DirEntry, err error) error {
-		if log.V(1) {
-			clog.Infof(ctx, "glob %s dir=%t: %v", pathname, d.IsDir(), err)
-		}
 		if err != nil {
+			if log.V(1) {
+				clog.Infof(ctx, "glob %s: %v", pathname, err)
+			}
 			return err
+		}
+		if log.V(1) {
+			clog.Infof(ctx, "glob %s dir=%t", pathname, d.IsDir())
 		}
 		if d.IsDir() {
 			return err
