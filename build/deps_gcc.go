@@ -220,7 +220,11 @@ func (depsGCC) scandeps(ctx context.Context, b *Builder, step *Step) ([]string, 
 			req.Timeout = 2 * req.Timeout
 		}
 		if log.V(1) {
-			clog.Infof(ctx, "scandeps req=%#v", req)
+			buf, berr := json.Marshal(req)
+			if berr != nil {
+				return berr
+			}
+			clog.Infof(ctx, "scandeps req=%s", buf)
 		}
 		started := time.Now()
 		var err error
