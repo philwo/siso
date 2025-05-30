@@ -21,9 +21,7 @@ import (
 	"go.chromium.org/infra/build/siso/execute"
 	"go.chromium.org/infra/build/siso/o11y/clog"
 	"go.chromium.org/infra/build/siso/o11y/trace"
-	"go.chromium.org/infra/build/siso/toolsupport/gccutil"
 	"go.chromium.org/infra/build/siso/toolsupport/makeutil"
-	"go.chromium.org/infra/build/siso/toolsupport/msvcutil"
 )
 
 type depsProcessor interface {
@@ -109,55 +107,52 @@ func depsFastStep(ctx context.Context, b *Builder, step *Step) (*Step, error) {
 func depsExpandInputs(ctx context.Context, b *Builder, step *Step) {
 	ctx, span := trace.NewSpan(ctx, "deps-expand-inputs")
 	defer span.Close(nil)
-
-	// deps=gcc,msvc with sources doesn't need to expand inputs.
-	if step.cmd.Deps == "gcc" && len(gccutil.ExtractScanDepsParams(ctx, step.cmd.Args, step.cmd.Env).Sources) > 0 {
-		return
-	}
-	if step.cmd.Deps == "msvc" && len(msvcutil.ExtractScanDepsParams(ctx, step.cmd.Args, step.cmd.Env).Sources) > 0 {
-		return
-	}
-
-	oldlen := len(step.cmd.Inputs)
-	expanded := step.def.ExpandedInputs(ctx)
-	inputs := make([]string, 0, oldlen+len(expanded))
-	seen := make(map[string]bool)
-	for _, in := range step.cmd.Inputs {
-		if seen[in] {
-			continue
-		}
-		seen[in] = true
-		// labels are expanded in expanded,
-		// so no need to preserve it in inputs.
-		if strings.Contains(in, ":") {
-			if runtime.GOOS == "windows" && filepath.IsAbs(in) {
-				if strings.Contains(in[2:], ":") {
-					continue
-				}
-			} else {
+	// deps=gcc, msvc will get correct inputs from deps log,
+	// so no need to expand inputs here.
+	switch step.cmd.Deps {
+	case "gcc", "msvc":
+	default:
+		oldlen := len(step.cmd.Inputs)
+		expanded := step.def.ExpandedInputs(ctx)
+		inputs := make([]string, 0, oldlen+len(expanded))
+		seen := make(map[string]bool)
+		for _, in := range step.cmd.Inputs {
+			if seen[in] {
 				continue
 			}
+			seen[in] = true
+			// labels are expanded in expanded,
+			// so no need to preserve it in inputs.
+			if strings.Contains(in, ":") {
+				if runtime.GOOS == "windows" && filepath.IsAbs(in) {
+					if strings.Contains(in[2:], ":") {
+						continue
+					}
+				} else {
+					continue
+				}
+			}
+			if _, err := b.hashFS.Stat(ctx, b.path.ExecRoot, in); err != nil {
+				clog.Warningf(ctx, "deps stat error %s: %v", in, err)
+				continue
+			}
+			inputs = append(inputs, in)
 		}
-		if _, err := b.hashFS.Stat(ctx, b.path.ExecRoot, in); err != nil {
-			clog.Warningf(ctx, "deps stat error %s: %v", in, err)
-			continue
+		for _, in := range expanded {
+			if seen[in] {
+				continue
+			}
+			seen[in] = true
+			if _, err := b.hashFS.Stat(ctx, b.path.ExecRoot, in); err != nil {
+				clog.Warningf(ctx, "deps stat error %s: %v", in, err)
+				continue
+			}
+			inputs = append(inputs, in)
 		}
-		inputs = append(inputs, in)
+		clog.Infof(ctx, "deps expands %d -> %d", len(step.cmd.Inputs), len(inputs))
+		step.cmd.Inputs = make([]string, len(inputs))
+		copy(step.cmd.Inputs, inputs)
 	}
-	for _, in := range expanded {
-		if seen[in] {
-			continue
-		}
-		seen[in] = true
-		if _, err := b.hashFS.Stat(ctx, b.path.ExecRoot, in); err != nil {
-			clog.Warningf(ctx, "deps stat error %s: %v", in, err)
-			continue
-		}
-		inputs = append(inputs, in)
-	}
-	clog.Infof(ctx, "deps expands %d -> %d", len(step.cmd.Inputs), len(inputs))
-	step.cmd.Inputs = make([]string, len(inputs))
-	copy(step.cmd.Inputs, inputs)
 }
 
 func depsFixCmd(ctx context.Context, b *Builder, step *Step, deps []string) {

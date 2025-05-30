@@ -172,8 +172,7 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 		b.teardownRSP(ctx, step)
 	}()
 
-	// expand inputs to get full action inputs unless deps=gcc,msvc with main supported source files such as .c, .cc, .mm etc.
-	// deps gcc,msvc for rust and cxx module compiles will still rely on `depsExpandInputs` instead of scandeps.
+	// expand inputs to get full action inputs unless deps=gcc,msvc
 	depsExpandInputs(ctx, b, step)
 
 	runCmd := b.runStrategy(ctx, step)
