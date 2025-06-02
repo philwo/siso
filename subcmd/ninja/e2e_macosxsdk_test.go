@@ -89,8 +89,7 @@ func TestBuild_MacOSXSDK(t *testing.T) {
 				if err != nil {
 					t.Logf("missing symlink %s in input", sname)
 					var buf strings.Builder
-					err := tree.Dump(ctx, &buf)
-					if err != nil {
+					if err := tree.Dump(ctx, &buf); err != nil {
 						t.Errorf("failed to dump: %v", err)
 					}
 					t.Logf("input tree:\n%s", buf.String())
