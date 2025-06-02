@@ -235,24 +235,35 @@ func (c *Client) Missing(ctx context.Context, blobs []digest.Digest) ([]digest.D
 	}
 	cas := rpb.NewContentAddressableStorageClient(c.casConn)
 
-	var resp *rpb.FindMissingBlobsResponse
-	// TODO(b/328332495): grpc should retry by service config?
-	err := retry.Do(ctx, func() error {
-		var err error
-		resp, err = cas.FindMissingBlobs(ctx, &rpb.FindMissingBlobsRequest{
-			InstanceName: c.opt.Instance,
-			BlobDigests:  blobspb,
+	var ret []digest.Digest
+	for len(blobspb) > 0 {
+		var remain []*rpb.Digest
+		// limit *rpb.FindMissingBlobsRequest size under 4MB.
+		// each digest is 2ha256 64 bytes + size 4 bytes.
+		// 48k is sufficiently large that would never exceeds 4MB.
+		const maxBlobs = 48 * 1024
+		if len(blobspb) > maxBlobs {
+			remain = blobspb[maxBlobs:]
+			blobspb = blobspb[:maxBlobs]
+		}
+		var resp *rpb.FindMissingBlobsResponse
+		// TODO(b/328332495): grpc should retry by service config?
+		err := retry.Do(ctx, func() error {
+			var err error
+			resp, err = cas.FindMissingBlobs(ctx, &rpb.FindMissingBlobsRequest{
+				InstanceName: c.opt.Instance,
+				BlobDigests:  blobspb,
+			})
+			c.m.OpsDone(err)
+			return err
 		})
-		c.m.OpsDone(err)
-		return err
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	ret := make([]digest.Digest, 0, len(resp.GetMissingBlobDigests()))
-	for _, b := range resp.GetMissingBlobDigests() {
-		ret = append(ret, digest.FromProto(b))
+		if err != nil {
+			return nil, fmt.Errorf("find missing: %w", err)
+		}
+		for _, b := range resp.GetMissingBlobDigests() {
+			ret = append(ret, digest.FromProto(b))
+		}
+		blobspb = remain
 	}
 	return ret, nil
 }
@@ -302,7 +313,13 @@ func (c *Client) UploadAll(ctx context.Context, ds *digest.Store) (numUploaded i
 				}
 				close(uop.ch)
 			default:
-				clog.Infof(ctx, "upload %s failed: %v", d, uop.err)
+				var s string
+				if data, ok := ds.Get(d); ok {
+					s = data.String()
+				} else {
+					s = d.String()
+				}
+				clog.Infof(ctx, "upload %s failed: %v", s, uop.err)
 				c.knownDigests.CompareAndDelete(d, uop)
 			}
 		}
