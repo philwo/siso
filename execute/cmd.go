@@ -372,6 +372,13 @@ func (c *Cmd) SetActionDigest(d digest.Digest) {
 	c.actionDigest = d
 }
 
+// RemoteChroot returns whether it is executed under chroot on remote worker.
+// e.g. dockerChrootPath=. in platform property.
+func (c *Cmd) RemoteChroot() bool {
+	_, ok := c.Platform["dockerChrootPath"]
+	return ok
+}
+
 // Digest computes action digest of the cmd.
 // If ds is nil, then it will reuse the previous calculated digest if any.
 func (c *Cmd) Digest(ctx context.Context, ds *digest.Store) (digest.Digest, error) {
@@ -382,6 +389,12 @@ func (c *Cmd) Digest(ctx context.Context, ds *digest.Store) (digest.Digest, erro
 		return digest.Digest{}, fmt.Errorf("unable to get the input root for %s: missing HashFS", c)
 
 	}
+	chrootPath, remoteChroot := c.Platform["dockerChrootPath"]
+	if remoteChroot {
+		if chrootPath != "." {
+			return digest.Digest{}, fmt.Errorf("unsupported dockerChrootPath=%q", chrootPath)
+		}
+	}
 	ents, err := c.inputTree(ctx)
 	if err != nil {
 		return digest.Digest{}, fmt.Errorf("failed to get input tree for %s: %w", c, err)
@@ -390,6 +403,9 @@ func (c *Cmd) Digest(ctx context.Context, ds *digest.Store) (digest.Digest, erro
 	treeInputs := c.TreeInputs
 	if c.CanonicalizeDir {
 		ents, treeInputs = c.canonicalizeDir(ctx, ents, treeInputs)
+	}
+	if remoteChroot {
+		ents, treeInputs = c.chrootDir(ctx, ents, treeInputs)
 	}
 
 	inputRootDigest, err := treeDigest(ctx, treeInputs, ents, ds)
@@ -432,8 +448,37 @@ func (c *Cmd) Digest(ctx context.Context, ds *digest.Store) (digest.Digest, erro
 // inputTree returns Merkle tree entries for the cmd.
 func (c *Cmd) inputTree(ctx context.Context) ([]merkletree.Entry, error) {
 	inputs := c.AllInputs()
+	if log.V(1) {
+		clog.Infof(ctx, "tree @%s %s", c.ExecRoot, inputs)
+	}
+	var rootEnts []merkletree.Entry
+	switch {
+	case c.RemoteChroot():
+		// allow absolute path for inputs when remote chroot.
+		var rootInputs, newInputs []string
+		for _, input := range inputs {
+			if !filepath.IsLocal(input) {
+				if filepath.IsAbs(input) {
+					rootInputs = append(rootInputs, input)
+					continue
+				}
+				rootInputs = append(rootInputs, filepath.ToSlash(filepath.Join(c.ExecRoot, input)))
+				continue
+			}
+			newInputs = append(newInputs, input)
+		}
+		if len(rootInputs) > 0 {
+			var err error
+			// use "" as root as rootInputs are absolute paths.
+			rootEnts, err = c.HashFS.Entries(ctx, "", rootInputs)
+			if err != nil {
+				return nil, err
+			}
+			clog.Infof(ctx, "external inputs %d -> %d", len(rootInputs), len(rootEnts))
+		}
+		inputs = newInputs
 
-	if c.UseSystemInput {
+	case c.UseSystemInput:
 		var newInputs []string
 		for _, input := range inputs {
 			if !filepath.IsLocal(input) {
@@ -445,15 +490,16 @@ func (c *Cmd) inputTree(ctx context.Context) ([]merkletree.Entry, error) {
 		inputs = newInputs
 	}
 
-	if log.V(1) {
-		clog.Infof(ctx, "tree @%s %s", c.ExecRoot, inputs)
-	}
 	ents, err := c.HashFS.Entries(ctx, c.ExecRoot, inputs)
 	if err != nil {
 		return nil, err
 	}
+	ents = append(ents, rootEnts...)
 
 	if len(c.RemoteInputs) == 0 {
+		sort.Slice(ents, func(i, j int) bool {
+			return ents[i].Name < ents[j].Name
+		})
 		return ents, nil
 	}
 	if log.V(1) {
@@ -612,6 +658,32 @@ func canonicalizeDir(fname, dir, cdir string) string {
 	return fname
 }
 
+// chrootDir converts pathnames in ents and treeInputs from exec root relative to "/" relative.
+func (c *Cmd) chrootDir(ctx context.Context, ents []merkletree.Entry, treeInputs []merkletree.TreeEntry) ([]merkletree.Entry, []merkletree.TreeEntry) {
+	dir := filepath.ToSlash(filepath.Clean(c.ExecRoot))
+	if log.V(1) {
+		clog.Infof(ctx, "chdoor dir: %s", dir)
+	}
+	for i := range ents {
+		e := &ents[i]
+		if filepath.IsAbs(e.Name) {
+			e.Name = e.Name[1:]
+			continue
+		}
+		e.Name = filepath.ToSlash(filepath.Join(dir, e.Name))[1:]
+	}
+	treeInputs = slices.Clone(treeInputs)
+	for i := range treeInputs {
+		e := &treeInputs[i]
+		if filepath.IsAbs(e.Name) {
+			e.Name = e.Name[1:]
+			continue
+		}
+		e.Name = filepath.ToSlash(filepath.Join(dir, e.Name))[1:]
+	}
+	return ents, treeInputs
+}
+
 // remoteExecutionPlatform constructs a Remote Execution Platform properties from the platform properties.
 func (c *Cmd) remoteExecutionPlatform() *rpb.Platform {
 	platform := &rpb.Platform{}
@@ -648,6 +720,10 @@ func (c *Cmd) commandDigest(ctx context.Context, ds *digest.Store) (digest.Diges
 	if c.CanonicalizeDir {
 		dir = c.canonicalDir()
 	}
+	if c.RemoteChroot() {
+		dir = filepath.ToSlash(filepath.Join(c.ExecRoot, dir))[1:]
+	}
+	// out files are cwd relative.
 	command := &rpb.Command{
 		Arguments:        args,
 		WorkingDirectory: filepath.ToSlash(dir),

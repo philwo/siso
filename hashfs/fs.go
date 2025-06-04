@@ -946,6 +946,7 @@ func (hfs *HashFS) Availables(ctx context.Context, root string, inputs []string)
 
 // Entries gets merkletree entries for inputs at root.
 // it won't return entries symlink escaped from root.
+// root can be an empty string "" when inputs are absolute paths.
 func (hfs *HashFS) Entries(ctx context.Context, root string, inputs []string) ([]merkletree.Entry, error) {
 	ctx, span := trace.NewSpan(ctx, "fs-entries")
 	defer span.Close(nil)
@@ -1629,8 +1630,10 @@ func (e *entry) init(ctx context.Context, fname string, executables map[string]b
 		e.size = fi.Size()
 		e.src = osfs.FileSource(fname, fi.Size())
 	default:
+		// e.g. fifo in chromiumos build tree?
+		// /build/amd64-generic/tmp/portage/chromeos-base/chromeos-chrome-139.0.7206.0_rc-r1/.ipc/in: unknown filetype prwxrwx---
 		e.err = fmt.Errorf("unexpected filetype not regular %s: %s", fi.Mode(), fname)
-		clog.Errorf(ctx, "tree entry %s: unknown filetype %s", fname, fi.Mode())
+		clog.Warningf(ctx, "tree entry %s: unknown filetype %s", fname, fi.Mode())
 		return
 	}
 	if e.mtime.Before(fi.ModTime()) {

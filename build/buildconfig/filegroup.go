@@ -66,6 +66,13 @@ func (g globSpec) Update(ctx context.Context, fsys fs.FS, fg filegroup) (filegro
 		return fg, nil
 	}
 	fg.etag = hash
+	var root string
+	if filepath.IsAbs(g.dir) {
+		// abspath is used for dockerChrootPath=.
+		// in this case, fsys is based on /, not exec root.
+		g.dir = g.dir[1:]
+		root = "/"
+	}
 	if !fs.ValidPath(g.dir) {
 		clog.Warningf(ctx, "filegroup dir is out of exec root %q. unable to use for remote execution", g.dir)
 		return fg, nil
@@ -91,7 +98,7 @@ func (g globSpec) Update(ctx context.Context, fsys fs.FS, fg filegroup) (filegro
 		}
 		pathname = filepath.ToSlash(pathname)
 		if m(pathname) {
-			files = append(files, path.Join(g.dir, pathname))
+			files = append(files, path.Join(root, g.dir, pathname))
 		}
 		return nil
 	})

@@ -9,8 +9,10 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"path/filepath"
 	"strings"
 
+	log "github.com/golang/glog"
 	"go.starlark.net/starlark"
 
 	"go.chromium.org/infra/build/siso/build"
@@ -109,7 +111,11 @@ func parseFilegroupUpdater(ctx context.Context, key string, v starlark.Value) (f
 // When a given filegroup is valid, it is reused.
 // Otherwise, gets the file list by the filegroup operation. e.g. glob.
 func (cfg *Config) UpdateFilegroups(ctx context.Context, hashFS *hashfs.HashFS, buildPath *build.Path, filegroups Filegroups) (Filegroups, error) {
-	fsys := hashFS.FileSystem(ctx, buildPath.ExecRoot)
+	fsysExecRoot := hashFS.FileSystem(ctx, buildPath.ExecRoot)
+	// fsysRoot is used only when the filegroups are absolute paths to
+	// support CrOS chroot builds.
+	fsysRoot := hashFS.FileSystem(ctx, "/")
+
 	fg := Filegroups{
 		ETags:      make(map[string]string),
 		Filegroups: make(map[string][]string),
@@ -120,9 +126,16 @@ func (cfg *Config) UpdateFilegroups(ctx context.Context, hashFS *hashfs.HashFS, 
 			etag:  filegroups.ETags[k],
 			files: filegroups.Filegroups[k],
 		}
+		fsys := fsysExecRoot
+		if filepath.IsAbs(k) {
+			fsys = fsysRoot
+		}
 		v, err := g.Update(ctx, fsys, v)
 		if errors.Is(err, fs.ErrNotExist) {
 			// ignore the filegroup. b/283203079
+			if log.V(1) {
+				clog.Warningf(ctx, "failed to update filegroup %q: %v", k, err)
+			}
 			continue
 		}
 		if err != nil {

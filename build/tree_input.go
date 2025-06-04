@@ -65,11 +65,23 @@ func (b *Builder) resolveSymlinkForInputDeps(ctx context.Context, dir, labelSuff
 	// see: https://lwn.net/Articles/650786/
 	const maxSymlinks = 40
 	for range maxSymlinks {
+		root := b.path.ExecRoot
+		if !filepath.IsLocal(dir) {
+			// make it absolute path when dir is not under exec root for dockerChrootPath=.
+			root = ""
+			if !filepath.IsAbs(dir) {
+				dir = filepath.Join(b.path.ExecRoot, dir)
+			}
+		}
+		if log.V(1) {
+			clog.Infof(ctx, "check input deps %q", dir+labelSuffix)
+		}
 		files, ok := inputDeps[dir+labelSuffix]
 		if ok {
 			return dir, files, nil
 		}
-		fi, err := b.hashFS.Stat(ctx, b.path.ExecRoot, dir)
+		fi, err := b.hashFS.Stat(ctx, root, dir)
+		clog.Infof(ctx, "input deps stat %q %q: %v", root, dir, err)
 		if err != nil {
 			return "", nil, fmt.Errorf("not in input_deps, and stat err %s: %w", dir, err)
 		}
@@ -90,6 +102,14 @@ func (b *Builder) treeInput(ctx context.Context, dir, labelSuffix string, fixFn 
 		return merkletree.TreeEntry{}, errors.New("reapi is not configured")
 	}
 	m := b.graph.InputDeps(ctx)
+	if !filepath.IsLocal(dir) {
+		// only allowed for dockerChrootPath=. in platform container image
+		absdir := filepath.ToSlash(filepath.Join(b.path.ExecRoot, dir))
+		if log.V(1) {
+			clog.Infof(ctx, "tree dir: %q %q -> %q", b.path.ExecRoot, dir, absdir)
+		}
+		dir = absdir
+	}
 	dir, files, err := b.resolveSymlinkForInputDeps(ctx, dir, labelSuffix, m)
 	if err != nil {
 		return merkletree.TreeEntry{}, err
@@ -129,7 +149,12 @@ func (st *subtree) init(ctx context.Context, b *Builder, dir string, files []str
 			inputs = append(inputs, strings.TrimPrefix(f, dir+"/"))
 		}
 		sort.Strings(inputs)
-		ents, err := b.hashFS.Entries(ctx, filepath.Join(b.path.ExecRoot, dir), inputs)
+		rootDir := dir
+		if !filepath.IsAbs(rootDir) {
+			rootDir = filepath.Join(b.path.ExecRoot, dir)
+		}
+		clog.Infof(ctx, "tree init root dir: %q (%q %q)", rootDir, b.path.ExecRoot, dir)
+		ents, err := b.hashFS.Entries(ctx, rootDir, inputs)
 		if err != nil {
 			clog.Warningf(ctx, "failed to get subtree entries %s: %v", dir, err)
 			st.err = err

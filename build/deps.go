@@ -199,6 +199,9 @@ func depsCmd(ctx context.Context, b *Builder, step *Step) error {
 		if err != nil {
 			return err
 		}
+		if log.V(2) {
+			clog.Infof(ctx, "inputs: %q", inputs)
+		}
 		step.cmd.Inputs = inputs
 		// DepsCmd should set Pure=true or false.
 	}

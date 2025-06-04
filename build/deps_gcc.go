@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -188,23 +189,78 @@ func (depsGCC) scandeps(ctx context.Context, b *Builder, step *Step) ([]string, 
 			return nil
 		}
 
+		// externals stores non local paths.
+		// usually error, but can be used for scandeps for cros chroot case.
+		var externals []string
 		for i := range params.Sources {
 			params.Sources[i] = b.path.MaybeFromWD(ctx, params.Sources[i])
+			if !filepath.IsLocal(params.Sources[i]) {
+				externals = append(externals, params.Sources[i])
+			}
 		}
 		for i := range params.Includes {
 			params.Includes[i] = b.path.MaybeFromWD(ctx, params.Includes[i])
+			if !filepath.IsLocal(params.Includes[i]) {
+				externals = append(externals, params.Includes[i])
+			}
 		}
 		for i := range params.Files {
 			params.Files[i] = b.path.MaybeFromWD(ctx, params.Files[i])
+			if !filepath.IsLocal(params.Files[i]) {
+				externals = append(externals, params.Files[i])
+			}
 		}
 		for i := range params.Dirs {
 			params.Dirs[i] = b.path.MaybeFromWD(ctx, params.Dirs[i])
+			if !filepath.IsLocal(params.Dirs[i]) {
+				externals = append(externals, params.Dirs[i])
+			}
 		}
 		for i := range params.Frameworks {
 			params.Frameworks[i] = b.path.MaybeFromWD(ctx, params.Frameworks[i])
+			if !filepath.IsLocal(params.Frameworks[i]) {
+				externals = append(externals, params.Frameworks[i])
+			}
 		}
 		for i := range params.Sysroots {
 			params.Sysroots[i] = b.path.MaybeFromWD(ctx, params.Sysroots[i])
+			if !filepath.IsLocal(params.Sysroots[i]) {
+				externals = append(externals, params.Sysroots[i])
+			}
+		}
+		execRoot := b.path.ExecRoot
+		if len(externals) > 0 {
+			if !step.cmd.RemoteChroot() {
+				n := len(externals)
+				v := externals[:max(len(externals), 5)]
+				return fmt.Errorf("inputs are not under exec root %d %q...: platform=%q", n, v, step.cmd.Platform)
+			}
+			// Convert paths from relative to exec root to relative to /
+			// e.g.
+			//  execRoot: /path/to/chromium/src
+			//     path:  ../../../../usr/include
+			// ->
+			//  execRoot: /
+			//     path:  usr/include
+			execRoot = "/"
+			for i := range params.Sources {
+				params.Sources[i] = filepath.Join(b.path.ExecRoot, params.Sources[i])[1:]
+			}
+			for i := range params.Includes {
+				params.Includes[i] = filepath.Join(b.path.ExecRoot, params.Includes[i])[1:]
+			}
+			for i := range params.Files {
+				params.Files[i] = filepath.Join(b.path.ExecRoot, params.Files[i])[1:]
+			}
+			for i := range params.Dirs {
+				params.Dirs[i] = filepath.Join(b.path.ExecRoot, params.Dirs[i])[1:]
+			}
+			for i := range params.Frameworks {
+				params.Frameworks[i] = filepath.Join(b.path.ExecRoot, params.Frameworks[i])[1:]
+			}
+			for i := range params.Sysroots {
+				params.Sysroots[i] = filepath.Join(b.path.ExecRoot, params.Sysroots[i])[1:]
+			}
 		}
 		req := scandeps.Request{
 			Defines:    params.Defines,
@@ -228,7 +284,7 @@ func (depsGCC) scandeps(ctx context.Context, b *Builder, step *Step) ([]string, 
 		}
 		started := time.Now()
 		var err error
-		ins, err = b.scanDeps.Scan(ctx, b.path.ExecRoot, req)
+		ins, err = b.scanDeps.Scan(ctx, execRoot, req)
 		if log.V(1) {
 			clog.Infof(ctx, "scandeps %d %s: %v", len(ins), time.Since(started), err)
 		}
@@ -238,6 +294,12 @@ func (depsGCC) scandeps(ctx context.Context, b *Builder, step *Step) ([]string, 
 			return err
 		}
 		ins = append(ins, params.Files...)
+		if len(externals) > 0 {
+			// make ins[i] full absolute paths.
+			for i := range ins {
+				ins[i] = filepath.Join(execRoot, ins[i])
+			}
+		}
 		return nil
 	})
 	if err != nil {
