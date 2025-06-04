@@ -2162,6 +2162,58 @@ func TestRemoveFlush(t *testing.T) {
 	}
 }
 
+func TestEntries_Symlink(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skipf("no symlink on windows")
+	}
+	ctx := context.Background()
+	execRoot := t.TempDir()
+
+	hashFS, err := hashfs.New(ctx, hashfs.Option{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		err := hashFS.Close(ctx)
+		if err != nil {
+			t.Error(err)
+		}
+	})
+
+	err = os.Mkdir(filepath.Join(execRoot, "dir"), 0755)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = os.WriteFile(filepath.Join(execRoot, "dir", "foo"), nil, 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = os.Symlink("dir", filepath.Join(execRoot, "symlink_dir"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ents, err := hashFS.Entries(ctx, execRoot, []string{"dir", "symlink_dir", "dir/foo", "symlink_dir/foo"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := []merkletree.Entry{
+		{Name: "dir"},
+		{Name: "symlink_dir", Target: "dir"},
+		{Name: "dir/foo", Data: digest.FromBytes("", nil)},
+		{Name: "symlink_dir/foo", Data: digest.FromBytes("", nil)},
+	}
+
+	if diff := cmp.Diff(want, ents, cmp.Transformer("digest", func(d digest.Data) digest.Digest {
+		return d.Digest()
+	})); diff != "" {
+		t.Errorf("hashFS.Entries() diff -want +got:\n%s", diff)
+	}
+}
+
 func TestEntries_EscapedSymlink(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skipf("no symlink on windows")
