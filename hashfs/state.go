@@ -332,9 +332,9 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 				}
 				return nil
 			}
-			if now := time.Now(); fi.ModTime().After(now) {
-				clog.Warningf(gctx, "future timestamp on %q: mtime=%s now=%s", ent.Name, fi.ModTime(), now)
-				return fmt.Errorf("future timestamp on %q: mtime=%s now=%s", ent.Name, fi.ModTime(), now)
+			err = waitUntilModTime(ctx, ent.Name, fi.ModTime())
+			if err != nil {
+				return err
 			}
 			e, et := newStateEntry(ctx, ent, fi.ModTime(), hfs.opt.DataSource, hfs.OS)
 			e.cmdhash = h

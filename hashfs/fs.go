@@ -390,9 +390,10 @@ func (hfs *HashFS) stat(ctx context.Context, root, fname string, needCompute boo
 				return FileInfo{}, err
 			default:
 				mtime := lfi.ModTime()
-				if now := time.Now(); mtime.After(now) {
-					clog.Warningf(ctx, "future timestamp on %s: mtime=%s now=%s", fullname, mtime, now)
-					return FileInfo{}, fmt.Errorf("future timestamp on %s: mtime=%s now=%s", fullname, mtime, now)
+				// adjust for clock stepback by NTP
+				err = waitUntilModTime(ctx, fullname, mtime)
+				if err != nil {
+					return FileInfo{}, err
 				}
 				e.mu.Lock()
 				e.mtime = mtime
@@ -2583,4 +2584,33 @@ func (de DirEntry) Type() fs.FileMode {
 // Info returns a FileInfo.
 func (de DirEntry) Info() (fs.FileInfo, error) {
 	return de.fi, nil
+}
+
+// waitUntilModTime ensures mtime is past timestamp
+// for clock stepback by NTP.
+func waitUntilModTime(ctx context.Context, fullname string, mtime time.Time) error {
+	now := time.Now()
+	if !mtime.After(now) {
+		return nil
+	}
+	if mtime.Sub(now) > 5*time.Second {
+		return fmt.Errorf("future mtime on %s: mtime=%s now=%s", fullname, mtime, now)
+	}
+	// report error as it implies that broken time synchronization
+	// so unreliable build.
+	clog.Errorf(ctx, "waiting for future mtime on %s: mtime=%s now=%s", fullname, mtime, now)
+	started := now
+	for time.Since(started) < 5*time.Second {
+		select {
+		case <-ctx.Done():
+			return context.Cause(ctx)
+		case <-time.After(min(5*time.Second, mtime.Sub(now))):
+		}
+		now = time.Now()
+		if !mtime.After(now) {
+			clog.Warningf(ctx, "future mtime corrected for %s in %s", fullname, time.Since(started))
+			return nil
+		}
+	}
+	return fmt.Errorf("future mtime on %s: mtime=%s now=%s %s", fullname, mtime, started, now)
 }
