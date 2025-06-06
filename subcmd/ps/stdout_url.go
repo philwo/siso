@@ -46,7 +46,7 @@ func newStdoutURLSource(ctx context.Context, stdoutURL string) (*stdoutURLSource
 		}
 	}
 	clog.Infof(ctx, "check %s", stdoutURL)
-	req, err := http.NewRequest("GET", stdoutURL, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", stdoutURL, nil)
 	if err != nil {
 		return nil, err
 	}

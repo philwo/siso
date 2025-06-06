@@ -5,6 +5,7 @@
 package cred
 
 import (
+	"context"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -22,5 +23,6 @@ func (gcloudTokenSource) Token() (*oauth2.Token, error) {
 	}
 	token := strings.TrimSpace(string(out))
 
-	return fromTokenString("gcloud", token)
+	// TODO: Propagate context when https://github.com/golang/oauth2/issues/262 is fixed.
+	return fromTokenString(context.TODO(), "gcloud", token)
 }

@@ -49,7 +49,11 @@ func (s *localSource) fetch(ctx context.Context) ([]build.ActiveStepInfo, error)
 		}
 		return nil, fmt.Errorf("siso is not running in %s? failed to read .siso_port: %w", s.wd, err)
 	}
-	resp, err := http.Get(fmt.Sprintf("http://%s/api/active_steps", strings.TrimSpace(string(buf))))
+	req, err := http.NewRequestWithContext(ctx, "GET", fmt.Sprintf("http://%s/api/active_steps", strings.TrimSpace(string(buf))), nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get active_steps via .siso_port: %w", err)
 	}

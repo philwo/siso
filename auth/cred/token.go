@@ -5,6 +5,7 @@
 package cred
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -16,8 +17,13 @@ import (
 	"golang.org/x/oauth2"
 )
 
-func fromTokenString(src, token string) (*oauth2.Token, error) {
-	resp, err := http.Post("https://oauth2.googleapis.com/tokeninfo", "application/x-www-form-urlencoded", strings.NewReader("access_token="+token))
+func fromTokenString(ctx context.Context, src, token string) (*oauth2.Token, error) {
+	req, err := http.NewRequestWithContext(ctx, "POST", "https://oauth2.googleapis.com/tokeninfo", strings.NewReader("access_token="+token))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get tokeninfo: %w", err)
 	}
