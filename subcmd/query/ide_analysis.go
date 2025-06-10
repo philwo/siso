@@ -47,13 +47,15 @@ type ideAnalysisRun struct {
 	fname    string
 	fsopt    *hashfs.Option
 	format   string
+	output   string
 }
 
 const ideAnalysisUsage = `query ninja build graph for Cider-G.
 
- $ siso query ideanalysis -C <dir> [--format <format>] [targets...]
+ $ siso query ideanalysis -C <dir> [--format <format>] [--output <output>] [targets...]
 
 format: proto, prototext or json
+output: pathname. "" or "-" is stdout.
 `
 
 func cmdIDEAnalysis() *subcommands.Command {
@@ -76,6 +78,7 @@ func (c *ideAnalysisRun) init() {
 	c.fsopt.StateFile = ".siso_fs_state"
 	c.fsopt.RegisterFlags(&c.Flags)
 	c.Flags.StringVar(&c.format, "format", "proto", `output format. "proto", "prototext" or "json"`)
+	c.Flags.StringVar(&c.output, "output", "", `output path. "" or "-" is stdout`)
 }
 
 func (c *ideAnalysisRun) Run(a subcommands.Application, args []string, env subcommands.Env) int {
@@ -138,9 +141,16 @@ func (c *ideAnalysisRun) run(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("%s", buf)
-	fmt.Fprintf(os.Stderr, "siso query ideanalysis in %s\n", ui.FormatDuration(time.Since(started)))
-	return nil
+	output := c.output
+	switch c.output {
+	case "", "-":
+		output = "/dev/stdout"
+		_, err = os.Stdout.Write(buf)
+	default:
+		err = os.WriteFile(output, buf, 0644)
+	}
+	fmt.Fprintf(os.Stderr, "siso query ideanalysis to %s in %s: %v\n", output, ui.FormatDuration(time.Since(started)), err)
+	return err
 }
 
 func (c *ideAnalysisRun) analyze(ctx context.Context, args []string) (*pb.IdeAnalysis, error) {
