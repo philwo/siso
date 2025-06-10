@@ -1,4 +1,4 @@
-// Copyright 2023 The Chromium Authors
+// Copyright 2025 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -18,9 +18,48 @@ import (
 
 	log "github.com/golang/glog"
 
+	"go.chromium.org/infra/build/siso/execute"
 	"go.chromium.org/infra/build/siso/o11y/clog"
 	"go.chromium.org/infra/build/siso/o11y/trace"
+	"go.chromium.org/infra/build/siso/toolsupport/straceutil"
 )
+
+type fileTraceExecutor struct {
+	b               *Builder
+	executor        execute.Executor
+	inputs, outputs []string
+}
+
+func newFileTraceExecutor(ctx context.Context, b *Builder, executor execute.Executor) (*fileTraceExecutor, error) {
+	if !straceutil.Available(ctx) {
+		return nil, errors.New("strace is not available")
+	}
+	return &fileTraceExecutor{
+		b:        b,
+		executor: executor,
+	}, nil
+}
+
+func (f *fileTraceExecutor) Run(ctx context.Context, cmd *execute.Cmd) error {
+	st := straceutil.New(ctx, cmd.ID, cmd.Args, cmd.Dir)
+	newCmd := &execute.Cmd{}
+	*newCmd = *cmd
+	newCmd.Args = st.Args(ctx)
+	err := f.executor.Run(ctx, newCmd)
+	if err != nil {
+		return err
+	}
+	f.inputs, f.outputs, err = st.PostProcess(ctx)
+	return err
+}
+
+func (f *fileTraceExecutor) logLocalExec(ctx context.Context, step *Step, dur time.Duration) error {
+	err := f.checkTrace(ctx, step, dur)
+	if err != nil {
+		clog.Warningf(ctx, "failed to check trace %v", err)
+	}
+	return err
+}
 
 // TODO(b/276390237): Provide user friendly build dependency errors caught by file trace
 
@@ -42,13 +81,15 @@ import (
 //
 // - for deps=gcc/msvc, we believe deps is correct by `clang -M` so never return error.
 // - if `keeps-going-impure` experiment flag is set, not return error.
-func (b *Builder) checkTrace(ctx context.Context, step *Step, dur time.Duration) error {
+func (f *fileTraceExecutor) checkTrace(ctx context.Context, step *Step, dur time.Duration) error {
 	ctx, span := trace.NewSpan(ctx, "check-trace")
 	defer span.Close(nil)
+	b := f.b
 	command := step.def.Binding("command")
 	if len(command) > 256 {
 		command = command[:256] + "..."
 	}
+	// TODO: collect files in precomputed trees too.
 	allInputs := step.cmd.AllInputs()
 	allOutputs := step.cmd.AllOutputs()
 	var output string
@@ -60,12 +101,12 @@ func (b *Builder) checkTrace(ctx context.Context, step *Step, dur time.Duration)
 		inouts = allOutputs
 		allOutputs = nil
 	}
-	inadds, indels, inplatforms, inerrs := filesDiff(ctx, b, allInputs, inouts, step.cmd.FileTrace.Inputs, step.def.Binding("ignore_extra_input_pattern"))
-	outadds, outdels, outplatforms, outerrs := filesDiff(ctx, b, allOutputs, inouts, step.cmd.FileTrace.Outputs, step.def.Binding("ignore_extra_output_pattern"))
+	inadds, indels, inplatforms, inerrs := filesDiff(ctx, b, allInputs, inouts, f.inputs, step.def.Binding("ignore_extra_input_pattern"))
+	outadds, outdels, outplatforms, outerrs := filesDiff(ctx, b, allOutputs, inouts, f.outputs, step.def.Binding("ignore_extra_output_pattern"))
 	clog.Infof(ctx, "check-trace inputs=%d+%d+%d=>%d+%d+%d outputs=%d+%d+%d=>%d+%d+%d",
-		len(allInputs), len(inouts), len(step.cmd.FileTrace.Inputs),
+		len(allInputs), len(inouts), len(f.inputs),
 		len(inadds), len(indels), len(inplatforms),
-		len(allOutputs), len(inouts), len(step.cmd.FileTrace.Outputs),
+		len(allOutputs), len(inouts), len(f.outputs),
 		len(outadds), len(outdels), len(outplatforms))
 
 	if len(inerrs) > 0 {

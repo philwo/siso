@@ -17,7 +17,6 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.chromium.org/infra/build/siso/execute"
-	"go.chromium.org/infra/build/siso/execute/localexec"
 	"go.chromium.org/infra/build/siso/o11y/clog"
 	"go.chromium.org/infra/build/siso/o11y/trace"
 )
@@ -44,27 +43,41 @@ func (b *Builder) execLocal(ctx context.Context, step *Step) error {
 		stateMessage += " (pool=" + pool + ")"
 	}
 	phase := stepLocalRun
-	enableTrace := experiments.Enabled("file-access-trace", "enable file-access-trace")
-	switch {
-	// TODO(b/273407069): native integration instead of spwaning gomacc/rewrapper?
-	case step.def.Binding("use_remote_exec_wrapper") != "":
-		// no need to file trace for gomacc/rewwapper.
+	var executor execute.Executor = b.localExec
+	logLocalExec := b.logLocalExec
+	switch sandbox := step.def.Binding("sandbox"); sandbox {
+	// TODO(crbug.com/420752996): add sandbox supports
+	case "":
+		enableTrace := experiments.Enabled("file-access-trace", "enable file-access-trace")
+		if enableTrace {
+			// check impure explicitly set in config,
+			// rather than step.cmd.Pure.
+			// step.cmd.Pure may be false when config is not set
+			// for the step too, but we want to disable
+			// file-access-trace only for the step with impure=true.
+			// http://b/261655377 errorprone_plugin_tests: too slow under strace?
+			impure := step.def.Binding("impure") == "true"
+			if !impure {
+				traceExecutor, err := newFileTraceExecutor(ctx, b, executor)
+				if err != nil {
+					return fmt.Errorf("unable to perform file-access-trace: %w", err)
+				}
+				executor = traceExecutor
+				logLocalExec = traceExecutor.logLocalExec
+			}
+		} else {
+			clog.Warningf(ctx, "unable to use file-access-trace")
+		}
+	default:
+		clog.Warningf(ctx, "unsupported sandbox %q", sandbox)
+	}
+
+	// native integration is handled by exec_reproxy.go
+	if step.def.Binding("use_remote_exec_wrapper") != "" {
+		// no sandbox and no need to file trace for gomacc/rewwapper.
 		stateMessage = "remote exec wrapper"
 		phase = stepREWrapperRun
 		sema = b.rewrapSema
-	case localexec.TraceEnabled(ctx):
-		// check impure explicitly set in config,
-		// rather than step.cmd.Pure.
-		// step.cmd.Pure may be false when config is not set
-		// for the step too, but we want to disable
-		// file-access-trace only for the step with impure=true.
-		// http://b/261655377 errorprone_plugin_tests: too slow under strace?
-		impure := step.def.Binding("impure") == "true"
-		if !impure && enableTrace {
-			step.cmd.FileTrace = &execute.FileTrace{}
-		}
-	case enableTrace:
-		clog.Warningf(ctx, "unable to use file-access-trace")
 	}
 	if phase == stepLocalRun && step.metrics.Fallback {
 		phase = stepFallbackRun
@@ -86,7 +99,7 @@ func (b *Builder) execLocal(ctx context.Context, step *Step) error {
 		if step.metrics.ActionStartTime == 0 {
 			step.metrics.ActionStartTime = IntervalMetric(started.Sub(b.start))
 		}
-		err := b.localExec.Run(ctx, step.cmd)
+		err := executor.Run(ctx, step.cmd)
 		dur = time.Since(started)
 		step.setPhase(stepOutput)
 		if step.cmd.Console {
@@ -109,16 +122,9 @@ func (b *Builder) execLocal(ctx context.Context, step *Step) error {
 		return err
 	})
 	if !errors.Is(err, context.Canceled) {
-		if step.cmd.FileTrace != nil {
-			cerr := b.checkTrace(ctx, step, dur)
-			if cerr != nil {
-				clog.Warningf(ctx, "failed to check trace %v", cerr)
-				if err == nil {
-					err = cerr
-				}
-			}
-		} else {
-			b.logLocalExec(ctx, step, dur)
+		lerr := logLocalExec(ctx, step, dur)
+		if err == nil {
+			err = lerr
 		}
 	}
 	if err != nil {
@@ -199,7 +205,7 @@ func (b *Builder) checkLocalOutputs(ctx context.Context, step *Step) error {
 	return nil
 }
 
-func (b *Builder) logLocalExec(ctx context.Context, step *Step, dur time.Duration) {
+func (b *Builder) logLocalExec(ctx context.Context, step *Step, dur time.Duration) error {
 	command := step.def.Binding("command")
 	if len(command) > 256 {
 		command = command[:256] + " ..."
@@ -222,4 +228,5 @@ command: %q %d
 	if err != nil {
 		clog.Warningf(ctx, "failed to log localexec: %v", err)
 	}
+	return nil
 }

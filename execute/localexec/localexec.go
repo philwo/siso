@@ -18,7 +18,6 @@ import (
 	"time"
 
 	rpb "github.com/bazelbuild/remote-apis/build/bazel/remote/execution/v2"
-	log "github.com/golang/glog"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -27,7 +26,6 @@ import (
 	"go.chromium.org/infra/build/siso/o11y/clog"
 	"go.chromium.org/infra/build/siso/runtimex"
 	"go.chromium.org/infra/build/siso/sync/semaphore"
-	"go.chromium.org/infra/build/siso/toolsupport/straceutil"
 	"go.chromium.org/infra/build/siso/ui"
 )
 
@@ -143,39 +141,14 @@ func run(ctx context.Context, cmd *execute.Cmd) (*rpb.ActionResult, error) {
 
 	var ru *epb.Rusage
 	var err error
-	if cmd.FileTrace != nil {
-		if !straceutil.Available(ctx) {
-			return nil, fmt.Errorf("strace is not available")
-		}
-		st := straceutil.New(ctx, cmd.ID, c)
-		c = st.Cmd(ctx)
-		err = forkSema.Do(ctx, func(ctx context.Context) error {
-			return c.Start()
-		})
-		if err == nil {
-			err = c.Wait()
-		}
-		if err == nil {
-			ru = rusage(c)
-
-			cmd.FileTrace.Inputs, cmd.FileTrace.Outputs, err = st.PostProcess(ctx)
-			if err != nil {
-				err = fmt.Errorf("failed to postprocess: %w", err)
-			}
-		}
-		st.Close(ctx)
-		log.V(1).Infof("%s filetrace=false n_traced_inputs=%d n_traced_outputs=%d err=%v", cmd.ID, len(cmd.Inputs), len(cmd.Outputs), err)
-	} else {
-		err = forkSema.Do(ctx, func(ctx context.Context) error {
-			return c.Start()
-		})
-		if err == nil {
-			err = c.Wait()
-		}
-		if err == nil {
-			ru = rusage(c)
-		}
-		log.V(1).Infof("%s filetrace=false %v", cmd.ID, err)
+	err = forkSema.Do(ctx, func(ctx context.Context) error {
+		return c.Start()
+	})
+	if err == nil {
+		err = c.Wait()
+	}
+	if err == nil {
+		ru = rusage(c)
 	}
 	if cmd.Console {
 		consoleCancel()
@@ -224,9 +197,4 @@ func exitCode(err error) int32 {
 		return -1
 	}
 	return int32(eerr.ProcessState.ExitCode())
-}
-
-// TraceEnabled returns whether file trace is enabled or not.
-func TraceEnabled(ctx context.Context) bool {
-	return straceutil.Available(ctx)
 }

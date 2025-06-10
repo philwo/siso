@@ -44,27 +44,25 @@ func Available(ctx context.Context) bool {
 
 // Strace represents a cmd traced by strace.
 type Strace struct {
-	// id is the identifier of the cmd for trace.
-	id  string
-	cmd *exec.Cmd
+	id   string
+	args []string
+	dir  string
 
 	// fname is filename of strace output file.
 	fname string
 }
 
 // New creates a new Strace for cmd.
-func New(ctx context.Context, id string, cmd *exec.Cmd) *Strace {
-	if path == "" {
-		var err error
-		path, err = exec.LookPath("strace")
-		if err != nil {
-			clog.Warningf(ctx, "strace is not found: %v", err)
-		}
+// It will be fatal error when not available, so check Available before New.
+func New(ctx context.Context, id string, args []string, dir string) *Strace {
+	if !Available(ctx) {
+		clog.Fatalf(ctx, "straceutil.New is called when !Available")
 	}
 	fname := filepath.Join(os.TempDir(), fmt.Sprintf("%s.trace", id))
 	return &Strace{
 		id:    id,
-		cmd:   cmd,
+		args:  args,
+		dir:   dir,
 		fname: fname,
 	}
 }
@@ -77,8 +75,8 @@ func (s *Strace) Close(ctx context.Context) {
 	}
 }
 
-// Cmd returns cmd to run under strace.
-func (s *Strace) Cmd(ctx context.Context) *exec.Cmd {
+// Args returns args to run under strace.
+func (s *Strace) Args(ctx context.Context) []string {
 	args := []string{
 		path,
 		"-f",
@@ -86,13 +84,9 @@ func (s *Strace) Cmd(ctx context.Context) *exec.Cmd {
 		// TODO(b/249633204): "--successful-only" is not available in old strace (4.2 on ubuntu-18.10).
 		"-o", s.fname,
 	}
-	args = append(args, s.cmd.Args...)
-	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
-	cmd.Env = s.cmd.Env
-	cmd.Dir = s.cmd.Dir
-	cmd.Stdout = s.cmd.Stdout
-	cmd.Stderr = s.cmd.Stderr
-	return cmd
+	// TODO: use --seccomp-bpf ?
+	args = append(args, s.args...)
+	return args
 }
 
 // PostProcess processes strace outputs and returns inputs/outputs accessed by the cmd.
@@ -103,11 +97,11 @@ func (s *Strace) PostProcess(ctx context.Context) (inputs, outputs []string, err
 		return nil, nil, err
 	}
 	if log.V(3) {
-		clog.Infof(ctx, "strace for %s\n%s", s.cmd, b)
+		clog.Infof(ctx, "strace for %s\n%s", s.id, b)
 	}
 	inputs, outputs = scanStraceData(ctx, b)
 	for i := 0; i < len(inputs); i++ {
-		target, err := os.Readlink(filepath.Join(s.cmd.Dir, inputs[i]))
+		target, err := os.Readlink(filepath.Join(s.dir, inputs[i]))
 		if err == nil {
 			clog.Infof(ctx, "add symlink from %s -> %s", inputs[i], target)
 			if !filepath.IsAbs(target) {
