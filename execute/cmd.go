@@ -1024,6 +1024,37 @@ func (c *Cmd) RecordOutputsFromLocal(ctx context.Context, now time.Time) error {
 			return fmt.Errorf("failed to update hashfs from local dir %q: %w", ent.Name, err)
 		}
 	}
+	if c.Restat {
+		pre := make(map[string]hashfs.UpdateEntry)
+		for _, ent := range c.preOutputEntries {
+			pre[ent.Name] = ent
+		}
+		ents := c.HashFS.RetrieveUpdateEntries(ctx, c.ExecRoot, outs)
+		// log restat mtime updated same content, which would
+		// differ in mtime-less build.
+		// TODO: remove when mtime-based build is deprecated.
+		for _, ent := range ents {
+			if !ent.IsChanged {
+				continue
+			}
+			pent := pre[ent.Name]
+			if pent.ModTime.Equal(ent.ModTime) {
+				continue
+			}
+			if pent.Entry == nil || ent.Entry == nil {
+				continue
+			}
+			d := ent.Entry.Data.Digest()
+			if pent.Entry.Data.Digest() != d {
+				continue
+			}
+			if d.SizeBytes == 0 {
+				clog.Warningf(ctx, "restat: empty file %q %s->%s", ent.Name, pent.ModTime, ent.ModTime)
+				continue
+			}
+			clog.Warningf(ctx, "restat: changed but not modified %q %s %s->%s", ent.Name, ent.Entry.Data.Digest(), pent.ModTime, ent.ModTime)
+		}
+	}
 	return nil
 }
 
