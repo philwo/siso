@@ -55,11 +55,14 @@ type digraphRun struct {
 
 	dir   string
 	fname string
+
+	orderOnly bool
 }
 
 func (c *digraphRun) init() {
 	c.Flags.StringVar(&c.dir, "C", ".", "ninja running directory to find build.ninja")
 	c.Flags.StringVar(&c.fname, "f", "build.ninja", "input build filename (relative to -C)")
+	c.Flags.BoolVar(&c.orderOnly, "order_only", true, "includes order_only deps")
 }
 
 func (c *digraphRun) Run(a subcommands.Application, args []string, env subcommands.Env) int {
@@ -97,7 +100,8 @@ func (c *digraphRun) run(ctx context.Context, args []string) error {
 		targets = append(targets, n.Path())
 	}
 	d := &digraph{
-		seen: make(map[string]bool),
+		orderOnly: c.orderOnly,
+		seen:      make(map[string]bool),
 	}
 	for _, t := range targets {
 		err := d.Traverse(ctx, state, t)
@@ -109,7 +113,8 @@ func (c *digraphRun) run(ctx context.Context, args []string) error {
 }
 
 type digraph struct {
-	seen map[string]bool
+	orderOnly bool
+	seen      map[string]bool
 }
 
 func (d *digraph) Traverse(ctx context.Context, state *ninjautil.State, target string) error {
@@ -127,7 +132,13 @@ func (d *digraph) Traverse(ctx context.Context, state *ninjautil.State, target s
 		return nil
 	}
 	var inputs []string
-	for _, in := range edge.Inputs() {
+	var edgeInputs []*ninjautil.Node
+	if d.orderOnly {
+		edgeInputs = edge.Inputs()
+	} else {
+		edgeInputs = edge.TriggerInputs()
+	}
+	for _, in := range edgeInputs {
 		p := in.Path()
 		err := d.Traverse(ctx, state, p)
 		if err != nil {
