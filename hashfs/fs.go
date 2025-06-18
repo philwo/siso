@@ -1602,9 +1602,9 @@ func (e *entry) init(ctx context.Context, fname string, executables map[string]b
 		e.err = err
 		return
 	}
-	if now := time.Now(); fi.ModTime().After(now) {
-		clog.Warningf(ctx, "future timestamp on %s: mtime=%s now=%s", fname, fi.ModTime(), now)
-		e.err = fmt.Errorf("future timestamp on %s: mtime=%s now=%s", fname, fi.ModTime(), now)
+	err = waitUntilModTime(ctx, fname, fi.ModTime())
+	if err != nil {
+		e.err = err
 		return
 	}
 	switch {
