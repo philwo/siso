@@ -97,7 +97,7 @@ Please check [go/chrome-build-dogfood](http://go/chrome-build-dogfood) for more 
 
 ## Contacts
 
-- File a bug in [the public tracker](https://b.corp.google.com/issues/new?component=1724382&template=2146965) or in [the internal tracker](http://go/siso-bug).
+- File a bug in [the public tracker](https://issues.chromium.org/issues/new?component=1724382&template=2146965) or in [the internal tracker](http://go/siso-bug).
 - Ask a question in [#build](https://chromium.slack.com/archives/C08SJ9DH4BZ) Slack channel.
 - Send an email to chrome-build-team@google.com.
 
