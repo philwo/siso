@@ -20,6 +20,7 @@ import (
 
 var errDepsLog = errors.New("failed to exec with deps log")
 var errNeedPreproc = errors.New("need to preproc")
+var errRemoteExecDisabled = errors.New("remote exec disabled")
 
 // runRemote runs step with using remote apis.
 //
@@ -90,6 +91,9 @@ func (b *Builder) runRemote(ctx context.Context, step *Step) error {
 		err = b.runRemoteStep(ctx, step, needCheckCache && cacheCheck)
 	}
 	if err != nil {
+		if errors.Is(err, errRemoteExecDisabled) {
+			return b.execLocal(ctx, step)
+		}
 		if errors.Is(err, context.Canceled) {
 			return err
 		}
@@ -195,6 +199,9 @@ func (b *Builder) runRemoteStep(ctx context.Context, step *Step, cacheCheck bool
 			return nil
 		}
 		clog.Infof(ctx, "cmd cache miss: %v", err)
+	}
+	if !b.reExecEnable {
+		return errRemoteExecDisabled
 	}
 	return b.execRemote(ctx, step)
 }

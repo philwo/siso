@@ -80,6 +80,7 @@ type Options struct {
 	Path              *Path
 	HashFS            *hashfs.HashFS
 	REAPIClient       *reapi.Client
+	REExecEnable      bool
 	RECacheEnableRead bool
 	// TODO(b/266518906): enable RECacheEnableWrite option for read-only client.
 	// RECacheEnableWrite bool
@@ -184,6 +185,7 @@ type Builder struct {
 
 	remoteSema        *semaphore.Semaphore
 	remoteExec        *remoteexec.RemoteExec
+	reExecEnable      bool
 	reCacheEnableRead bool
 	// TODO(b/266518906): enable reCacheEnableWrite option for read-only client.
 	// reCacheEnableWrite bool
@@ -332,6 +334,7 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 		fastLocalSema:     fastLocalSema,
 		remoteSema:        semaphore.New("remoteexec", opts.Limits.Remote),
 		remoteExec:        re,
+		reExecEnable:      opts.REExecEnable,
 		reCacheEnableRead: opts.RECacheEnableRead,
 		// reCacheEnableWrite: opts.RECacheEnableWrite,
 		reproxyExec: pe,

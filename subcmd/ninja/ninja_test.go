@@ -244,6 +244,7 @@ func setupBuild(ctx context.Context, t *testing.T, dir string, fsopt hashfs.Opti
 	opt := build.Options{
 		Path:            path,
 		HashFS:          hashFS,
+		REExecEnable:    true,
 		Cache:           cache,
 		FailuresAllowed: 1,
 		Limits:          build.UnitTestLimits(ctx),
