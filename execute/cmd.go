@@ -1058,24 +1058,30 @@ func (c *Cmd) RecordOutputsFromLocal(ctx context.Context, now time.Time) error {
 	return nil
 }
 
-// ResultFromEntries updates result from entries.
-func ResultFromEntries(result *rpb.ActionResult, entries []merkletree.Entry) {
+// ResultFromEntries updates result from entries (collected from exec root).
+func ResultFromEntries(ctx context.Context, result *rpb.ActionResult, dir string, entries []merkletree.Entry) {
 	for _, ent := range entries {
+		name, err := filepath.Rel(dir, ent.Name)
+		if err != nil {
+			clog.Warningf(ctx, "failed to get rel path %q: %v", ent.Name, err)
+			continue
+		}
+		name = filepath.ToSlash(name)
 		switch {
 		case ent.IsSymlink():
 			result.OutputSymlinks = append(result.OutputSymlinks, &rpb.OutputSymlink{
-				Path:   ent.Name,
+				Path:   name,
 				Target: ent.Target,
 			})
 		case ent.IsDir():
 			result.OutputDirectories = append(result.OutputDirectories, &rpb.OutputDirectory{
-				Path: ent.Name,
+				Path: name,
 				// TODO(b/275448031): calculate tree digest from the entry.
 				TreeDigest: digest.Empty.Proto(),
 			})
 		default:
 			result.OutputFiles = append(result.OutputFiles, &rpb.OutputFile{
-				Path:         ent.Name,
+				Path:         name,
 				Digest:       ent.Data.Digest().Proto(),
 				IsExecutable: ent.IsExecutable,
 			})
