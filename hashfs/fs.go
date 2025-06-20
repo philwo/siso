@@ -540,7 +540,8 @@ func (hfs *HashFS) ReadFile(ctx context.Context, root, fname string) ([]byte, er
 	e.mu.Lock()
 	ed := e.d
 	e.mu.Unlock()
-	// check digest is already known.
+	// If digest is known and the file is not flushed to disk, read from CAS.
+	// Otherwise, read from local disk, which will also compute the digest if unknown.
 	if !ed.IsZero() {
 		// digest is known.
 		lfi, err := hfs.OS.Lstat(ctx, fname)
@@ -554,8 +555,6 @@ func (hfs *HashFS) ReadFile(ctx context.Context, root, fname string) ([]byte, er
 			return buf, err
 		}
 		// already flushed. reading from local disk is faster.
-	} else {
-		// digest is not computed yet.
 	}
 	if e.src == nil {
 		return nil, fmt.Errorf("readfile %s: no src", fname)

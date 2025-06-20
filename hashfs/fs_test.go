@@ -326,10 +326,7 @@ func TestStat_Race(t *testing.T) {
 	const n = 1000
 	for range runtimex.NumCPU() - 1 {
 		eg.Go(func() error {
-			for {
-				if count.Load() == n {
-					break
-				}
+			for count.Load() < n {
 			}
 			return nil
 		})

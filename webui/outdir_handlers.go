@@ -647,10 +647,7 @@ func (s *WebuiServer) handleOutdirListSteps(w http.ResponseWriter, r *http.Reque
 		// We assume the last step is on the critical path.
 		// Build the critical path backwards then reverse it.
 		critStepID := metrics.lastStepID
-		for {
-			if critStepID == "" {
-				break
-			}
+		for critStepID != "" {
 			if step, ok := metrics.stepByStepID[critStepID]; ok {
 				filteredSteps = append(filteredSteps, step)
 				critStepID = step.PrevStepID
