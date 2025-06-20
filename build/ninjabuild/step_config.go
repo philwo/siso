@@ -432,12 +432,9 @@ loop:
 					rule.Platform[k] = v
 				}
 			}
-		}
-		if rule.InputRootAbsolutePath {
-			if len(rule.Platform) == 0 {
-				rule.Platform = make(map[string]string)
+			if rule.InputRootAbsolutePath {
+				rule.Platform["InputRootAbsolutePath"] = bpath.ExecRoot
 			}
-			rule.Platform["InputRootAbsolutePath"] = bpath.ExecRoot
 		}
 
 		if bool(log.V(1)) || rule.Debug {

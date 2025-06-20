@@ -10,11 +10,11 @@ import (
 
 func (b *Builder) runStrategy(ctx context.Context, step *Step) func(context.Context, *Step) error {
 	// Criteria for remote executable:
-	// - Allow remote if available and command has platform container-image property.
+	// - Allow remote if available and command has platform property.
 	// - Allow reproxy if available and command has reproxy config set.
 	// If the command doesn't meet either criteria, fallback to local.
 	// Any further validation should be done in the exec handler, not here.
-	allowRemote := b.remoteExec != nil && len(step.cmd.Platform) > 0 && step.cmd.Platform["container-image"] != ""
+	allowRemote := b.remoteExec != nil && len(step.cmd.Platform) > 0
 	allowREProxy := b.reproxyExec.Enabled() && step.cmd.REProxyConfig != nil
 	switch {
 	case step.cmd.Pure && allowREProxy:
