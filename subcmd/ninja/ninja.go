@@ -65,6 +65,7 @@ import (
 	"go.chromium.org/infra/build/siso/toolsupport/artfsutil"
 	"go.chromium.org/infra/build/siso/toolsupport/cogutil"
 	"go.chromium.org/infra/build/siso/toolsupport/ninjautil"
+	"go.chromium.org/infra/build/siso/toolsupport/soongutil"
 	"go.chromium.org/infra/build/siso/toolsupport/watchmanutil"
 	"go.chromium.org/infra/build/siso/ui"
 )
@@ -142,6 +143,7 @@ type ninjaCmdRun struct {
 	// depsLogBucket
 
 	logDir             string
+	frontendFile       string
 	failureSummaryFile string
 	failedCommandsFile string
 	outputLogFile      string
@@ -194,6 +196,23 @@ func (c *ninjaCmdRun) Run(a subcommands.Application, args []string, env subcomma
 		ui.Default.Errorf("%v\n", err)
 		return 2
 	}
+	if c.frontendFile != "" {
+		f, err := os.OpenFile(c.frontendFile, os.O_WRONLY|os.O_APPEND, 0644)
+		if err != nil {
+			ui.Default.Errorf("failed to open frontend file: %v\n", err)
+			return 1
+		}
+		defer func() {
+			err = f.Close()
+			if err != nil {
+				ui.Default.Errorf("failed to close frontend file: %v\n", err)
+			}
+		}()
+		frontend := soongutil.NewFrontend(ctx, f)
+		ui.Default = frontend
+		defer frontend.Close()
+	}
+
 	stats, err := c.run(ctx)
 	d := time.Since(c.started)
 	sps := float64(stats.Done-stats.Skipped) / d.Seconds()
@@ -1121,6 +1140,9 @@ func (c *ninjaCmdRun) init() {
 	c.Flags.StringVar(&c.depsLogFile, "deps_log", ".siso_deps", "deps log filename (relative to -C)")
 
 	c.Flags.StringVar(&c.logDir, "log_dir", ".", "log directory (relative to -C")
+
+	// https://android.googlesource.com/platform/build/soong/+/refs/heads/main/ui/build/ninja.go
+	c.Flags.StringVar(&c.frontendFile, "frontend_file", "", "frontend FIFO file to report build status to soong ui.")
 
 	c.Flags.StringVar(&c.failureSummaryFile, "failure_summary", "", "filename for failure summary (relative to -log_dir)")
 	c.failedCommandsFile = "siso_failed_commands.sh"
