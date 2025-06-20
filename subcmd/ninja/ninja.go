@@ -125,6 +125,7 @@ type ninjaCmdRun struct {
 	ninjaLoadLimit int
 
 	remoteJobs int
+	localJobs  int
 	fname      string
 
 	cacheDir         string
@@ -409,7 +410,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	}
 
 	if c.ninjaJobs >= 0 {
-		fmt.Fprintf(os.Stderr, "-j is not supported. use -remote_jobs instead\n")
+		fmt.Fprintf(os.Stderr, "-j is not supported. use -remote_jobs and -local_jobs instead\n")
 	}
 	if c.ninjaLoadLimit >= 0 {
 		fmt.Fprintf(os.Stderr, "-l is not supported.\n")
@@ -507,6 +508,9 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	// compute default limits based on fstype of work dir (e.g. artfs),
 	// not of exec root.
 	limits := build.DefaultLimits(ctx)
+	if c.localJobs > 0 {
+		limits.Local = c.localJobs
+	}
 	if c.remoteJobs > 0 {
 		limits.Remote = c.remoteJobs
 		limits.REWrap = c.remoteJobs
@@ -1095,8 +1099,9 @@ func (c *ninjaCmdRun) init() {
 	c.Flags.IntVar(&c.failuresAllowed, "k", 1, "keep going until N jobs fail (0 means inifinity)")
 	c.Flags.StringVar(&c.actionSalt, "action_salt", "", "action salt")
 
-	c.Flags.IntVar(&c.ninjaJobs, "j", -1, "not supported. use -remote_jobs instead")
+	c.Flags.IntVar(&c.ninjaJobs, "j", -1, "not supported. use -remote_jobs and -local_jobs instead")
 	c.Flags.IntVar(&c.ninjaLoadLimit, "l", -1, "not supported.")
+	c.Flags.IntVar(&c.localJobs, "local_jobs", 0, "run N local jobs in parallel. when the value is no positive, the default will be computed based on # of CPUs.")
 	c.Flags.IntVar(&c.remoteJobs, "remote_jobs", 0, "run N remote jobs in parallel. when the value is no positive, the default will be computed based on # of CPUs.")
 	c.Flags.StringVar(&c.fname, "f", "build.ninja", "input build manifest filename (relative to -C)")
 
