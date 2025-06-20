@@ -72,6 +72,7 @@ func (c *versionRun) Run(a subcommands.Application, args []string, env subcomman
 			if buildInfo.GoVersion != "" {
 				fmt.Printf("go\t%s\n", buildInfo.GoVersion)
 			}
+			fmt.Printf("mod\t%s\t%s\t%s\n", buildInfo.Main.Path, buildInfo.Main.Version, buildInfo.Main.Sum)
 			for _, s := range buildInfo.Settings {
 				if strings.HasPrefix(s.Key, "vcs.") {
 					fmt.Printf("build\t%s=%s\n", s.Key, s.Value)

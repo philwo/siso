@@ -585,6 +585,10 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 				clog.Infof(ctx, "Go version: %s", buildInfo.GoVersion)
 				properties.Add("go_version", buildInfo.GoVersion)
 			}
+			clog.Infof(ctx, "module %s %s %s", buildInfo.Main.Path, buildInfo.Main.Version, buildInfo.Main.Sum)
+			properties.Add("go_module_path", buildInfo.Main.Path)
+			properties.Add("go_module_version", buildInfo.Main.Version)
+			properties.Add("go_module_sum", buildInfo.Main.Sum)
 			for _, s := range buildInfo.Settings {
 				if strings.HasPrefix(s.Key, "vcs.") || strings.HasPrefix(s.Key, "-") {
 					clog.Infof(ctx, "build_%s=%s", s.Key, s.Value)
