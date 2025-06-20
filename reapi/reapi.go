@@ -90,16 +90,8 @@ func (o *Option) RegisterFlags(fs *flag.FlagSet, envs map[string]string) {
 	fs.BoolVar(&o.KeepAliveParams.PermitWithoutStream, o.Prefix+"_grpc_keepalive_permit_without_stream", false, "grpc keepalive permit without stream"+purpose)
 }
 
-func isRBE(address string) bool {
-	return strings.HasSuffix(address, "remotebuildexecution.googleapis.com:443")
-}
-
 // UpdateProjectID updates the Option for projID and returns cloud project ID to use.
-// Just returns empty string if backend is not RBE.
 func (o *Option) UpdateProjectID(projID string) string {
-	if !isRBE(o.Address) {
-		return ""
-	}
 	if projID != "" && !strings.HasPrefix(o.Instance, "projects/") {
 		o.Instance = path.Join("projects", projID, "instances", o.Instance)
 	}
@@ -115,13 +107,7 @@ func (o *Option) UpdateProjectID(projID string) string {
 
 // IsValid returns whether option is valid or not.
 func (o Option) IsValid() bool {
-	if o.Address == "" {
-		return false
-	}
-	if isRBE(o.Address) {
-		return o.Instance != ""
-	}
-	return true
+	return o.Address != "" && o.Instance != ""
 }
 
 // NeedCred returns whether credential is needed or not.
@@ -220,7 +206,7 @@ func New(ctx context.Context, cred cred.Cred, opt Option) (*Client, error) {
 	if opt.Address == "" {
 		return nil, errors.New("no reapi address")
 	}
-	if isRBE(opt.Address) && opt.Instance == "" {
+	if opt.Instance == "" {
 		return nil, errors.New("no reapi instance")
 	}
 	clog.Infof(ctx, "address: %q instance: %q", opt.Address, opt.Instance)

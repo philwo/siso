@@ -49,7 +49,7 @@ func depsFastStep(ctx context.Context, b *Builder, step *Step) (*Step, error) {
 	if step.useReclient() {
 		return nil, fmt.Errorf("no fast-deps (use reclient)")
 	}
-	if len(step.cmd.Platform) == 0 {
+	if len(step.cmd.Platform) == 0 || step.cmd.Platform["container-image"] == "" {
 		return nil, errors.New("no fast-deps (no remote step)")
 	}
 	if step.def.Binding("no_fast_deps") != "" {
