@@ -55,7 +55,7 @@ func (b *Builder) runRemote(ctx context.Context, step *Step) error {
 			fastChecked = true
 
 			preprocErr = preprocCmd(ctx, b, step)
-			if len(step.cmd.Platform) > 0 && step.cmd.Platform["container-image"] != "" && preprocErr == nil {
+			if len(step.cmd.Platform) > 0 && preprocErr == nil {
 				err := b.execRemoteCache(ctx, step)
 				if err == nil {
 					return nil
@@ -190,8 +190,8 @@ func (b *Builder) fastStepDone(ctx context.Context, step, fastStep *Step) error 
 }
 
 func (b *Builder) runRemoteStep(ctx context.Context, step *Step, cacheCheck bool) error {
-	if len(step.cmd.Platform) == 0 || step.cmd.Platform["container-image"] == "" {
-		return fmt.Errorf("no remote available (missing container-image property)")
+	if len(step.cmd.Platform) == 0 {
+		return fmt.Errorf("no remote available (missing platform property)")
 	}
 	if cacheCheck {
 		err := b.execRemoteCache(ctx, step)
