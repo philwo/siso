@@ -191,7 +191,7 @@ func (c *ninjaCmdRun) Run(a subcommands.Application, args []string, env subcomma
 	ctx := cli.GetContext(a, c, env)
 	err := parseFlagsFully(&c.Flags)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		ui.Default.Errorf("%v\n", err)
 		return 2
 	}
 	stats, err := c.run(ctx)
@@ -203,17 +203,17 @@ func (c *ninjaCmdRun) Run(a subcommands.Application, args []string, env subcomma
 		var errBuild buildError
 		switch {
 		case errors.Is(err, auth.ErrLoginRequired):
-			fmt.Fprintf(os.Stderr, "need to login: run `siso login`\n")
+			ui.Default.Errorf("need to login: run `siso login`\n")
 		case errors.Is(err, errNothingToDo):
 			msgPrefix := "Everything is up-to-date"
 			if ui.IsTerminal() {
 				msgPrefix = ui.SGR(ui.Green, msgPrefix)
 			}
-			fmt.Fprintf(os.Stderr, "%s Nothing to do.\n", msgPrefix)
+			ui.Default.Warningf("%s Nothing to do.\n", msgPrefix)
 			return 0
 
 		case errors.As(err, &errFlag):
-			fmt.Fprintf(os.Stderr, "%v\n", err)
+			ui.Default.Errorf("%v\n", err)
 
 		case errors.As(err, &errBuild):
 			var errTarget build.TargetError
@@ -223,13 +223,15 @@ func (c *ninjaCmdRun) Run(a subcommands.Application, args []string, env subcomma
 					dur = ui.SGR(ui.Bold, dur)
 					msgPrefix = ui.SGR(ui.BackgroundRed, msgPrefix)
 				}
-				fmt.Fprintf(os.Stderr, "\n%6s %s: %v\n", dur, msgPrefix, errTarget)
+				ui.Default.Errorf("\n%6s %s: %v\n", dur, msgPrefix, errTarget)
 				if len(errTarget.Suggests) > 0 {
-					fmt.Fprintf(os.Stderr, "Did you mean:")
+					var sb strings.Builder
+					fmt.Fprintf(&sb, "Did you mean:")
 					for _, s := range errTarget.Suggests {
-						fmt.Fprintf(os.Stderr, " %q", s)
+						fmt.Fprintf(&sb, " %q", s)
 					}
-					fmt.Fprintln(os.Stderr, " ?")
+					fmt.Fprintln(&sb, " ?")
+					ui.Default.Warningf("%s\n", sb.String())
 				}
 				return 1
 			}
@@ -240,7 +242,7 @@ func (c *ninjaCmdRun) Run(a subcommands.Application, args []string, env subcomma
 					dur = ui.SGR(ui.Bold, dur)
 					msgPrefix = ui.SGR(ui.BackgroundRed, msgPrefix)
 				}
-				fmt.Fprintf(os.Stderr, "\n%6s %s: %v\n", dur, msgPrefix, errMissingSource)
+				ui.Default.Errorf("\n%6s %s: %v\n", dur, msgPrefix, errMissingSource)
 				return 1
 			}
 			msgPrefix := "Build Failure"
@@ -248,7 +250,7 @@ func (c *ninjaCmdRun) Run(a subcommands.Application, args []string, env subcomma
 				dur = ui.SGR(ui.Bold, dur)
 				msgPrefix = ui.SGR(ui.BackgroundRed, msgPrefix)
 			}
-			fmt.Fprintf(os.Stderr, "\n%6s %s: %d done %d failed %d remaining - %.02f/s\n %v\n", dur, msgPrefix, stats.Done-stats.Skipped, stats.Fail, stats.Total-stats.Done, sps, errBuild.err)
+			ui.Default.Errorf("\n%6s %s: %d done %d failed %d remaining - %.02f/s\n %v\n", dur, msgPrefix, stats.Done-stats.Skipped, stats.Fail, stats.Total-stats.Done, sps, errBuild.err)
 			suggest := fmt.Sprintf("see %s for full command line and output", c.logFilename(c.outputLogFile, c.startDir))
 			if c.sisoInfoLog != "" {
 				suggest += fmt.Sprintf("\n or %s", c.logFilename(c.sisoInfoLog, c.startDir))
@@ -263,16 +265,16 @@ func (c *ninjaCmdRun) Run(a subcommands.Application, args []string, env subcomma
 			if ui.IsTerminal() {
 				suggest = ui.SGR(ui.Bold, suggest)
 			}
-			fmt.Fprintf(os.Stderr, "%s\n", suggest)
+			ui.Default.Warningf("%s\n", suggest)
 		default:
 			msgPrefix := "Error"
 			if ui.IsTerminal() {
 				msgPrefix = ui.SGR(ui.BackgroundRed, msgPrefix)
 			}
 			if status.Code(err) == codes.Unavailable {
-				fmt.Fprintf(os.Stderr, "\n%6s %s: could not connect to backend. If you want to build offline, pass `-o` or `--offline`\n %v\n", ui.FormatDuration(time.Since(c.started)), msgPrefix, err)
+				ui.Default.Errorf("\n%6s %s: could not connect to backend. If you want to build offline, pass `-o` or `--offline`\n %v\n", ui.FormatDuration(time.Since(c.started)), msgPrefix, err)
 			} else {
-				fmt.Fprintf(os.Stderr, "\n%6s %s: %v\n", ui.FormatDuration(time.Since(c.started)), msgPrefix, err)
+				ui.Default.Errorf("\n%6s %s: %v\n", ui.FormatDuration(time.Since(c.started)), msgPrefix, err)
 			}
 		}
 		return 1
@@ -282,7 +284,7 @@ func (c *ninjaCmdRun) Run(a subcommands.Application, args []string, env subcomma
 		dur = ui.SGR(ui.Bold, dur)
 		msgPrefix = ui.SGR(ui.Green, msgPrefix)
 	}
-	fmt.Fprintf(os.Stderr, "%6s %s: %d steps - %.02f/s\n", dur, msgPrefix, stats.Done-stats.Skipped, sps)
+	ui.Default.Warningf("%6s %s: %d steps - %.02f/s\n", dur, msgPrefix, stats.Done-stats.Skipped, sps)
 	return 0
 }
 
@@ -410,10 +412,10 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	}
 
 	if c.ninjaJobs >= 0 {
-		fmt.Fprintf(os.Stderr, "-j is not supported. use -remote_jobs and -local_jobs instead\n")
+		ui.Default.Warningf("-j is not supported. use -remote_jobs and -local_jobs instead\n")
 	}
 	if c.ninjaLoadLimit >= 0 {
-		fmt.Fprintf(os.Stderr, "-l is not supported.\n")
+		ui.Default.Warningf("-l is not supported.\n")
 	}
 	if c.failuresAllowed <= 0 {
 		c.failuresAllowed = math.MaxInt
@@ -423,11 +425,11 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	}
 
 	if c.adjustWarn != "" {
-		fmt.Fprintf(os.Stderr, "-w is specified. but not supported. b/288807840\n")
+		ui.Default.Warningf("-w is specified. but not supported. b/288807840\n")
 	}
 
 	if c.offline {
-		fmt.Fprintln(os.Stderr, ui.SGR(ui.Red, "offline mode"))
+		ui.Default.Warningf(ui.SGR(ui.Red, "offline mode"))
 		clog.Warningf(ctx, "offline mode")
 		c.reopt = new(reapi.Option)
 		c.projectID = ""
@@ -480,11 +482,11 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 			defer func() {
 				err := lock.Unlock()
 				if err != nil {
-					fmt.Fprintf(os.Stderr, "failed to unlock .siso_lock: %v\n", err)
+					ui.Default.Errorf("failed to unlock .siso_lock: %v\n", err)
 				}
 				err = lock.Close()
 				if err != nil {
-					fmt.Fprintf(os.Stderr, "failed to close .siso_lock: %v\n", err)
+					ui.Default.Errorf("failed to close .siso_lock: %v\n", err)
 				}
 			}()
 		}
@@ -549,12 +551,12 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		if err != nil {
 			// b/335295396 Compile step hitting write requests quota
 			// rather than build fails, fallback to glog.
-			fmt.Fprintf(os.Stderr, "cloud logging: %v\n", err)
-			fmt.Fprintln(os.Stderr, "fallback to glog")
+			ui.Default.Errorf("cloud logging: %v\n", err)
+			ui.Default.Warningf("fallback to glog\n")
 			c.enableCloudLogging = false
 		} else {
 			// use stderr for confirm no-op step. b/288534744
-			fmt.Fprintln(os.Stderr, loggerURL)
+			ui.Default.Warningf("%s\n", loggerURL)
 			defer done()
 			ctx = logCtx
 		}
@@ -617,7 +619,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		if err != nil {
 			return stats, err
 		}
-		fmt.Fprintf(os.Stderr, "https://btx.cloud.google.com/invocations/%s\n", c.buildID)
+		ui.Default.Warningf("https://btx.cloud.google.com/invocations/%s\n", c.buildID)
 		defer func() {
 			spin.Start("finishing upload to resultstore")
 			exitCode := 0
@@ -787,7 +789,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 			fsmonitorPath, err = exec.LookPath(fsmonitor)
 			if err != nil {
 				clog.Warningf(ctx, "failed to find fsmonitor %q: %v", fsmonitor, err)
-				fmt.Fprintln(os.Stderr, ui.SGR(ui.BackgroundRed, fmt.Sprintf("SISO_FSMONITOR=%q: failed %v", fsmonitor, err)))
+				ui.Default.Warningf(ui.SGR(ui.BackgroundRed, fmt.Sprintf("SISO_FSMONITOR=%q: failed %v", fsmonitor, err)))
 			}
 		} else {
 			fsmonitorPath = fsmonitor
@@ -799,13 +801,13 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 				fsm, err := watchmanutil.New(ctx, fsmonitorPath, execRoot)
 				if err != nil {
 					clog.Warningf(ctx, "failed to initialize watchman: %v", err)
-					fmt.Fprintln(os.Stderr, ui.SGR(ui.BackgroundRed, fmt.Sprintf("SISO_FSMONITOR=watchman: failed %v", err)))
+					ui.Default.Errorf(ui.SGR(ui.BackgroundRed, fmt.Sprintf("SISO_FSMONITOR=watchman: failed %v", err)))
 				} else {
-					fmt.Fprintln(os.Stdout, ui.SGR(ui.Yellow, fmt.Sprintf("use watchman as fsmonitor: %s", fsmonitorPath)))
+					ui.Default.Infof(ui.SGR(ui.Yellow, fmt.Sprintf("use watchman as fsmonitor: %s", fsmonitorPath)))
 					c.fsopt.FSMonitor = fsm
 				}
 			default:
-				fmt.Fprintln(os.Stderr, ui.SGR(ui.BackgroundRed, fmt.Sprintf("unknown SISO_FSMONITOR=%q (%q)", fsmonitor, fsm)))
+				ui.Default.Errorf(ui.SGR(ui.BackgroundRed, fmt.Sprintf("unknown SISO_FSMONITOR=%q (%q)", fsmonitor, fsm)))
 			}
 		}
 	}
@@ -871,7 +873,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	}()
 	hashFSErr := hashFS.LoadErr()
 	if hashFSErr != nil {
-		fmt.Fprintln(os.Stderr, ui.SGR(ui.BackgroundRed, fmt.Sprintf("unable to do incremental build as fs state is corrupted: %v", hashFSErr)))
+		ui.Default.Errorf(ui.SGR(ui.BackgroundRed, fmt.Sprintf("unable to do incremental build as fs state is corrupted: %v", hashFSErr)))
 	}
 
 	_, err = os.Stat(failedTargetsFilename)
@@ -1119,6 +1121,7 @@ func (c *ninjaCmdRun) init() {
 	c.Flags.StringVar(&c.depsLogFile, "deps_log", ".siso_deps", "deps log filename (relative to -C)")
 
 	c.Flags.StringVar(&c.logDir, "log_dir", ".", "log directory (relative to -C")
+
 	c.Flags.StringVar(&c.failureSummaryFile, "failure_summary", "", "filename for failure summary (relative to -log_dir)")
 	c.failedCommandsFile = "siso_failed_commands.sh"
 	if runtime.GOOS == "windows" {
@@ -1835,7 +1838,7 @@ func dumpResourceUsageTable(ctx context.Context, semaTraces map[string]semaTrace
 	ltw.Flush()
 	utw.Flush()
 	if needToShow {
-		fmt.Print(usb.String())
+		ui.Default.Infof("%s", usb.String())
 	}
 	return lsb.String()
 }

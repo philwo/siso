@@ -229,7 +229,7 @@ func (p *progress) step(ctx context.Context, b *Builder, step *Step, s string) {
 				stat.Done-stat.Skipped, stat.Total-stat.Skipped,
 				dur,
 				step.def.Binding("command"))
-			fmt.Println(msg)
+			ui.Default.Infof("%s\n", msg)
 		} else if strings.HasPrefix(s, progressPrefixFinish) && step != nil {
 			msg = fmt.Sprintf("[%d/%d] %s %s",
 				stat.Done-stat.Skipped, stat.Total-stat.Skipped,
@@ -238,10 +238,10 @@ func (p *progress) step(ctx context.Context, b *Builder, step *Step, s string) {
 			if outputResult != "" {
 				msg += "\n" + outputResult + "\n"
 			}
-			fmt.Println(msg)
+			ui.Default.Infof("%s\n", msg)
 
 		} else if step == nil {
-			fmt.Println(msg)
+			ui.Default.Infof("%s\n", msg)
 		}
 	case ui.IsTerminal():
 		runProgress := func(waits, servs int) string {

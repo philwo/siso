@@ -15,7 +15,8 @@ import (
 	"golang.org/x/term"
 )
 
-type spinner interface {
+// Spinner controls spinner.
+type Spinner interface {
 	// Start starts the spinner with the specified formatted string.
 	Start(format string, args ...any)
 	// Stop stops the spinner, outputting an error if provided.
@@ -31,7 +32,16 @@ type UI interface {
 	// Otherwise, it will replaces the last N lines, where N is len(msgs).
 	PrintLines(msgs ...string)
 	// NewSpinner returns a new spinner.
-	NewSpinner() spinner
+	NewSpinner() Spinner
+
+	// Infof reports info level.
+	Infof(string, ...any)
+
+	// Warningf reports warning level.
+	Warningf(string, ...any)
+
+	// Errorf reports error level.
+	Errorf(string, ...any)
 }
 
 // Default holds the default UI interface.

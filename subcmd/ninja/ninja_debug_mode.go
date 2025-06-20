@@ -8,8 +8,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"strings"
+
+	"go.chromium.org/infra/build/siso/ui"
 )
 
 // ninja compatible debug mode.
@@ -31,10 +32,10 @@ func (m *debugMode) check() error {
 multiple modes can be enabled via -d FOO -d BAR`)
 	}
 	if m.Stats {
-		fmt.Fprintln(os.Stderr, "WARNING: `-d stats` is not implemented yet")
+		ui.Default.Warningf("WARNING: `-d stats` is not implemented yet\n")
 	}
 	if m.Keepdepfile {
-		fmt.Fprintln(os.Stderr, "WARNING: `-d keepdepfile` is not implemented yet")
+		ui.Default.Warningf("WARNING: `-d keepdepfile` is not implemented yet\n")
 	}
 	return nil
 }

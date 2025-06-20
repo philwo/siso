@@ -119,6 +119,21 @@ func (t *TermUI) PrintLines(msgs ...string) {
 }
 
 // NewSpinner returns a terminal-based spinner.
-func (TermUI) NewSpinner() spinner {
+func (TermUI) NewSpinner() Spinner {
 	return &termSpinner{}
+}
+
+// Infof reports to stdout.
+func (TermUI) Infof(format string, args ...any) {
+	fmt.Fprintf(os.Stdout, format, args...)
+}
+
+// Warningf reports to stderr.
+func (TermUI) Warningf(format string, args ...any) {
+	fmt.Fprintf(os.Stderr, format, args...)
+}
+
+// Errorf reports to stderr.
+func (TermUI) Errorf(format string, args ...any) {
+	fmt.Fprintf(os.Stderr, format, args...)
 }

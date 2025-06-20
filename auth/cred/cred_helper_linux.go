@@ -12,6 +12,8 @@ import (
 	"os"
 	"syscall"
 	"time"
+
+	"go.chromium.org/infra/build/siso/ui"
 )
 
 // https://fuchsia.googlesource.com/fuchsia/+/ba3ebe3223ab95245f974d11f1f0c960dbabbf50/build/bazel/templates/template.bazelrc#73
@@ -35,11 +37,11 @@ func DefaultCredentialHelper() string {
 			return helper
 		case <-time.After(5 * time.Second):
 			if i == 0 {
-				fmt.Fprintln(os.Stderr, "WARNING: Accessing /google/src takes longer than expected. Retrying for 10 more seconds...")
+				ui.Default.Warningf("WARNING: Accessing /google/src takes longer than expected. Retrying for 10 more seconds...\n")
 			}
 		}
 	}
-	fmt.Fprintf(os.Stderr, `ERROR: Timeout while accessing /google/src.
+	ui.Default.Errorf(`ERROR: Timeout while accessing /google/src.
 Run "diagnose_me" or you would need RPC access: http://go/request-rpc
 `)
 	return ""

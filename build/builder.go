@@ -796,17 +796,17 @@ loop:
 		go func() {
 			time.Sleep(10 * time.Minute)
 			// expect siso process finishes before it runs
-			fmt.Fprintf(os.Stderr, "\nBUG: http://b/360961799 - siso didn't finish in %s after build finished \ndump all goroutines:\n", time.Since(finished))
+			ui.Default.Errorf("\nBUG: http://b/360961799 - siso didn't finish in %s after build finished \ndump all goroutines:\n", time.Since(finished))
 			err := pprof.Lookup("goroutine").WriteTo(os.Stderr, 1)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "failed to WriteTo: %v\n", err)
+				ui.Default.Errorf("failed to WriteTo: %v\n", err)
 			}
-			fmt.Fprintf(os.Stderr, "\nwait more 10 minutes.\n")
+			ui.Default.Warningf("\nwait more 10 minutes.\n")
 			time.Sleep(10 * time.Minute)
-			fmt.Fprintf(os.Stderr, "siso still didn't finish in %s after build finished \ndump all goroutines:\n", time.Since(finished))
+			ui.Default.Errorf("siso still didn't finish in %s after build finished \ndump all goroutines:\n", time.Since(finished))
 			err = pprof.Lookup("goroutine").WriteTo(os.Stderr, 1)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "failed to WriteTo: %v\n", err)
+				ui.Default.Errorf("failed to WriteTo: %v\n", err)
 			}
 			os.Exit(1)
 		}()

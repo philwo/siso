@@ -50,6 +50,21 @@ func (LogUI) PrintLines(msgs ...string) {
 }
 
 // NewSpinner returns an implementation of ui.spinner.
-func (LogUI) NewSpinner() spinner {
+func (LogUI) NewSpinner() Spinner {
 	return &logSpinner{}
+}
+
+// Infof reports to stdout, stripping ansi escape sequence.
+func (LogUI) Infof(format string, args ...any) {
+	fmt.Fprintf(os.Stdout, "%s", StripANSIEscapeCodes(fmt.Sprintf(format, args...)))
+}
+
+// Warningf reports to stderr, stripping ansi escape sequence.
+func (LogUI) Warningf(format string, args ...any) {
+	fmt.Fprintf(os.Stderr, "%s", StripANSIEscapeCodes(fmt.Sprintf(format, args...)))
+}
+
+// Errorf reports to stderr, stripping ansi escape sequence.
+func (LogUI) Errorf(format string, args ...any) {
+	fmt.Fprintf(os.Stderr, "%s", StripANSIEscapeCodes(fmt.Sprintf(format, args...)))
 }
