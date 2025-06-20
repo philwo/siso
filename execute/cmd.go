@@ -1098,10 +1098,20 @@ func (e ExitError) Error() string {
 	return fmt.Sprintf("exit=%d", e.ExitCode)
 }
 
+// SetOutputResult sets output result.
 func (c *Cmd) SetOutputResult(msg string) {
 	c.outputResult = msg
 }
 
+// SetOutputResult sets output result.
 func (c *Cmd) OutputResult() string {
 	return c.outputResult
+}
+
+// ExitCode returns cmd exit code, or -1.
+func (c *Cmd) ExitCode() int32 {
+	if c.actionResult == nil {
+		return -1
+	}
+	return c.actionResult.ExitCode
 }

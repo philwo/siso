@@ -305,6 +305,7 @@ func (p *progress) step(ctx context.Context, b *Builder, step *Step, s string) {
 		fallthrough
 	default:
 		if step != nil {
+			b.statusReporter.PlanHasTotalSteps(stat.Total - stat.Skipped)
 			msg = fmt.Sprintf("[%d/%d] %s %s",
 				stat.Done-stat.Skipped, stat.Total-stat.Skipped,
 				dur,

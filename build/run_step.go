@@ -134,7 +134,9 @@ func (b *Builder) runStep(ctx context.Context, step *Step) (err error) {
 	}
 
 	b.progressStepStarted(ctx, step)
+	b.statusReporter.BuildStepStarted(step)
 	defer b.progressStepFinished(ctx, step)
+	defer b.statusReporter.BuildStepFinished(step)
 
 	step.setPhase(stepHandler)
 	exited, err := b.handleStep(ctx, step)

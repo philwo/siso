@@ -19,8 +19,9 @@ func TestProgress_NotIsTerminal(t *testing.T) {
 	ui.Default = &ui.LogUI{}
 	var p progress
 	b := &Builder{
-		plan:  &plan{},
-		stats: &stats{},
+		statusReporter: noopStatusReporter{},
+		plan:           &plan{},
+		stats:          &stats{},
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

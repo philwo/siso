@@ -123,6 +123,7 @@ type Edge struct {
 
 // Step is a build step.
 type Step struct {
+	idnum   int
 	def     StepDef
 	nwaits  int
 	outputs []Target
@@ -146,6 +147,34 @@ type Step struct {
 	metrics StepMetric
 
 	state *stepState
+}
+
+// IDNum is a step identification number.
+func (s *Step) IDNum() int { return s.idnum }
+
+// Desc returns step's description.
+func (s *Step) Desc() string {
+	return s.cmd.Desc
+}
+
+// Command returns step's command line.
+func (s *Step) Command() string {
+	return s.def.Binding("command")
+}
+
+// IsConsole reports whether it uses console pool.
+func (s *Step) IsConsole() bool {
+	return s.cmd.Console
+}
+
+// ExitCode returns exit code of the step.
+func (s *Step) ExitCode() int32 {
+	return s.cmd.ExitCode()
+}
+
+// OutputResult returns output result of the step.
+func (s *Step) OutputResult() string {
+	return s.cmd.OutputResult()
 }
 
 type stepState struct {

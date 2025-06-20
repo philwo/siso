@@ -147,7 +147,8 @@ type Builder struct {
 	projectID string
 	metadata  metadata.Metadata
 
-	progress progress
+	statusReporter StatusReporter
+	progress       progress
 
 	// path system used in the build.
 	path   *Path
@@ -246,6 +247,10 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 	if start.IsZero() {
 		start = time.Now()
 	}
+	var statusReporter StatusReporter = noopStatusReporter{}
+	if sr, ok := ui.Default.(StatusReporter); ok {
+		statusReporter = sr
+	}
 	ew := opts.ExplainWriter
 	if ew == nil {
 		ew = io.Discard
@@ -319,6 +324,8 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 		id:        opts.ID,
 		projectID: opts.ProjectID,
 		metadata:  opts.Metadata,
+
+		statusReporter: statusReporter,
 
 		path:              opts.Path,
 		hashFS:            opts.HashFS,
@@ -437,6 +444,9 @@ func (b numBytes) String() string {
 // Build builds args with the name.
 func (b *Builder) Build(ctx context.Context, name string, args ...string) (err error) {
 	started := time.Now()
+	b.statusReporter.BuildStarted()
+	defer b.statusReporter.BuildFinished()
+
 	// pctx is parent context, that is used to check
 	// original context is canceled or not.
 	pctx := ctx
@@ -487,6 +497,7 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 	}
 	b.plan = sched.plan
 	b.stats = newStats(sched.total)
+	b.statusReporter.PlanHasTotalSteps(sched.total)
 
 	stat := b.Stats()
 	if stat.Total == 0 {

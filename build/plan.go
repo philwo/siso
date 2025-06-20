@@ -566,6 +566,7 @@ func (s *scheduler) add(ctx context.Context, graph Graph, step *Step) {
 		s.lastProgress = time.Now()
 	}()
 	s.total++
+	step.idnum = s.total
 	if !step.def.IsPhony() {
 		// don't add output for phony targets. https://crbug.com/1517575
 		for _, output := range step.outputs {
