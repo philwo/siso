@@ -75,17 +75,16 @@ type Options struct {
 	ID        string
 	StartTime time.Time
 
-	Metadata          metadata.Metadata
-	ProjectID         string
-	Path              *Path
-	HashFS            *hashfs.HashFS
-	REAPIClient       *reapi.Client
-	REExecEnable      bool
-	RECacheEnableRead bool
-	// TODO(b/266518906): enable RECacheEnableWrite option for read-only client.
-	// RECacheEnableWrite bool
-	ReproxyAddr string
-	ActionSalt  []byte
+	Metadata           metadata.Metadata
+	ProjectID          string
+	Path               *Path
+	HashFS             *hashfs.HashFS
+	REAPIClient        *reapi.Client
+	REExecEnable       bool
+	RECacheEnableRead  bool
+	RECacheEnableWrite bool
+	ReproxyAddr        string
+	ActionSalt         []byte
 
 	OutputLocal          OutputLocalFunc
 	Cache                *Cache
@@ -184,13 +183,12 @@ type Builder struct {
 
 	fastLocalSema *semaphore.Semaphore
 
-	remoteSema        *semaphore.Semaphore
-	remoteExec        *remoteexec.RemoteExec
-	reExecEnable      bool
-	reCacheEnableRead bool
-	// TODO(b/266518906): enable reCacheEnableWrite option for read-only client.
-	// reCacheEnableWrite bool
-	reapiclient *reapi.Client
+	remoteSema         *semaphore.Semaphore
+	remoteExec         *remoteexec.RemoteExec
+	reExecEnable       bool
+	reCacheEnableRead  bool
+	reCacheEnableWrite bool
+	reapiclient        *reapi.Client
 
 	reproxySema *semaphore.Semaphore
 	reproxyExec *reproxyexec.REProxyExec
@@ -327,27 +325,27 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 
 		statusReporter: statusReporter,
 
-		path:              opts.Path,
-		hashFS:            opts.HashFS,
-		start:             start,
-		graph:             graph,
-		stepSema:          semaphore.New("step", opts.Limits.Step),
-		preprocSema:       semaphore.New("preproc", opts.Limits.Preproc),
-		scanDepsSema:      semaphore.New("scandeps", opts.Limits.ScanDeps),
-		scanDeps:          scandeps.New(opts.HashFS, graph.InputDeps(ctx)),
-		localSema:         semaphore.New("localexec", opts.Limits.Local),
-		localExec:         le,
-		rewrapSema:        semaphore.New("rewrap", opts.Limits.REWrap),
-		fastLocalSema:     fastLocalSema,
-		remoteSema:        semaphore.New("remoteexec", opts.Limits.Remote),
-		remoteExec:        re,
-		reExecEnable:      opts.REExecEnable,
-		reCacheEnableRead: opts.RECacheEnableRead,
-		// reCacheEnableWrite: opts.RECacheEnableWrite,
-		reproxyExec: pe,
-		reproxySema: semaphore.New("reproxyexec", opts.Limits.Remote),
-		actionSalt:  opts.ActionSalt,
-		reapiclient: opts.REAPIClient,
+		path:               opts.Path,
+		hashFS:             opts.HashFS,
+		start:              start,
+		graph:              graph,
+		stepSema:           semaphore.New("step", opts.Limits.Step),
+		preprocSema:        semaphore.New("preproc", opts.Limits.Preproc),
+		scanDepsSema:       semaphore.New("scandeps", opts.Limits.ScanDeps),
+		scanDeps:           scandeps.New(opts.HashFS, graph.InputDeps(ctx)),
+		localSema:          semaphore.New("localexec", opts.Limits.Local),
+		localExec:          le,
+		rewrapSema:         semaphore.New("rewrap", opts.Limits.REWrap),
+		fastLocalSema:      fastLocalSema,
+		remoteSema:         semaphore.New("remoteexec", opts.Limits.Remote),
+		remoteExec:         re,
+		reExecEnable:       opts.REExecEnable,
+		reCacheEnableRead:  opts.RECacheEnableRead,
+		reCacheEnableWrite: opts.RECacheEnableWrite,
+		reproxyExec:        pe,
+		reproxySema:        semaphore.New("reproxyexec", opts.Limits.Remote),
+		actionSalt:         opts.ActionSalt,
+		reapiclient:        opts.REAPIClient,
 
 		outputLocal:          opts.OutputLocal,
 		cacheSema:            semaphore.New("cache", opts.Limits.Cache),

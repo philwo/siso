@@ -348,6 +348,18 @@ func (c *Client) GetActionResult(ctx context.Context, d digest.Digest) (*rpb.Act
 	return result, err
 }
 
+// UpdateActionResult updates the action result by the digest.
+func (c *Client) UpdateActionResult(ctx context.Context, d digest.Digest, result *rpb.ActionResult) error {
+	client := rpb.NewActionCacheClient(c.casConn)
+	_, err := client.UpdateActionResult(ctx, &rpb.UpdateActionResultRequest{
+		InstanceName: c.opt.Instance,
+		ActionDigest: d.Proto(),
+		ActionResult: result,
+	})
+	c.m.OpsDone(err)
+	return err
+}
+
 // NewContext returns new context with request metadata.
 func NewContext(ctx context.Context, rmd *rpb.RequestMetadata) context.Context {
 	ver, err := version.GetStartupVersion()

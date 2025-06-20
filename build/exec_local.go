@@ -19,6 +19,7 @@ import (
 	"go.chromium.org/infra/build/siso/execute"
 	"go.chromium.org/infra/build/siso/o11y/clog"
 	"go.chromium.org/infra/build/siso/o11y/trace"
+	"go.chromium.org/infra/build/siso/reapi/digest"
 )
 
 func (b *Builder) execLocal(ctx context.Context, step *Step) error {
@@ -134,9 +135,51 @@ func (b *Builder) execLocal(ctx context.Context, step *Step) error {
 	if err != nil {
 		return err
 	}
-	return b.checkLocalOutputs(ctx, step)
+	err = b.checkLocalOutputs(ctx, step)
+	if err != nil {
+		return err
+	}
+	return b.trustedLocalUpload(ctx, step)
 	// no need to call b.outputs, as all outputs are already on disk
 	// so no need to flush.
+}
+
+// Uploads and sets local execution result in RE if builder is trusted
+// Note: currently does not work with layered cache and blocks on digest calculation
+func (b *Builder) trustedLocalUpload(ctx context.Context, step *Step) error {
+	// Local upload must be enabled and step must have pure inputs/outputs
+	if b.reapiclient == nil || !b.reCacheEnableWrite || !step.cmd.Pure {
+		return nil
+	}
+	// Action digests are lazily computed for local so they are not available at this point
+	cmd := step.cmd
+	result, _ := cmd.ActionResult()
+	ds := digest.NewStore()
+	digest, err := cmd.Digest(ctx, ds)
+	if err != nil {
+		clog.Warningf(ctx, "failed to compute digest for trusted local upload: %v", err)
+		return err
+	}
+	// Retrieve and compute output digests from HashFS on the action
+	hashFS := b.hashFS
+	outputEntries, err := hashFS.Entries(ctx, cmd.ExecRoot, cmd.AllOutputs())
+	if err != nil {
+		return err
+	}
+
+	// Set the outputs on the result
+	execute.ResultFromEntries(ctx, result, cmd.Dir, outputEntries)
+	for _, entry := range outputEntries {
+		ds.Set(entry.Data)
+	}
+
+	// Upload all collected output data, input data, and action itself
+	_, err = b.reapiclient.UploadAll(ctx, ds)
+	if err != nil {
+		return err
+	}
+	// Now set the action result in RE
+	return b.reapiclient.UpdateActionResult(ctx, digest, result)
 }
 
 func (b *Builder) prepareLocalInputs(ctx context.Context, step *Step) error {

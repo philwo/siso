@@ -154,12 +154,12 @@ type ninjaCmdRun struct {
 	buildPprof         string
 	// uploadBuildPprof bool
 
-	fsopt             *hashfs.Option
-	reopt             *reapi.Option
-	reExecEnable      bool
-	reCacheEnableRead bool
-	// reCacheEnableWrite bool
-	reproxyAddr string
+	fsopt              *hashfs.Option
+	reopt              *reapi.Option
+	reExecEnable       bool
+	reCacheEnableRead  bool
+	reCacheEnableWrite bool
+	reproxyAddr        string
 
 	artfsDir      string
 	artfsEndpoint string
@@ -1169,6 +1169,7 @@ func (c *ninjaCmdRun) init() {
 	c.reopt.RegisterFlags(&c.Flags, envs)
 	c.Flags.BoolVar(&c.reExecEnable, "re_exec_enable", true, "remote exec enable")
 	c.Flags.BoolVar(&c.reCacheEnableRead, "re_cache_enable_read", true, "remote exec cache enable read")
+	c.Flags.BoolVar(&c.reCacheEnableWrite, "re_cache_enable_write", false, "remote exec cache allow local trusted uploads")
 	// reclient_helper.py sets the RBE_server_address
 	// https://chromium.googlesource.com/chromium/tools/depot_tools.git/+/e13840bd9a04f464e3bef22afac1976fc15a96a0/reclient_helper.py#138
 	c.reproxyAddr = os.Getenv("RBE_server_address")
