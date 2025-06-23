@@ -484,6 +484,7 @@ func (c *Cmd) inputTree(ctx context.Context) ([]merkletree.Entry, error) {
 	if err != nil {
 		return nil, err
 	}
+	ents = append([]merkletree.Entry{{Name: c.Dir}}, ents...)
 	ents = append(ents, rootEnts...)
 
 	if len(c.RemoteInputs) == 0 {
