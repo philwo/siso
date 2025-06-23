@@ -12,7 +12,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"go.chromium.org/luci/common/errors"
 	"go.chromium.org/luci/common/retry"
 	"go.chromium.org/luci/common/retry/transient"
 
@@ -67,7 +66,7 @@ func Do(ctx context.Context, f func() error) error {
 	return retry.Retry(ctx, transient.Only(retry.Default), func() error {
 		err := f()
 		if retriableError(err, &authRetry) {
-			return errors.Annotate(err, "retriable error").Tag(transient.Tag).Err()
+			return transient.Tag.Apply(err)
 		}
 		return err
 	}, func(err error, backoff time.Duration) {
