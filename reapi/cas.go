@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"path"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -52,6 +53,23 @@ const (
 
 	bytestreamSlowThroughputPerSec = 1 * 1024 * 1024
 )
+
+func selectCompressor(serverSupported []rpb.Compressor_Value) rpb.Compressor_Value {
+	if len(serverSupported) == 0 {
+		// No compressor support.
+		return rpb.Compressor_IDENTITY
+	}
+	for _, c := range []rpb.Compressor_Value{
+		rpb.Compressor_ZSTD,
+		rpb.Compressor_DEFLATE,
+		rpb.Compressor_IDENTITY,
+	} {
+		if slices.Contains(serverSupported, c) {
+			return c
+		}
+	}
+	return rpb.Compressor_IDENTITY
+}
 
 type uploadOp struct {
 	ch  chan struct{}
@@ -97,12 +115,7 @@ func (c *Client) useCompressedBlob(d digest.Digest) bool {
 }
 
 func (c *Client) getCompressor() rpb.Compressor_Value {
-	if len(c.capabilities.CacheCapabilities.SupportedCompressors) == 0 {
-		// No compressor support.
-		return rpb.Compressor_IDENTITY
-	}
-	// always use the first supported compressor for now.
-	return c.capabilities.CacheCapabilities.SupportedCompressors[0]
+	return selectCompressor(c.capabilities.CacheCapabilities.SupportedCompressors)
 }
 
 // resourceName constructs a resource name for reading the blob identified by the digest.
