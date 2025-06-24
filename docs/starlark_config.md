@@ -292,6 +292,10 @@ provide [`json`](https://pkg.go.dev/go.starlark.net/lib/json)
 ### [@builtin//lib/gn.star](../build/buildconfig/lib/gn.star)
 provide `gn`.
 
+note: deprecated. parsing args.gn doesn't work well.
+emit computed value and parse it, like gn_logs.txt.
+https://crbug.com/427333789
+
  * `args`: returns a dict for content of args.gn.
    value is not interpreted, but just as string.
    e.g.
