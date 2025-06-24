@@ -1570,6 +1570,7 @@ func (c *ninjaCmdRun) initBuildOpts(ctx context.Context, projectID string, build
 		REAPIClient:          ds.client,
 		REExecEnable:         c.reExecEnable,
 		RECacheEnableRead:    c.reCacheEnableRead,
+		RECacheEnableWrite:   c.reCacheEnableWrite,
 		ReproxyAddr:          c.reproxyAddr,
 		ActionSalt:           actionSaltBytes,
 		OutputLocal:          build.OutputLocalFunc(c.fsopt.OutputLocal),
