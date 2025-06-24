@@ -53,6 +53,7 @@ type Option struct {
 	// When 0 is set, blob compression is disabled.
 	CompressedBlob int64
 
+	ConnPool        int
 	KeepAliveParams keepalive.ClientParameters
 }
 
@@ -82,6 +83,8 @@ func (o *Option) RegisterFlags(fs *flag.FlagSet, envs map[string]string) {
 	fs.StringVar(&o.TLSClientAuthKey, o.Prefix+"_tls_client_auth_key", os.Getenv("RBE_tls_client_auth_key"), "Key to use when using mTLS to connect to the RE api service. default can be set by $RBE_tls_client_auth_key")
 
 	fs.Int64Var(&o.CompressedBlob, o.Prefix+"_compress_blob", 1024, "use compressed blobs if server supports compressed blobs and size is bigger than this. specify 0 to disable comporession."+purpose)
+
+	fs.IntVar(&o.ConnPool, o.Prefix+"_grpc_conn_pool", 25, "grpc connection pool")
 
 	// https://grpc.io/docs/guides/keepalive/#keepalive-configuration-specification
 	// b/286237547 - RBE suggests 30s
@@ -243,7 +246,7 @@ func New(ctx context.Context, cred cred.Cred, opt Option) (*Client, error) {
 func newConn(ctx context.Context, addr string, cred cred.Cred, opt Option) (grpcClientConn, error) {
 	copts := []option.ClientOption{
 		option.WithEndpoint(addr),
-		option.WithGRPCConnectionPool(25),
+		option.WithGRPCConnectionPool(opt.ConnPool),
 	}
 	dopts := dialOptions(opt.KeepAliveParams)
 	var conn grpcClientConn
