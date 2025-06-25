@@ -320,6 +320,13 @@ func needPathClean(names ...string) bool {
 	return false
 }
 
+func makeFullpath(root, fname string) string {
+	if filepath.IsAbs(fname) {
+		return filepath.ToSlash(fname)
+	}
+	return filepath.ToSlash(filepath.Join(root, fname))
+}
+
 func (hfs *HashFS) dirLookup(ctx context.Context, root, fname string) (*entry, *directory, bool) {
 	if filepath.IsAbs(fname) {
 		return hfs.directory.lookup(ctx, filepath.ToSlash(fname))
@@ -378,7 +385,7 @@ func (hfs *HashFS) stat(ctx context.Context, root, fname string, needCompute boo
 			// directory's mtime has been updated locally
 			// where hashfs doesn't know. e.g. add new file
 			// in the directory by local run.
-			fullname := filepath.Join(root, fname)
+			fullname := makeFullpath(root, fname)
 			lfi, err := hfs.OS.Lstat(ctx, fullname)
 			switch {
 			case errors.Is(err, fs.ErrNotExist):
@@ -409,11 +416,7 @@ func (hfs *HashFS) stat(ctx context.Context, root, fname string, needCompute boo
 		}
 		return FileInfo{root: root, fname: fname, e: e}, nil
 	}
-	fullname := fname
-	if !filepath.IsAbs(fullname) {
-		fullname = filepath.Join(root, fname)
-	}
-	fullname = filepath.ToSlash(fullname)
+	fullname := makeFullpath(root, fname)
 	e = newLocalEntry()
 	e.init(ctx, fullname, hfs.executables, hfs.OS)
 	if log.V(1) {
@@ -454,11 +457,7 @@ func (hfs *HashFS) ReadDir(ctx context.Context, root, name string) (dents []DirE
 			clog.Infof(ctx, "readdir @%s %s -> %d %v", root, name, len(dents), err)
 		}()
 	}
-	dirname := name
-	if !filepath.IsAbs(name) {
-		dirname = filepath.Join(root, name)
-	}
-	dname := filepath.ToSlash(dirname)
+	dname := makeFullpath(root, name)
 	e, _, ok := hfs.directory.lookup(ctx, dname)
 	if !ok {
 		e = newLocalEntry()
@@ -482,9 +481,9 @@ func (hfs *HashFS) ReadDir(ctx context.Context, root, name string) (dents []DirE
 		return nil, fmt.Errorf("read dir %s: not dir: %w", dname, os.ErrPermission)
 	}
 	// TODO(ukai): fix race in updateDir -> store.
-	names := e.updateDir(ctx, hfs, dirname)
+	names := e.updateDir(ctx, hfs, dname)
 	if log.V(1) {
-		clog.Infof(ctx, "update-dir %s -> %d", dirname, len(names))
+		clog.Infof(ctx, "update-dir %s -> %d", dname, len(names))
 	}
 	var ents []DirEntry
 	e.directory.m.Range(func(k, v any) bool {
@@ -496,7 +495,7 @@ func (hfs *HashFS) ReadDir(ctx context.Context, root, name string) (dents []DirE
 		ents = append(ents, DirEntry{
 			fi: FileInfo{
 				root:  root,
-				fname: filepath.ToSlash(filepath.Join(dirname, name)),
+				fname: filepath.ToSlash(filepath.Join(dname, name)),
 				e:     ee,
 			},
 		})
@@ -512,8 +511,7 @@ func (hfs *HashFS) ReadFile(ctx context.Context, root, fname string) ([]byte, er
 	if log.V(1) {
 		clog.Infof(ctx, "readfile @%s %s", root, fname)
 	}
-	fname = filepath.Join(root, fname)
-	fname = filepath.ToSlash(fname)
+	fname = makeFullpath(root, fname)
 	span.SetAttr("fname", fname)
 	e, _, ok := hfs.directory.lookup(ctx, fname)
 	if !ok {
@@ -583,8 +581,7 @@ func (hfs *HashFS) WriteFile(ctx context.Context, root, fname string, b []byte, 
 	}
 	hfs.clean.Store(false)
 	data := digest.FromBytes(fname, b)
-	fname = filepath.Join(root, fname)
-	fname = filepath.ToSlash(fname)
+	fname = makeFullpath(root, fname)
 	span.SetAttr("fname", fname)
 	lready := make(chan bool, 1)
 	lready <- true
@@ -620,8 +617,7 @@ func (hfs *HashFS) Symlink(ctx context.Context, root, target, linkpath string, m
 		clog.Infof(ctx, "symlink @%s %s -> %s", root, linkpath, target)
 	}
 	hfs.clean.Store(false)
-	linkfname := filepath.Join(root, linkpath)
-	linkfname = filepath.ToSlash(linkfname)
+	linkfname := makeFullpath(root, linkpath)
 	lready := make(chan bool, 1)
 	lready <- true
 	e := &entry{
@@ -650,13 +646,8 @@ func (hfs *HashFS) Copy(ctx context.Context, root, src, dst string, mtime time.T
 		clog.Infof(ctx, "copy @%s %s to %s", root, src, dst)
 	}
 	hfs.clean.Store(false)
-	srcname := src
-	if !filepath.IsAbs(src) {
-		srcname = filepath.Join(root, src)
-	}
-	srcfname := filepath.ToSlash(srcname)
-	dstfname := filepath.Join(root, dst)
-	dstfname = filepath.ToSlash(dstfname)
+	srcfname := makeFullpath(root, src)
+	dstfname := makeFullpath(root, dst)
 	e, _, ok := hfs.directory.lookup(ctx, srcfname)
 	if !ok {
 		e = newLocalEntry()
@@ -717,8 +708,7 @@ func (hfs *HashFS) Mkdir(ctx context.Context, root, dirname string, cmdhash, edg
 		clog.Infof(ctx, "mkdir @%s %s", root, dirname)
 	}
 	hfs.clean.Store(false)
-	dirname = filepath.Join(root, dirname)
-	dirname = filepath.ToSlash(dirname)
+	dirname = makeFullpath(root, dirname)
 	fi, err := hfs.OS.Lstat(ctx, dirname)
 	mtime := time.Now()
 	if err == nil && fi.IsDir() {
@@ -779,8 +769,7 @@ func (hfs *HashFS) Remove(ctx context.Context, root, fname string) error {
 		clog.Infof(ctx, "remove @%s %s", root, fname)
 	}
 	hfs.clean.Store(false)
-	fname = filepath.Join(root, fname)
-	fname = filepath.ToSlash(fname)
+	fname = makeFullpath(root, fname)
 	lready := make(chan bool, 1)
 	lready <- true
 	e := &entry{
@@ -799,8 +788,7 @@ func (hfs *HashFS) RemoveAll(ctx context.Context, root, name string) error {
 		clog.Infof(ctx, "removeAll @%s %s", root, name)
 	}
 	hfs.clean.Store(false)
-	name = filepath.Join(root, name)
-	name = filepath.ToSlash(name)
+	name = makeFullpath(root, name)
 	err := os.RemoveAll(name)
 	if err == nil {
 		err = fs.ErrNotExist
@@ -819,8 +807,7 @@ func (hfs *HashFS) RemoveAll(ctx context.Context, root, name string) error {
 // Forget forgets cached entry for inputs under root.
 func (hfs *HashFS) Forget(ctx context.Context, root string, inputs []string) {
 	for _, fname := range inputs {
-		fullname := filepath.Join(root, fname)
-		fullname = filepath.ToSlash(fullname)
+		fullname := makeFullpath(root, fname)
 		hfs.directory.delete(ctx, fullname)
 	}
 }
@@ -862,8 +849,7 @@ func (hfs *HashFS) ForgetMissingsInDir(ctx context.Context, root, dir string) {
 	}
 	err := ForgetMissingsSemaphore.Do(ctx, func(ctx context.Context) error {
 		for _, fname := range needCheck {
-			fullname := filepath.Join(root, fname)
-			fullname = filepath.ToSlash(fullname)
+			fullname := makeFullpath(root, fname)
 			_, err := hfs.OS.Lstat(ctx, fullname)
 			if errors.Is(err, fs.ErrNotExist) {
 				clog.Infof(ctx, "forget missing %s", fullname)
@@ -904,8 +890,7 @@ func (hfs *HashFS) ForgetMissings(ctx context.Context, root string, inputs []str
 
 	err := ForgetMissingsSemaphore.Do(ctx, func(ctx context.Context) error {
 		for _, fname := range needCheck {
-			fullname := filepath.Join(root, fname)
-			fullname = filepath.ToSlash(fullname)
+			fullname := makeFullpath(root, fname)
 			_, err := hfs.OS.Lstat(ctx, fullname)
 			if errors.Is(err, fs.ErrNotExist) {
 				clog.Infof(ctx, "forget missing %s", fullname)
@@ -954,8 +939,7 @@ func (hfs *HashFS) Entries(ctx context.Context, root string, inputs []string) ([
 	var wg sync.WaitGroup
 	ents := make([]*entry, 0, len(inputs))
 	for _, fname := range inputs {
-		fname := filepath.Join(root, fname)
-		fname = filepath.ToSlash(fname)
+		fname := makeFullpath(root, fname)
 		e, _, ok := hfs.directory.lookup(ctx, fname)
 		if ok {
 			if log.V(2) {
@@ -1019,15 +1003,10 @@ func (hfs *HashFS) Entries(ctx context.Context, root string, inputs []string) ([
 			name := filepath.Join(root, fname)
 			elink := e
 			for range maxSymlinks {
-				if filepath.IsAbs(elink.target) {
-					tname = elink.target
-				} else {
-					tname = filepath.Join(filepath.Dir(name), elink.target)
-				}
+				tname = makeFullpath(filepath.Dir(name), elink.target)
 				if log.V(1) {
 					clog.Infof(ctx, "symlink %s -> %s", name, tname)
 				}
-				tname = filepath.ToSlash(tname)
 				if strings.HasPrefix(tname, root+"/") {
 					break
 				}
@@ -1382,8 +1361,7 @@ func (hfs *HashFS) RetrieveUpdateEntriesFromLocal(ctx context.Context, root stri
 
 	ents := make([]UpdateEntry, 0, len(fnames))
 	for _, fname := range fnames {
-		fullname := filepath.Join(root, fname)
-		fullname = filepath.ToSlash(fullname)
+		fullname := makeFullpath(root, fname)
 		lfi, err := hfs.OS.Lstat(ctx, fullname)
 		if errors.Is(err, fs.ErrNotExist) {
 			clog.Warningf(ctx, "missing local %s: %v", fname, err)
@@ -1440,7 +1418,7 @@ func (noDataSource) Source(_ context.Context, d digest.Digest, fname string) dig
 
 // NeedFlush returns whether the fname need to be flushed based on OutputLocal option.
 func (hfs *HashFS) NeedFlush(ctx context.Context, execRoot, fname string) bool {
-	return hfs.opt.OutputLocal(ctx, filepath.ToSlash(filepath.Join(execRoot, fname)))
+	return hfs.opt.OutputLocal(ctx, makeFullpath(execRoot, fname))
 }
 
 // Flush flushes cached information for files under execRoot to local disk.
@@ -1451,8 +1429,7 @@ func (hfs *HashFS) Flush(ctx context.Context, execRoot string, files []string) e
 	defer span.Close(nil)
 	eg, ctx := errgroup.WithContext(ctx)
 	for _, file := range files {
-		fname := filepath.Join(execRoot, file)
-		fname = filepath.ToSlash(fname)
+		fname := makeFullpath(execRoot, file)
 		e, _, ok := hfs.directory.lookup(ctx, fname)
 		if !ok {
 			// If it doesn't exist in memory, just use local disk as is.
@@ -2475,10 +2452,7 @@ type FileInfo struct {
 }
 
 func (fi *FileInfo) Path() string {
-	if filepath.IsAbs(fi.fname) {
-		return filepath.ToSlash(fi.fname)
-	}
-	return filepath.ToSlash(filepath.Join(fi.root, fi.fname))
+	return makeFullpath(fi.root, fi.fname)
 }
 
 // Name is a base name of the file.
