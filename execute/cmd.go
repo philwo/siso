@@ -208,6 +208,9 @@ type Cmd struct {
 	// ConsoleOut indicates the command outputs to the console.
 	ConsoleOut *atomic.Bool
 
+	// OOMScoreAdj is value to set oom_score_adj on local exec (linux only)
+	OOMScoreAdj *int
+
 	// outfiles is outputs of the step in build graph.
 	// These outputs will be recorded with cmdhash.
 	// Other outputs in c.Outputs will be recorded without cmdhash.

@@ -30,6 +30,7 @@ var knownExperiments = map[string]string{
 	"ignore-missing-targets":      "",
 	"keep-going-handle-error":     "",
 	"keep-going-impure":           "check siso_localexec",
+	"oom-score-adj":               "",
 	"no-fallback":                 "",
 	"no-fast-deps":                "",
 	"no-fast-deps-fallback":       "",

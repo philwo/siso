@@ -145,6 +145,9 @@ func run(ctx context.Context, cmd *execute.Cmd) (*rpb.ActionResult, error) {
 		return c.Start()
 	})
 	if err == nil {
+		if cmd.OOMScoreAdj != nil {
+			oomScoreAdj(ctx, c.Process.Pid, *cmd.OOMScoreAdj)
+		}
 		err = c.Wait()
 	}
 	if err == nil {

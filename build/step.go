@@ -492,6 +492,11 @@ func newCmd(ctx context.Context, b *Builder, stepDef StepDef, stepManifest *step
 		cmd.Platform["dockerRuntime"] = "runsc"
 	}
 	cmd.InitOutputs()
+
+	if experiments.Enabled("oom-score-adj", "Set oom_score_adj=1000 on local exec") {
+		score := 1000 // OOM_SCORE_ADJ_MAX. likely to be killed by OOM
+		cmd.OOMScoreAdj = &score
+	}
 	return cmd
 }
 
