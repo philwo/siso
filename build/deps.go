@@ -160,6 +160,8 @@ func depsExpandInputs(ctx context.Context, b *Builder, step *Step) {
 	copy(step.cmd.Inputs, inputs)
 }
 
+// depsFixCmd checks the purity of the command by checking step inputs and deps.
+// It also updates the command inputs when fast deps is enabled.
 func depsFixCmd(ctx context.Context, b *Builder, step *Step, deps []string) {
 	stepInputs := step.def.Inputs(ctx) // use ToolInputs?
 	deps = step.def.ExpandedCaseSensitives(ctx, deps)
@@ -169,8 +171,16 @@ func depsFixCmd(ctx context.Context, b *Builder, step *Step, deps []string) {
 		step.cmd.Pure = false
 		return
 	}
-	step.cmd.Inputs = inputs
 	step.cmd.Pure = true
+	if reason, ok := b.disableFastDeps.Load().(string); ok && reason != "" {
+		// if fast deps is not used, scandeps is used for step.cmd
+		// so cache will hit in next build.
+		// no need to modify step.cmd's Inputs.
+		return
+	}
+	// if fast deps is used, fix cmd to match with deps_log used
+	// so that cache will hit in next build.
+	step.cmd.Inputs = inputs
 }
 
 func depsCmd(ctx context.Context, b *Builder, step *Step) error {
