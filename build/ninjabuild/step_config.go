@@ -15,6 +15,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"sync"
 
 	log "github.com/golang/glog"
 
@@ -477,6 +478,11 @@ loop:
 	return StepRule{}, false
 }
 
+type depPathPair struct{ dep, path string }
+
+// for log missing input only once per path or depPathPair.
+var knownMissingInputs sync.Map // {path or depPathPair} -> true
+
 // ExpandInputs expands inputs, and returns paths separated by slash.
 func (sc StepConfig) ExpandInputs(ctx context.Context, p *build.Path, hashFS *hashfs.HashFS, paths []string) []string {
 	seen := make(map[string]bool)
@@ -490,8 +496,10 @@ func (sc StepConfig) ExpandInputs(ctx context.Context, p *build.Path, hashFS *ha
 		if !strings.Contains(path, ":") {
 			_, err := hashFS.Stat(ctx, p.ExecRoot, path)
 			if err != nil {
-				// TODO(b/271783311): hard error for bad config
-				clog.Warningf(ctx, "missing inputs %s", path)
+				if _, loaded := knownMissingInputs.LoadOrStore(path, true); !loaded {
+					// TODO(b/271783311): hard error for bad config
+					clog.Warningf(ctx, "missing inputs %s", path)
+				}
 			} else {
 				expanded = append(expanded, filepath.ToSlash(path))
 			}
@@ -510,7 +518,9 @@ func (sc StepConfig) ExpandInputs(ctx context.Context, p *build.Path, hashFS *ha
 				}
 				_, err := hashFS.Stat(ctx, p.ExecRoot, dep)
 				if err != nil {
-					clog.Warningf(ctx, "missing file in input-dep %s (from %s): %v", dep, path, err)
+					if _, loaded := knownMissingInputs.LoadOrStore(depPathPair{dep, path}, true); !loaded {
+						clog.Warningf(ctx, "missing file in input-dep %s (from %s): %v", dep, path, err)
+					}
 					continue
 				}
 				paths = append(paths, dep)
