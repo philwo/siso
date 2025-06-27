@@ -187,7 +187,7 @@ func TestWriter(t *testing.T) {
 	}
 	ctx := context.Background()
 
-	w, err := Create(ctx, c, resourceName)
+	w, err := Create(ctx, c, resourceName, "testdata")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -235,7 +235,7 @@ func TestWriterAlreadyExists(t *testing.T) {
 	}
 	ctx := context.Background()
 
-	w, err := Create(ctx, c, resourceName)
+	w, err := Create(ctx, c, resourceName, "testdata")
 	if err != nil {
 		t.Fatal(err)
 	}

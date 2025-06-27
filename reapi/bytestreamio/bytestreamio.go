@@ -86,7 +86,7 @@ func (r *Reader) Size() int64 {
 
 // Create creates a writer on the bytestream for resourceName.
 // ctx will be used until the rriter is closed.
-func Create(ctx context.Context, c pb.ByteStreamClient, resourceName string) (*Writer, error) {
+func Create(ctx context.Context, c pb.ByteStreamClient, resourceName, name string) (*Writer, error) {
 	sizeStr := path.Base(resourceName)
 	size, err := strconv.ParseInt(sizeStr, 10, 64)
 	if err != nil {
@@ -97,6 +97,7 @@ func Create(ctx context.Context, c pb.ByteStreamClient, resourceName string) (*W
 		return nil, err
 	}
 	return &Writer{
+		name:    name,
 		resname: resourceName,
 		size:    size,
 		wr:      wr,
@@ -105,7 +106,8 @@ func Create(ctx context.Context, c pb.ByteStreamClient, resourceName string) (*W
 
 // Writer is a writer on bytestream, and implemnets io.Writer.
 type Writer struct {
-	resname string
+	name    string // data source name
+	resname string // resource name for upload destination
 	size    int64
 	wr      pb.ByteStream_WriteClient
 	offset  int64
@@ -136,11 +138,11 @@ func (w *Writer) Write(buf []byte) (int, error) {
 	if err == io.EOF {
 		// the blob already stored in CAS.
 		w.ok = true
-		clog.Infof(w.wr.Context(), "bytestream write %s got EOF at %d: %v", w.resname, w.offset, err)
+		clog.Infof(w.wr.Context(), "bytestream write %s for %s got EOF at %d: %v", w.resname, w.name, w.offset, err)
 		return len(buf), nil
 	}
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("failed to send for %s: %w", w.name, err)
 	}
 	w.offset += int64(len(buf))
 	return len(buf), nil
@@ -162,19 +164,19 @@ func (w *Writer) Close() error {
 			// The client may leave 'data' empty.
 		})
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to finish for %s: %w", w.name, err)
 		}
 	}
 	res, err := w.wr.CloseAndRecv()
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to close for %s: %w", w.name, err)
 	}
 	// in case compressed-blobs, res.CommittedSize != w.offset.
 	// since w.offset is compressed size.
 	// res.CommittedSize is original data size, so it must match with
 	// size in resource name (i.e. size_bytes in digest).
 	if res.CommittedSize != w.size {
-		return status.Errorf(codes.Internal, "unexpected committedSize: %d != %d", res.CommittedSize, w.size)
+		return status.Errorf(codes.Internal, "unexpected committedSize: %d != %d for %s", res.CommittedSize, w.size, w.name)
 	}
 	return nil
 }

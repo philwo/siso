@@ -693,7 +693,7 @@ func (c *Client) uploadWithByteStream(ctx context.Context, digests []digest.Dige
 			if log.V(1) {
 				clog.Infof(ctx, "put %s", resourceName)
 			}
-			wr, err := bytestreamio.Create(ctx, bsClient, c.uploadResourceName(d))
+			wr, err := bytestreamio.Create(ctx, bsClient, c.uploadResourceName(d), data.String())
 			if err != nil {
 				return err
 			}
