@@ -374,7 +374,7 @@ func (c *Cmd) RemoteChroot() bool {
 
 // Digest computes action digest of the cmd.
 // If ds is nil, then it will reuse the previous calculated digest if any.
-func (c *Cmd) Digest(ctx context.Context, ds *digest.Store) (digest.Digest, error) {
+func (c *Cmd) Digest(ctx context.Context, ds *digest.Store) (actionDigest digest.Digest, err error) {
 	if !c.Pure {
 		return digest.Digest{}, fmt.Errorf("unable to create digest for impure cmd %s", c.ID)
 	}
@@ -388,6 +388,13 @@ func (c *Cmd) Digest(ctx context.Context, ds *digest.Store) (digest.Digest, erro
 			return digest.Digest{}, fmt.Errorf("unsupported dockerChrootPath=%q", chrootPath)
 		}
 	}
+	var inputRootDigest, commandDigest digest.Digest
+	var treeDuration time.Duration
+	defer func() {
+		// -2 for command and action message.
+		clog.Infof(ctx, "action: %s {command; %s inputRoot: %s %d %s}: %v", actionDigest, commandDigest, inputRootDigest, ds.Size()-2, treeDuration, err)
+	}()
+	started := time.Now()
 	ents, err := c.inputTree(ctx)
 	if err != nil {
 		return digest.Digest{}, fmt.Errorf("failed to get input tree for %s: %w", c, err)
@@ -401,16 +408,16 @@ func (c *Cmd) Digest(ctx context.Context, ds *digest.Store) (digest.Digest, erro
 		ents, treeInputs = c.chrootDir(ctx, ents, treeInputs)
 	}
 
-	inputRootDigest, err := treeDigest(ctx, treeInputs, ents, ds)
+	inputRootDigest, err = treeDigest(ctx, treeInputs, ents, ds)
 	if err != nil {
 		return digest.Digest{}, fmt.Errorf("failed to get input root for %s: %w", c, err)
 	}
-	clog.Infof(ctx, "inputRoot: %s digests=%d", inputRootDigest, ds.Size())
-	commandDigest, err := c.commandDigest(ctx, ds)
+	treeDuration = time.Since(started)
+
+	commandDigest, err = c.commandDigest(ctx, ds)
 	if err != nil {
 		return digest.Digest{}, fmt.Errorf("failed to build command for %s: %w", c, err)
 	}
-	clog.Infof(ctx, "command: %s", commandDigest)
 
 	var timeout *durationpb.Duration
 	if c.Timeout > 0 {
@@ -434,7 +441,6 @@ func (c *Cmd) Digest(ctx context.Context, ds *digest.Store) (digest.Digest, erro
 		ds.Set(action)
 	}
 	c.actionDigest = action.Digest()
-	clog.Infof(ctx, "action: %s", c.actionDigest)
 	return c.actionDigest, nil
 }
 
