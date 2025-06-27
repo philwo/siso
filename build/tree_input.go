@@ -81,7 +81,9 @@ func (b *Builder) resolveSymlinkForInputDeps(ctx context.Context, dir, labelSuff
 			return dir, files, nil
 		}
 		fi, err := b.hashFS.Stat(ctx, root, dir)
-		clog.Infof(ctx, "input deps stat %q %q: %v", root, dir, err)
+		if log.V(1) {
+			clog.Infof(ctx, "input deps stat %q %q: %v", root, dir, err)
+		}
 		if err != nil {
 			return "", nil, fmt.Errorf("not in input_deps, and stat err %s: %w", dir, err)
 		}
