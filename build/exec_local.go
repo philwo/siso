@@ -131,15 +131,15 @@ func (b *Builder) execLocal(ctx context.Context, step *Step) error {
 	if err != nil {
 		return err
 	}
+	err = b.trustedLocalUpload(ctx, step)
+	if err != nil {
+		return err
+	}
 	err = b.updateDeps(ctx, step)
 	if err != nil {
 		return err
 	}
-	err = b.checkLocalOutputs(ctx, step)
-	if err != nil {
-		return err
-	}
-	return b.trustedLocalUpload(ctx, step)
+	return b.checkLocalOutputs(ctx, step)
 	// no need to call b.outputs, as all outputs are already on disk
 	// so no need to flush.
 }

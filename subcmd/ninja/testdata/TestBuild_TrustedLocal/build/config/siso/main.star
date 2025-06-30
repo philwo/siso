@@ -8,13 +8,22 @@ def init(ctx):
     step_config = {
         "rules": [
             {
-				"action": "action",
-				"name": "action",
-				"output_local": True,
-				"platform": {
- 	                "container-image": "docker://gcr.io/test/test",
-				},
-				"timeout": "1s",
+                "action": "action",
+                "name": "action",
+                "output_local": True,
+                "platform": {
+                    "container-image": "docker://gcr.io/test/test",
+                },
+                "timeout": "1s",
+            },
+            {
+                "action": "gcc",
+                "name": "gcc",
+                "output_local": True,
+                "platform": {
+                    "container-image": "docker://gcr.io/test/test",
+                },
+                "timeout": "1s",
             },
         ],
     }

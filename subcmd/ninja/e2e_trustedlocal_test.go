@@ -27,6 +27,7 @@ func TestBuild_TrustedLocal(t *testing.T) {
 		"out/siso/gen/asserts.out",
 		"out/siso/obj/foo0.inputdeps.out",
 		"out/siso/obj/foo1.inputdeps.out",
+		"out/siso/obj/foo.o",
 	}
 
 	// Keep a global mock RE for the lifetime of the test
@@ -98,9 +99,9 @@ func TestBuild_TrustedLocal(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ninja err: %v", err)
 	}
-	if stats.Done != stats.Total || stats.Local != 3 || stats.CacheHit != 0 || stats.Remote != 0 {
+	if stats.Done != stats.Total || stats.Local != 4 || stats.CacheHit != 0 || stats.Remote != 0 {
 		t.Errorf("done=%d,local=%d,cache=%d,remote=%d; want done=%d,local=%d,cache=%d,remote=%d",
-			stats.Done, stats.Local, stats.CacheHit, stats.Remote, stats.Total, 3, 0, 0)
+			stats.Done, stats.Local, stats.CacheHit, stats.Remote, stats.Total, 4, 0, 0)
 
 	}
 
@@ -110,9 +111,9 @@ func TestBuild_TrustedLocal(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ninja err: %v", err)
 	}
-	if stats.Done != stats.Total || stats.Local != 0 || stats.CacheHit != 3 || stats.Remote != 0 {
+	if stats.Done != stats.Total || stats.Local != 0 || stats.CacheHit != 4 || stats.Remote != 0 {
 		t.Errorf("done=%d,local=%d,cache=%d,remote=%d; want done=%d,local=%d,cache=%d,remote=%d",
-			stats.Done, stats.Local, stats.CacheHit, stats.Remote, stats.Total, 0, 3, 0)
+			stats.Done, stats.Local, stats.CacheHit, stats.Remote, stats.Total, 0, 4, 0)
 	}
 
 }
