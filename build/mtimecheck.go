@@ -38,7 +38,9 @@ func (b *Builder) needToRun(ctx context.Context, stepDef StepDef, stepManifest *
 				dirtyErr: dirtyErr,
 				mtime:    mtime,
 			})
-			clog.Infof(ctx, "phony output %s dirty=%v mtime=%v", outpath, dirtyErr, mtime)
+			if dirtyErr != nil || log.V(1) {
+				clog.Infof(ctx, "phony output %s dirty=%v mtime=%v", outpath, dirtyErr, mtime)
+			}
 		}
 		// nothing to run for phony target.
 		return false
