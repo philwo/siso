@@ -13,6 +13,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -258,13 +259,19 @@ func (a *ideAnalyzer) analyzeTarget(ctx context.Context, target string) (*pb.Ana
 		}
 		return result, nil
 	}
-	node := nodes[0]
-
+	node := nodes[0] // first node by default.
 	var nodeEnt *fspb.Entry
-	// need to check build succeeded for .java
-	// for cxx, we don't compile *.o with
-	// `SISO_EXPERIMENTS=prepare-header-only`, so *.o may not exist.
-	if filepath.Ext(result.SourceFilePath) == ".java" {
+	switch filepath.Ext(result.SourceFilePath) {
+	case ".c", ".cc", ".cxx", ".cpp", ".m", ".mm", ".S", ".h", ".hxx", ".hpp", ".inc":
+		// prefer *.o or *.obj
+		node = selectNodeByExt(nodes, ".o", ".obj")
+	case ".java":
+		// prefer *.jar or *.srcjar
+		node = selectNodeByExt(nodes, ".jar", ".srcjar")
+
+		// need to check build succeeded for .java
+		// for cxx, we don't compile *.o with
+		// `SISO_EXPERIMENTS=prepare-header-only`, so *.o may not exist.
 		var ok bool
 		nodeEnt, ok = a.fsm[filepath.ToSlash(filepath.Join(a.path.ExecRoot, a.path.Dir, node.Path()))]
 		if !ok {
@@ -381,6 +388,15 @@ func (a *ideAnalyzer) targetForCPP(ctx context.Context, target string) ([]*ninja
 		return []*ninjautil.Node{files[filenames[0]]}, nil
 	}
 	return nil, err
+}
+
+func selectNodeByExt(nodes []*ninjautil.Node, exts ...string) *ninjautil.Node {
+	for _, n := range nodes {
+		if slices.Contains(exts, filepath.Ext(n.Path())) {
+			return n
+		}
+	}
+	return nodes[0]
 }
 
 func (a *ideAnalyzer) analyzeCPP(ctx context.Context, edge *ninjautil.Edge, result *pb.AnalysisResult) (*pb.AnalysisResult, map[string]*pb.BuildableUnit) {
