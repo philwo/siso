@@ -1537,7 +1537,7 @@ type entry struct {
 	src digest.Source
 	buf []byte // from WriteFile.
 
-	mu sync.Mutex
+	mu sync.RWMutex
 	// mtime of entry in hashfs.
 	mtime        time.Time
 	mtimeUpdated bool
@@ -1667,20 +1667,20 @@ func (e *entry) compute(ctx context.Context, fname string) error {
 }
 
 func (e *entry) digest() digest.Digest {
-	e.mu.Lock()
-	defer e.mu.Unlock()
+	e.mu.RLock()
+	defer e.mu.RUnlock()
 	return e.d
 }
 
 func (e *entry) getMtime() time.Time {
-	e.mu.Lock()
-	defer e.mu.Unlock()
+	e.mu.RLock()
+	defer e.mu.RUnlock()
 	return e.mtime
 }
 
 func (e *entry) getUpdatedTime() time.Time {
-	e.mu.Lock()
-	defer e.mu.Unlock()
+	e.mu.RLock()
+	defer e.mu.RUnlock()
 	return e.updatedTime
 }
 
@@ -2483,16 +2483,16 @@ func (fi FileInfo) UpdatedTime() time.Time {
 
 // IsChanged returns true if file has been changed in the session.
 func (fi FileInfo) IsChanged() bool {
-	fi.e.mu.Lock()
-	defer fi.e.mu.Unlock()
+	fi.e.mu.RLock()
+	defer fi.e.mu.RUnlock()
 	return fi.e.isChanged
 }
 
 // IsMissingChecked returns true if file has been checked existence
 // for ForgetMissings.
 func (fi FileInfo) IsMissingChecked() bool {
-	fi.e.mu.Lock()
-	defer fi.e.mu.Unlock()
+	fi.e.mu.RLock()
+	defer fi.e.mu.RUnlock()
 	return fi.e.isMissingChecked
 }
 
