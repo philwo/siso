@@ -1028,6 +1028,9 @@ func runNinja(ctx context.Context, fname string, graph *ninjabuild.Graph, bopts 
 			ui.Default.PrintLines(fmt.Sprintf("Building last failed targets: %s...\n", failedTargets))
 			var err error
 			stats, err = doBuild(ctx, graph, bopts, nopts, failedTargets...)
+			if errors.Is(err, build.ErrManifest) {
+				return stats, err
+			}
 			if errors.Is(err, build.ErrManifestModified) {
 				if bopts.DryRun {
 					return stats, nil

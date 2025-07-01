@@ -410,6 +410,9 @@ func (b *Builder) TraceStats() []*TraceStat {
 	return b.traceStats.get()
 }
 
+// ErrManifest is an error to indicate manifest error.
+var ErrManifest = errors.New("manifest error")
+
 // ErrManifestModified is an error to indicate that manifest is modified.
 var ErrManifestModified = errors.New("manifest modified")
 
@@ -543,9 +546,11 @@ func (b *Builder) Build(ctx context.Context, name string, args ...string) (err e
 			fi, mferr := b.hashFS.Stat(ctx, b.path.ExecRoot, filepath.Join(b.path.Dir, b.rebuildManifest))
 			if mferr != nil {
 				clog.Warningf(ctx, "failed to stat %s: %v", b.rebuildManifest, mferr)
+				err = fmt.Errorf("%w: missing manifest %s: %v", ErrManifest, b.rebuildManifest, mferr)
 				return
 			}
 			if err != nil {
+				err = fmt.Errorf("%w: %v", ErrManifest, err)
 				return
 			}
 			clog.Infof(ctx, "rebuild manifest %#v %s: %s->%s: %s", stat, b.rebuildManifest, mftime, fi.ModTime(), time.Since(started))
