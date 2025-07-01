@@ -314,7 +314,7 @@ func NewFromConn(ctx context.Context, opt Option, conn, casConn grpcClientConn) 
 	}
 	clog.Infof(ctx, "capabilities of %s: %s", opt.Instance, capa)
 	if opt.CompressedBlob > 0 {
-		if c := selectCompressor(capa.CacheCapabilities.SupportedCompressors); c != rpb.Compressor_IDENTITY {
+		if c := selectCompressor(capa.GetCacheCapabilities().GetSupportedCompressors()); c != rpb.Compressor_IDENTITY {
 			clog.Infof(ctx, "compressed-blobs/%s for > %d", strings.ToLower(c.String()), opt.CompressedBlob)
 		} else {
 			clog.Infof(ctx, "compressed-blobs is not supported")
