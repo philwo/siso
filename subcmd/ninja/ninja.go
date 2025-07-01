@@ -549,7 +549,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	var sisoMetadata ninjalog.SisoMetadata
 
 	var credential cred.Cred
-	if projectID != "" {
+	if projectID != "" || c.reopt.NeedCred() {
 		// TODO: can be async until cred is needed?
 		spin := ui.Default.NewSpinner()
 		spin.Start("init credentials")
