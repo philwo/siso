@@ -232,14 +232,8 @@ func inputMtime(ctx context.Context, b *Builder, stepDef StepDef) (string, time.
 	if err != nil {
 		return "", inmtime, fmt.Errorf("failed to load deps: %w", err)
 	}
-	seen := make(map[string]bool)
-
 	var retErr error
 	appendSeq(ins, depsIter)(func(in string) bool {
-		if seen[in] {
-			return true
-		}
-		seen[in] = true
 		var mtime time.Time
 		var changed bool
 		v, ok := b.phony.Load(in)
@@ -281,12 +275,22 @@ func inputMtime(ctx context.Context, b *Builder, stepDef StepDef) (string, time.
 }
 
 func appendSeq(ins []string, iter func(func(string) bool)) func(yield func(string) bool) {
+	// ins should be unique inputs.
+	// iter (deps log) should also be unique inputs,
+	// but input in iter may be duplicated with input in ins.
+	seen := make(map[string]bool, len(ins))
 	return func(yield func(string) bool) {
 		for _, in := range ins {
+			seen[in] = true
 			if !yield(in) {
 				return
 			}
 		}
-		iter(yield)
+		iter(func(in string) bool {
+			if seen[in] {
+				return true
+			}
+			return yield(in)
+		})
 	}
 }
