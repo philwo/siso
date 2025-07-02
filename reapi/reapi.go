@@ -129,6 +129,9 @@ func (o Option) IsValid() bool {
 
 // NeedCred returns whether credential is needed or not.
 func (o Option) NeedCred() bool {
+	if o.Address == "" {
+		return false
+	}
 	if o.Insecure {
 		return false
 	}

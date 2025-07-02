@@ -448,7 +448,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	}
 
 	if c.offline {
-		ui.Default.Warningf(ui.SGR(ui.Red, "offline mode"))
+		ui.Default.Warningf(ui.SGR(ui.Red, "offline mode\n"))
 		clog.Warningf(ctx, "offline mode")
 		c.reopt = new(reapi.Option)
 		c.projectID = ""
@@ -549,19 +549,14 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	var sisoMetadata ninjalog.SisoMetadata
 
 	var credential cred.Cred
-	if projectID != "" || c.reopt.NeedCred() {
+	if c.reopt.NeedCred() || c.enableCloudLogging || c.enableResultstore || c.enableCloudProfiler || c.enableCloudTrace || c.enableCloudMonitoring {
 		// TODO: can be async until cred is needed?
 		spin := ui.Default.NewSpinner()
 		spin.Start("init credentials")
 		credential, err = cred.New(ctx, c.authOpts)
 		if err != nil {
-			if !c.reopt.NeedCred() && !c.enableCloudLogging && !c.enableResultstore && !c.enableCloudProfiler && !c.enableCloudTrace && !c.enableCloudMonitoring {
-				log.Warningf("failed to init credential: %v", err)
-				log.Warningf("but no remote apis require credential")
-			} else {
-				spin.Stop(errors.New(""))
-				return stats, err
-			}
+			spin.Stop(errors.New(""))
+			return stats, err
 		}
 		spin.Stop(nil)
 	}
