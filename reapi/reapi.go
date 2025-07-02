@@ -248,6 +248,11 @@ func newConn(ctx context.Context, addr string, cred cred.Cred, opt Option) (grpc
 		option.WithEndpoint(addr),
 		option.WithGRPCConnectionPool(opt.ConnPool),
 	}
+	if !isRBE(addr) {
+		// disable Google Application Default for non RBE backend.
+		// user should specify credential helper for the backend.
+		copts = append(copts, option.WithoutAuthentication())
+	}
 	dopts := dialOptions(opt.KeepAliveParams)
 	var conn grpcClientConn
 	var err error
