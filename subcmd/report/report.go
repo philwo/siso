@@ -104,7 +104,7 @@ func (c *run) collect(ctx context.Context) (map[string]digest.Data, error) {
 			return nil, err
 		}
 		if len(matches) == 0 {
-			return nil, fmt.Errorf("no siso files in %s: did you specify correct `-C <dir>` ?", wd)
+			continue
 		}
 		for _, fname := range matches {
 			_, err := os.Stat(fname)
@@ -133,6 +133,9 @@ func (c *run) collect(ctx context.Context) (map[string]digest.Data, error) {
 				report[fname] = data
 			}
 		}
+	}
+	if len(report) == 0 {
+		return nil, fmt.Errorf("no siso files in %s: did you specify correct `-C <dir>` ?", wd)
 	}
 
 	// no need to collect .reproxy_tmp/racing
