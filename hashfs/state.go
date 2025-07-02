@@ -304,7 +304,7 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 					}
 					return nil
 				}
-				if outputLocal(ctx, ent.Name) {
+				if outputLocal(ctx, ent.Name) || ent.Local {
 					// command output file that is needed on the disk doesn't exist on the disk.
 					// need to forget to trigger steps for the output. b/298523549
 					clog.Warningf(gctx, "not exist output-needed file: %q", ent.Name)
@@ -317,6 +317,7 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 				e.cmdhash = h
 				e.edgehash = ent.EdgeHash
 				e.action = toDigest(ent.Action)
+				e.local = ent.Local
 				entries[i] = e
 				if logw != nil {
 					fmt.Fprintf(logw, "not exist with cmd hash: %q\n", ent.Name)
@@ -340,6 +341,7 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 			e.cmdhash = h
 			e.edgehash = ent.EdgeHash
 			e.action = toDigest(ent.Action)
+			e.local = ent.Local
 			ftype := "file"
 			if e.d.IsZero() && e.target == "" {
 				ftype = "dir"
@@ -437,6 +439,7 @@ func (hfs *HashFS) SetState(ctx context.Context, state *pb.State) error {
 				le.cmdhash = e.cmdhash
 				le.edgehash = e.edgehash
 				le.action = e.action
+				le.local = e.local
 				e = le
 			case entryEqLocal:
 				neq.Add(1)
@@ -814,6 +817,7 @@ func (hfs *HashFS) State(ctx context.Context) *pb.State {
 					CmdHash:      e.cmdhash,
 					EdgeHash:     e.edgehash,
 					Action:       fromDigest(e.action),
+					Local:        e.local,
 					UpdatedTime:  e.updatedTime.UnixNano(),
 				})
 				e.mu.Unlock()
@@ -828,6 +832,7 @@ func (hfs *HashFS) State(ctx context.Context) *pb.State {
 					CmdHash:     e.cmdhash,
 					EdgeHash:    e.edgehash,
 					Action:      fromDigest(e.action),
+					Local:       e.local,
 					UpdatedTime: e.updatedTime.UnixNano(),
 				})
 				e.mu.Unlock()
@@ -931,6 +936,7 @@ func (hfs *HashFS) journalEntry(ctx context.Context, fname string, e *entry) {
 		CmdHash:      e.cmdhash,
 		EdgeHash:     e.edgehash,
 		Action:       fromDigest(e.action),
+		Local:        e.local,
 		UpdatedTime:  e.updatedTime.UnixNano(),
 	}
 	e.mu.Unlock()

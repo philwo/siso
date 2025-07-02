@@ -32,6 +32,8 @@ message Entry {
   Digest action = 7;
 
   int64 updated_time = 8; // unix nano sec.
+
+  bool local = 10; // local generated. not in RBE-CAS.
 }
 
 message BuildTargets {

@@ -1180,6 +1180,7 @@ func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []Update
 				e.cmdhash = ent.CmdHash
 				e.edgehash = ent.EdgeHash
 				e.action = ent.Action
+				e.local = ent.IsLocal
 				e.updatedTime = ent.UpdatedTime
 				e.isChanged = ent.IsChanged
 				e.mu.Unlock()
@@ -1190,6 +1191,7 @@ func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []Update
 				e.cmdhash = ent.CmdHash
 				e.edgehash = ent.EdgeHash
 				e.action = ent.Action
+				e.local = ent.IsLocal
 				e.updatedTime = ent.UpdatedTime
 				e.isChanged = ent.IsChanged
 			}
@@ -1239,6 +1241,7 @@ func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []Update
 				cmdhash:     ent.CmdHash,
 				edgehash:    ent.EdgeHash,
 				action:      ent.Action,
+				local:       ent.IsLocal,
 				src:         ent.Entry.Data,
 				d:           ent.Entry.Data.Digest(),
 				updatedTime: ent.UpdatedTime,
@@ -1275,6 +1278,7 @@ func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []Update
 				cmdhash:  ent.CmdHash,
 				edgehash: ent.EdgeHash,
 				action:   ent.Action,
+				local:    true,
 				target:   ent.Entry.Target,
 
 				updatedTime: ent.UpdatedTime,
@@ -1301,6 +1305,7 @@ func (hfs *HashFS) Update(ctx context.Context, execRoot string, entries []Update
 				cmdhash:   ent.CmdHash,
 				edgehash:  ent.EdgeHash,
 				action:    ent.Action,
+				local:     true,
 				directory: &directory{},
 
 				updatedTime: ent.UpdatedTime,
@@ -1527,6 +1532,8 @@ type entry struct {
 	// digest of action that generated this file.
 	action digest.Digest
 
+	// local indicates the file is generated locally.
+	local bool
 	// isChanged indicates the file is changed in the session.
 	isChanged bool
 	// isMissingChecked indicates the file is checked in ForgetMissings.
@@ -2132,6 +2139,7 @@ func (d *directory) storeEntry(ctx context.Context, fname string, e *entry) (*en
 				e.cmdhash = ee.cmdhash
 				e.edgehash = ee.edgehash
 				e.action = ee.action
+				e.local = ee.local
 			}
 			cmdchanged := !bytes.Equal(ee.cmdhash, e.cmdhash)
 			edgechanged := !bytes.Equal(ee.edgehash, e.edgehash)
