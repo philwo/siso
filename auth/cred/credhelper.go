@@ -15,8 +15,9 @@ import (
 	"sync"
 	"time"
 
-	log "github.com/golang/glog"
 	"golang.org/x/oauth2"
+
+	"go.chromium.org/infra/build/siso/o11y/clog"
 )
 
 var errNoAuthorization = errors.New("no authrozation header")
@@ -38,8 +39,8 @@ type credHelperResp struct {
 	stdout []byte
 }
 
-func (h *credHelper) run(endpoint string) (credHelperResp, error) {
-	cmd := exec.Command(h.path, "get")
+func (h *credHelper) run(ctx context.Context, endpoint string) (credHelperResp, error) {
+	cmd := exec.CommandContext(ctx, h.path, "get")
 	type credHelperReq struct {
 		URI string `json:"uri"`
 	}
@@ -80,7 +81,7 @@ type credHelperPerRPCCredentials struct {
 	stdout  []byte
 }
 
-func (h *credHelper) get(endpoint string) (credHelperPerRPCCredentials, error) {
+func (h *credHelper) get(ctx context.Context, endpoint string) (credHelperPerRPCCredentials, error) {
 	if strings.HasPrefix(endpoint, "https://") && strings.Contains(endpoint, ".googleapis.com/") {
 		endpoint = "https://*.googleapis.com/"
 	}
@@ -98,8 +99,11 @@ func (h *credHelper) get(endpoint string) (credHelperPerRPCCredentials, error) {
 	cce.mu.Lock()
 	defer cce.mu.Unlock()
 	if cce.cred.expires.IsZero() || cce.cred.expires.Before(time.Now()) {
+		ctx, cancel := context.WithTimeout(ctx, 1*time.Minute)
+		defer cancel()
 		// first call, or expired
-		resp, err := h.run(endpoint)
+		started := time.Now()
+		resp, err := h.run(ctx, endpoint)
 		if err != nil {
 			return cce.cred, fmt.Errorf("credhelper failed: %w", err)
 		}
@@ -119,6 +123,7 @@ func (h *credHelper) get(endpoint string) (credHelperPerRPCCredentials, error) {
 		}
 		cce.cred.expires = expires
 		cce.cred.stdout = resp.stdout
+		clog.Infof(ctx, "cred %s %s valid %s", endpoint, time.Since(started), time.Until(expires))
 	}
 	return cce.cred, nil
 }
@@ -128,33 +133,19 @@ func (h *credHelper) GetRequestMetadata(ctx context.Context, uri ...string) (map
 	if len(uri) > 0 {
 		endpoint = uri[0]
 	}
-	var md map[string]string
-	errch := make(chan error)
-	go func() {
-		prc, err := h.get(endpoint)
-		if err != nil {
-			errch <- err
-		}
-		md = prc.headers
-		errch <- nil
-	}()
-	select {
-	case err := <-errch:
-		return md, err
-	case <-ctx.Done():
-		return nil, context.Cause(ctx)
-	case <-time.After(1 * time.Minute):
-		log.Fatalf("too slow credhelper?")
-		return nil, errors.New("too slow credhelper")
+	prc, err := h.get(ctx, endpoint)
+	if err != nil {
+		return nil, err
 	}
+	return prc.headers, nil
 }
 
 func (*credHelper) RequireTransportSecurity() bool {
 	return true
 }
 
-func (h *credHelper) token(endpoint string) (*oauth2.Token, error) {
-	prc, err := h.get(endpoint)
+func (h *credHelper) token(ctx context.Context, endpoint string) (*oauth2.Token, error) {
+	prc, err := h.get(ctx, endpoint)
 	if err != nil {
 		return nil, err
 	}
@@ -178,5 +169,5 @@ type credHelperGoogle struct {
 }
 
 func (h *credHelperGoogle) Token() (*oauth2.Token, error) {
-	return h.h.token("https://*.googleapis.com/")
+	return h.h.token(context.Background(), "https://*.googleapis.com/")
 }
