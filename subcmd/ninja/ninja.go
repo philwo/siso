@@ -197,17 +197,20 @@ func (c *ninjaCmdRun) Run(a subcommands.Application, args []string, env subcomma
 		return 2
 	}
 	if c.frontendFile != "" {
-		f, err := os.OpenFile(c.frontendFile, os.O_WRONLY|os.O_APPEND, 0644)
-		if err != nil {
-			ui.Default.Errorf("failed to open frontend file: %v\n", err)
-			return 1
-		}
-		defer func() {
-			err = f.Close()
+		f := os.Stdout
+		if c.frontendFile != "-" {
+			f, err = os.OpenFile(c.frontendFile, os.O_WRONLY|os.O_APPEND, 0644)
 			if err != nil {
-				ui.Default.Errorf("failed to close frontend file: %v\n", err)
+				ui.Default.Errorf("failed to open frontend file: %v\n", err)
+				return 1
 			}
-		}()
+			defer func() {
+				err = f.Close()
+				if err != nil {
+					ui.Default.Errorf("failed to close frontend file: %v\n", err)
+				}
+			}()
+		}
 		frontend := soongutil.NewFrontend(ctx, f)
 		ui.Default = frontend
 		defer frontend.Close()
@@ -1140,7 +1143,7 @@ func (c *ninjaCmdRun) init() {
 	c.Flags.StringVar(&c.logDir, "log_dir", ".", "log directory (relative to -C")
 
 	// https://android.googlesource.com/platform/build/soong/+/refs/heads/main/ui/build/ninja.go
-	c.Flags.StringVar(&c.frontendFile, "frontend_file", "", "frontend FIFO file to report build status to soong ui.")
+	c.Flags.StringVar(&c.frontendFile, "frontend_file", "", "frontend FIFO file to report build status to soong ui, or `-` to report to stdout.")
 
 	c.Flags.StringVar(&c.failureSummaryFile, "failure_summary", "", "filename for failure summary (relative to -log_dir)")
 	c.failedCommandsFile = "siso_failed_commands.sh"

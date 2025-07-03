@@ -32,6 +32,7 @@ import (
 	"go.chromium.org/infra/build/siso/subcmd/isolate"
 	"go.chromium.org/infra/build/siso/subcmd/metricscmd"
 	"go.chromium.org/infra/build/siso/subcmd/ninja"
+	"go.chromium.org/infra/build/siso/subcmd/ninjafrontend"
 	"go.chromium.org/infra/build/siso/subcmd/ps"
 	"go.chromium.org/infra/build/siso/subcmd/query"
 	"go.chromium.org/infra/build/siso/subcmd/recall"
@@ -61,6 +62,7 @@ func getApplication(authOpts cred.Options) *cli.Application {
 		Commands: []*subcommands.Command{
 			help.Cmd(),
 			ninja.Cmd(authOpts, versionID),
+			ninjafrontend.Cmd(),
 			query.Cmd(),
 			fscmd.Cmd(authOpts),
 			isolate.Cmd(authOpts),
