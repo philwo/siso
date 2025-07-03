@@ -23,7 +23,7 @@ import (
 	"time"
 
 	"go.chromium.org/infra/build/siso/build"
-	mwc "go.chromium.org/infra/build/third_party/material_web_components"
+	mwc "go.chromium.org/infra/build/siso/third_party/material_web_components"
 )
 
 //go:embed *.html css/*.css
