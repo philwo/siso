@@ -454,10 +454,13 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 		ui.Default.Warningf(ui.SGR(ui.Red, "offline mode\n"))
 		clog.Warningf(ctx, "offline mode")
 		c.reopt = new(reapi.Option)
+		c.reopt.Insecure = true
 		c.projectID = ""
 		c.enableCloudLogging = false
+		c.enableResultstore = false
 		c.enableCloudProfiler = false
 		c.enableCloudTrace = false
+		c.enableCloudMonitoring = false
 		c.reproxyAddr = ""
 	}
 
@@ -552,7 +555,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	var sisoMetadata ninjalog.SisoMetadata
 
 	var credential cred.Cred
-	if c.reopt.NeedCred() || c.enableCloudLogging || c.enableResultstore || c.enableCloudProfiler || c.enableCloudTrace || c.enableCloudMonitoring {
+	if !c.offline || c.reopt.NeedCred() || c.enableCloudLogging || c.enableResultstore || c.enableCloudProfiler || c.enableCloudTrace || c.enableCloudMonitoring {
 		// TODO: can be async until cred is needed?
 		spin := ui.Default.NewSpinner()
 		spin.Start("init credentials")
