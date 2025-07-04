@@ -39,15 +39,16 @@ const (
 // Limits specifies the resource limits used in siso build process.
 // zero limit means default.
 type Limits struct {
-	Step      int
-	Preproc   int
-	ScanDeps  int
-	Local     int
-	FastLocal int
-	Remote    int
-	REWrap    int
-	Cache     int
-	Thread    int
+	Step       int
+	Preproc    int
+	ScanDeps   int
+	Local      int
+	FastLocal  int
+	StartLocal int
+	Remote     int
+	REWrap     int
+	Cache      int
+	Thread     int
 }
 
 var (
@@ -71,9 +72,10 @@ func DefaultLimits(ctx context.Context) Limits {
 			ScanDeps:  scanDepsLimitFactor * numCPU,
 			Local:     numCPU,
 			FastLocal: limitForFastLocal(numCPU),
-			Remote:    limitForRemote(ctx, numCPU),
-			REWrap:    limitForREWrapper(ctx, numCPU),
-			Cache:     stepLimitFactor * numCPU,
+			// TODO(crbug.com/429473708): set reasonable default for StartLocal
+			Remote: limitForRemote(ctx, numCPU),
+			REWrap: limitForREWrapper(ctx, numCPU),
+			Cache:  stepLimitFactor * numCPU,
 		}
 		// On many cores machine, it would hit default max thread limit = 10000.
 		// Usually, it would require 1/3 of stepLimit threads (cache miss case?).
@@ -110,6 +112,8 @@ func DefaultLimits(ctx context.Context) Limits {
 				defaultLimits.Local = n
 			case "fastlocal":
 				defaultLimits.FastLocal = n
+			case "startlocal":
+				defaultLimits.StartLocal = n
 			case "remote":
 				defaultLimits.Remote = n
 			case "rewrap":

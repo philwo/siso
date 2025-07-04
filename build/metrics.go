@@ -91,6 +91,7 @@ type StepMetric struct {
 	IsRemote    bool `json:"is_remote,omitempty"`    // whether the action uses remote result.
 	IsLocal     bool `json:"is_local,omitempty"`     // whether the action uses local result.
 	FastLocal   bool `json:"fast_local,omitempty"`   // whether the action chooses local for fast build.
+	StartLocal  bool `json:"start_local,omitempty"`  // whether the action chooses local for start in incremental build.
 	Cached      bool `json:"cached,omitempty"`       // whether the action was a cache hit.
 	Fallback    bool `json:"fallback,omitempty"`     // whether the action failed remotely and was retried locally.
 	Err         bool `json:"err,omitempty"`          // whether the action failed.

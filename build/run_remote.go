@@ -24,11 +24,12 @@ var errRemoteExecDisabled = errors.New("remote exec disabled")
 
 // runRemote runs step with using remote apis.
 //
-//  1. Check remote cacche with deps log if available.
-//  2. If local resource is idle, run locally.
-//  3. Otherwise, try running a remote execution with deps log.
-//  4. If it failed, it will retry a remote execution with deps scan.
-//  5. If it still failed, it will fallback to local execution.
+//  1. for initial steps of startLocal, run locally.
+//  2. Check remote cacche with deps log if available.
+//  3. If local resource is idle, run locally.
+//  4. Otherwise, try running a remote execution with deps log.
+//  5. If it failed, it will retry a remote execution with deps scan.
+//  6. If it still failed, it will fallback to local execution.
 //
 // - Before each remote exec, it checks remote cache before running.
 // - The fallbacks can be disabled via experiment flags.
@@ -39,7 +40,15 @@ func (b *Builder) runRemote(ctx context.Context, step *Step) error {
 	fastNeedCheckCache := true
 	needCheckCache := true
 	cacheCheck := b.cache != nil && b.reCacheEnableRead
-	if b.fastLocalSema != nil && int(b.progress.numLocal.Load()) < b.fastLocalSema.Capacity() {
+	startLocal := b.startLocalCounter.Add(-1) >= 0
+	if startLocal {
+		// no cacheCheck as startlocal for incremental build
+		// will build modified code, and not expect cache hit (?)
+		clog.Infof(ctx, "start local %s", step.cmd.Desc)
+		err := b.execLocal(ctx, step)
+		step.metrics.StartLocal = true
+		return err
+	} else if b.fastLocalSema != nil && int(b.progress.numLocal.Load()) < b.fastLocalSema.Capacity() {
 		// TODO: skip check cache when step is too new and can't expect cache hit?
 		if cacheCheck {
 			clog.Infof(ctx, "check cache before fast local")

@@ -181,7 +181,8 @@ type Builder struct {
 
 	rewrapSema *semaphore.Semaphore
 
-	fastLocalSema *semaphore.Semaphore
+	fastLocalSema     *semaphore.Semaphore
+	startLocalCounter atomic.Int32
 
 	remoteSema         *semaphore.Semaphore
 	remoteExec         *remoteexec.RemoteExec
@@ -373,6 +374,9 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 		failures:             failures{allowed: opts.FailuresAllowed},
 		keepRSP:              opts.KeepRSP,
 		rebuildManifest:      opts.RebuildManifest,
+	}
+	if opts.Limits.StartLocal > 0 {
+		b.startLocalCounter.Store(int32(opts.Limits.StartLocal))
 	}
 	var disableReason string
 	switch {
