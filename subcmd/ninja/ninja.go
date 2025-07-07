@@ -1166,11 +1166,7 @@ func (c *ninjaCmdRun) init() {
 	c.fsopt.RegisterFlags(&c.Flags)
 
 	c.reopt = new(reapi.Option)
-	envs := map[string]string{
-		"SISO_REAPI_INSTANCE": os.Getenv("SISO_REAPI_INSTANCE"),
-		"SISO_REAPI_ADDRESS":  os.Getenv("SISO_REAPI_ADDRESS"),
-	}
-	c.reopt.RegisterFlags(&c.Flags, envs)
+	c.reopt.RegisterFlags(&c.Flags, reapi.Envs("REAPI"))
 	c.Flags.BoolVar(&c.reExecEnable, "re_exec_enable", true, "remote exec enable")
 	c.Flags.BoolVar(&c.reCacheEnableRead, "re_cache_enable_read", true, "remote exec cache enable read")
 	c.Flags.BoolVar(&c.reCacheEnableWrite, "re_cache_enable_write", false, "remote exec cache allow local trusted uploads")

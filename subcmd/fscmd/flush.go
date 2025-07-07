@@ -70,11 +70,7 @@ func (c *flushRun) init() {
 	c.Flags.StringVar(&c.stateFile, "fs_state", stateFile, "fs_state filename")
 	c.Flags.StringVar(&c.projectID, "project", os.Getenv("SISO_PROJECT"), "cloud project ID. can be set by $SISO_PROJECT")
 	c.reopt = new(reapi.Option)
-	envs := map[string]string{
-		"SISO_REAPI_ADDRESS":  os.Getenv("SISO_REAPI_ADDRESS"),
-		"SISO_REAPI_INSTANCE": os.Getenv("SISO_REAPI_INSTANCE"),
-	}
-	c.reopt.RegisterFlags(&c.Flags, envs)
+	c.reopt.RegisterFlags(&c.Flags, reapi.Envs("REAPI"))
 	c.Flags.BoolVar(&c.force, "f", false, "force to fetch")
 	c.Flags.BoolVar(&c.recursive, "recursive", true, "flush recursively")
 	c.Flags.StringVar(&c.fileListPath, "file_list", "", "path to a file containing a list of files to flush, one per line")

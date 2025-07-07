@@ -57,6 +57,18 @@ type Option struct {
 	KeepAliveParams keepalive.ClientParameters
 }
 
+// Envs returns environment flags for reapi.
+func Envs(t string) map[string]string {
+	envs := map[string]string{}
+	if v, ok := os.LookupEnv(fmt.Sprintf("SISO_%s_INSTANCE", t)); ok {
+		envs["SISO_REAPI_INSTANCE"] = v
+	}
+	if v, ok := os.LookupEnv(fmt.Sprintf("SISO_%s_ADDRESS", t)); ok {
+		envs["SISO_REAPI_ADDRESS"] = v
+	}
+	return envs
+}
+
 // RegisterFlags registers flags on the option.
 func (o *Option) RegisterFlags(fs *flag.FlagSet, envs map[string]string) {
 	var purpose string
@@ -71,8 +83,8 @@ func (o *Option) RegisterFlags(fs *flag.FlagSet, envs map[string]string) {
 	}
 	fs.StringVar(&o.Address, o.Prefix+"_address", addr, "reapi address"+purpose)
 	fs.StringVar(&o.CASAddress, o.Prefix+"_cas_address", "", "reapi cas address"+purpose+" (if empty, share conn with "+o.Prefix+"_address)")
-	instance := envs["SISO_REAPI_INSTANCE"]
-	if instance == "" {
+	instance, ok := envs["SISO_REAPI_INSTANCE"]
+	if !ok {
 		instance = "default_instance"
 	}
 	fs.StringVar(&o.Instance, o.Prefix+"_instance", instance, "reapi instance name"+purpose)

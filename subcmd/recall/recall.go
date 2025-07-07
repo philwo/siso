@@ -107,11 +107,7 @@ func (c *run) init() {
 	c.Flags.BoolVar(&c.local, "local", false, "force running the action locally using Docker, even if REAPI is configured")
 	c.Flags.BoolVar(&c.stats, "stats", false, "run the command under /usr/bin/time and print detailed resource stats after execution (note: this may fail if the container glibc is incompatible with the host)")
 	c.reopt = new(reapi.Option)
-	envs := map[string]string{
-		"SISO_REAPI_ADDRESS":  os.Getenv("SISO_REAPI_ADDRESS"),
-		"SISO_REAPI_INSTANCE": os.Getenv("SISO_REAPI_INSTANCE"),
-	}
-	c.reopt.RegisterFlags(&c.Flags, envs)
+	c.reopt.RegisterFlags(&c.Flags, reapi.Envs("REAPI"))
 	c.Flags.StringVar(&c.executeRequestStr, "execute_request", "", "execute request proto")
 }
 

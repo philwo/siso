@@ -88,18 +88,10 @@ type run struct {
 func (c *run) init() {
 	c.Flags.StringVar(&c.projectID, "project", os.Getenv("SISO_PROJECT"), "cloud project ID. can be set by $SISO_PROJECT")
 	c.reopt = new(reapi.Option)
-	envs := map[string]string{
-		"SISO_REAPI_ADDRESS":  os.Getenv("SISO_REAPI_ADDRESS"),
-		"SISO_REAPI_INSTANCE": os.Getenv("SISO_REAPI_INSTANCE"),
-	}
-	c.reopt.RegisterFlags(&c.Flags, envs)
+	c.reopt.RegisterFlags(&c.Flags, reapi.Envs("REAPI"))
 	c.casopt = new(reapi.Option)
 	c.casopt.Prefix = "cas"
-	envs = map[string]string{
-		"SISO_REAPI_ADDRESS":  os.Getenv("SISO_DEST_CAS_ADDRESS"),
-		"SISO_REAPI_INSTANCE": os.Getenv("SISO_DEST_CAS_INSTANCE"),
-	}
-	c.casopt.RegisterFlags(&c.Flags, envs)
+	c.casopt.RegisterFlags(&c.Flags, reapi.Envs("DEST_CASS"))
 
 	c.Flags.StringVar(&c.dir, "C", ".", "ninja running directory")
 

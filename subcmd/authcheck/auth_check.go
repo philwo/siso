@@ -41,11 +41,7 @@ func (r *authCheckRun) init() {
 	r.Flags.StringVar(&r.projectID, "project", os.Getenv("SISO_PROJECT"), "cloud project ID. can set by $SISO_PROJECT")
 
 	r.reopt = new(reapi.Option)
-	envs := map[string]string{
-		"SISO_REAPI_INSTANCE": os.Getenv("SISO_REAPI_INSTANCE"),
-		"SISO_REAPI_ADDRESS":  os.Getenv("SISO_REAPI_ADDRESS"),
-	}
-	r.reopt.RegisterFlags(&r.Flags, envs)
+	r.reopt.RegisterFlags(&r.Flags, reapi.Envs("REAPI"))
 }
 
 func (r *authCheckRun) Run(a subcommands.Application, args []string, env subcommands.Env) int {

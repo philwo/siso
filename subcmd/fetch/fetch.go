@@ -78,11 +78,7 @@ type run struct {
 func (c *run) init() {
 	c.Flags.StringVar(&c.projectID, "project", os.Getenv("SISO_PROJECT"), "cloud project ID. can be set by $SISO_PROJECT")
 	c.reopt = new(reapi.Option)
-	envs := map[string]string{
-		"SISO_REAPI_ADDRESS":  os.Getenv("SISO_REAPI_ADDRESS"),
-		"SISO_REAPI_INSTANCE": os.Getenv("SISO_REAPI_INSTANCE"),
-	}
-	c.reopt.RegisterFlags(&c.Flags, envs)
+	c.reopt.RegisterFlags(&c.Flags, reapi.Envs("REAPI"))
 	c.Flags.StringVar(&c.dataType, "type", "raw", `data type. "raw", "command", "action", "dir", "tree", "dir-extract"`)
 }
 
