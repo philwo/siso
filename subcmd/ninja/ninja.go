@@ -809,7 +809,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 			fsmonitorPath, err = exec.LookPath(fsmonitor)
 			if err != nil {
 				clog.Warningf(ctx, "failed to find fsmonitor %q: %v", fsmonitor, err)
-				ui.Default.Warningf(ui.SGR(ui.BackgroundRed, fmt.Sprintf("SISO_FSMONITOR=%q: failed %v", fsmonitor, err)))
+				ui.Default.Warningf(ui.SGR(ui.BackgroundRed, fmt.Sprintf("SISO_FSMONITOR=%q: failed %v\n", fsmonitor, err)))
 			}
 		} else {
 			fsmonitorPath = fsmonitor
@@ -821,13 +821,13 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 				fsm, err := watchmanutil.New(ctx, fsmonitorPath, execRoot)
 				if err != nil {
 					clog.Warningf(ctx, "failed to initialize watchman: %v", err)
-					ui.Default.Errorf(ui.SGR(ui.BackgroundRed, fmt.Sprintf("SISO_FSMONITOR=watchman: failed %v", err)))
+					ui.Default.Errorf(ui.SGR(ui.BackgroundRed, fmt.Sprintf("SISO_FSMONITOR=watchman: failed %v\n", err)))
 				} else {
-					ui.Default.Infof(ui.SGR(ui.Yellow, fmt.Sprintf("use watchman as fsmonitor: %s", fsmonitorPath)))
+					ui.Default.Infof(ui.SGR(ui.Yellow, fmt.Sprintf("use watchman as fsmonitor: %s\n", fsmonitorPath)))
 					c.fsopt.FSMonitor = fsm
 				}
 			default:
-				ui.Default.Errorf(ui.SGR(ui.BackgroundRed, fmt.Sprintf("unknown SISO_FSMONITOR=%q (%q)", fsmonitor, fsm)))
+				ui.Default.Errorf(ui.SGR(ui.BackgroundRed, fmt.Sprintf("unknown SISO_FSMONITOR=%q (%q)\n", fsmonitor, fsm)))
 			}
 		}
 	}
@@ -893,7 +893,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	}()
 	hashFSErr := hashFS.LoadErr()
 	if hashFSErr != nil {
-		ui.Default.Errorf(ui.SGR(ui.BackgroundRed, fmt.Sprintf("unable to do incremental build as fs state is corrupted: %v", hashFSErr)))
+		ui.Default.Errorf(ui.SGR(ui.BackgroundRed, fmt.Sprintf("unable to do incremental build as fs state is corrupted: %v\n", hashFSErr)))
 	}
 
 	_, err = os.Stat(failedTargetsFilename)
@@ -960,11 +960,11 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	if c.fsopt.KeepTainted {
 		tainted := hashFS.TaintedFiles()
 		if len(tainted) == 0 {
-			ui.Default.PrintLines(ui.SGR(ui.Yellow, "no tainted generated files:\n"))
+			ui.Default.Warningf(ui.SGR(ui.Yellow, "no tainted generated files:\n"))
 		} else if len(tainted) < 5 {
-			ui.Default.PrintLines(ui.SGR(ui.Yellow, fmt.Sprintf("keep %d tainted files:\n %s\n", len(tainted), strings.Join(tainted, "\n "))))
+			ui.Default.Warningf(ui.SGR(ui.Yellow, fmt.Sprintf("keep %d tainted files:\n %s\n", len(tainted), strings.Join(tainted, "\n "))))
 		} else {
-			ui.Default.PrintLines(ui.SGR(ui.Yellow, fmt.Sprintf("keep %d tainted files:\n %s\n ...more\n", len(tainted), strings.Join(tainted, "\n "))))
+			ui.Default.Warningf(ui.SGR(ui.Yellow, fmt.Sprintf("keep %d tainted files:\n %s\n ...more\n", len(tainted), strings.Join(tainted, "\n "))))
 		}
 	}
 
