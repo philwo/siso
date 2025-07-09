@@ -167,7 +167,7 @@ func (c *run) run(ctx context.Context) error {
 		}
 	}
 
-	ui.Default.PrintLines(fmt.Sprintf("reapi instance: %s\n", c.reopt.Instance))
+	ui.Default.Infof(fmt.Sprintf("use %s\n", c.reopt))
 	client, err := reapi.New(ctx, credential, *c.reopt)
 	if err != nil {
 		return fmt.Errorf("failed to initialize reapi client: %w", err)

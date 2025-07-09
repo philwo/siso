@@ -109,6 +109,20 @@ func isRBE(address string) bool {
 	return strings.HasSuffix(address, "remotebuildexecution.googleapis.com:443")
 }
 
+func (o *Option) String() string {
+	if o == nil || o.Address == "" {
+		return "no reapi backend"
+	}
+	addr := fmt.Sprintf("reapi %q", o.Address)
+	if isRBE(o.Address) {
+		addr = "RBE"
+		if strings.HasSuffix(o.Address, "-remotebuildexecution.googleapis.com:443") {
+			addr = fmt.Sprintf("RBE(%s)", strings.TrimSuffix(o.Address, "-remotebuildexecution.googleapis.com:443"))
+		}
+	}
+	return fmt.Sprintf("%s instance %q", addr, o.Instance)
+}
+
 // UpdateProjectID updates the Option for projID and returns cloud project ID to use.
 // Just returns empty string if backend is not RBE.
 func (o *Option) UpdateProjectID(projID string) string {

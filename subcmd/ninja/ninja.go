@@ -727,7 +727,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	})
 
 	if c.reopt.IsValid() {
-		ui.Default.PrintLines(fmt.Sprintf("reapi instance: %s\n\n", c.reopt.Instance))
+		ui.Default.Infof(fmt.Sprintf("use %s\n", c.reopt))
 	} else {
 		if c.strictRemote {
 			return stats, flagError{err: errors.New("no reapi specified, but remote is requested as --strict_remote")}

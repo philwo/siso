@@ -62,7 +62,7 @@ func (r *authCheckRun) Run(a subcommands.Application, args []string, env subcomm
 	r.reopt.UpdateProjectID(r.projectID)
 	if r.reopt.IsValid() {
 		client, err := reapi.New(ctx, credential, *r.reopt)
-		fmt.Printf("use reapi instance %s\n", r.reopt.Instance)
+		fmt.Printf("use %s\n", r.reopt)
 		if err != nil {
 			fmt.Printf("access error: %v\n", err)
 			return 1
