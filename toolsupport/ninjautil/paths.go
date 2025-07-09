@@ -80,6 +80,7 @@ func (p *pathParser) path() evalString {
 			}
 			// escaped, or varref.
 			i += n + 2
+			path.pos = -1
 			path.esc++
 			continue
 		}

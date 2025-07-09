@@ -478,6 +478,53 @@ build build.ninja: configure | $root/configure.py $root/misc/ninja_syntax.py
 	}
 }
 
+func TestParser_eval_path_in_build_binding(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	err := os.WriteFile(filepath.Join(dir, "build.ninja"), []byte(`
+rule bootstrap
+  command = cd "$$(dirname "${builder}")" && touch ${out}
+
+build out/soong/build.ninja: bootstrap $
+   | out/soong/build.glob_results $
+   ${builder}
+ description = analyzing Android.bp files and generating ninja file
+ builder = out/soong/host/linux-x86/bin/soong_build
+`), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state := NewState()
+	p := NewManifestParser(state)
+	p.SetWd(dir)
+	err = p.Load(ctx, "build.ninja")
+	if err != nil {
+		t.Errorf("Load %v", err)
+	}
+	node, ok := state.LookupNodeByPath("out/soong/build.ninja")
+	if !ok {
+		t.Fatalf("out/soong/build.ninja not found")
+	}
+	edge, ok := node.InEdge()
+	if !ok {
+		t.Fatalf("no inEdge of out/soong/build/build.ninja")
+	}
+	inputs := edge.Inputs()
+	var got []string
+	for _, in := range inputs {
+		got = append(got, in.Path())
+	}
+	want := []string{"out/soong/build.glob_results", "out/soong/host/linux-x86/bin/soong_build"}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("inputs of out/soong/build.ninja: diff -want +got:\n%s", diff)
+	}
+	command := edge.Binding("command")
+	wantCommand := `cd "$(dirname "out/soong/host/linux-x86/bin/soong_build")" && touch out/soong/build.ninja`
+	if command != wantCommand {
+		t.Errorf("command=%q; want=%q", command, wantCommand)
+	}
+}
+
 func TestParser_simplevar(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
