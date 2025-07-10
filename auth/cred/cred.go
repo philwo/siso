@@ -83,7 +83,7 @@ func AuthOpts(credHelperPath string) Options {
 // New creates a Cred using LUCI auth's default options.
 // It ensures that the user is logged in and returns an error otherwise.
 func New(ctx context.Context, opts Options) (Cred, error) {
-	t := "luci-auth"
+	t := "luci-auth-cloud-platform"
 	authenticator := auth.NewAuthenticator(ctx, auth.SilentLogin, opts.LUCIAuth)
 	err := authenticator.CheckLoginRequired()
 	if err != nil && len(opts.FallbackLUCIAuth.Scopes) > 0 {
@@ -149,7 +149,7 @@ func New(ctx context.Context, opts Options) (Cred, error) {
 		return Cred{}, err
 	}
 
-	clog.Infof(ctx, "use luci-auth email: %s", email)
+	clog.Infof(ctx, "use %s email: %s", t, email)
 	return Cred{
 		Type:              t,
 		Email:             email,
