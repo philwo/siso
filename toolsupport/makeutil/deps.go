@@ -17,6 +17,10 @@ import (
 	"go.chromium.org/infra/build/siso/o11y/clog"
 )
 
+// IgnoreMissingOut controls whether to report missing out in depfile as
+// error (false) or not (true).
+var IgnoreMissingOut bool
+
 // ParseDepsFile parses *.d file in fname on fsys.
 func ParseDepsFile(ctx context.Context, fsys fs.FS, fname string) ([]string, error) {
 	if fname == "" {
@@ -26,7 +30,7 @@ func ParseDepsFile(ctx context.Context, fsys fs.FS, fname string) ([]string, err
 	if err != nil {
 		return nil, err
 	}
-	deps, err := ParseDeps(b)
+	deps, err := ParseDeps(ctx, b)
 	if log.V(1) {
 		clog.Infof(ctx, "deps %s => %s: %v", fname, deps, err)
 	}
@@ -34,7 +38,7 @@ func ParseDepsFile(ctx context.Context, fsys fs.FS, fname string) ([]string, err
 }
 
 // ParseDeps parses deps and returns a list of inputs.
-func ParseDeps(b []byte) ([]string, error) {
+func ParseDeps(ctx context.Context, b []byte) ([]string, error) {
 	// deps contents
 	// <output>: <input> ...
 	// <input> is space separated
@@ -53,7 +57,11 @@ depLines:
 		}
 		out := bytes.TrimSpace(s[:i])
 		if len(out) == 0 {
-			return nil, fmt.Errorf("missing output in deps. depfile should be `<target>: <dependencyList>`")
+			if IgnoreMissingOut {
+				clog.Warningf(ctx, "missing output in deps. depfile should be `<target>: <dependencyList>`")
+			} else {
+				return nil, fmt.Errorf("missing output in deps. depfile should be `<target>: <dependencyList>`")
+			}
 		}
 		// collect inputs
 		for s = s[i+1:]; len(s) > 0; {

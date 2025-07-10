@@ -27,14 +27,18 @@ var knownExperiments = map[string]string{
 	"file-access-trace":           "",
 	"gvisor":                      "",
 	"ignore-missing-local-inputs": "",
-	"ignore-missing-targets":      "",
-	"keep-going-handle-error":     "",
-	"keep-going-impure":           "check siso_localexec",
-	"oom-score-adj":               "",
-	"no-fallback":                 "",
-	"no-fast-deps":                "",
-	"no-fast-deps-fallback":       "",
-	"prepare-header-only":         "",
+
+	// TODO(b/430486641): remove this once bad *.d is fixed
+	"ignore-missing-out-in-depfile": "",
+
+	"ignore-missing-targets":  "",
+	"keep-going-handle-error": "",
+	"keep-going-impure":       "check siso_localexec",
+	"oom-score-adj":           "",
+	"no-fallback":             "",
+	"no-fast-deps":            "",
+	"no-fast-deps-fallback":   "",
+	"prepare-header-only":     "",
 }
 
 type experimentFeature struct {

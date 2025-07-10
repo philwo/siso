@@ -53,6 +53,7 @@ import (
 	"go.chromium.org/infra/build/siso/runtimex"
 	"go.chromium.org/infra/build/siso/scandeps"
 	"go.chromium.org/infra/build/siso/sync/semaphore"
+	"go.chromium.org/infra/build/siso/toolsupport/makeutil"
 	"go.chromium.org/infra/build/siso/toolsupport/ninjautil"
 	"go.chromium.org/infra/build/siso/ui"
 )
@@ -397,6 +398,9 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 	if disableReason != "" {
 		clog.Infof(ctx, "disable fast-deps: %s", disableReason)
 		b.disableFastDeps.Store(disableReason)
+	}
+	if experiments.Enabled("ignore-missing-out-in-depfile", "ignore missing out error in depfile") {
+		makeutil.IgnoreMissingOut = true
 	}
 	return b, nil
 }

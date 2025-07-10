@@ -571,7 +571,7 @@ func (a *ideAnalyzer) invalidation(ctx context.Context) *pb.Invalidation {
 		clog.Warningf(ctx, "failed to read build.ninja.d: %v", err)
 		return inv
 	}
-	bdeps, err := makeutil.ParseDeps(buf)
+	bdeps, err := makeutil.ParseDeps(ctx, buf)
 	if err != nil {
 		clog.Warningf(ctx, "failed to parse build.ninja.d: %v", err)
 		return inv

@@ -5,6 +5,7 @@
 package makeutil
 
 import (
+	"context"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -91,7 +92,8 @@ obj/ios/chrome/browser/shared/ui/util/util_swift/UIView+WindowObserving.o : ../.
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := ParseDeps(tc.depsfile)
+			ctx := context.Background()
+			got, err := ParseDeps(ctx, tc.depsfile)
 			if err != nil {
 				t.Errorf("ParseDeps(%q) got err=%v; want nil err", tc.depsfile, err)
 			}
@@ -118,7 +120,8 @@ func TestParseDeps_Error(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := ParseDeps(tc.depsfile)
+			ctx := context.Background()
+			got, err := ParseDeps(ctx, tc.depsfile)
 			if err == nil {
 				t.Errorf("ParseDeps(%q)=%q, %v; want err", tc.depsfile, got, err)
 			}
