@@ -10,6 +10,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"os"
 
 	"golang.org/x/oauth2"
 	"google.golang.org/api/option"
@@ -47,21 +48,30 @@ type Options struct {
 
 // AuthOpts returns the LUCI auth options that Siso uses.
 func AuthOpts(credHelperPath string) Options {
-	authOpts := chromeinfra.DefaultAuthOptions()
-	authOpts.Scopes = []string{
-		auth.OAuthScopeEmail,
-		"https://www.googleapis.com/auth/cloud-platform",
-	}
-	// If the user is already logged in via `luci-auth login --scopes-context`,
-	// we can use that token and avoid having to prompt for another login.
-	fallbackAuthOpts := chromeinfra.DefaultAuthOptions()
-	// same scope as `--scopes-context`
-	// https://crrev.com/bdbc1802265493619ac518d392776af6593fd1e0/auth/client/authcli/authcli.go#22
-	fallbackAuthOpts.Scopes = []string{
-		"https://www.googleapis.com/auth/cloud-platform",
-		"https://www.googleapis.com/auth/firebase",
-		"https://www.googleapis.com/auth/gerritcodereview",
-		"https://www.googleapis.com/auth/userinfo.email",
+	var authOpts, fallbackAuthOpts auth.Options
+	// don't use luci-auth if $HOME is not set,
+	// since chromeinfra.DefaultAuthOptions will print
+	// "Can't resolve $HOME: $HOME is not defined"
+	// to stderr.
+	// https://crrev.com/d0549b3d2cf7923dd33d1810ac5a8348d09237ac/hardcoded/chromeinfra/chromeinfra.go#137
+	_, err := os.UserHomeDir()
+	if err == nil {
+		authOpts = chromeinfra.DefaultAuthOptions()
+		authOpts.Scopes = []string{
+			auth.OAuthScopeEmail,
+			"https://www.googleapis.com/auth/cloud-platform",
+		}
+		// If the user is already logged in via `luci-auth login --scopes-context`,
+		// we can use that token and avoid having to prompt for another login.
+		fallbackAuthOpts = chromeinfra.DefaultAuthOptions()
+		// same scope as `--scopes-context`
+		// https://crrev.com/bdbc1802265493619ac518d392776af6593fd1e0/auth/client/authcli/authcli.go#22
+		fallbackAuthOpts.Scopes = []string{
+			"https://www.googleapis.com/auth/cloud-platform",
+			"https://www.googleapis.com/auth/firebase",
+			"https://www.googleapis.com/auth/gerritcodereview",
+			"https://www.googleapis.com/auth/userinfo.email",
+		}
 	}
 	var perRPCCredentials credentials.PerRPCCredentials
 	var tokenSource oauth2.TokenSource
