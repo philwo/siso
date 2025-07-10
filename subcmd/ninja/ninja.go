@@ -1595,6 +1595,7 @@ func (c *ninjaCmdRun) initBuildOpts(ctx context.Context, projectID string, build
 		StrictRemote:         c.strictRemote,
 		FailuresAllowed:      c.failuresAllowed,
 		KeepRSP:              c.debugMode.Keeprsp,
+		KeepDepfile:          c.debugMode.Keepdepfile,
 		Limits:               limits,
 	}
 	return bopts, func(err *error) {

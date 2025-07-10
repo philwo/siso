@@ -27,15 +27,12 @@ func (m *debugMode) check() error {
 		return errors.New(`debugging modes
   stats        not implemented: print operation counts/timing info
   explain      explain what caused a command to execute
-  keepdepfile  not implemented: don't delete depfiles after they're read by ninja
+  keepdepfile  don't delete depfiles after they're read by ninja
   keeprsp      don't delete @response files on success
 multiple modes can be enabled via -d FOO -d BAR`)
 	}
 	if m.Stats {
 		ui.Default.Warningf("WARNING: `-d stats` is not implemented yet\n")
-	}
-	if m.Keepdepfile {
-		ui.Default.Warningf("WARNING: `-d keepdepfile` is not implemented yet\n")
 	}
 	return nil
 }

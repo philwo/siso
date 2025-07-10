@@ -109,7 +109,7 @@ func (depsGCC) fixForSplitDwarf(ctx context.Context, cmd *execute.Cmd) {
 	cmd.Outputs = uniqueFiles(cmd.Outputs, []string{dwo})
 }
 
-func (depsGCC) DepsAfterRun(ctx context.Context, b *Builder, step *Step) ([]string, error) {
+func (depsGCC) DepsAfterRun(ctx context.Context, b *Builder, step *Step) (_ []string, err error) {
 	ctx, span := trace.NewSpan(ctx, "gcc-deps")
 	defer span.Close(nil)
 	if step.cmd.Deps != "gcc" {
@@ -118,6 +118,13 @@ func (depsGCC) DepsAfterRun(ctx context.Context, b *Builder, step *Step) ([]stri
 	defer func() {
 		// don't remove depfile if it is used as output.
 		if slices.Contains(step.cmd.Outputs, step.cmd.Depfile) {
+			return
+		}
+		if err != nil {
+			clog.Warningf(ctx, "preserve depfile=%q: %v", step.cmd.Depfile, err)
+			return
+		}
+		if b.keepDepfile {
 			return
 		}
 		b.hashFS.Remove(ctx, step.cmd.ExecRoot, step.cmd.Depfile)
