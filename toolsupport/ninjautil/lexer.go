@@ -74,7 +74,9 @@ func init() {
 	for _, ch := range []byte("$ :\t\r\n|\000") {
 		nonLiteralChar.set(ch)
 	}
-	for _, ch := range []byte(" \t\r\n") {
+	// https://github.com/ninja-build/ninja/issues/952
+	// tab is not considered as whitespace in Ninja.
+	for _, ch := range []byte(" \r\n") {
 		whitespaceChar.set(ch)
 	}
 }

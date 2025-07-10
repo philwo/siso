@@ -604,3 +604,59 @@ build out: foo in
 	}
 
 }
+
+func TestParser_whitespace_in_command(t *testing.T) {
+	// https://github.com/ninja-build/ninja/issues/952
+	// b/430748593
+	ctx := context.Background()
+	dir := t.TempDir()
+	err := os.WriteFile(filepath.Join(dir, "build.ninja"), []byte(`
+rule echo_tab
+  command = echo foo$
+	bar && touch ${out}
+
+rule echo_space
+  command = echo foo$
+    bar && touch ${out}
+
+build out: echo_tab
+build out2: echo_space
+`), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state := NewState()
+	p := NewManifestParser(state)
+	p.SetWd(dir)
+	err = p.Load(ctx, "build.ninja")
+	if err != nil {
+		t.Errorf("Load %v", err)
+	}
+	node, ok := state.LookupNodeByPath("out")
+	if !ok {
+		t.Fatalf("out not found")
+	}
+	edge, ok := node.InEdge()
+	if !ok {
+		t.Fatalf("no inEdge of out")
+	}
+	command := edge.Binding("command")
+	want := "echo foo\tbar && touch out"
+	if command != want {
+		t.Errorf("out command=%q; want=%q", command, want)
+	}
+
+	node, ok = state.LookupNodeByPath("out2")
+	if !ok {
+		t.Fatalf("out2 not found")
+	}
+	edge, ok = node.InEdge()
+	if !ok {
+		t.Fatalf("no inEdge of out2")
+	}
+	command = edge.Binding("command")
+	want = "echo foobar && touch out2"
+	if command != want {
+		t.Errorf("out2 command=%q; want=%q", command, want)
+	}
+}
