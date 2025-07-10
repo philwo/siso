@@ -77,6 +77,9 @@ type Graph interface {
 	// steps by pool name.
 	StepLimits(context.Context) map[string]int
 
+	// Binding returns top-level binding
+	Binding(name string) string
+
 	// Filenames returns filenames of build manifest (all files loaded by build.ninja).
 	Filenames() []string
 }

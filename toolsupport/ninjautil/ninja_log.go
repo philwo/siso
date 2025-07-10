@@ -11,6 +11,7 @@ import (
 	"hash/fnv"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -23,8 +24,8 @@ const ninjaLogVersion = 5
 
 // InitializeNinjaLog creates or truncates the ninja log file (.ninja_log) for writing
 // and writes the version header.
-func InitializeNinjaLog() (*os.File, error) {
-	f, err := os.OpenFile(ninjaLogName, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
+func InitializeNinjaLog(builddir string) (*os.File, error) {
+	f, err := os.OpenFile(filepath.Join(builddir, ninjaLogName), os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
 	if err != nil {
 		return nil, err
 	}

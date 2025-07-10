@@ -43,9 +43,8 @@ func (fs *fileState) addSubninja(fname string) {
 
 // fileParser is a parser of a ninja manifest file.
 type fileParser struct {
-	state  *State
-	parent *fileScope
-	scope  fileScope
+	state *State
+	scope *fileScope
 
 	sema chan struct{}
 
@@ -235,9 +234,8 @@ func (p *fileParser) alloc(ctx context.Context) {
 	p.poolArena.reserve(p.full.npool)
 	p.bindingArena.reserve(p.full.nrulevar + p.full.nbuildvar)
 
-	p.scope.rules = newRuleMap(p.full.nrule)
+	p.scope.rules = newRuleMap(p.full.nrule, p.scope.rules)
 	p.scope.bindings = newShardBindings(p.full.nvar)
-	p.scope.parent = p.parent
 
 	if log.V(1) {
 		clog.Infof(ctx, "alloc rule=%d edge=%d pool=%d var=%d binding=%d+%d", p.full.nrule, p.full.nbuild, p.full.npool, p.full.nvar, p.full.nrulevar, p.full.nbuildvar)
@@ -277,7 +275,7 @@ func (p *fileParser) setup(ctx context.Context) error {
 			p.sema <- struct{}{}
 			defer func() { <-p.sema }()
 
-			return ch.setupInChunk(ctx, p.state, &p.scope)
+			return ch.setupInChunk(ctx, p.state, p.scope)
 		})
 		// adjust statement positions if there is any include in any chunk.
 		if p.full.ninclude > 0 {
@@ -304,7 +302,7 @@ func (p *fileParser) buildGraph(ctx context.Context) error {
 			p.sema <- struct{}{}
 			defer func() { <-p.sema }()
 
-			return ch.buildGraphInChunk(ctx, p.state, &p.fileState, &p.scope)
+			return ch.buildGraphInChunk(ctx, p.state, &p.fileState, p.scope)
 		})
 		for j := range ch.includes {
 			inc := ch.includes[j]
@@ -314,7 +312,7 @@ func (p *fileParser) buildGraph(ctx context.Context) error {
 					p.sema <- struct{}{}
 					defer func() { <-p.sema }()
 
-					return ich.buildGraphInChunk(ctx, p.state, &p.fileState, &p.scope)
+					return ich.buildGraphInChunk(ctx, p.state, &p.fileState, p.scope)
 				})
 			}
 		}
