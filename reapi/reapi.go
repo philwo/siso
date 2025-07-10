@@ -158,6 +158,9 @@ func (o Option) NeedCred() bool {
 	if o.Address == "" {
 		return false
 	}
+	if !o.IsValid() {
+		return false
+	}
 	if o.Insecure {
 		return false
 	}

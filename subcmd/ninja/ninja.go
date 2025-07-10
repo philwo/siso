@@ -555,7 +555,7 @@ func (c *ninjaCmdRun) run(ctx context.Context) (stats build.Stats, err error) {
 	var sisoMetadata ninjalog.SisoMetadata
 
 	var credential cred.Cred
-	if !c.offline || c.reopt.NeedCred() || c.enableCloudLogging || c.enableResultstore || c.enableCloudProfiler || c.enableCloudTrace || c.enableCloudMonitoring {
+	if !c.offline && (c.reopt.NeedCred() || c.enableCloudLogging || c.enableResultstore || c.enableCloudProfiler || c.enableCloudTrace || c.enableCloudMonitoring) {
 		// TODO: can be async until cred is needed?
 		spin := ui.Default.NewSpinner()
 		spin.Start("init credentials")
