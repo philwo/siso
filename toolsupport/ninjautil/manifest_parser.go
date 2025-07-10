@@ -37,8 +37,8 @@ type ManifestParser struct {
 
 // NewManifestParser creates a new manifest parser.
 func NewManifestParser(state *State) *ManifestParser {
-	scope := state.scope
-	scope.rules = newRuleMap(1, nil)
+	scope := newFileScope(state.scope)
+	scope.rules = newRuleMap(1)
 	_ = scope.setRule(phonyRule)
 	return &ManifestParser{
 		state: state,
@@ -81,16 +81,16 @@ func (p *ManifestParser) Load(ctx context.Context, fname string) error {
 
 func (p *ManifestParser) loadFile(ctx context.Context, fname string) error {
 	fp := &fileParser{
-		scope: p.scope,
-		state: p.state,
-		sema:  p.fsema,
+		parent: p.scope,
+		state:  p.state,
+		sema:   p.fsema,
 	}
 	err := fp.parseFile(ctx, filepath.Join(p.wd, fname))
 	if err != nil {
 		return err
 	}
 	for _, fname := range fp.fileState.subninjas {
-		scope := fp.scope
+		scope := &fp.scope
 		p.eg.Go(func() error {
 			p.sema <- struct{}{}
 			defer func() { <-p.sema }()

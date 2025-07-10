@@ -58,12 +58,9 @@ type ruleMap struct {
 }
 
 // newRuleMap creates new ruleMap for size n.
-func newRuleMap(n int, old *ruleMap) *ruleMap {
+func newRuleMap(n int) *ruleMap {
 	rm := &ruleMap{
 		seed: maphash.MakeSeed(),
-	}
-	if old != nil {
-		n += len(old.rules)
 	}
 	// numRulesPerBuckets is the number of rules per buckets.
 	// We want to keep it small to avoid contention.
@@ -74,11 +71,6 @@ func newRuleMap(n int, old *ruleMap) *ruleMap {
 		numBuckets <<= 1
 	}
 	rm.rules = make([]atomic.Pointer[rule], numBuckets)
-	if old != nil {
-		for i := range old.rules {
-			rm.setRule(old.rules[i].Load())
-		}
-	}
 	return rm
 }
 

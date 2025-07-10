@@ -5,7 +5,6 @@
 package ninjautil
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -366,17 +365,6 @@ func (s *State) PhonyNodes() []*Node {
 // AddBinding adds bindings.
 func (s *State) AddBinding(name, value string) {
 	s.scope.setVar([]byte(name), evalString{v: []byte(value)})
-}
-
-// Binding returns top level binding.
-func (s *State) Binding(name string) string {
-	val, ok := s.scope.lookupVar(-1, []byte(name))
-	if !ok {
-		return ""
-	}
-	var buf bytes.Buffer
-	evaluate(s.scope, &buf, val)
-	return buf.String()
 }
 
 // Filenames returns files parsed by the parser (e.g. build.ninja and its subninja etc.)
