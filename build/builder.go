@@ -95,7 +95,6 @@ type Options struct {
 	ExplainWriter        io.Writer
 	LocalexecLogWriter   io.Writer
 	MetricsJSONWriter    io.Writer
-	NinjaLogWriter       io.Writer
 	TraceJSON            string
 	Pprof                string
 	TraceExporter        *trace.Exporter
@@ -242,7 +241,7 @@ type Builder struct {
 }
 
 // New creates new builder.
-func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
+func New(ctx context.Context, graph Graph, opts Options) (_ *Builder, err error) {
 	logger := clog.FromContext(ctx)
 	if logger != nil {
 		logger.Formatter = logFormat
@@ -267,10 +266,26 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 	if mw == nil {
 		mw = io.Discard
 	}
-	nw := opts.NinjaLogWriter
-	if nw == nil {
-		nw = io.Discard
+
+	builddir := graph.Binding("builddir")
+	clog.Infof(ctx, "builddir=%q", builddir)
+	if builddir != "" {
+		err := os.MkdirAll(builddir, 0755)
+		if err != nil {
+			return nil, err
+		}
 	}
+	ninjaLogWriter, err := ninjautil.InitializeNinjaLog(builddir)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		clog.Infof(ctx, "close .ninja_log")
+		cerr := ninjaLogWriter.Close()
+		if err == nil {
+			err = cerr
+		}
+	}()
 
 	if err := opts.Path.Check(); err != nil {
 		return nil, err
@@ -362,7 +377,7 @@ func New(ctx context.Context, graph Graph, opts Options) (*Builder, error) {
 		explainWriter:        ew,
 		localexecLogWriter:   lelw,
 		metricsJSONWriter:    mw,
-		ninjaLogWriter:       nw,
+		ninjaLogWriter:       ninjaLogWriter,
 		traceExporter:        opts.TraceExporter,
 		traceEvents:          newTraceEvents(opts.TraceJSON, opts.Metadata),
 		traceStats:           newTraceStats(),

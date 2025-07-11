@@ -1533,17 +1533,6 @@ func (c *ninjaCmdRun) initBuildOpts(ctx context.Context, projectID string, build
 		c.buildPprof = filepath.Join(c.logDir, c.buildPprof)
 	}
 
-	ninjaLogWriter, err := ninjautil.InitializeNinjaLog()
-	if err != nil {
-		return bopts, nil, err
-	}
-	dones = append(dones, func(errp *error) {
-		clog.Infof(ctx, "close .ninja_log")
-		cerr := ninjaLogWriter.Close()
-		if *errp == nil {
-			*errp = cerr
-		}
-	})
 	var actionSaltBytes []byte
 	if c.actionSalt != "" {
 		actionSaltBytes = []byte(c.actionSalt)
@@ -1581,7 +1570,6 @@ func (c *ninjaCmdRun) initBuildOpts(ctx context.Context, projectID string, build
 		ExplainWriter:        explainWriter,
 		LocalexecLogWriter:   localexecLogWriter,
 		MetricsJSONWriter:    metricsJSONWriter,
-		NinjaLogWriter:       ninjaLogWriter,
 		TraceExporter:        traceExporter,
 		TraceJSON:            c.traceJSON,
 		Pprof:                c.buildPprof,

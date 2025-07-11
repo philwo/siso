@@ -370,6 +370,11 @@ func (g *Graph) Filename() string {
 	return g.fname
 }
 
+// Binding returns top level binding.
+func (g *Graph) Binding(name string) string {
+	return g.globals.nstate.Binding(name)
+}
+
 // Filenames returns filenames of build manifest (all files loaded by build.ninja).
 func (g *Graph) Filenames() []string {
 	return g.globals.nstate.Filenames()

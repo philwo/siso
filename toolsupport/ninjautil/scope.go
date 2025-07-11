@@ -34,6 +34,9 @@ func (s *fileScope) lookupRule(ruleName []byte) (*rule, bool) {
 	if s.parent != nil {
 		return s.parent.lookupRule(ruleName)
 	}
+	if string(ruleName) == "phony" {
+		return phonyRule, true
+	}
 	return nil, false
 }
 
