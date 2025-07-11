@@ -58,7 +58,9 @@ func (b *Builder) execLocal(ctx context.Context, step *Step) error {
 			// file-access-trace only for the step with impure=true.
 			// http://b/261655377 errorprone_plugin_tests: too slow under strace?
 			impure := step.def.Binding("impure") == "true"
-			if !impure {
+			if impure {
+				clog.Warningf(ctx, "disable file-access-trace by impure")
+			} else {
 				traceExecutor, err := newFileTraceExecutor(ctx, b, executor)
 				if err != nil {
 					return fmt.Errorf("unable to perform file-access-trace: %w", err)
@@ -66,7 +68,7 @@ func (b *Builder) execLocal(ctx context.Context, step *Step) error {
 				executor = traceExecutor
 				logLocalExec = traceExecutor.logLocalExec
 			}
-		} else {
+		} else if log.V(1) {
 			clog.Warningf(ctx, "unable to use file-access-trace")
 		}
 	default:
